@@ -4,21 +4,21 @@ from datetime import datetime, timezone
 import Library.Market
 import Library.Portfolio
 
-from Library.Spotware.Market import _period_, _quote_, _millis_, _PRICE_SCALE_
+from Library.Spotware.Market import _timeframe_id_, _quote_, _millis_, _PRICE_SCALE_
 
 from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOAGetTrendbarsRes,
     ProtoOAGetTickDataRes
 )
 
-def test_period_helper_known_values():
-    assert _period_("M1") == 1
-    assert _period_("m5") == 5
-    assert _period_("H1") == 9
-    assert _period_("D1") == 12
-    assert _period_("W1") == 13
-    assert _period_("MN1") == 14
-    assert _period_(7) == 7
+def test_timeframe_helper_known_values():
+    assert _timeframe_id_("M1") == 1
+    assert _timeframe_id_("m5") == 5
+    assert _timeframe_id_("H1") == 9
+    assert _timeframe_id_("D1") == 12
+    assert _timeframe_id_("W1") == 13
+    assert _timeframe_id_("MN1") == 14
+    assert _timeframe_id_(7) == 7
 
 def test_quote_helper_values():
     assert _quote_("BID") == 1
@@ -54,15 +54,17 @@ def test_bars_decodes_ohlc_from_deltas(spotware):
     b2.utcTimestampInMinutes = 26500001
     b2.period = 1
     spotware._responses_.append(res)
-    df = spotware.market.bars(symbol=1, start=datetime(2020, 5, 1, tzinfo=timezone.utc), period="M1")
+    df = spotware.market.bars(symbol=1, start=datetime(2020, 5, 1, tzinfo=timezone.utc), timeframe="M1")
     assert len(df) == 2
-    assert df["Low"][0] == pytest.approx(1.0)
-    assert df["Open"][0] == pytest.approx(1.005)
-    assert df["High"][0] == pytest.approx(1.01)
-    assert df["Close"][0] == pytest.approx(1.007)
-    assert df["Volume"][0] == 50
-    assert df["Low"][1] == pytest.approx(2.0)
-    assert df["High"][1] == pytest.approx(2.005)
+    assert df["TimeframeUID"][0] == "M1"
+    assert df["SecurityUID"][0] == 1
+    assert df["LowBidPrice"][0] == pytest.approx(1.0)
+    assert df["OpenBidPrice"][0] == pytest.approx(1.005)
+    assert df["HighBidPrice"][0] == pytest.approx(1.01)
+    assert df["CloseBidPrice"][0] == pytest.approx(1.007)
+    assert df["TickVolume"][0] == 50
+    assert df["LowBidPrice"][1] == pytest.approx(2.0)
+    assert df["HighBidPrice"][1] == pytest.approx(2.005)
     sent = spotware._sent_[0]
     assert type(sent).__name__ == "ProtoOAGetTrendbarsReq"
     assert sent.period == 1
@@ -77,16 +79,17 @@ def test_bars_timestamp_decodes_minutes(spotware):
     b.utcTimestampInMinutes = 27000000
     b.period = 9
     spotware._responses_.append(res)
-    df = spotware.market.bars(symbol=1, start=datetime(2021, 1, 1, tzinfo=timezone.utc), period="H1")
+    df = spotware.market.bars(symbol=1, start=datetime(2021, 1, 1, tzinfo=timezone.utc), timeframe="H1")
     expected = datetime.fromtimestamp(27000000 * 60, tz=timezone.utc)
     assert df["DateTime"][0].replace(tzinfo=timezone.utc) == expected
+    assert df["TimeframeUID"][0] == "H1"
 
 def test_bars_passes_count(spotware):
     res = ProtoOAGetTrendbarsRes()
     res.period = 1
     res.symbolId = 1
     spotware._responses_.append(res)
-    spotware.market.bars(symbol=1, start=datetime(2020, 1, 1, tzinfo=timezone.utc), period="M1", count=100)
+    spotware.market.bars(symbol=1, start=datetime(2020, 1, 1, tzinfo=timezone.utc), timeframe="M1", count=100)
     sent = spotware._sent_[0]
     assert sent.count == 100
 
@@ -105,7 +108,7 @@ def test_ticks_accumulates_deltas(spotware):
         quote="BID"
     )
     assert len(df) == 3
-    prices = df.sort("DateTime")["Price"].to_list()
+    prices = df.sort("DateTime")["BidPrice"].to_list()
     assert prices[0] == pytest.approx(1.05)
     assert prices[1] == pytest.approx(1.05005)
     assert prices[2] == pytest.approx(1.05003)

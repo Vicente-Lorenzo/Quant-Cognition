@@ -25,38 +25,38 @@ def _add_symbol(response, symbol_id, name, asset_base=10, asset_quote=20, catego
         s.symbolCategoryId = category
         s.description = f"{name} desc"
 
-def test_symbols_parses_light_symbols(spotware):
+def test_tickers_parses_light_symbols(spotware):
     res = ProtoOASymbolsListRes()
     res.ctidTraderAccountId = 123
     _add_symbol(res, 1, "EURUSD")
     _add_symbol(res, 2, "GBPUSD")
     spotware._responses_.append(res)
-    df = spotware.universe.symbols()
+    df = spotware.universe.tickers()
     assert len(df) == 2
-    assert df["SymbolId"].to_list() == [1, 2]
-    assert df["Name"].to_list() == ["EURUSD", "GBPUSD"]
+    assert df["SecurityUID"].to_list() == [1, 2]
+    assert df["TickerUID"].to_list() == ["EURUSD", "GBPUSD"]
     sent = spotware._sent_[0]
     assert type(sent).__name__ == "ProtoOASymbolsListReq"
     assert sent.ctidTraderAccountId == 123
     assert sent.includeArchivedSymbols is False
 
-def test_symbols_includes_archived_when_flag_set(spotware):
+def test_tickers_includes_archived_when_flag_set(spotware):
     res = ProtoOASymbolsListRes()
     res.ctidTraderAccountId = 123
     _add_symbol(res, 1, "ACTIVE")
     _add_symbol(res, 99, "OLD", archived=True)
     spotware._responses_.append(res)
-    df = spotware.universe.symbols(archived=True)
+    df = spotware.universe.tickers(archived=True)
     assert len(df) == 2
-    assert set(df["SymbolId"].to_list()) == {1, 99}
+    assert set(df["SecurityUID"].to_list()) == {1, 99}
     assert spotware._sent_[0].includeArchivedSymbols is True
 
-def test_symbols_empty_response(spotware):
+def test_tickers_empty_response(spotware):
     spotware._responses_.append(ProtoOASymbolsListRes())
-    df = spotware.universe.symbols()
+    df = spotware.universe.tickers()
     assert len(df) == 0
 
-def test_symbol_detail_fetch(spotware):
+def test_ticker_detail_fetch(spotware):
     res = ProtoOASymbolByIdRes()
     s = res.symbol.add()
     s.symbolId = 1
@@ -71,23 +71,23 @@ def test_symbol_detail_fetch(spotware):
     s.swapLong = -1
     s.swapShort = -2
     spotware._responses_.append(res)
-    df = spotware.universe.symbol(ids=1)
+    df = spotware.universe.ticker(ids=1)
     assert len(df) == 1
-    assert df["SymbolId"][0] == 1
+    assert df["SecurityUID"][0] == 1
     assert df["Digits"][0] == 5
     assert df["PipPosition"][0] == 4
     assert df["LotSize"][0] == 100000
     sent = spotware._sent_[0]
     assert list(sent.symbolId) == [1]
 
-def test_symbol_detail_multiple_ids(spotware):
+def test_ticker_detail_multiple_ids(spotware):
     res = ProtoOASymbolByIdRes()
     a = res.symbol.add()
     a.symbolId = 1; a.digits = 5; a.pipPosition = 4
     b = res.symbol.add()
     b.symbolId = 2; b.digits = 3; b.pipPosition = 2
     spotware._responses_.append(res)
-    df = spotware.universe.symbol(ids=[1, 2])
+    df = spotware.universe.ticker(ids=[1, 2])
     assert len(df) == 2
     assert list(spotware._sent_[0].symbolId) == [1, 2]
 
