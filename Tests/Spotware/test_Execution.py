@@ -6,7 +6,8 @@ import Library.Portfolio
 
 from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOAExecutionEvent,
-    ProtoOAOrderErrorEvent
+    ProtoOAOrderErrorEvent,
+    ProtoOAReconcileRes
 )
 
 def _execution(order_id: int | None = None, position_id: int | None = None, deal_id: int | None = None, exec_type: int = 2):
@@ -245,3 +246,152 @@ def test_execution_frame_captures_order_error(spotware):
     assert df["ErrorCode"][0] == "MARKET_CLOSED"
     assert df["OrderID"][0] == 99
     assert df["Description"][0] == "Market is closed"
+
+def _reconcile_positions(items):
+    res = ProtoOAReconcileRes()
+    res.ctidTraderAccountId = 123
+    for pid, symbol_id, side, volume in items:
+        p = res.position.add()
+        p.positionId = pid
+        p.tradeData.symbolId = symbol_id
+        p.tradeData.volume = volume
+        p.tradeData.tradeSide = side
+        p.tradeData.openTimestamp = 1577836800000
+        p.tradeData.guaranteedStopLoss = False
+        p.positionStatus = 1
+        p.price = 1.0
+        p.swap = 0
+        p.commission = 0
+        p.marginRate = 1.0
+        p.mirroringCommission = 0
+        p.guaranteedStopLoss = False
+        p.usedMargin = 0
+        p.utcLastUpdateTimestamp = 1577836800000
+        p.moneyDigits = 2
+    return res
+
+def _reconcile_orders(items):
+    res = ProtoOAReconcileRes()
+    res.ctidTraderAccountId = 123
+    for oid, symbol_id, side, volume in items:
+        o = res.order.add()
+        o.orderId = oid
+        o.tradeData.symbolId = symbol_id
+        o.tradeData.volume = volume
+        o.tradeData.tradeSide = side
+        o.tradeData.openTimestamp = 1577836800000
+        o.tradeData.guaranteedStopLoss = False
+        o.orderType = 1
+        o.orderStatus = 1
+        o.executedVolume = 0
+        o.baseSlippagePrice = 0
+        o.slippageInPoints = 0
+        o.closingOrder = False
+        o.timeInForce = 1
+    return res
+
+def test_market_order_batches_symbols_and_volumes(spotware):
+    spotware._responses_.append(_execution(order_id=101, position_id=201, deal_id=301))
+    spotware._responses_.append(_execution(order_id=102, position_id=202, deal_id=302))
+    spotware._responses_.append(_execution(order_id=103, position_id=203, deal_id=303))
+    df = spotware.execution.market_order("BUY", symbol=[1, 2, 3], volume=[1000, 2000, 3000])
+    assert len(df) == 3
+    assert len(spotware._sent_) == 3
+    assert [s.symbolId for s in spotware._sent_] == [1, 2, 3]
+    assert [s.volume for s in spotware._sent_] == [1000, 2000, 3000]
+    assert all(s.tradeSide == 1 for s in spotware._sent_)
+    assert df["OrderID"].to_list() == [101, 102, 103]
+
+def test_market_order_broadcasts_scalars_against_sequence(spotware):
+    spotware._responses_.append(_execution(order_id=111))
+    spotware._responses_.append(_execution(order_id=112))
+    spotware.execution.market_order(side=["BUY", "SELL"], symbol=5, volume=1000)
+    assert len(spotware._sent_) == 2
+    assert [s.tradeSide for s in spotware._sent_] == [1, 2]
+    assert [s.symbolId for s in spotware._sent_] == [5, 5]
+    assert [s.volume for s in spotware._sent_] == [1000, 1000]
+
+def test_batch_mismatched_lengths_raises(spotware):
+    with pytest.raises(ValueError):
+        spotware.execution.market_order("BUY", symbol=[1, 2], volume=[1000, 2000, 3000])
+
+def test_limit_order_batches_prices_and_tif(spotware):
+    spotware._responses_.append(_execution(order_id=121))
+    spotware._responses_.append(_execution(order_id=122))
+    spotware.execution.limit_order(side="BUY", symbol=[1, 2], volume=[500, 600], price=[1.1, 1.2])
+    assert len(spotware._sent_) == 2
+    assert [s.limitPrice for s in spotware._sent_] == pytest.approx([1.1, 1.2])
+    assert [s.volume for s in spotware._sent_] == [500, 600]
+
+def test_modify_order_batches(spotware):
+    spotware._responses_.append(_execution(order_id=131))
+    spotware._responses_.append(_execution(order_id=132))
+    spotware.execution.modify_order(order=[131, 132], volume=[1500, 2500])
+    assert len(spotware._sent_) == 2
+    assert all(type(s).__name__ == "ProtoOAAmendOrderReq" for s in spotware._sent_)
+    assert [s.orderId for s in spotware._sent_] == [131, 132]
+    assert [s.volume for s in spotware._sent_] == [1500, 2500]
+
+def test_modify_position_batches(spotware):
+    spotware._responses_.append(_execution(position_id=141))
+    spotware._responses_.append(_execution(position_id=142))
+    spotware.execution.modify_position(position=[141, 142], stop_loss=[1.0, 1.1], take_profit=1.5)
+    assert len(spotware._sent_) == 2
+    assert all(type(s).__name__ == "ProtoOAAmendPositionSLTPReq" for s in spotware._sent_)
+    assert [s.positionId for s in spotware._sent_] == [141, 142]
+    assert [s.stopLoss for s in spotware._sent_] == pytest.approx([1.0, 1.1])
+    assert [s.takeProfit for s in spotware._sent_] == pytest.approx([1.5, 1.5])
+
+def test_close_order_closes_all_when_no_args(spotware):
+    spotware._responses_.append(_reconcile_orders([(301, 1, 1, 1000), (302, 2, 2, 2000)]))
+    spotware._responses_.append(_execution(order_id=301))
+    spotware._responses_.append(_execution(order_id=302))
+    df = spotware.execution.close_order()
+    assert len(df) == 2
+    assert type(spotware._sent_[0]).__name__ == "ProtoOAReconcileReq"
+    assert type(spotware._sent_[1]).__name__ == "ProtoOACancelOrderReq"
+    assert type(spotware._sent_[2]).__name__ == "ProtoOACancelOrderReq"
+    assert [s.orderId for s in spotware._sent_[1:]] == [301, 302]
+
+def test_close_order_batches_ids(spotware):
+    spotware._responses_.append(_execution(order_id=311))
+    spotware._responses_.append(_execution(order_id=312))
+    df = spotware.execution.close_order(order=[311, 312])
+    assert len(df) == 2
+    assert all(type(s).__name__ == "ProtoOACancelOrderReq" for s in spotware._sent_)
+    assert [s.orderId for s in spotware._sent_] == [311, 312]
+
+def test_close_position_closes_all_when_no_args(spotware):
+    spotware._responses_.append(_reconcile_positions([(401, 1, 1, 1000), (402, 2, 2, 2000)]))
+    spotware._responses_.append(_execution(position_id=401, deal_id=501))
+    spotware._responses_.append(_execution(position_id=402, deal_id=502))
+    df = spotware.execution.close_position()
+    assert len(df) == 2
+    assert type(spotware._sent_[0]).__name__ == "ProtoOAReconcileReq"
+    assert type(spotware._sent_[1]).__name__ == "ProtoOAClosePositionReq"
+    assert type(spotware._sent_[2]).__name__ == "ProtoOAClosePositionReq"
+    assert [s.positionId for s in spotware._sent_[1:]] == [401, 402]
+    assert [s.volume for s in spotware._sent_[1:]] == [1000, 2000]
+
+def test_close_position_resolves_full_volume_when_missing(spotware):
+    spotware._responses_.append(_reconcile_positions([(411, 1, 1, 7500), (412, 2, 2, 3500)]))
+    spotware._responses_.append(_execution(position_id=411, deal_id=601))
+    spotware.execution.close_position(position=411)
+    assert type(spotware._sent_[0]).__name__ == "ProtoOAReconcileReq"
+    assert type(spotware._sent_[1]).__name__ == "ProtoOAClosePositionReq"
+    assert spotware._sent_[1].positionId == 411
+    assert spotware._sent_[1].volume == 7500
+
+def test_close_position_batches_ids_and_volumes(spotware):
+    spotware._responses_.append(_execution(position_id=421, deal_id=701))
+    spotware._responses_.append(_execution(position_id=422, deal_id=702))
+    spotware.execution.close_position(position=[421, 422], volume=[500, 1500])
+    assert len(spotware._sent_) == 2
+    assert all(type(s).__name__ == "ProtoOAClosePositionReq" for s in spotware._sent_)
+    assert [s.positionId for s in spotware._sent_] == [421, 422]
+    assert [s.volume for s in spotware._sent_] == [500, 1500]
+
+def test_close_position_mismatched_lengths_raises(spotware):
+    spotware._responses_.append(_execution(position_id=431, deal_id=801))
+    with pytest.raises(ValueError):
+        spotware.execution.close_position(position=[431, 432], volume=[500])
