@@ -41,16 +41,22 @@ class DataframeAPI:
         if isinstance(data, pd.DataFrame):
             if data.empty: return [], [], True  # type: ignore
             return list(data.columns), data.to_dict(orient="records"), True  # type: ignore
+        if isinstance(data, DataclassAPI):
+            data_dict = data.dict()
+            return list(data_dict.keys()), [data_dict], False
         if isinstance(data, dict):
             return list(data.keys()), [data], False
         if isinstance(data, (list, tuple)):
             if not data: return [], [], True
             if isinstance(data[0], dict):
                 return list(data[0].keys()), list(data), True
+            if isinstance(data[0], DataclassAPI):
+                dicts = [d.dict() for d in data]
+                return list(dicts[0].keys()), dicts, True
             if isinstance(data[0], (list, tuple)):
                 return None, list(data), True
             return None, [data], False
-        raise TypeError(f"Unsupported data type: {type(data)}")
+        return None, [[data]], False
 
     def frame(self, data: Any, schema: dict = None, legacy: bool | Missing = MISSING) -> Any:
         data = self.flatten(data)
