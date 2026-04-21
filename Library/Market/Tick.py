@@ -6,7 +6,7 @@ from datetime import datetime
 from dataclasses import dataclass, field, InitVar
 
 from Library.Database.Dataframe import pl
-from Library.Database.Database import PrimaryKey, ForeignKey
+from Library.Database.Database import PrimaryKey, ForeignKey, DatabaseAPI
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Dataclass import overridefield
 from Library.Market.Timestamp import TimestampAPI
@@ -65,7 +65,21 @@ class TickAPI(DatapointAPI):
             **super().Columns
         }
 
-    def __post_init__(self, db, migrate, autosave, autoload, autooverload, security, timestamp, ask, bid, ask_base_conversion, bid_base_conversion, ask_quote_conversion, bid_quote_conversion, contract) -> None:
+    def __post_init__(self,
+                      db: DatabaseAPI | None,
+                      migrate: bool,
+                      autosave: bool,
+                      autoload: bool,
+                      autooverload: bool,
+                      security: int | str | SecurityAPI,
+                      timestamp: datetime | TimestampAPI,
+                      ask: float | PriceAPI | None,
+                      bid: float | PriceAPI | None,
+                      ask_base_conversion: float | PriceAPI | None,
+                      bid_base_conversion: float | PriceAPI | None,
+                      ask_quote_conversion: float | PriceAPI | None,
+                      bid_quote_conversion: float | PriceAPI | None,
+                      contract: ContractAPI | None) -> None:
         if isinstance(security, SecurityAPI):
             self._security_ = security
         elif security is not MISSING and security is not None:

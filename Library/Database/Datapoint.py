@@ -54,7 +54,12 @@ class DatapointAPI(DataclassAPI):
             **self.Columns
         }
 
-    def __post_init__(self, db: DatabaseAPI | None, migrate: bool, autosave: bool, autoload: bool, autooverload: bool) -> None:
+    def __post_init__(self,
+                      db: DatabaseAPI | None,
+                      migrate: bool,
+                      autosave: bool,
+                      autoload: bool,
+                      autooverload: bool) -> None:
         self._db_, self._migrate_, self._save_, self._load_, self._overload_ = db, migrate, autosave, autoload, autooverload
         if self._db_ is not None:
             if self._migrate_: self._db_.migrate(schema=self.Schema, table=self.Table, structure=self.Structure)
