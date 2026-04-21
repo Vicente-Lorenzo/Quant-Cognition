@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from typing import Type, Any
-from dataclasses import dataclass, InitVar
+from dataclasses import dataclass, field, InitVar
+from enum import Enum
+
+from Library.Utility.Typing import MISSING
 
 def overridefield(func):
     func._overridefield_ = True
@@ -29,12 +32,13 @@ class DatametaAPI:
                 return prop.fget.__annotations__.get("return", None)
             return None
         fs = attrs.get("__dataclass_fields__")
-        if (f := fs.get(item, None)) is not None:
+        if fs is not None and (f := fs.get(item, None)) is not None:
             if isinstance(f.type, InitVar):
                 ft = get_property_type(name=item)
             elif item.startswith("_"):
-                item = item[1:]
-                ft = get_property_type(name=item)
+                item_name = item[1:]
+                if item_name.endswith("_"): item_name = item_name[:-1]
+                ft = get_property_type(name=item_name)
             else:
                 ft = f.type
             iid = f"{self._iid}.{item}" if self._iid else item
@@ -58,29 +62,25 @@ class DatametaAPI:
 @dataclass(slots=True)
 class DataclassAPI:
 
+    UID: Any = field(default=MISSING, kw_only=True)
+
     def __init_subclass__(cls, **kwargs):
         super(DataclassAPI, cls).__init_subclass__(**kwargs)
         cls.ID = DatametaAPI(cls)
 
     def parse(self, name):
         f = getattr(self, name)
-        from enum import Enum
         if isinstance(f, Enum): return f.name
-        from Library.Market.Timestamp import TimestampAPI
-        if isinstance(f, TimestampAPI): return f.DateTime
-        from Library.Market.Price import PriceAPI
-        if isinstance(f, PriceAPI): return f.Price
-        from Library.Portfolio.PnL import PnLAPI
-        if isinstance(f, PnLAPI): return f.PnL
+        if isinstance(f, DataclassAPI) and (uid := f.UID) is not MISSING: return uid
         return f
 
     def data(self, include_fields, include_initvar_fields, include_hidden_fields, include_override_fields, include_properties):
         attrs = self.__class__.__dict__
         if include_fields:
-            for f_name, f in attrs["__dataclass_fields__"].items():
+            for f_name, f in attrs.get("__dataclass_fields__", {}).items():
                 if include_initvar_fields and isinstance(f.type, InitVar):
                     yield f_name, self.parse(f_name)
-                if include_hidden_fields or f.repr:
+                elif not isinstance(f.type, InitVar) and (include_hidden_fields or f.repr):
                     yield f_name, self.parse(f_name)
         if include_override_fields or include_properties:
             for cls in reversed(type(self).mro()):

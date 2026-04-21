@@ -10,9 +10,14 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True, kw_only=True)
 class PriceAPI(DataclassAPI):
+
     Price: float = field(init=True, repr=True)
     Reference: float | None = field(default=None, init=True, repr=True)
     Contract: ContractAPI | None = field(default=None, init=True, repr=True)
+
+    @property
+    def UID(self) -> float:
+        return self.Price
 
     @property
     def Distance(self) -> float | None:

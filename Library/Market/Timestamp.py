@@ -31,6 +31,10 @@ class TimestampAPI(DataclassAPI):
     DateTime: datetime = field(init=True, repr=True)
 
     @property
+    def UID(self) -> datetime:
+        return self.DateTime
+
+    @property
     def Year(self) -> CycleAPI:
         return CycleAPI(Value=self.DateTime.year)
     @property
