@@ -2,15 +2,25 @@ from __future__ import annotations
 
 import math
 from datetime import datetime
+from calendar import monthrange, isleap
 from dataclasses import dataclass, field
 
 from Library.Database.Dataclass import DataclassAPI
 
 @dataclass(slots=True, kw_only=True)
 class CycleAPI(DataclassAPI):
+
     Value: float = field(init=True, repr=True)
     Period: int | None = field(default=None, init=True, repr=True)
 
+    @property
+    def UID(self) -> float:
+        return self.Value
+
+    @property
+    def Normalized(self) -> float | None:
+        if not self.Period: return None
+        return self.Value / self.Period
     @property
     def Radian(self) -> float | None:
         if not self.Period: return None
@@ -18,22 +28,24 @@ class CycleAPI(DataclassAPI):
     @property
     def Sin(self) -> float | None:
         radian = self.Radian
-        if radian is None: return None
-        return math.sin(radian)
+        return math.sin(radian) if radian is not None else None
     @property
     def Cos(self) -> float | None:
         radian = self.Radian
-        if radian is None: return None
-        return math.cos(radian)
+        return math.cos(radian) if radian is not None else None
 
 @dataclass(slots=True, kw_only=True)
 class TimestampAPI(DataclassAPI):
+
     DateTime: datetime = field(init=True, repr=True)
 
     @property
     def UID(self) -> datetime:
         return self.DateTime
 
+    @property
+    def Epoch(self) -> float:
+        return self.DateTime.timestamp()
     @property
     def Year(self) -> CycleAPI:
         return CycleAPI(Value=self.DateTime.year)
@@ -48,7 +60,10 @@ class TimestampAPI(DataclassAPI):
         return CycleAPI(Value=self.DateTime.weekday(), Period=7)
     @property
     def Day(self) -> CycleAPI:
-        return CycleAPI(Value=self.DateTime.day, Period=31)
+        return CycleAPI(Value=self.DateTime.day, Period=monthrange(self.DateTime.year, self.DateTime.month)[1])
+    @property
+    def Yearday(self) -> CycleAPI:
+        return CycleAPI(Value=self.DateTime.timetuple().tm_yday, Period=366 if isleap(self.DateTime.year) else 365)
     @property
     def Hour(self) -> CycleAPI:
         return CycleAPI(Value=self.DateTime.hour, Period=24)
