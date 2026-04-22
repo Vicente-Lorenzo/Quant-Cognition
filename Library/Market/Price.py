@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import math
+from enum import Enum
 from typing import TYPE_CHECKING
 from dataclasses import dataclass, field
 
 from Library.Database.Dataclass import DataclassAPI
 if TYPE_CHECKING:
     from Library.Universe.Contract import ContractAPI
+
+class TradeType(Enum):
+    Buy = 1
+    Neutral = 0
+    Sell = -1
 
 @dataclass(slots=True, kw_only=True)
 class PriceAPI(DataclassAPI):
@@ -20,19 +26,31 @@ class PriceAPI(DataclassAPI):
         return self.Price
 
     @property
+    def LogPrice(self) -> float | None:
+        if self.Price <= 0: return None
+        return math.log(self.Price)
+    @property
+    def InvertedPrice(self) -> float | None:
+        if not self.Price: return None
+        return 1.0 / self.Price
+    @property
     def Distance(self) -> float | None:
         if self.Reference is None: return None
         return self.Price - self.Reference
     @property
-    def Points(self) -> float | None:
-        distance = self.Distance
-        if distance is None or not self.Contract or not self.Contract.PointSize: return None
-        return distance / self.Contract.PointSize
+    def AbsoluteDistance(self) -> float | None:
+        d = self.Distance
+        return abs(d) if d is not None else None
     @property
     def Pips(self) -> float | None:
         distance = self.Distance
         if distance is None or not self.Contract or not self.Contract.PipSize: return None
         return distance / self.Contract.PipSize
+    @property
+    def Points(self) -> float | None:
+        distance = self.Distance
+        if distance is None or not self.Contract or not self.Contract.PointSize: return None
+        return distance / self.Contract.PointSize
     @property
     def Percentage(self) -> float | None:
         if not self.Reference: return None
@@ -43,6 +61,19 @@ class PriceAPI(DataclassAPI):
         if pct is None or pct <= -1.0: return None
         return math.log1p(pct)
     @property
-    def LogPrice(self) -> float | None:
-        if self.Price <= 0: return None
-        return math.log(self.Price)
+    def AbsolutePercentage(self) -> float | None:
+        pct = self.Percentage
+        return abs(pct) if pct is not None else None
+    @property
+    def AbsoluteLogPercentage(self) -> float | None:
+        lp = self.LogPercentage
+        return abs(lp) if lp is not None else None
+    @property
+    def Direction(self) -> TradeType | None:
+        d = self.Distance
+        if d is None: return None
+        return TradeType.Buy if d > 0 else TradeType.Sell if d < 0 else TradeType.Neutral
+    @property
+    def Ratio(self) -> float | None:
+        if not self.Reference: return None
+        return self.Price / self.Reference
