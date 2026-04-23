@@ -3,7 +3,7 @@ from dateutil.relativedelta import relativedelta, weekday
 
 from Library.Database.Enumeration import Enumeration
 
-class Day(Enumeration):
+class Weekday(Enumeration):
     Monday = 0
     Tuesday = 1
     Wednesday = 2
@@ -55,27 +55,27 @@ def seconds_to_string(seconds: float) -> str:
         result.append(f"{round(milliseconds * 1000)} milliseconds")
     return " ".join(result)
 
-def weekday_shift_datetime(wd: Day, shift: int, today: datetime = datetime.today()) -> datetime:
+def weekday_shift_datetime(wd: Weekday, shift: int, today: datetime = datetime.today()) -> datetime:
     shift = shift - 1 if today.weekday() > wd.value else shift
     return today + relativedelta(weekday=weekday(wd.value)(shift))
 
 def monday_shift_datetime(shift: int, today: datetime = datetime.today()) -> datetime:
-    return weekday_shift_datetime(wd=Day.Monday, shift=shift, today=today)
+    return weekday_shift_datetime(wd=Weekday.Monday, shift=shift, today=today)
 
 def tuesday_shift_datetime(shift: int, today: datetime = datetime.today()) -> datetime:
-    return weekday_shift_datetime(wd=Day.Tuesday, shift=shift, today=today)
+    return weekday_shift_datetime(wd=Weekday.Tuesday, shift=shift, today=today)
 
 def wednesday_shift_datetime(shift: int, today: datetime = datetime.today()) -> datetime:
-    return weekday_shift_datetime(wd=Day.Wednesday, shift=shift, today=today)
+    return weekday_shift_datetime(wd=Weekday.Wednesday, shift=shift, today=today)
 
 def thursday_shift_datetime(shift: int, today: datetime = datetime.today()) -> datetime:
-    return weekday_shift_datetime(wd=Day.Thursday, shift=shift, today=today)
+    return weekday_shift_datetime(wd=Weekday.Thursday, shift=shift, today=today)
 
 def friday_shift_datetime(shift: int, today: datetime = datetime.today()) -> datetime:
-    return weekday_shift_datetime(wd=Day.Friday, shift=shift, today=today)
+    return weekday_shift_datetime(wd=Weekday.Friday, shift=shift, today=today)
 
 def saturday_shift_datetime(shift: int, today: datetime = datetime.today()) -> datetime:
-    return weekday_shift_datetime(wd=Day.Saturday, shift=shift, today=today)
+    return weekday_shift_datetime(wd=Weekday.Saturday, shift=shift, today=today)
 
 def sunday_shift_datetime(shift: int, today: datetime = datetime.today()) -> datetime:
-    return weekday_shift_datetime(wd=Day.Sunday, shift=shift, today=today)
+    return weekday_shift_datetime(wd=Weekday.Sunday, shift=shift, today=today)
