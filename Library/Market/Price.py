@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from dataclasses import dataclass, field
 
 from Library.Database.Dataclass import DataclassAPI
+
 if TYPE_CHECKING: from Library.Universe.Contract import ContractAPI
 
 class TradeType(Enum):
@@ -13,16 +14,19 @@ class TradeType(Enum):
     Neutral = 0
     Sell = -1
 
-@dataclass(slots=True, kw_only=True)
+@dataclass(kw_only=True)
 class PriceAPI(DataclassAPI):
 
     Price: float = field(init=True, repr=True)
     Reference: float | None = field(default=None, init=True, repr=True)
-    Contract: ContractAPI | None = field(default=None, init=True, repr=True)
+    Contract: ContractAPI | None = field(default=None, repr=False)
 
     @property
     def UID(self) -> float:
         return self.Price
+    @UID.setter
+    def UID(self, value) -> None:
+        pass
 
     @property
     def LogPrice(self) -> float | None:
@@ -40,16 +44,6 @@ class PriceAPI(DataclassAPI):
     def AbsoluteDistance(self) -> float | None:
         d = self.Distance
         return abs(d) if d is not None else None
-    @property
-    def Pips(self) -> float | None:
-        distance = self.Distance
-        if distance is None or not self.Contract or not self.Contract.PipSize: return None
-        return distance / self.Contract.PipSize
-    @property
-    def Points(self) -> float | None:
-        distance = self.Distance
-        if distance is None or not self.Contract or not self.Contract.PointSize: return None
-        return distance / self.Contract.PointSize
     @property
     def Percentage(self) -> float | None:
         if not self.Reference: return None
@@ -76,3 +70,11 @@ class PriceAPI(DataclassAPI):
     def Ratio(self) -> float | None:
         if not self.Reference: return None
         return self.Price / self.Reference
+    @property
+    def Pips(self) -> float | None:
+        if self.Contract is None or not self.Contract.PipSize: return None
+        return self.Price / self.Contract.PipSize
+    @property
+    def Points(self) -> float | None:
+        if self.Contract is None or not self.Contract.PointSize: return None
+        return self.Price / self.Contract.PointSize
