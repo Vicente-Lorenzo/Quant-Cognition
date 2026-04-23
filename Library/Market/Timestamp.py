@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from Library.Database.Dataclass import DataclassAPI
 
-@dataclass(slots=True, kw_only=True)
+@dataclass(kw_only=True)
 class CycleAPI(DataclassAPI):
 
     Value: float = field(init=True, repr=True)
@@ -16,6 +16,9 @@ class CycleAPI(DataclassAPI):
     @property
     def UID(self) -> float:
         return self.Value
+    @UID.setter
+    def UID(self, val) -> None:
+        pass
 
     @property
     def Normalized(self) -> float | None:
@@ -34,7 +37,7 @@ class CycleAPI(DataclassAPI):
         radian = self.Radian
         return math.cos(radian) if radian is not None else None
 
-@dataclass(slots=True, kw_only=True)
+@dataclass(kw_only=True)
 class TimestampAPI(DataclassAPI):
 
     DateTime: datetime = field(init=True, repr=True)
@@ -42,6 +45,9 @@ class TimestampAPI(DataclassAPI):
     @property
     def UID(self) -> datetime:
         return self.DateTime
+    @UID.setter
+    def UID(self, val) -> None:
+        pass
 
     @property
     def Epoch(self) -> float:
