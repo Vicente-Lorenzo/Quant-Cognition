@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from typing import ClassVar, Sequence, TYPE_CHECKING
 from dataclasses import dataclass
+from typing import ClassVar, TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
-from Library.Database.Enumeration import Enumeration, as_enum
-from Library.Database import PrimaryKey
-from Library.Universe.Universe import UniverseAPI
+from Library.Database.Database import PrimaryKey
 from Library.Database.Datapoint import DatapointAPI
-if TYPE_CHECKING: from Library.Database import DatabaseAPI
+from Library.Database.Enumeration import Enumeration, as_enum
+from Library.Universe.Universe import UniverseAPI
+
+if TYPE_CHECKING: from Library.Database.Database import DatabaseAPI
 
 class Provider(Enumeration):
     Spotware = 0
@@ -25,7 +26,7 @@ class Platform(Enumeration):
     QuantConnect = 4
     API = 5
 
-@dataclass(kw_only=True)
+@dataclass
 class ProviderAPI(DatapointAPI):
 
     Database: ClassVar[str] = DatapointAPI.Database
@@ -33,68 +34,52 @@ class ProviderAPI(DatapointAPI):
     Table: ClassVar[str] = "Provider"
 
     UID: str | None = None
-
     Platform: Platform | str | None = None
     Name: str | None = None
     Abbreviation: str | None = None
 
-    @classmethod
-    def Structure(cls) -> dict:
+    @property
+    def Structure(self) -> dict:
         return {
-            cls.ID.UID: PrimaryKey(pl.String),
-            cls.ID.Platform: pl.Enum([p.name for p in Platform]),
-            cls.ID.Name: pl.String(),
-            cls.ID.Abbreviation: pl.String(),
-            **DatapointAPI.Structure()
+            self.ID.UID: PrimaryKey(pl.String),
+            self.ID.Platform: pl.Enum([p.name for p in Platform]),
+            self.ID.Name: pl.String(),
+            self.ID.Abbreviation: pl.String(),
+            **super().Structure
         }
 
     @staticmethod
     def normalize(uid: str) -> str:
         return uid.replace("-", " ")
 
-    def __post_init__(self, db: DatabaseAPI | None) -> None:
+    def __post_init__(self,
+                      db: DatabaseAPI | None,
+                      migrate: bool,
+                      autosave: bool,
+                      autoload: bool,
+                      autooverload: bool) -> None:
         self.Platform = as_enum(Platform, self.Platform)
-        if self.UID: self.UID = self.normalize(self.UID)
+        if self.UID:
+            self.UID = self.normalize(self.UID)
         elif self.Abbreviation and self.Platform:
             self.UID = f"{self.Abbreviation} ({self.Platform.name})"
-        self._db_ = self._connect_(db)
-        self._db_.migrate(schema=self.Schema, table=self.Table, structure=self.Structure())
-        self.pull()
+        super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
-    def _apply_(self, row: dict) -> None:
-        if not self.UID: self.UID = row.get("UID")
-        if self.Platform is None: self.Platform = as_enum(Platform, row.get("Platform"))
-        if self.Name is None: self.Name = row.get("Name")
-        if self.Abbreviation is None: self.Abbreviation = row.get("Abbreviation")
-
-    def pull(self, condition: str | None = None, parameters: dict | None = None) -> None:
-        if condition:
-            row = super().pull(condition=condition, parameters=parameters)
-            if row: self._apply_(row)
-            return
-        if not self.UID and not self.Name and not self.Abbreviation: return
-        clauses = []
-        params = {}
-        if self.UID:
-            clauses.append('"UID" = :uid:')
-            params["uid"] = self.UID
-        if self.Name:
-            clauses.append('"Name" = :name:')
-            params["name"] = self.Name
-        if self.Abbreviation:
-            clauses.append('"Abbreviation" = :abbr:')
-            params["abbr"] = self.Abbreviation
-        row = super().pull(condition=" OR ".join(clauses), parameters=params)
-        if not row:
-            if self.Platform is None or self.Abbreviation is None: raise ValueError(f"Provider '{self.UID or self.Name or self.Abbreviation}' not found in database and lacks required fields for creation.")
-            return
-        self._apply_(row)
-
-    def push(self, by: str, key: str | Sequence[str] | None = None) -> None:
-        super().push(by=by, key=key or self.ID.UID)
-
-    def __str__(self) -> str:
-        return self.UID or ""
-
-    def __repr__(self) -> str:
-        return f"ProviderAPI(UID={self.UID!r}, Platform={self.Platform!r}, Name={self.Name!r}, Abbreviation={self.Abbreviation!r})"
+    def _pull_(self, overload: bool) -> dict | None:
+        condition, parameters = None, None
+        if not self.UID and (self.Name or self.Abbreviation):
+            clauses, params = [], {}
+            if self.Name:
+                clauses.append('"Name" = :name:')
+                params["name"] = self.Name
+            if self.Abbreviation:
+                clauses.append('"Abbreviation" = :abbr:')
+                params["abbr"] = self.Abbreviation
+            condition, parameters = " OR ".join(clauses), params
+        row = super()._pull_(overload=overload) if condition is None else self._fetch_(condition=condition, parameters=parameters, overload=overload)
+        if row:
+            self.Platform = as_enum(Platform, self.Platform)
+        elif not row and not condition:
+            if self.Platform is None or self.Abbreviation is None:
+                raise ValueError(f"Provider '{self.UID or self.Name or self.Abbreviation}' not found in database and lacks required fields for creation.")
+        return row
