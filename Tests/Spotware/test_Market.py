@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import Library.Market
 import Library.Portfolio
 
-from Library.Spotware.Market import _timeframe_id_, _quote_, _millis_, _PRICE_SCALE_
+from Library.Spotware.Market import MarketAPI
 
 from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOAGetTrendbarsRes,
@@ -12,26 +12,26 @@ from ctrader_open_api.messages.OpenApiMessages_pb2 import (
 )
 
 def test_timeframe_helper_known_values():
-    assert _timeframe_id_("M1") == 1
-    assert _timeframe_id_("m5") == 5
-    assert _timeframe_id_("H1") == 9
-    assert _timeframe_id_("D1") == 12
-    assert _timeframe_id_("W1") == 13
-    assert _timeframe_id_("MN1") == 14
-    assert _timeframe_id_(7) == 7
+    assert MarketAPI._timeframe_id_("M1") == 1
+    assert MarketAPI._timeframe_id_("m5") == 5
+    assert MarketAPI._timeframe_id_("H1") == 9
+    assert MarketAPI._timeframe_id_("D1") == 12
+    assert MarketAPI._timeframe_id_("W1") == 13
+    assert MarketAPI._timeframe_id_("MN1") == 14
+    assert MarketAPI._timeframe_id_(7) == 7
 
 def test_quote_helper_values():
-    assert _quote_("BID") == 1
-    assert _quote_("ask") == 2
-    assert _quote_(1) == 1
+    assert MarketAPI._quote_("BID") == 1
+    assert MarketAPI._quote_("ask") == 2
+    assert MarketAPI._quote_(1) == 1
 
 def test_millis_converts_utc_naive():
     dt = datetime(2020, 1, 1, 0, 0, 0)
-    assert _millis_(dt) == 1577836800000
+    assert MarketAPI._millis_(dt) == 1577836800000
 
 def test_millis_converts_tz_aware():
     dt = datetime(2020, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-    assert _millis_(dt) == 1577836800000
+    assert MarketAPI._millis_(dt) == 1577836800000
 
 def test_bars_decodes_ohlc_from_deltas(spotware):
     res = ProtoOAGetTrendbarsRes()
