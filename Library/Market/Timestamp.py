@@ -56,6 +56,9 @@ class TimestampAPI(DataclassAPI):
     def Year(self) -> CycleAPI:
         return CycleAPI(Value=self.DateTime.year)
     @property
+    def Yearday(self) -> CycleAPI:
+        return CycleAPI(Value=self.DateTime.timetuple().tm_yday, Period=366 if isleap(self.DateTime.year) else 365)
+    @property
     def Month(self) -> CycleAPI:
         return CycleAPI(Value=self.DateTime.month, Period=12)
     @property
@@ -67,9 +70,6 @@ class TimestampAPI(DataclassAPI):
     @property
     def Day(self) -> CycleAPI:
         return CycleAPI(Value=self.DateTime.day, Period=monthrange(self.DateTime.year, self.DateTime.month)[1])
-    @property
-    def Yearday(self) -> CycleAPI:
-        return CycleAPI(Value=self.DateTime.timetuple().tm_yday, Period=366 if isleap(self.DateTime.year) else 365)
     @property
     def Hour(self) -> CycleAPI:
         return CycleAPI(Value=self.DateTime.hour, Period=24)
