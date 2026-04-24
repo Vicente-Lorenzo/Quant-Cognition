@@ -92,7 +92,6 @@ class TickerAPI(UniverseAPI):
 
     @Category.setter
     def Category(self, val: str | CategoryAPI | None) -> None:
-        print("SETTING TICKER CATEGORY:", val)
         if isinstance(val, CategoryAPI): self._category_ = val
         elif val is not None: self._category_ = CategoryAPI(UID=val, db=self._db_, autoload=True)
 
