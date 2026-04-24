@@ -9,7 +9,7 @@ from Library.Database.Dataclass import overridefield, coerce
 from Library.Database.Enumeration import Enumeration, as_enum
 from Library.Database import IdentityKey, PrimaryKey, ForeignKey
 from Library.Universe.Universe import UniverseAPI
-from Library.Universe.Ticker import TickerAPI, Contract
+from Library.Universe.Ticker import TickerAPI, ContractType
 from Library.Universe.Provider import ProviderAPI
 from Library.Utility.DateTime import Weekday
 from Library.Utility.Typing import MISSING
@@ -51,7 +51,7 @@ class ContractAPI(UniverseAPI):
     Table: ClassVar[str] = "Contract"
 
     UID: int | None = None
-    Type: Contract | str | None = None
+    Type: ContractType | str | None = None
 
     Ticker: InitVar[str | TickerAPI | None] = field(default=MISSING)
     Provider: InitVar[str | ProviderAPI | None] = field(default=MISSING)
@@ -83,7 +83,7 @@ class ContractAPI(UniverseAPI):
             self.ID.UID: IdentityKey(pl.Int64),
             self.ID.Ticker: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{TickerAPI.Table}"("{TickerAPI.ID.UID}")', primary=True),
             self.ID.Provider: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{ProviderAPI.Table}"("{ProviderAPI.ID.UID}")', primary=True),
-            self.ID.Type: PrimaryKey(pl.Enum([i.name for i in Contract])),
+            self.ID.Type: PrimaryKey(pl.Enum([i.name for i in ContractType])),
             self.ID.Digits: pl.Int32(),
             self.ID.PointSize: pl.Float64(),
             self.ID.PipSize: pl.Float64(),
@@ -122,7 +122,7 @@ class ContractAPI(UniverseAPI):
             self._provider_ = ProviderAPI(UID=ProviderAPI.normalize(provider), db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
         if self.Type is None and self._ticker_ is not None and self._ticker_.UID:
             self.Type = TickerAPI.detect(self._ticker_.UID)
-        self.Type = as_enum(Contract, self.Type)
+        self.Type = as_enum(ContractType, self.Type)
         self.CommissionMode = as_enum(CommissionMode, self.CommissionMode)
         self.SwapMode = as_enum(SwapMode, self.SwapMode)
         self.SwapExtraDay = as_enum(Weekday, self.SwapExtraDay)
@@ -131,14 +131,14 @@ class ContractAPI(UniverseAPI):
     def _pull_(self, overload: bool) -> dict | None:
         row = super()._pull_(overload=overload)
         if not row and self.UID is None and self._ticker_ and self._provider_ and self.Type is not None:
-            tval = self.Type.name if isinstance(self.Type, Contract) else self.Type
+            tval = self.Type.name if isinstance(self.Type, ContractType) else self.Type
             row = self._fetch_(
                 condition='"Ticker" = :ticker: AND "Provider" = :provider: AND "Type" = :type:',
                 parameters={"ticker": self._ticker_.UID, "provider": self._provider_.UID, "type": tval},
                 overload=overload
             )
         if row:
-            self.Type = as_enum(Contract, self.Type)
+            self.Type = as_enum(ContractType, self.Type)
             self.CommissionMode = as_enum(CommissionMode, self.CommissionMode)
             self.SwapMode = as_enum(SwapMode, self.SwapMode)
             self.SwapExtraDay = as_enum(Weekday, self.SwapExtraDay)
