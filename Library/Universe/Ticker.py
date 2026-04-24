@@ -19,7 +19,7 @@ _PREFIX_PATTERN_ = re.compile(r"^[^:]+:")
 _TRIM_PATTERN_ = re.compile(r"[#.+\-_]+$")
 _SUFFIX_LIST_ = sorted([".m", ".micro", ".pro", ".p", ".raw", ".ecn", ".s", ".std", ".i", ".ins", ".z", ".v", ".x", ".plus", "+", "-", "_sb", ".c", ".cfd"], key=len, reverse=True)
 
-class Contract(Enumeration):
+class ContractType(Enumeration):
     Spot = 0
     Future = 1
     Swap = 2
@@ -66,10 +66,10 @@ class TickerAPI(UniverseAPI):
         return _TRIM_PATTERN_.sub("", uid).upper()
 
     @staticmethod
-    def detect(uid: str) -> Contract:
+    def detect(uid: str) -> ContractType:
         for pattern in _FUTURES_PATTERNS_:
-            if pattern.search(uid): return Contract.Future
-        return Contract.Spot
+            if pattern.search(uid): return ContractType.Future
+        return ContractType.Spot
 
     def __post_init__(self,
                       db: DatabaseAPI | None,

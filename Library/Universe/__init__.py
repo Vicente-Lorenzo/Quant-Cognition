@@ -7,7 +7,7 @@ from Library.Universe.Provider import (
 )
 from Library.Universe.Ticker import (
     TickerAPI,
-    Contract
+    ContractType
 )
 from Library.Universe.Contract import (
     ContractAPI,
@@ -27,7 +27,7 @@ __all__ = [
     "Provider",
     "Platform",
     "TickerAPI",
-    "Contract",
+    "ContractType",
     "ContractAPI",
     "SpreadType",
     "CommissionType",
