@@ -1,3 +1,4 @@
+from typing import Union
 import pytest
 from datetime import datetime, timezone
 
@@ -10,7 +11,7 @@ from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOAReconcileRes
 )
 
-def _execution(order_id: int | None = None, position_id: int | None = None, deal_id: int | None = None, exec_type: int = 2):
+def _execution(order_id: Union[int, None] = None, position_id: Union[int, None] = None, deal_id: Union[int, None] = None, exec_type: int = 2):
     ev = ProtoOAExecutionEvent()
     ev.ctidTraderAccountId = 123
     ev.executionType = exec_type

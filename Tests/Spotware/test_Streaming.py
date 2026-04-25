@@ -1,3 +1,4 @@
+from typing import Union
 import pytest
 
 import Library.Market
@@ -14,7 +15,7 @@ from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOAUnsubscribeLiveTrendbarRes
 )
 
-def _spot_event(symbol_id: int, bid: int | None = None, ask: int | None = None, timestamp: int | None = None):
+def _spot_event(symbol_id: int, bid: Union[int, None] = None, ask: Union[int, None] = None, timestamp: Union[int, None] = None):
     ev = ProtoOASpotEvent()
     ev.ctidTraderAccountId = 123
     ev.symbolId = symbol_id

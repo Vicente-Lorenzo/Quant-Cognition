@@ -1,3 +1,4 @@
+from typing import Union
 import pytest
 from datetime import datetime
 from dataclasses import dataclass
@@ -11,9 +12,9 @@ class MockDatapoint(DatapointAPI):
     Schema = "TestSchema"
     Table = "MockDatapoint"
 
-    TestID: int | None = None
-    Value: str | None = None
-    Other: float | None = None
+    TestID: Union[int, None] = None
+    Value: Union[str, None] = None
+    Other: Union[float, None] = None
 
     @property
     def Key(self) -> dict:
