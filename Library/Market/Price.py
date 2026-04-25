@@ -9,7 +9,7 @@ from Library.Database.Dataclass import DataclassAPI
 
 if TYPE_CHECKING: from Library.Universe.Contract import ContractAPI
 
-class TradeType(Enum):
+class Direction(Enum):
     Buy = 1
     Neutral = 0
     Sell = -1
@@ -62,10 +62,10 @@ class PriceAPI(DataclassAPI):
         lp = self.LogPercentage
         return abs(lp) if lp is not None else None
     @property
-    def Direction(self) -> TradeType | None:
+    def Direction(self) -> Direction | None:
         d = self.Distance
         if d is None: return None
-        return TradeType.Buy if d > 0 else TradeType.Sell if d < 0 else TradeType.Neutral
+        return Direction.Buy if d > 0 else Direction.Sell if d < 0 else Direction.Neutral
     @property
     def Ratio(self) -> float | None:
         if not self.Reference: return None
