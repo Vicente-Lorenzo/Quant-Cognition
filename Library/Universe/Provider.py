@@ -30,7 +30,7 @@ class Platform(Enumeration):
 class ProviderAPI(DatapointAPI):
 
     Database: ClassVar[str] = DatapointAPI.Database
-    Schema: ClassVar[str] = UniverseAPI.Schema
+    Schema: ClassVar[str] = "Universe"
     Table: ClassVar[str] = "Provider"
 
     UID: str | None = None
