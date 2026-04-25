@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 @dataclass(kw_only=True)
 class UniverseAPI(DatapointAPI):
+
     Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = "Universe"
     Table: ClassVar[str] = "Universe"
@@ -36,12 +37,11 @@ class UniverseAPI(DatapointAPI):
         else: data.load()
 
     @staticmethod
-    def pull_categories(db: DatabaseAPI, as_dataframe: bool = True) -> pl.DataFrame | list[CategoryAPI]:
+    def pull_categories(db: DatabaseAPI) -> pl.DataFrame:
         from Library.Universe.Category import CategoryAPI
         sql = f'SELECT * FROM "{UniverseAPI.Schema}"."{CategoryAPI.Table}" ORDER BY "UID"'
         df = db.executeone(QueryAPI(sql), schema=CategoryAPI.Schema, table=CategoryAPI.Table).fetchall(legacy=False)
-        if as_dataframe: return df
-        return [CategoryAPI.parse(row) for row in df.iter_rows(named=True)]
+        return df
 
     @staticmethod
     def push_categories(db: DatabaseAPI, data: pl.DataFrame | list[dict] | tuple | dict) -> None:
@@ -61,12 +61,11 @@ class UniverseAPI(DatapointAPI):
         else: data.load()
 
     @staticmethod
-    def pull_providers(db: DatabaseAPI, as_dataframe: bool = True) -> pl.DataFrame | list[ProviderAPI]:
+    def pull_providers(db: DatabaseAPI) -> pl.DataFrame:
         from Library.Universe.Provider import ProviderAPI
         sql = f'SELECT * FROM "{UniverseAPI.Schema}"."{ProviderAPI.Table}" ORDER BY "UID"'
         df = db.executeone(QueryAPI(sql), schema=ProviderAPI.Schema, table=ProviderAPI.Table).fetchall(legacy=False)
-        if as_dataframe: return df
-        return [ProviderAPI.parse(row) for row in df.iter_rows(named=True)]
+        return df
 
     @staticmethod
     def push_providers(db: DatabaseAPI, data: pl.DataFrame | list[dict] | tuple | dict) -> None:
@@ -86,12 +85,11 @@ class UniverseAPI(DatapointAPI):
         else: data.load()
 
     @staticmethod
-    def pull_tickers(db: DatabaseAPI, as_dataframe: bool = True) -> pl.DataFrame | list[TickerAPI]:
+    def pull_tickers(db: DatabaseAPI) -> pl.DataFrame:
         from Library.Universe.Ticker import TickerAPI
         sql = f'SELECT * FROM "{UniverseAPI.Schema}"."{TickerAPI.Table}" ORDER BY "UID"'
         df = db.executeone(QueryAPI(sql), schema=TickerAPI.Schema, table=TickerAPI.Table).fetchall(legacy=False)
-        if as_dataframe: return df
-        return [TickerAPI.parse(row) for row in df.iter_rows(named=True)]
+        return df
 
     @staticmethod
     def push_tickers(db: DatabaseAPI, data: pl.DataFrame | list[dict] | tuple | dict) -> None:
@@ -111,12 +109,11 @@ class UniverseAPI(DatapointAPI):
         else: data.load()
 
     @staticmethod
-    def pull_timeframes(db: DatabaseAPI, as_dataframe: bool = True) -> pl.DataFrame | list[TimeframeAPI]:
+    def pull_timeframes(db: DatabaseAPI) -> pl.DataFrame:
         from Library.Universe.Timeframe import TimeframeAPI
         sql = f'SELECT * FROM "{UniverseAPI.Schema}"."{TimeframeAPI.Table}" ORDER BY "UID"'
         df = db.executeone(QueryAPI(sql), schema=TimeframeAPI.Schema, table=TimeframeAPI.Table).fetchall(legacy=False)
-        if as_dataframe: return df
-        return [TimeframeAPI.parse(row) for row in df.iter_rows(named=True)]
+        return df
 
     @staticmethod
     def push_timeframes(db: DatabaseAPI, data: pl.DataFrame | list[dict] | tuple | dict) -> None:
@@ -136,12 +133,11 @@ class UniverseAPI(DatapointAPI):
         else: data.load()
 
     @staticmethod
-    def pull_contracts(db: DatabaseAPI, as_dataframe: bool = True) -> pl.DataFrame | list[ContractAPI]:
+    def pull_contracts(db: DatabaseAPI) -> pl.DataFrame:
         from Library.Universe.Contract import ContractAPI
         sql = f'SELECT * FROM "{UniverseAPI.Schema}"."{ContractAPI.Table}" ORDER BY "UID"'
         df = db.executeone(QueryAPI(sql), schema=ContractAPI.Schema, table=ContractAPI.Table).fetchall(legacy=False)
-        if as_dataframe: return df
-        return [ContractAPI.parse(row) for row in df.iter_rows(named=True)]
+        return df
 
     @staticmethod
     def push_contracts(db: DatabaseAPI, data: pl.DataFrame | list[dict] | tuple | dict) -> None:
@@ -161,12 +157,11 @@ class UniverseAPI(DatapointAPI):
         else: data.load()
 
     @staticmethod
-    def pull_securities(db: DatabaseAPI, as_dataframe: bool = True) -> pl.DataFrame | list[SecurityAPI]:
+    def pull_securities(db: DatabaseAPI) -> pl.DataFrame:
         from Library.Universe.Security import SecurityAPI
         sql = f'SELECT * FROM "{UniverseAPI.Schema}"."{SecurityAPI.Table}" ORDER BY "UID"'
         df = db.executeone(QueryAPI(sql), schema=SecurityAPI.Schema, table=SecurityAPI.Table).fetchall(legacy=False)
-        if as_dataframe: return df
-        return [SecurityAPI.parse(row) for row in df.iter_rows(named=True)]
+        return df
 
     @staticmethod
     def push_securities(db: DatabaseAPI, data: pl.DataFrame | list[dict] | tuple | dict) -> None:
