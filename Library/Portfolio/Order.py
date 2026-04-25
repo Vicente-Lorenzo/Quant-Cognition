@@ -10,11 +10,10 @@ from Library.Database.Database import IdentityKey, ForeignKey, DatabaseAPI
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Dataclass import overridefield, coerce
 from Library.Database.Enumeration import as_enum
-from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.Position import PositionAPI
 from Library.Universe.Universe import UniverseAPI
 from Library.Market.Timestamp import TimestampAPI
-from Library.Market.Price import PriceAPI, TradeType
+from Library.Market.Price import PriceAPI, Direction
 from Library.Utility.Typing import MISSING
 
 if TYPE_CHECKING:
@@ -47,14 +46,14 @@ class TimeInForce(Enum):
 class OrderAPI(DatapointAPI):
 
     Database: ClassVar[str] = DatapointAPI.Database
-    Schema: ClassVar[str] = PortfolioAPI.Schema
+    Schema: ClassVar[str] = "Portfolio"
     Table: ClassVar[str] = "Order"
 
     UID: int | None = None
-    TradeType: TradeType | str | None = None
-    OrderType: OrderType | str | None = None
-    OrderStatus: OrderStatus | str | None = None
-    TimeInForce: TimeInForce | str | None = None
+    Direction: InitVar[Direction | str | None] = field(default=MISSING)
+    OrderType: InitVar[OrderType | str | None] = field(default=MISSING)
+    OrderStatus: InitVar[OrderStatus | str | None] = field(default=MISSING)
+    TimeInForce: InitVar[TimeInForce | str | None] = field(default=MISSING)
     Volume: float | None = None
     ExecutedVolume: float | None = None
     RelativeStopLoss: float | None = None
@@ -84,6 +83,11 @@ class OrderAPI(DatapointAPI):
 
     Contract: InitVar[ContractAPI | None] = field(default=MISSING)
 
+    _direction_: Direction | None = field(default=None, init=False, repr=False)
+    _order_type_: OrderType | None = field(default=None, init=False, repr=False)
+    _order_status_: OrderStatus | None = field(default=None, init=False, repr=False)
+    _time_in_force_: TimeInForce | None = field(default=None, init=False, repr=False)
+
     _security_: SecurityAPI | None = field(default=None, init=False, repr=False)
     _position_: PositionAPI | None = field(default=None, init=False, repr=False)
     _execution_price_: PriceAPI | None = field(default=None, init=False, repr=False)
@@ -103,8 +107,8 @@ class OrderAPI(DatapointAPI):
         return {
             self.ID.UID: IdentityKey(pl.Int64),
             self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
-            self.ID.Position: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{PositionAPI.Table}"("{PositionAPI.ID.UID}")'),
-            self.ID.TradeType: pl.Enum([e.name for e in TradeType]),
+            self.ID.Position: pl.Int64(),
+            self.ID.Direction: pl.Enum([e.name for e in Direction]),
             self.ID.OrderType: pl.Enum([e.name for e in OrderType]),
             self.ID.OrderStatus: pl.Enum([e.name for e in OrderStatus]),
             self.ID.TimeInForce: pl.Enum([e.name for e in TimeInForce]),
@@ -138,6 +142,10 @@ class OrderAPI(DatapointAPI):
                       autosave: bool,
                       autoload: bool,
                       autooverload: bool,
+                      direction: Direction | str | None,
+                      order_type: OrderType | str | None,
+                      order_status: OrderStatus | str | None,
+                      time_in_force: TimeInForce | str | None,
                       security: int | SecurityAPI | None,
                       position: int | PositionAPI | None,
                       execution_price: float | PriceAPI | None,
@@ -151,6 +159,16 @@ class OrderAPI(DatapointAPI):
                       last_update_timestamp: datetime | TimestampAPI | None,
                       contract: ContractAPI | None) -> None:
         from Library.Universe.Security import SecurityAPI
+        direction = MISSING if isinstance(direction, property) else direction
+        order_type = MISSING if isinstance(order_type, property) else order_type
+        order_status = MISSING if isinstance(order_status, property) else order_status
+        time_in_force = MISSING if isinstance(time_in_force, property) else time_in_force
+        
+        self._direction_ = as_enum(Direction, direction) if direction is not MISSING else None
+        self._order_type_ = as_enum(OrderType, order_type) if order_type is not MISSING else None
+        self._order_status_ = as_enum(OrderStatus, order_status) if order_status is not MISSING else None
+        self._time_in_force_ = as_enum(TimeInForce, time_in_force) if time_in_force is not MISSING else None
+
         security = coerce(security)
         position = coerce(position)
         execution_price = coerce(execution_price)
@@ -163,10 +181,7 @@ class OrderAPI(DatapointAPI):
         expiration_timestamp = coerce(expiration_timestamp)
         last_update_timestamp = coerce(last_update_timestamp)
         contract = coerce(contract)
-        self.TradeType = as_enum(TradeType, self.TradeType)
-        self.OrderType = as_enum(OrderType, self.OrderType)
-        self.OrderStatus = as_enum(OrderStatus, self.OrderStatus)
-        self.TimeInForce = as_enum(TimeInForce, self.TimeInForce)
+
         if isinstance(security, SecurityAPI): self._security_ = security
         elif security is not MISSING and security is not None:
             self._security_ = SecurityAPI(UID=security, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
@@ -189,10 +204,10 @@ class OrderAPI(DatapointAPI):
     def _pull_(self, overload: bool) -> dict | None:
         row = super()._pull_(overload=overload)
         if row:
-            self.TradeType = as_enum(TradeType, self.TradeType)
-            self.OrderType = as_enum(OrderType, self.OrderType)
-            self.OrderStatus = as_enum(OrderStatus, self.OrderStatus)
-            self.TimeInForce = as_enum(TimeInForce, self.TimeInForce)
+            self._direction_ = as_enum(Direction, row.get(self.ID.Direction))
+            self._order_type_ = as_enum(OrderType, row.get(self.ID.OrderType))
+            self._order_status_ = as_enum(OrderStatus, row.get(self.ID.OrderStatus))
+            self._time_in_force_ = as_enum(TimeInForce, row.get(self.ID.TimeInForce))
         return row
 
     @staticmethod
@@ -231,6 +246,38 @@ class OrderAPI(DatapointAPI):
             backing.DateTime = val
             return backing
         return TimestampAPI(DateTime=val)
+
+    @property
+    @overridefield
+    def Direction(self) -> Direction | None:
+        return self._direction_
+    @Direction.setter
+    def Direction(self, val: Direction | str | None) -> None:
+        self._direction_ = as_enum(Direction, val)
+
+    @property
+    @overridefield
+    def OrderType(self) -> OrderType | None:
+        return self._order_type_
+    @OrderType.setter
+    def OrderType(self, val: OrderType | str | None) -> None:
+        self._order_type_ = as_enum(OrderType, val)
+
+    @property
+    @overridefield
+    def OrderStatus(self) -> OrderStatus | None:
+        return self._order_status_
+    @OrderStatus.setter
+    def OrderStatus(self, val: OrderStatus | str | None) -> None:
+        self._order_status_ = as_enum(OrderStatus, val)
+
+    @property
+    @overridefield
+    def TimeInForce(self) -> TimeInForce | None:
+        return self._time_in_force_
+    @TimeInForce.setter
+    def TimeInForce(self, val: TimeInForce | str | None) -> None:
+        self._time_in_force_ = as_enum(TimeInForce, val)
 
     @property
     @overridefield
@@ -332,29 +379,26 @@ class OrderAPI(DatapointAPI):
         self._last_update_timestamp_ = self._assign_timestamp_(self._last_update_timestamp_, val)
 
     @property
-    def Direction(self) -> TradeType | None:
-        return self.TradeType if isinstance(self.TradeType, TradeType) else None
-    @property
     def IsBuy(self) -> bool:
-        return self.TradeType == TradeType.Buy
+        return self._direction_ == Direction.Buy
     @property
     def IsSell(self) -> bool:
-        return self.TradeType == TradeType.Sell
+        return self._direction_ == Direction.Sell
     @property
     def IsFilled(self) -> bool:
-        return self.OrderStatus == OrderStatus.Filled
+        return self._order_status_ == OrderStatus.Filled
     @property
     def IsAccepted(self) -> bool:
-        return self.OrderStatus == OrderStatus.Accepted
+        return self._order_status_ == OrderStatus.Accepted
     @property
     def IsRejected(self) -> bool:
-        return self.OrderStatus == OrderStatus.Rejected
+        return self._order_status_ == OrderStatus.Rejected
     @property
     def IsCancelled(self) -> bool:
-        return self.OrderStatus == OrderStatus.Cancelled
+        return self._order_status_ == OrderStatus.Cancelled
     @property
     def IsExpired(self) -> bool:
-        return self.OrderStatus == OrderStatus.Expired
+        return self._order_status_ == OrderStatus.Expired
     @property
     def ExecutionRatio(self) -> float | None:
         if not self.Volume or self.ExecutedVolume is None: return None
