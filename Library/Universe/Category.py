@@ -14,7 +14,7 @@ if TYPE_CHECKING: from Library.Database.Database import DatabaseAPI
 class CategoryAPI(DatapointAPI):
 
     Database: ClassVar[str] = DatapointAPI.Database
-    Schema: ClassVar[str] = UniverseAPI.Schema
+    Schema: ClassVar[str] = "Universe"
     Table: ClassVar[str] = "Category"
 
     UID: str | None = None
