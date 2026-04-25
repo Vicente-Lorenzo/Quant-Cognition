@@ -8,11 +8,10 @@ from dataclasses import dataclass
 from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Query import QueryAPI
+from Library.Market.Tick import TickAPI
+from Library.Market.Bar import BarAPI
 
-if TYPE_CHECKING:
-    from Library.Database.Database import DatabaseAPI
-    from Library.Market.Tick import TickAPI
-    from Library.Market.Bar import BarAPI
+if TYPE_CHECKING: from Library.Database.Database import DatabaseAPI
 
 @dataclass(kw_only=True)
 class MarketAPI(DatapointAPI):
@@ -50,20 +49,17 @@ class MarketAPI(DatapointAPI):
             data.load()
 
     @staticmethod
-    def pull_ticks(db: DatabaseAPI, security: int, start: datetime, stop: datetime, as_dataframe: bool = True) -> pl.DataFrame | list[TickAPI]:
-        from Library.Market.Tick import TickAPI
+    def pull_ticks(db: DatabaseAPI, security: int, start: datetime, stop: datetime) -> pl.DataFrame:
         sql = '''
         SELECT * FROM "Market"."Tick"
         WHERE "Security" = :security: AND "Timestamp" BETWEEN :start: AND :stop:
         ORDER BY "Timestamp"
         '''
         df = db.executeone(QueryAPI(sql), security=security, start=start, stop=stop, schema=TickAPI.Schema, table=TickAPI.Table).fetchall(legacy=False)
-        if as_dataframe: return df
-        return [TickAPI.parse(row) for row in df.iter_rows(named=True)]
+        return df
 
     @staticmethod
-    def pull_bars(db: DatabaseAPI, security: int, timeframe: str, start: datetime, stop: datetime, as_dataframe: bool = True) -> pl.DataFrame | list[BarAPI]:
-        from Library.Market.Bar import BarAPI
+    def pull_bars(db: DatabaseAPI, security: int, timeframe: str, start: datetime, stop: datetime) -> pl.DataFrame:
         sql = '''
         SELECT b."UID", b."Timestamp", b."Security", b."Timeframe",
                b."GapTick", b."OpenTick", b."HighTick", b."LowTick", b."CloseTick",
@@ -114,33 +110,12 @@ class MarketAPI(DatapointAPI):
         ORDER BY b."Timestamp"
         '''
         df = db.executeone(QueryAPI(sql), security=security, timeframe=timeframe, start=start, stop=stop, schema=BarAPI.Schema, table=BarAPI.Table).fetchall(legacy=False)
-        if as_dataframe: return df
-        return [MarketAPI._from_bar_join_row_(row) for row in df.iter_rows(named=True)]
+        return df
 
     @staticmethod
     def push_ticks(db: DatabaseAPI, data: pl.DataFrame | list[dict] | tuple | dict) -> None:
-        from Library.Market.Tick import TickAPI
         db.upsert(schema=TickAPI.Schema, table=TickAPI.Table, data=data, key=["Timestamp", "Security"], exclude=["CreatedAt", "CreatedBy"])
 
     @staticmethod
     def push_bars(db: DatabaseAPI, data: pl.DataFrame | list[dict] | tuple | dict) -> None:
-        from Library.Market.Bar import BarAPI
         db.upsert(schema=BarAPI.Schema, table=BarAPI.Table, data=data, key=["Timestamp", "Security", "Timeframe"], exclude=["CreatedAt", "CreatedBy"])
-
-    @staticmethod
-    def _from_bar_join_row_(row: dict) -> object:
-        from Library.Market.Bar import BarAPI
-        from Library.Market.Tick import TickAPI
-
-        def _extract(prefix: str):
-            if row.get(f"{prefix}_UID") is None: return None
-            tick_dict = {k.replace(f"{prefix}_", ""): v for k, v in row.items() if k.startswith(f"{prefix}_")}
-            return TickAPI.parse(tick_dict)
-
-        bar_dict = {k: v for k, v in row.items() if not any(k.startswith(p) for p in ("Gap_", "Open_", "High_", "Low_", "Close_"))}
-        bar_dict["GapTick"] = _extract("Gap")
-        bar_dict["OpenTick"] = _extract("Open")
-        bar_dict["HighTick"] = _extract("High")
-        bar_dict["LowTick"] = _extract("Low")
-        bar_dict["CloseTick"] = _extract("Close")
-        return BarAPI.parse(bar_dict)
