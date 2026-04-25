@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass, field
 
 from Library.Database.Dataclass import DataclassAPI
-from Library.Market.Price import TradeType
+from Library.Market.Price import Direction
 
 @dataclass(slots=True, kw_only=True)
 class PnLAPI(DataclassAPI):
@@ -20,8 +20,8 @@ class PnLAPI(DataclassAPI):
     def Absolute(self) -> float:
         return abs(self.PnL)
     @property
-    def Direction(self) -> TradeType:
-        return TradeType.Buy if self.PnL > 0 else TradeType.Sell if self.PnL < 0 else TradeType.Neutral
+    def Direction(self) -> Direction:
+        return Direction.Buy if self.PnL > 0 else Direction.Sell if self.PnL < 0 else Direction.Neutral
     @property
     def Return(self) -> float | None:
         if not self.Reference: return None
