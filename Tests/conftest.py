@@ -1,24 +1,18 @@
 import pytest
-
 import Library.Universe
 import Library.Market
 import Library.Portfolio
-
 from Library.Database.Datapoint import DatapointAPI
-
 def override_databases(cls, db_name):
     cls.Database = db_name
     for sub in cls.__subclasses__():
         override_databases(sub, db_name)
-
 override_databases(DatapointAPI, "Tests")
-
 from Library.Database.Query import QueryAPI
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Universe.Universe import UniverseAPI
 from Library.Market.Market import MarketAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
-
 @pytest.fixture(scope="session")
 def db():
     admin = PostgresDatabaseAPI(admin=True)
@@ -42,7 +36,6 @@ def db():
         yield conn
     finally:
         conn.disconnect()
-
 @pytest.fixture(scope="session")
 def universe(db):
     from Library.Universe.Category import CategoryAPI
@@ -70,7 +63,6 @@ def universe(db):
     tf = TimeframeAPI(UID="M1", db=db)
     tf.save(by="fixture")
     return {"category": cat, "provider": prov, "ticker": ticker, "contract": contract, "security": sec, "timeframe": tf}
-
 @pytest.fixture(scope="session")
 def market(db, universe):
     from Library.Market.Tick import TickAPI

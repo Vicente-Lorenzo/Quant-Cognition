@@ -2,11 +2,9 @@ from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Ticker import TickerAPI
 from Library.Universe.Category import CategoryAPI
 from Library.Database.Datapoint import DatapointAPI
-
 def test_ticker_normalize_prefix():
     assert TickerAPI.normalize("OANDA:EURUSD") == "EURUSD"
     assert TickerAPI.normalize("BINANCE:BTCUSD") == "BTCUSD"
-
 def test_ticker_normalize_suffix():
     assert TickerAPI.normalize("EURUSD.m") == "EURUSD"
     assert TickerAPI.normalize("GBPUSD.pro") == "GBPUSD"
@@ -25,15 +23,12 @@ def test_ticker_normalize_suffix():
     assert TickerAPI.normalize("UK100_sb") == "UK100"
     assert TickerAPI.normalize("US30.c") == "US30"
     assert TickerAPI.normalize("GER40.cfd") == "GER40"
-
 def test_ticker_normalize_special():
     assert TickerAPI.normalize("AAPL#") == "AAPL"
     assert TickerAPI.normalize("US30..") == "US30"
     assert TickerAPI.normalize("BTCUSD+_") == "BTCUSD"
-
 def test_ticker_normalize_combined():
     assert TickerAPI.normalize("FX:EURUSD.m#") == "EURUSD"
-
 def test_ticker_initialization(db):
     db.migrate(schema=UniverseAPI.Schema, table=CategoryAPI.Table, structure=CategoryAPI(db=db).Structure)
     try:

@@ -4,7 +4,6 @@ from Library.Universe.Ticker import TickerAPI, ContractType
 from Library.Universe.Provider import ProviderAPI
 from Library.Database.Datapoint import DatapointAPI
 from Library.Universe.Contract import ContractAPI
-
 def test_contract_initialization(db):
     db.migrate(schema=UniverseAPI.Schema, table=ProviderAPI.Table, structure=ProviderAPI(db=db).Structure)
     db.migrate(schema=UniverseAPI.Schema, table=CategoryAPI.Table, structure=CategoryAPI(db=db).Structure)

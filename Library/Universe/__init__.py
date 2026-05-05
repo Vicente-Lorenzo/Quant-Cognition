@@ -15,7 +15,10 @@ from Library.Universe.Contract import (
     CommissionType,
     CommissionMode,
     SwapType,
-    SwapMode
+    SwapMode,
+    VariantType,
+    ExerciseType,
+    PayoffType
 )
 from Library.Universe.Security import SecurityAPI
 from Library.Universe.Universe import UniverseAPI
@@ -34,6 +37,9 @@ __all__ = [
     "CommissionMode",
     "SwapType",
     "SwapMode",
+    "VariantType",
+    "ExerciseType",
+    "PayoffType",
     "SecurityAPI",
     "UniverseAPI"
 ]

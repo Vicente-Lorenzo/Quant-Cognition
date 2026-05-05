@@ -45,6 +45,25 @@ class SwapMode(Enumeration):
     Pips = 0
     Percentage = 1
 
+class VariantType(Enumeration):
+    Call = 0
+    Put = 1
+    Deliverable = 2
+    NDF = 3
+
+class PayoffType(Enumeration):
+    Trivial = 0
+    Vanilla = 1
+    Asian = 2
+    Barrier = 3
+    KnockOut = 4
+    Digital = 5
+
+class ExerciseType(Enumeration):
+    European = 0
+    American = 1
+    Bermudan = 2
+
 @dataclass
 class ContractAPI(UniverseAPI):
 
@@ -72,7 +91,11 @@ class ContractAPI(UniverseAPI):
     SwapSummerTime: int = 22
     SwapWinterTime: int = 21
     SwapPeriod: int = 24
-    Expiry: Union[datetime, None] = None
+    Variant: Union[VariantType, str, None] = None
+    Payoff: Union[PayoffType, str, None] = None
+    Strike: Union[float, None] = None
+    Maturity: Union[datetime, None] = None
+    Exercise: Union[ExerciseType, str, None] = None
 
     _ticker_: Union[TickerAPI, None] = field(default=None, init=False, repr=False)
     _provider_: Union[ProviderAPI, None] = field(default=None, init=False, repr=False)
@@ -100,7 +123,11 @@ class ContractAPI(UniverseAPI):
             self.ID.SwapSummerTime: pl.Int32(),
             self.ID.SwapWinterTime: pl.Int32(),
             self.ID.SwapPeriod: pl.Int32(),
-            self.ID.Expiry: pl.Datetime(),
+            self.ID.Variant: pl.String(),
+            self.ID.Payoff: pl.String(),
+            self.ID.Strike: pl.Float64(),
+            self.ID.Maturity: pl.Datetime(),
+            self.ID.Exercise: pl.String(),
             **super().Structure
         }
 
@@ -142,6 +169,9 @@ class ContractAPI(UniverseAPI):
             self.CommissionMode = CommissionMode.parse(self.CommissionMode)
             self.SwapMode = SwapMode.parse(self.SwapMode)
             self.SwapExtraDay = Weekday.parse(self.SwapExtraDay)
+            self.Variant = VariantType.parse(self.Variant)
+            self.Payoff = PayoffType.parse(self.Payoff)
+            self.Exercise = ExerciseType.parse(self.Exercise)
         return row
 
     def save(self, by: str = "Autosave") -> None:
@@ -167,3 +197,19 @@ class ContractAPI(UniverseAPI):
     def Provider(self, val: Union[str, ProviderAPI, None]) -> None:
         if isinstance(val, ProviderAPI): self._provider_ = val
         elif val is not None: self._provider_ = ProviderAPI(UID=ProviderAPI.normalize(val), db=self._db_, autoload=True)
+
+    @property
+    def IsSpot(self) -> bool:
+        return self.Type == ContractType.Spot
+
+    @property
+    def IsDerivative(self) -> bool:
+        return self.Type in [ContractType.Option, ContractType.Future, ContractType.Swap]
+
+    @property
+    def IsLinear(self) -> bool:
+        return self.Type in [ContractType.Spot, ContractType.CFD, ContractType.Future, ContractType.Swap]
+
+    @property
+    def IsNonLinear(self) -> bool:
+        return self.Type == ContractType.Option or self.Payoff not in [PayoffType.Vanilla, PayoffType.Trivial, None]

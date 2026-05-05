@@ -1,6 +1,5 @@
 import Library.Market
 import Library.Portfolio
-
 from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOASymbolsListRes,
     ProtoOASymbolByIdRes,
@@ -8,7 +7,6 @@ from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOAAssetClassListRes,
     ProtoOASymbolCategoryListRes
 )
-
 def _add_symbol(response, symbol_id, name, asset_base=10, asset_quote=20, category=5, archived=False):
     if archived:
         s = response.archivedSymbol.add()
@@ -24,7 +22,6 @@ def _add_symbol(response, symbol_id, name, asset_base=10, asset_quote=20, catego
         s.quoteAssetId = asset_quote
         s.symbolCategoryId = category
         s.description = f"{name} desc"
-
 def test_tickers_parses_light_symbols(spotware):
     res = ProtoOASymbolsListRes()
     res.ctidTraderAccountId = 123
@@ -39,7 +36,6 @@ def test_tickers_parses_light_symbols(spotware):
     assert type(sent).__name__ == "ProtoOASymbolsListReq"
     assert sent.ctidTraderAccountId == 123
     assert sent.includeArchivedSymbols is False
-
 def test_tickers_includes_archived_when_flag_set(spotware):
     res = ProtoOASymbolsListRes()
     res.ctidTraderAccountId = 123
@@ -50,12 +46,10 @@ def test_tickers_includes_archived_when_flag_set(spotware):
     assert len(df) == 2
     assert set(df["SecurityUID"].to_list()) == {1, 99}
     assert spotware._sent_[0].includeArchivedSymbols is True
-
 def test_tickers_empty_response(spotware):
     spotware._responses_.append(ProtoOASymbolsListRes())
     df = spotware.universe.tickers()
     assert len(df) == 0
-
 def test_ticker_detail_fetch(spotware):
     res = ProtoOASymbolByIdRes()
     s = res.symbol.add()
@@ -79,7 +73,6 @@ def test_ticker_detail_fetch(spotware):
     assert df["LotSize"][0] == 100000
     sent = spotware._sent_[0]
     assert list(sent.symbolId) == [1]
-
 def test_ticker_detail_multiple_ids(spotware):
     res = ProtoOASymbolByIdRes()
     a = res.symbol.add()
@@ -90,7 +83,6 @@ def test_ticker_detail_multiple_ids(spotware):
     df = spotware.universe.ticker(ids=[1, 2])
     assert len(df) == 2
     assert list(spotware._sent_[0].symbolId) == [1, 2]
-
 def test_assets(spotware):
     res = ProtoOAAssetListRes()
     a = res.asset.add(); a.assetId = 1; a.name = "USD"; a.displayName = "US Dollar"; a.digits = 2
@@ -100,7 +92,6 @@ def test_assets(spotware):
     assert len(df) == 2
     assert df["Name"].to_list() == ["USD", "EUR"]
     assert df["AssetId"].to_list() == [1, 2]
-
 def test_asset_classes(spotware):
     res = ProtoOAAssetClassListRes()
     c = res.assetClass.add(); c.id = 1; c.name = "Forex"
@@ -110,7 +101,6 @@ def test_asset_classes(spotware):
     assert len(df) == 2
     assert df["AssetClassId"].to_list() == [1, 2]
     assert df["Name"].to_list() == ["Forex", "Metals"]
-
 def test_categories(spotware):
     res = ProtoOASymbolCategoryListRes()
     c = res.symbolCategory.add(); c.id = 10; c.assetClassId = 1; c.name = "Major"

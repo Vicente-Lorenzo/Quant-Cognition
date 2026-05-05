@@ -1,9 +1,7 @@
 import pytest
 from datetime import datetime, timezone
-
 import Library.Market
 import Library.Portfolio
-
 from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOAGetAccountListByAccessTokenRes,
     ProtoOATraderRes,
@@ -14,7 +12,6 @@ from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOAGetPositionUnrealizedPnLRes,
     ProtoOACashFlowHistoryListRes
 )
-
 def test_accounts_parses_response(spotware):
     res = ProtoOAGetAccountListByAccessTokenRes()
     res.accessToken = "tok"
@@ -27,7 +24,6 @@ def test_accounts_parses_response(spotware):
     assert df["IsLive"].to_list() == [False, True]
     assert type(spotware._sent_[0]).__name__ == "ProtoOAGetAccountListByAccessTokenReq"
     assert spotware._sent_[0].accessToken == "test_token"
-
 def test_account_scales_balance_by_money_digits(spotware):
     res = ProtoOATraderRes()
     res.ctidTraderAccountId = 123
@@ -60,7 +56,6 @@ def test_account_scales_balance_by_money_digits(spotware):
     assert df["MarginMode"][0] == "Max"
     assert df["Leverage"][0] == pytest.approx(100.0)
     assert df["MoneyDigits"][0] == 2
-
 def test_position_filters_by_id(spotware):
     res = ProtoOAReconcileRes()
     res.ctidTraderAccountId = 123
@@ -105,7 +100,6 @@ def test_position_filters_by_id(spotware):
     assert df["SecurityUID"][0] == 2
     assert df["Direction"][0] == "Sell"
     assert type(spotware._sent_[0]).__name__ == "ProtoOAReconcileReq"
-
 def test_positions_parses_reconcile(spotware):
     res = ProtoOAReconcileRes()
     res.ctidTraderAccountId = 123
@@ -138,7 +132,6 @@ def test_positions_parses_reconcile(spotware):
     assert df["EntryPrice"][0] == pytest.approx(1.05)
     assert df["CommissionPnL"][0] == pytest.approx(-2.0)
     assert df["UsedMargin"][0] == pytest.approx(500.0)
-
 def test_order_fetches_single_by_id(spotware):
     res = ProtoOAOrderDetailsRes()
     res.ctidTraderAccountId = 123
@@ -165,7 +158,6 @@ def test_order_fetches_single_by_id(spotware):
     sent = spotware._sent_[0]
     assert type(sent).__name__ == "ProtoOAOrderDetailsReq"
     assert sent.orderId == 42
-
 def test_orders_pending_via_reconcile(spotware):
     res = ProtoOAReconcileRes()
     res.ctidTraderAccountId = 123
@@ -190,7 +182,6 @@ def test_orders_pending_via_reconcile(spotware):
     assert df["SecurityUID"][0] == 5
     assert df["Direction"][0] == "Sell"
     assert type(spotware._sent_[0]).__name__ == "ProtoOAReconcileReq"
-
 def test_orders_historical_with_range(spotware):
     res = ProtoOAOrderListRes()
     res.ctidTraderAccountId = 123
@@ -219,7 +210,6 @@ def test_orders_historical_with_range(spotware):
     assert df["Direction"][0] == "Buy"
     assert type(spotware._sent_[0]).__name__ == "ProtoOAOrderListReq"
     assert spotware._sent_[0].fromTimestamp == 1577836800000
-
 def test_trade_filters_single_closing_deal_by_id(spotware):
     res = ProtoOADealListRes()
     res.ctidTraderAccountId = 123
@@ -279,7 +269,6 @@ def test_trade_filters_single_closing_deal_by_id(spotware):
     assert df["Direction"][0] == "Sell"
     sent = spotware._sent_[0]
     assert type(sent).__name__ == "ProtoOADealListReq"
-
 def test_trades_filters_to_closing_deals(spotware):
     res = ProtoOADealListRes()
     res.ctidTraderAccountId = 123
@@ -345,7 +334,6 @@ def test_trades_filters_to_closing_deals(spotware):
     assert type(sent).__name__ == "ProtoOADealListReq"
     assert sent.maxRows == 1000
     assert sent.fromTimestamp == 1577836800000
-
 def test_pnl_scales_by_money_digits(spotware):
     res = ProtoOAGetPositionUnrealizedPnLRes()
     res.ctidTraderAccountId = 123
@@ -360,7 +348,6 @@ def test_pnl_scales_by_money_digits(spotware):
     assert df["PositionID"][0] == 555
     assert df["GrossPnL"][0] == pytest.approx(125.0)
     assert df["NetPnL"][0] == pytest.approx(123.0)
-
 def test_cashflow_parses_entries(spotware):
     res = ProtoOACashFlowHistoryListRes()
     res.ctidTraderAccountId = 123

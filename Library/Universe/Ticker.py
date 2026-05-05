@@ -21,9 +21,10 @@ _SUFFIX_LIST_ = sorted([".m", ".micro", ".pro", ".p", ".raw", ".ecn", ".s", ".st
 
 class ContractType(Enumeration):
     Spot = 0
-    Future = 1
-    Swap = 2
-    Option = 3
+    CFD = 1
+    Option = 2
+    Future = 3
+    Swap = 4
 
 @dataclass
 class TickerAPI(UniverseAPI):

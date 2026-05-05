@@ -8,7 +8,6 @@ from Library.Universe.Category import CategoryAPI
 from Library.Universe.Provider import ProviderAPI, Platform
 from Library.Universe.Ticker import TickerAPI, ContractType
 from Library.Universe.Universe import UniverseAPI
-
 def test_bar_initialization(db):
     db.migrate(schema=UniverseAPI.Schema, table=CategoryAPI.Table, structure=CategoryAPI(db=db).Structure)
     db.migrate(schema=UniverseAPI.Schema, table=ProviderAPI.Table, structure=ProviderAPI(db=db).Structure)
@@ -16,32 +15,27 @@ def test_bar_initialization(db):
     db.migrate(schema=UniverseAPI.Schema, table=TimeframeAPI.Table, structure=TimeframeAPI(db=db).Structure)
     from Library.Universe.Contract import ContractAPI
     db.migrate(schema=UniverseAPI.Schema, table=ContractAPI.Table, structure=ContractAPI(db=db).Structure)
-
     CategoryAPI(UID="Forex (Major)", Primary="Forex", Secondary="Major", Alternative="Currency", db=db).save(by="test")
     ProviderAPI(UID="Pepperstone (cTrader)", Platform=Platform.cTrader, Name="Pepperstone Europe", Abbreviation="Pepperstone", db=db).save(by="test")
     TickerAPI(UID="EURUSD", Category="Forex (Major)", BaseAsset="EUR", BaseName="Euro", QuoteAsset="USD", QuoteName="US Dollar", Description="Euro vs US Dollar", db=db).save(by="test")
     ContractAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Type=ContractType.Spot, db=db).save(by="test")
     tf = TimeframeAPI(UID="M1", db=db)
     tf.save(by="test")
-
     sec = SecurityAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Contract=ContractType.Spot, db=db, migrate=True, autoload=True)
     sec.save(by="test")
     dt = datetime(2023, 1, 1, 12, 0, 0)
-    
     db.migrate(schema=TickAPI.Schema, table=TickAPI.Table, structure=TickAPI(db=db).Structure)
-
     bar_args = (
         sec.UID, 
         tf.UID,
         dt, 
-        None, # GapTick
-        TickAPI(Ask=1.0500, Bid=1.0498), # Open
-        TickAPI(Ask=1.0510, Bid=1.0508), # High
-        TickAPI(Ask=1.0490, Bid=1.0488), # Low
-        TickAPI(Ask=1.0505, Bid=1.0503)  # Close
+        None,
+        TickAPI(Ask=1.0500, Bid=1.0498),
+        TickAPI(Ask=1.0510, Bid=1.0508),
+        TickAPI(Ask=1.0490, Bid=1.0488),
+        TickAPI(Ask=1.0505, Bid=1.0503)
     )
     bar = BarAPI(*bar_args, db=db, migrate=True)
-    
     assert bar.Security.UID == sec.UID
     assert bar.Timeframe.UID == tf.UID
     assert bar.Timestamp.DateTime == dt
@@ -49,6 +43,5 @@ def test_bar_initialization(db):
     assert bar.HighTick.Ask.Price == pytest.approx(1.0510)
     assert bar.LowTick.Ask.Price == pytest.approx(1.0490)
     assert bar.CloseTick.Ask.Price == pytest.approx(1.0505)
-    
     from Library.Database.Query import QueryAPI
     db.executeone(QueryAPI(f'DELETE FROM "{BarAPI.Schema}"."{BarAPI.Table}"')).commit()

@@ -8,7 +8,6 @@ from Library.Universe.Category import CategoryAPI
 from Library.Universe.Provider import ProviderAPI, Platform
 from Library.Universe.Ticker import TickerAPI, ContractType
 from Library.Universe.Universe import UniverseAPI
-
 def test_portfolio_initialization(db):
     db.migrate(schema=UniverseAPI.Schema, table=CategoryAPI.Table, structure=CategoryAPI(db=db).Structure)
     db.migrate(schema=UniverseAPI.Schema, table=ProviderAPI.Table, structure=ProviderAPI(db=db).Structure)
@@ -21,13 +20,11 @@ def test_portfolio_initialization(db):
     db.migrate(schema=OrderAPI.Schema, table=OrderAPI.Table, structure=OrderAPI(db=db).Structure)
     db.migrate(schema=PositionAPI.Schema, table=PositionAPI.Table, structure=PositionAPI(db=db).Structure)
     db.migrate(schema=TradeAPI.Schema, table=TradeAPI.Table, structure=TradeAPI(db=db).Structure)
-
     CategoryAPI(UID="Forex (Major)", Primary="Forex", Secondary="Major", Alternative="Currency", db=db).save(by="test")
     provider = ProviderAPI(UID="Pepperstone (cTrader)", Platform=Platform.cTrader, Name="Pepperstone Europe", Abbreviation="Pepperstone", db=db)
     provider.save(by="test")
     TickerAPI(UID="EURUSD", Category="Forex (Major)", BaseAsset="EUR", BaseName="Euro", QuoteAsset="USD", QuoteName="US Dollar", Description="Euro vs US Dollar", db=db).save(by="test")
     ContractAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Type=ContractType.Spot, db=db).save(by="test")
-
     acc = AccountAPI(
         UID="123456",
         Provider=provider.UID,
@@ -49,11 +46,9 @@ def test_portfolio_initialization(db):
     assert acc.Provider.UID == "Pepperstone (cTrader)"
     assert acc.Environment == Environment.Live
     assert acc.AccountType == AccountType.Hedged
-
     sec = SecurityAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Contract=ContractType.Spot, db=db, autoload=True)
     sec.save(by="test")
     dt = datetime(2023, 1, 1, 12, 0, 0)
-    
     pos = PositionAPI(
         UID=1001,
         Security=sec.UID,
@@ -73,7 +68,6 @@ def test_portfolio_initialization(db):
     assert pos.Security.UID == sec.UID
     assert pos.Direction == Direction.Buy
     assert pos.EntryPrice.Price == pytest.approx(1.0500)
-
     exit_dt = datetime(2023, 1, 1, 14, 0, 0)
     trade = TradeAPI(
         UID=2001,
@@ -96,7 +90,6 @@ def test_portfolio_initialization(db):
     assert trade.UID == 2001
     assert trade.ExitPrice.Price == pytest.approx(1.0550)
     assert trade.NetPnL.PnL == pytest.approx(495.0)
-
     from Library.Database.Query import QueryAPI
     db.executeone(QueryAPI(f'DELETE FROM "{TradeAPI.Schema}"."{TradeAPI.Table}"')).commit()
     db.executeone(QueryAPI(f'DELETE FROM "{PositionAPI.Schema}"."{PositionAPI.Table}"')).commit()
