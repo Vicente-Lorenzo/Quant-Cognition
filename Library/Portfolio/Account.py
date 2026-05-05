@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from enum import Enum
 from typing import Union, ClassVar, TYPE_CHECKING
 from dataclasses import dataclass, field, InitVar
 
@@ -9,23 +8,23 @@ from Library.Database.Database import PrimaryKey, ForeignKey
 from Library.Database.Datapoint import DatapointAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Database.Dataclass import overridefield, coerce
-from Library.Database.Enumeration import as_enum
+from Library.Database.Enumeration import Enumeration
 from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Provider import ProviderAPI
 from Library.Utility.Typing import MISSING
 
 if TYPE_CHECKING: from Library.Database import DatabaseAPI
 
-class AccountType(Enum):
+class AccountType(Enumeration):
     Hedged = 0
     Netted = 1
 
-class MarginMode(Enum):
+class MarginMode(Enumeration):
     Sum = 0
     Max = 1
     Net = 2
 
-class Environment(Enum):
+class Environment(Enumeration):
     Live = 0
     Demo = 1
 
@@ -67,9 +66,9 @@ class AccountAPI(DatapointAPI):
     def Columns(self) -> dict:
         return {
             self.ID.Provider: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{ProviderAPI.Table}"("{ProviderAPI.ID.UID}")'),
-            self.ID.Environment: pl.Enum([e.name for e in Environment]),
-            self.ID.AccountType: pl.Enum([e.name for e in AccountType]),
-            self.ID.MarginMode: pl.Enum([e.name for e in MarginMode]),
+            self.ID.Environment: pl.String(),
+            self.ID.AccountType: pl.String(),
+            self.ID.MarginMode: pl.String(),
             self.ID.Asset: pl.String(),
             self.ID.Balance: pl.Float64(),
             self.ID.Equity: pl.Float64(),
@@ -92,13 +91,13 @@ class AccountAPI(DatapointAPI):
                       account_type: Union[AccountType, str, None],
                       margin_mode: Union[MarginMode, str, None],
                       provider: Union[str, ProviderAPI, None]) -> None:
-        environment = MISSING if isinstance(environment, property) else environment
-        account_type = MISSING if isinstance(account_type, property) else account_type
-        margin_mode = MISSING if isinstance(margin_mode, property) else margin_mode
+        environment = coerce(environment)
+        account_type = coerce(account_type)
+        margin_mode = coerce(margin_mode)
         provider = coerce(provider)
-        self._environment_ = as_enum(Environment, environment) if environment is not MISSING else None
-        self._account_type_ = as_enum(AccountType, account_type) if account_type is not MISSING else None
-        self._margin_mode_ = as_enum(MarginMode, margin_mode) if margin_mode is not MISSING else None
+        self._environment_ = Environment.parse(environment) if environment is not MISSING else None
+        self._account_type_ = AccountType.parse(account_type) if account_type is not MISSING else None
+        self._margin_mode_ = MarginMode.parse(margin_mode) if margin_mode is not MISSING else None
         if isinstance(provider, ProviderAPI): self._provider_ = provider
         elif provider is not MISSING and provider is not None:
             self._provider_ = ProviderAPI(UID=ProviderAPI.normalize(provider), db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
@@ -107,9 +106,9 @@ class AccountAPI(DatapointAPI):
     def _pull_(self, overload: bool) -> Union[dict, None]:
         row = super()._pull_(overload=overload)
         if row:
-            self._environment_ = as_enum(Environment, row.get(self.ID.Environment))
-            self._account_type_ = as_enum(AccountType, row.get(self.ID.AccountType))
-            self._margin_mode_ = as_enum(MarginMode, row.get(self.ID.MarginMode))
+            self._environment_ = Environment.parse(row.get(self.ID.Environment))
+            self._account_type_ = AccountType.parse(row.get(self.ID.AccountType))
+            self._margin_mode_ = MarginMode.parse(row.get(self.ID.MarginMode))
         return row
 
     @property
@@ -118,7 +117,7 @@ class AccountAPI(DatapointAPI):
         return self._environment_
     @Environment.setter
     def Environment(self, val: Union[Environment, str, None]) -> None:
-        self._environment_ = as_enum(Environment, val)
+        self._environment_ = Environment.parse(val)
 
     @property
     @overridefield
@@ -126,7 +125,7 @@ class AccountAPI(DatapointAPI):
         return self._account_type_
     @AccountType.setter
     def AccountType(self, val: Union[AccountType, str, None]) -> None:
-        self._account_type_ = as_enum(AccountType, val)
+        self._account_type_ = AccountType.parse(val)
 
     @property
     @overridefield
@@ -134,7 +133,7 @@ class AccountAPI(DatapointAPI):
         return self._margin_mode_
     @MarginMode.setter
     def MarginMode(self, val: Union[MarginMode, str, None]) -> None:
-        self._margin_mode_ = as_enum(MarginMode, val)
+        self._margin_mode_ = MarginMode.parse(val)
 
     @property
     @overridefield

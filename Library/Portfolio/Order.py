@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from enum import Enum
 from datetime import datetime
 from typing import Union, ClassVar, TYPE_CHECKING
 from dataclasses import dataclass, field, InitVar
@@ -10,7 +9,7 @@ from Library.Database.Database import IdentityKey, ForeignKey, DatabaseAPI
 from Library.Database.Datapoint import DatapointAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Database.Dataclass import overridefield, coerce
-from Library.Database.Enumeration import as_enum
+from Library.Database.Enumeration import Enumeration
 from Library.Portfolio.Position import PositionAPI
 from Library.Universe.Universe import UniverseAPI
 from Library.Market.Timestamp import TimestampAPI
@@ -21,7 +20,7 @@ if TYPE_CHECKING:
     from Library.Universe.Security import SecurityAPI
     from Library.Universe.Contract import ContractAPI
 
-class OrderType(Enum):
+class OrderType(Enumeration):
     Market = 1
     Limit = 2
     Stop = 3
@@ -29,14 +28,14 @@ class OrderType(Enum):
     MarketRange = 5
     StopLimit = 6
 
-class OrderStatus(Enum):
+class OrderStatus(Enumeration):
     Accepted = 1
     Filled = 2
     Rejected = 3
     Expired = 4
     Cancelled = 5
 
-class TimeInForce(Enum):
+class TimeInForce(Enumeration):
     GoodTillDate = 1
     GoodTillCancel = 2
     ImmediateOrCancel = 3
@@ -109,10 +108,10 @@ class OrderAPI(DatapointAPI):
             self.ID.UID: IdentityKey(pl.Int64),
             self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
             self.ID.Position: pl.Int64(),
-            self.ID.Direction: pl.Enum([e.name for e in Direction]),
-            self.ID.OrderType: pl.Enum([e.name for e in OrderType]),
-            self.ID.OrderStatus: pl.Enum([e.name for e in OrderStatus]),
-            self.ID.TimeInForce: pl.Enum([e.name for e in TimeInForce]),
+            self.ID.Direction: pl.String(),
+            self.ID.OrderType: pl.String(),
+            self.ID.OrderStatus: pl.String(),
+            self.ID.TimeInForce: pl.String(),
             self.ID.Volume: pl.Float64(),
             self.ID.ExecutedVolume: pl.Float64(),
             self.ID.ExecutionPrice: pl.Float64(),
@@ -160,15 +159,15 @@ class OrderAPI(DatapointAPI):
                       last_update_timestamp: Union[datetime, TimestampAPI, None],
                       contract: Union[ContractAPI, None]) -> None:
         from Library.Universe.Security import SecurityAPI
-        direction = MISSING if isinstance(direction, property) else direction
-        order_type = MISSING if isinstance(order_type, property) else order_type
-        order_status = MISSING if isinstance(order_status, property) else order_status
-        time_in_force = MISSING if isinstance(time_in_force, property) else time_in_force
+        direction = coerce(direction)
+        order_type = coerce(order_type)
+        order_status = coerce(order_status)
+        time_in_force = coerce(time_in_force)
         
-        self._direction_ = as_enum(Direction, direction) if direction is not MISSING else None
-        self._order_type_ = as_enum(OrderType, order_type) if order_type is not MISSING else None
-        self._order_status_ = as_enum(OrderStatus, order_status) if order_status is not MISSING else None
-        self._time_in_force_ = as_enum(TimeInForce, time_in_force) if time_in_force is not MISSING else None
+        self._direction_ = Direction.parse(direction) if direction is not MISSING else None
+        self._order_type_ = OrderType.parse(order_type) if order_type is not MISSING else None
+        self._order_status_ = OrderStatus.parse(order_status) if order_status is not MISSING else None
+        self._time_in_force_ = TimeInForce.parse(time_in_force) if time_in_force is not MISSING else None
 
         security = coerce(security)
         position = coerce(position)
@@ -205,10 +204,10 @@ class OrderAPI(DatapointAPI):
     def _pull_(self, overload: bool) -> Union[dict, None]:
         row = super()._pull_(overload=overload)
         if row:
-            self._direction_ = as_enum(Direction, row.get(self.ID.Direction))
-            self._order_type_ = as_enum(OrderType, row.get(self.ID.OrderType))
-            self._order_status_ = as_enum(OrderStatus, row.get(self.ID.OrderStatus))
-            self._time_in_force_ = as_enum(TimeInForce, row.get(self.ID.TimeInForce))
+            self._direction_ = Direction.parse(row.get(self.ID.Direction))
+            self._order_type_ = OrderType.parse(row.get(self.ID.OrderType))
+            self._order_status_ = OrderStatus.parse(row.get(self.ID.OrderStatus))
+            self._time_in_force_ = TimeInForce.parse(row.get(self.ID.TimeInForce))
         return row
 
     @staticmethod
@@ -254,7 +253,7 @@ class OrderAPI(DatapointAPI):
         return self._direction_
     @Direction.setter
     def Direction(self, val: Union[Direction, str, None]) -> None:
-        self._direction_ = as_enum(Direction, val)
+        self._direction_ = Direction.parse(val)
 
     @property
     @overridefield
@@ -262,7 +261,7 @@ class OrderAPI(DatapointAPI):
         return self._order_type_
     @OrderType.setter
     def OrderType(self, val: Union[OrderType, str, None]) -> None:
-        self._order_type_ = as_enum(OrderType, val)
+        self._order_type_ = OrderType.parse(val)
 
     @property
     @overridefield
@@ -270,7 +269,7 @@ class OrderAPI(DatapointAPI):
         return self._order_status_
     @OrderStatus.setter
     def OrderStatus(self, val: Union[OrderStatus, str, None]) -> None:
-        self._order_status_ = as_enum(OrderStatus, val)
+        self._order_status_ = OrderStatus.parse(val)
 
     @property
     @overridefield
@@ -278,7 +277,7 @@ class OrderAPI(DatapointAPI):
         return self._time_in_force_
     @TimeInForce.setter
     def TimeInForce(self, val: Union[TimeInForce, str, None]) -> None:
-        self._time_in_force_ = as_enum(TimeInForce, val)
+        self._time_in_force_ = TimeInForce.parse(val)
 
     @property
     @overridefield

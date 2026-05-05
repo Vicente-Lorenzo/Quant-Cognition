@@ -36,9 +36,9 @@ class SecurityAPI(UniverseAPI):
     def Structure(self) -> dict:
         return {
             self.ID.UID: IdentityKey(pl.Int64),
-            self.ID.Provider: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{ProviderAPI.Table}"("{ProviderAPI.ID.UID}")', primary=True),
+            self.ID.Provider: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{ProviderAPI.Table}"("{ProviderAPI.ID.UID}") ON DELETE CASCADE', primary=True),
             self.ID.Category: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{CategoryAPI.Table}"("{CategoryAPI.ID.UID}")', primary=True),
-            self.ID.Ticker: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{TickerAPI.Table}"("{TickerAPI.ID.UID}")', primary=True),
+            self.ID.Ticker: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{TickerAPI.Table}"("{TickerAPI.ID.UID}") ON DELETE CASCADE', primary=True),
             self.ID.Contract: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{ContractAPI.Table}"("{ContractAPI.ID.UID}")', primary=True),
             **super().Structure
         }

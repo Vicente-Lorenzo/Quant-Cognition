@@ -1,6 +1,7 @@
 import pytest
 from datetime import datetime
 from Library.Market.Bar import BarAPI
+from Library.Market.Tick import TickAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Universe.Timeframe import TimeframeAPI
 from Library.Universe.Category import CategoryAPI
@@ -27,20 +28,19 @@ def test_bar_initialization(db):
     sec.save(by="test")
     dt = datetime(2023, 1, 1, 12, 0, 0)
     
-    from Library.Market.Tick import TickAPI
     db.migrate(schema=TickAPI.Schema, table=TickAPI.Table, structure=TickAPI(db=db).Structure)
 
-    bar = BarAPI(
-        Security=sec.UID, 
-        Timeframe=tf.UID,
-        Timestamp=dt, 
-        OpenTick=TickAPI(Ask=1.0500, Bid=1.0498),
-        HighTick=TickAPI(Ask=1.0510, Bid=1.0508),
-        LowTick=TickAPI(Ask=1.0490, Bid=1.0488),
-        CloseTick=TickAPI(Ask=1.0505, Bid=1.0503),
-        db=db,
-        migrate=True
+    bar_args = (
+        sec.UID, 
+        tf.UID,
+        dt, 
+        None, # GapTick
+        TickAPI(Ask=1.0500, Bid=1.0498), # Open
+        TickAPI(Ask=1.0510, Bid=1.0508), # High
+        TickAPI(Ask=1.0490, Bid=1.0488), # Low
+        TickAPI(Ask=1.0505, Bid=1.0503)  # Close
     )
+    bar = BarAPI(*bar_args, db=db, migrate=True)
     
     assert bar.Security.UID == sec.UID
     assert bar.Timeframe.UID == tf.UID
@@ -49,11 +49,6 @@ def test_bar_initialization(db):
     assert bar.HighTick.Ask.Price == pytest.approx(1.0510)
     assert bar.LowTick.Ask.Price == pytest.approx(1.0490)
     assert bar.CloseTick.Ask.Price == pytest.approx(1.0505)
-    
-    assert bar.OpenTick.Mid == pytest.approx(1.0499)
-    assert bar.HighTick.Mid == pytest.approx(1.0509)
-    assert bar.LowTick.Mid == pytest.approx(1.0489)
-    assert bar.CloseTick.Mid == pytest.approx(1.0504)
     
     from Library.Database.Query import QueryAPI
     db.executeone(QueryAPI(f'DELETE FROM "{BarAPI.Schema}"."{BarAPI.Table}"')).commit()

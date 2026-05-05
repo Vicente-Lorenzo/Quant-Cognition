@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from enum import Enum
 from datetime import datetime
 from typing import Union, ClassVar, TYPE_CHECKING
 from dataclasses import dataclass, field, InitVar
@@ -9,7 +8,7 @@ from Library.Database.Dataframe import pl
 from Library.Database.Database import IdentityKey, ForeignKey, DatabaseAPI
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Dataclass import overridefield, coerce
-from Library.Database.Enumeration import as_enum
+from Library.Database.Enumeration import Enumeration
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.PnL import PnLAPI
 from Library.Universe.Universe import UniverseAPI
@@ -21,7 +20,7 @@ if TYPE_CHECKING:
     from Library.Universe.Security import SecurityAPI
     from Library.Portfolio.Order import OrderAPI
 
-class PositionType(Enum):
+class PositionType(Enumeration):
     Normal = 0
     Continuation = 1
 
@@ -96,8 +95,8 @@ class PositionAPI(DatapointAPI):
             self.ID.UID: IdentityKey(pl.Int64),
             self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
             self.ID.Order: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{OrderAPI.Table}"("{OrderAPI.ID.UID}")'),
-            self.ID.Type: pl.Enum([e.name for e in PositionType]),
-            self.ID.Direction: pl.Enum([e.name for e in Direction]),
+            self.ID.Type: pl.String(),
+            self.ID.Direction: pl.String(),
             self.ID.Volume: pl.Float64(),
             self.ID.Quantity: pl.Float64(),
             self.ID.EntryTimestamp: pl.Datetime(),
@@ -154,29 +153,29 @@ class PositionAPI(DatapointAPI):
                       order: Union[int, OrderAPI, None]) -> None:
         from Library.Universe.Security import SecurityAPI
         from Library.Portfolio.Order import OrderAPI
-        type = MISSING if isinstance(type, property) else type
-        direction = MISSING if isinstance(direction, property) else direction
-        security = MISSING if isinstance(security, property) else security
-        entry_timestamp = MISSING if isinstance(entry_timestamp, property) else entry_timestamp
-        entry_price = MISSING if isinstance(entry_price, property) else entry_price
-        stop_loss_price = MISSING if isinstance(stop_loss_price, property) else stop_loss_price
-        take_profit_price = MISSING if isinstance(take_profit_price, property) else take_profit_price
-        max_run_up_price = MISSING if isinstance(max_run_up_price, property) else max_run_up_price
-        max_draw_down_price = MISSING if isinstance(max_draw_down_price, property) else max_draw_down_price
-        exit_price = MISSING if isinstance(exit_price, property) else exit_price
-        stop_loss_pnl = MISSING if isinstance(stop_loss_pnl, property) else stop_loss_pnl
-        take_profit_pnl = MISSING if isinstance(take_profit_pnl, property) else take_profit_pnl
-        max_run_up_pnl = MISSING if isinstance(max_run_up_pnl, property) else max_run_up_pnl
-        max_draw_down_pnl = MISSING if isinstance(max_draw_down_pnl, property) else max_draw_down_pnl
-        gross_pnl = MISSING if isinstance(gross_pnl, property) else gross_pnl
-        commission_pnl = MISSING if isinstance(commission_pnl, property) else commission_pnl
-        swap_pnl = MISSING if isinstance(swap_pnl, property) else swap_pnl
-        net_pnl = MISSING if isinstance(net_pnl, property) else net_pnl
-        entry_balance = MISSING if isinstance(entry_balance, property) else entry_balance
-        order = MISSING if isinstance(order, property) else order
+        type = coerce(type)
+        direction = coerce(direction)
+        security = coerce(security)
+        entry_timestamp = coerce(entry_timestamp)
+        entry_price = coerce(entry_price)
+        stop_loss_price = coerce(stop_loss_price)
+        take_profit_price = coerce(take_profit_price)
+        max_run_up_price = coerce(max_run_up_price)
+        max_draw_down_price = coerce(max_draw_down_price)
+        exit_price = coerce(exit_price)
+        stop_loss_pnl = coerce(stop_loss_pnl)
+        take_profit_pnl = coerce(take_profit_pnl)
+        max_run_up_pnl = coerce(max_run_up_pnl)
+        max_draw_down_pnl = coerce(max_draw_down_pnl)
+        gross_pnl = coerce(gross_pnl)
+        commission_pnl = coerce(commission_pnl)
+        swap_pnl = coerce(swap_pnl)
+        net_pnl = coerce(net_pnl)
+        entry_balance = coerce(entry_balance)
+        order = coerce(order)
 
-        self._type_ = as_enum(PositionType, type) if type is not MISSING else None
-        self._direction_ = as_enum(Direction, direction) if direction is not MISSING else None
+        self._type_ = PositionType.parse(type) if type is not MISSING else None
+        self._direction_ = Direction.parse(direction) if direction is not MISSING else None
 
         if isinstance(security, SecurityAPI): self._security_ = security
         elif security is not MISSING and security is not None:
@@ -210,8 +209,8 @@ class PositionAPI(DatapointAPI):
     def _pull_(self, overload: bool) -> Union[dict, None]:
         row = super()._pull_(overload=overload)
         if row:
-            self._type_ = as_enum(PositionType, row.get(self.ID.Type))
-            self._direction_ = as_enum(Direction, row.get(self.ID.Direction))
+            self._type_ = PositionType.parse(row.get(self.ID.Type))
+            self._direction_ = Direction.parse(row.get(self.ID.Direction))
         return row
 
     @staticmethod
@@ -246,7 +245,7 @@ class PositionAPI(DatapointAPI):
         return self._type_
     @Type.setter
     def Type(self, val: Union[PositionType, str, None]) -> None:
-        self._type_ = as_enum(PositionType, val)
+        self._type_ = PositionType.parse(val)
 
     @property
     @overridefield
@@ -254,7 +253,7 @@ class PositionAPI(DatapointAPI):
         return self._direction_
     @Direction.setter
     def Direction(self, val: Union[Direction, str, None]) -> None:
-        self._direction_ = as_enum(Direction, val)
+        self._direction_ = Direction.parse(val)
 
     @property
     @overridefield

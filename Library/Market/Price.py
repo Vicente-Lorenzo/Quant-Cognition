@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import math
-from enum import Enum
 from typing import Union, TYPE_CHECKING
 from dataclasses import dataclass, field
 
 from Library.Database.Dataclass import DataclassAPI
+from Library.Database.Enumeration import Enumeration
 
 if TYPE_CHECKING: from Library.Universe.Contract import ContractAPI
 
-class Direction(Enum):
+class Direction(Enumeration):
     Buy = 1
     Neutral = 0
     Sell = -1

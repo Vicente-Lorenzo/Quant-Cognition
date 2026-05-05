@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, InitVar
 from Library.Database.Dataframe import pl
 from Library.Database.Database import IdentityKey, ForeignKey, DatabaseAPI
 from Library.Database.Datapoint import DatapointAPI
-from Library.Database.Dataclass import overridefield
+from Library.Database.Dataclass import overridefield, coerce
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.Position import PositionAPI, PositionType
 from Library.Portfolio.PnL import PnLAPI
@@ -44,8 +44,8 @@ class TradeAPI(PositionAPI):
             self.ID.UID: IdentityKey(pl.Int64),
             self.ID.Security: ForeignKey(pl.Int64, reference=f'"{SecurityAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
             self.ID.Position: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{PositionAPI.Table}"("{PositionAPI.ID.UID}")'),
-            self.ID.Type: pl.Enum([e.name for e in PositionType]),
-            self.ID.Direction: pl.Enum([e.name for e in Direction]),
+            self.ID.Type: pl.String(),
+            self.ID.Direction: pl.String(),
             self.ID.Volume: pl.Float64(),
             self.ID.Quantity: pl.Float64(),
             self.ID.EntryTimestamp: pl.Datetime(),
@@ -96,9 +96,9 @@ class TradeAPI(PositionAPI):
                       position: Union[int, PositionAPI, None],
                       exit_timestamp: Union[datetime, TimestampAPI, None],
                       exit_balance: Union[float, None]) -> None:
-        position = MISSING if isinstance(position, property) else position
-        exit_timestamp = MISSING if isinstance(exit_timestamp, property) else exit_timestamp
-        exit_balance = MISSING if isinstance(exit_balance, property) else exit_balance
+        position = coerce(position)
+        exit_timestamp = coerce(exit_timestamp)
+        exit_balance = coerce(exit_balance)
         if isinstance(position, PositionAPI): self._position_ = position
         elif position is not MISSING and position is not None:
             self._position_ = PositionAPI(UID=position, db=db, autoload=True)

@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Union
+from typing import Union, Any
 from difflib import SequenceMatcher
 
-def as_enum(cls_: type, value):
-    if value is None: return None
-    if isinstance(value, cls_): return value
-    try: return cls_.__members__[value] if isinstance(value, str) else cls_(value)
-    except (KeyError, ValueError): return None
-
 class Enumeration(Enum):
+    
+    @classmethod
+    def parse(cls, value: Any) -> Any:
+        if value is None: return None
+        if isinstance(value, cls): return value
+        try: return cls.__members__[value] if isinstance(value, str) else cls(value)
+        except (KeyError, ValueError): return value
+        
     @classmethod
     def _missing_(cls, value: object) -> Union[Enumeration, None]:
         if not isinstance(value, str):

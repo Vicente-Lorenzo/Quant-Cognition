@@ -6,7 +6,7 @@ from dataclasses import dataclass, field, InitVar
 
 from Library.Database.Dataframe import pl
 from Library.Database.Dataclass import overridefield, coerce
-from Library.Database.Enumeration import Enumeration, as_enum
+from Library.Database.Enumeration import Enumeration
 from Library.Database import IdentityKey, PrimaryKey, ForeignKey
 from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Ticker import TickerAPI, ContractType
@@ -81,9 +81,9 @@ class ContractAPI(UniverseAPI):
     def Structure(self) -> dict:
         return {
             self.ID.UID: IdentityKey(pl.Int64),
-            self.ID.Ticker: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{TickerAPI.Table}"("{TickerAPI.ID.UID}")', primary=True),
-            self.ID.Provider: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{ProviderAPI.Table}"("{ProviderAPI.ID.UID}")', primary=True),
-            self.ID.Type: PrimaryKey(pl.Enum([i.name for i in ContractType])),
+            self.ID.Ticker: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{TickerAPI.Table}"("{TickerAPI.ID.UID}") ON DELETE CASCADE', primary=True),
+            self.ID.Provider: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{ProviderAPI.Table}"("{ProviderAPI.ID.UID}") ON DELETE CASCADE', primary=True),
+            self.ID.Type: pl.String(),
             self.ID.Digits: pl.Int32(),
             self.ID.PointSize: pl.Float64(),
             self.ID.PipSize: pl.Float64(),
@@ -92,11 +92,11 @@ class ContractAPI(UniverseAPI):
             self.ID.VolumeMax: pl.Float64(),
             self.ID.VolumeStep: pl.Float64(),
             self.ID.Commission: pl.Float64(),
-            self.ID.CommissionMode: pl.Enum([c.name for c in CommissionMode]),
+            self.ID.CommissionMode: pl.String(),
             self.ID.SwapLong: pl.Float64(),
             self.ID.SwapShort: pl.Float64(),
-            self.ID.SwapMode: pl.Enum([s.name for s in SwapMode]),
-            self.ID.SwapExtraDay: pl.Enum([d.name for d in Weekday]),
+            self.ID.SwapMode: pl.String(),
+            self.ID.SwapExtraDay: pl.String(),
             self.ID.SwapSummerTime: pl.Int32(),
             self.ID.SwapWinterTime: pl.Int32(),
             self.ID.SwapPeriod: pl.Int32(),
@@ -122,10 +122,10 @@ class ContractAPI(UniverseAPI):
             self._provider_ = ProviderAPI(UID=ProviderAPI.normalize(provider), db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
         if self.Type is None and self._ticker_ is not None and self._ticker_.UID:
             self.Type = TickerAPI.detect(self._ticker_.UID)
-        self.Type = as_enum(ContractType, self.Type)
-        self.CommissionMode = as_enum(CommissionMode, self.CommissionMode)
-        self.SwapMode = as_enum(SwapMode, self.SwapMode)
-        self.SwapExtraDay = as_enum(Weekday, self.SwapExtraDay)
+        self.Type = ContractType.parse(self.Type)
+        self.CommissionMode = CommissionMode.parse(self.CommissionMode)
+        self.SwapMode = SwapMode.parse(self.SwapMode)
+        self.SwapExtraDay = Weekday.parse(self.SwapExtraDay)
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
@@ -138,10 +138,10 @@ class ContractAPI(UniverseAPI):
                 overload=overload
             )
         if row:
-            self.Type = as_enum(ContractType, self.Type)
-            self.CommissionMode = as_enum(CommissionMode, self.CommissionMode)
-            self.SwapMode = as_enum(SwapMode, self.SwapMode)
-            self.SwapExtraDay = as_enum(Weekday, self.SwapExtraDay)
+            self.Type = ContractType.parse(self.Type)
+            self.CommissionMode = CommissionMode.parse(self.CommissionMode)
+            self.SwapMode = SwapMode.parse(self.SwapMode)
+            self.SwapExtraDay = Weekday.parse(self.SwapExtraDay)
         return row
 
     def save(self, by: str = "Autosave") -> None:
