@@ -49,7 +49,7 @@ def test_bulk_population_integrity(db):
     assert sec.Category.UID == "Cat1"
 def test_ticker_detection_logic():
     assert TickerAPI.detect("EURUSD") == ContractType.Spot
-    assert TickerAPI.detect("AAPL.US") == ContractType.Spot # Current logic returns Spot for .US
+    assert TickerAPI.detect("AAPL.US") == ContractType.Spot
     assert TickerAPI.detect("ESH4") == ContractType.Future or TickerAPI.detect("ESH24") == ContractType.Future
 def test_referential_integrity_cascade(db):
     cat = CategoryAPI(UID="Forex", Primary="Forex", Secondary="Major", Alternative="Currency", db=db)
