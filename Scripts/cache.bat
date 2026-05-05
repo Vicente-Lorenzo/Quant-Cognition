@@ -25,4 +25,4 @@ if exist "C:\Users\Admin\OneDrive\Documents\cAlgo\.gemini" (
 echo -----------------------------------------------
 echo Cleanup Complete. Your CLI should be faster now.
 echo -----------------------------------------------
-pause
+timeout /t 10 >nul

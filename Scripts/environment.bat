@@ -17,5 +17,5 @@ if %ERRORLEVEL% NEQ 0 (
     echo -----------------------------------------------
     echo Update Complete.
     echo -----------------------------------------------
-    timeout /t 60 >nul
+    timeout /t 10 >nul
 )
