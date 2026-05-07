@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from Library.Database.Dataclass import DataclassAPI
 from Library.Database.Enumeration import Enumeration
 
-if TYPE_CHECKING: from Library.Universe.Contract import ContractAPI
+if TYPE_CHECKING:
+    from Library.Universe.Contract import ContractAPI
 
 class Direction(Enumeration):
     Buy = 1
