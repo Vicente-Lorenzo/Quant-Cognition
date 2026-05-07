@@ -27,10 +27,9 @@ For all shell executions, use the following patterns:
 3. **Naming:** `CamelCase` for public members; `_naming_` (snake_case with leading/trailing underscores) for private ones. Use lowercase for `__post_init__` arguments.
 4. Typing: Use Self from typing_extensions for instance returns to maintain Python 3.10 compatibility. Use from __future__ import annotations as the first line only if required for forward references. Avoid using typing classes where built-in types suffice.
 5. **Imports:** Organized in a sorted ladder-style block. Separate external and project (`Library.*`) imports with one blank line. Use **explicit imports** for internal library modules.
-6. **Conditional Imports:** Use one-line `if TYPE_CHECKING: from ... import ...` for single-line imports.
-7. **Density:** Keep method bodies dense without internal blank lines (except complex `__init__`). Maintain standard spacing in signatures and assignments.
-8. **Architecture:** Order methods by category (Connection → Disconnection → Business) and then by complexity (simplest first). Use `@staticmethod` for stateless logic and `InitVar` for temporary inputs.
-9. **Dataframes:** Capitalize framework-level columns (e.g., "Date", "Security"). Prefer Polars (`pl`) for performance; use Pandas (`pd`) for compatibility.
+6. **Density:** Keep method bodies dense without internal blank lines (except complex `__init__`). Maintain standard spacing in signatures and assignments.
+7. **Architecture:** Order methods by category (Connection → Disconnection → Business) and then by complexity (simplest first). Use `@staticmethod` for stateless logic and `InitVar` for temporary inputs.
+8. **Dataframes:** Capitalize framework-level columns (e.g., "Date", "Security"). Prefer Polars (`pl`) for performance; use Pandas (`pd`) for compatibility.
 
 ## CONTEXT AWARENESS PROTOCOL
 Before answering code-related questions, execute this check:
