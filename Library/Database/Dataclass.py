@@ -24,16 +24,12 @@ class DatametaAPI:
     def __getattr__(self, item: str) -> Any:
         attrs = {k: v for base in reversed(self._cls_.mro()) if base is not object for k, v in base.__dict__.items()}
         fs = attrs.get("__dataclass_fields__", {})
-        
         is_prop = item in attrs and isinstance(attrs[item], property)
         is_field = item in fs
         is_private_field = f"_{item}_" in fs or f"_{item}" in fs
-        
         if not (is_prop or is_field or is_private_field):
             raise AttributeError(f"'{self._cls_.__name__}' object has no attribute '{item}'")
-            
         attr_val = f"{self._name_}.{item}" if self._name_ and self._full_ else self._name_ if self._name_ else item
-        
         t_str = ""
         if is_prop:
             t_str = str(attrs[item].fget.__annotations__.get("return", ""))
@@ -43,15 +39,12 @@ class DatametaAPI:
                 t_str = str(attrs.get("__annotations__", {}).get(item, ""))
         elif is_private_field:
             t_str = str(attrs.get("__annotations__", {}).get(item, ""))
-            
         def get_all_subclasses(cls):
             subs = cls.__subclasses__()
-            return subs + [s for sub in subs for s in get_all_subclasses(sub)]
-            
-        for sub in get_all_subclasses(DataclassAPI):
-            if sub.__name__ in t_str:
-                return DatametaAPI(cls=sub, name=attr_val, full=self._full_)
-                
+            return subs + [s for child in subs for s in get_all_subclasses(child)]
+        for child_class in get_all_subclasses(DataclassAPI):
+            if child_class.__name__ in t_str:
+                return DatametaAPI(cls=child_class, name=attr_val, full=self._full_)
         return attr_val
 
     def __str__(self) -> str:

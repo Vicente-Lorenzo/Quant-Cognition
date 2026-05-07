@@ -10,7 +10,8 @@ from Library.Database.Database import IdentityKey, PrimaryKey, ForeignKey
 from Library.Database.Query import QueryAPI
 from Library.Utility.Typing import MISSING
 
-if TYPE_CHECKING: from Library.Database.Database import DatabaseAPI
+if TYPE_CHECKING:
+    from Library.Database.Database import DatabaseAPI
 
 @dataclass
 class DatapointAPI(DataclassAPI):
