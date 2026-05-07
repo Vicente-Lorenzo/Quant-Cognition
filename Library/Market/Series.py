@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from typing import Union
+from typing import Union, TYPE_CHECKING
 from Library.Database.Dataframe import pl
-from Library.Market.Tick import TickAPI
+
+if TYPE_CHECKING:
+    from Library.Market.Tick import TickAPI
 
 class SeriesAPI:
 
@@ -39,9 +41,9 @@ class SeriesAPI:
         return cols
 
     def dataframe(self) -> Union[pl.DataFrame, pl.Series]:
-        if self._data_ is None: return pl.DataFrame() if self._multiple_ else pl.Series(name=self._prefix_, dtype=pl.Float64)
+        if self._data_ is None: return pl.DataFrame() if self._multiple_ else pl.Series(self._prefix_, dtype=pl.Float64)
         if self._multiple_: return self._data_.select([c for c in self._column_() if c in self._data_.columns])
-        return self._data_[self._prefix_] if self._prefix_ in self._data_.columns else pl.Series(name=self._prefix_, dtype=pl.Float64)
+        return self._data_[self._prefix_] if self._prefix_ in self._data_.columns else pl.Series(self._prefix_, dtype=pl.Float64)
 
     def _slice_(self, shift: int, length: int) -> pl.DataFrame:
         if self._data_ is None or self._data_.is_empty(): return pl.DataFrame()
@@ -52,26 +54,27 @@ class SeriesAPI:
     def last(self, shift: int = 0, dataframe: bool = False):
         if not self._multiple_:
             s = self.dataframe()
-            if isinstance(s, pl.DataFrame): return None
-            return None if s is None or s.is_empty() or self._offset_ + shift > s.len() or self._offset_ + shift <= 0 else s[-(self._offset_ + shift)]
+            if isinstance(s, pl.DataFrame) or s.is_empty() or self._offset_ + shift > s.len() or self._offset_ + shift <= 0: return None
+            return s[-(self._offset_ + shift)]
         df = self._slice_(shift, 1)
         if dataframe: return df
         if df.is_empty(): return None
         r = df.to_dicts()[0]
         p = f"{self._prefix_}." if self._prefix_ else ""
+        from Library.Market.Tick import TickAPI
         return TickAPI(UID=r.get(f"{p}UID", r.get("UID")), Timestamp=r.get(f"{p}Timestamp", r.get("Timestamp")), Security=r.get(f"{p}Security", r.get("Security")), Ask=r.get(f"{p}Ask", r.get("Ask")), Bid=r.get(f"{p}Bid", r.get("Bid")), AskBaseConversion=r.get(f"{p}AskBaseConversion", r.get("AskBaseConversion")), BidBaseConversion=r.get(f"{p}BidBaseConversion", r.get("BidBaseConversion")), AskQuoteConversion=r.get(f"{p}AskQuoteConversion", r.get("AskQuoteConversion")), BidQuoteConversion=r.get(f"{p}BidQuoteConversion", r.get("BidQuoteConversion")), Volume=r.get(f"{p}Volume", r.get("Volume")))
 
     def tail(self, n: Union[int, None] = None, dataframe: bool = False):
         if not self._multiple_:
             s = self.dataframe()
-            if isinstance(s, pl.DataFrame): return pl.Series(name=self._prefix_, dtype=pl.Float64)
-            if s is None or s.is_empty(): return pl.Series(name=self._prefix_, dtype=pl.Float64)
+            if isinstance(s, pl.DataFrame) or s.is_empty(): return pl.Series(self._prefix_, dtype=pl.Float64)
             end = s.len() - self._offset_ + 1
-            return pl.Series(name=self._prefix_, dtype=pl.Float64) if end <= 0 else s[(0 if n is None else max(0, end - n)):end]
+            return pl.Series(self._prefix_, dtype=pl.Float64) if end <= 0 else s[(0 if n is None else max(0, end - n)):end]
         df = self._slice_(0, n if n is not None else (self._data_.height if self._data_ is not None else 0))
         if dataframe: return df
         if df.is_empty(): return []
         p = f"{self._prefix_}." if self._prefix_ else ""
+        from Library.Market.Tick import TickAPI
         return [TickAPI(UID=r.get(f"{p}UID", r.get("UID")), Timestamp=r.get(f"{p}Timestamp", r.get("Timestamp")), Security=r.get(f"{p}Security", r.get("Security")), Ask=r.get(f"{p}Ask", r.get("Ask")), Bid=r.get(f"{p}Bid", r.get("Bid")), AskBaseConversion=r.get(f"{p}AskBaseConversion", r.get("AskBaseConversion")), BidBaseConversion=r.get(f"{p}BidBaseConversion", r.get("BidBaseConversion")), AskQuoteConversion=r.get(f"{p}AskQuoteConversion", r.get("AskQuoteConversion")), BidQuoteConversion=r.get(f"{p}BidQuoteConversion", r.get("BidQuoteConversion")), Volume=r.get(f"{p}Volume", r.get("Volume"))) for r in df.to_dicts()]
 
     def over(self, other: Union[SeriesAPI, float, int], shift: int = 0, dataframe: bool = False) -> Union[bool, list[bool], pl.DataFrame]:
