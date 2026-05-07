@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import dataclasses
 from enum import Enum
+from dataclasses import dataclass, field
 from typing import Union, Type, Any, Self
-from dataclasses import dataclass, field, InitVar
 
 from Library.Utility.Typing import MISSING
 
@@ -16,52 +16,55 @@ def coerce(value: Any) -> Any:
 
 class DatametaAPI:
 
-    def __init__(self, cls: Type, name: Union[str, None] = None):
+    def __init__(self, cls: Type, name: Union[str, None] = None, full: bool = False):
         self._cls_ = cls
         self._name_ = name
+        self._full_ = full
 
     def __getattr__(self, item: str) -> Any:
-        attrs: dict[str, Any] = {
-            k: v
-            for base in reversed(self._cls_.mro())
-            if base is not object
-            for k, v in base.__dict__.items()
-        }
-        def get_attribute_type_(attr_name: str) -> Union[type, None]:
-            ann = attrs.get("__annotations__", {})
-            return ann.get(attr_name, None)
-        def get_property_type_(prop_name: str) -> Union[type, None]:
-            prop = attrs.get(prop_name, None)
-            if isinstance(prop, property):
-                return prop.fget.__annotations__.get("return", None)
-            return None
-        fs = attrs.get("__dataclass_fields__")
-        if fs is not None and (f := fs.get(item, None)) is not None:
-            if isinstance(f.type, InitVar):
-                ft = get_property_type_(prop_name=item)
-            elif item.startswith("_"):
-                item_name = item[1:]
-                if item_name.endswith("_"): item_name = item_name[:-1]
-                ft = get_property_type_(prop_name=item_name)
-            else:
-                ft = f.type
-            attr_val = self._name_ if self._name_ else item
-            if isinstance(ft, type) and issubclass(ft, DataclassAPI):
-                return DatametaAPI(cls=ft, name=attr_val)
-            return attr_val
-        if (a := attrs.get(item, None)) is not None:
-            if isinstance(a, property):
-                at = get_property_type_(item)
-            else:
-                at = get_attribute_type_(item)
-            attr_val = self._name_ if self._name_ else item
-            if isinstance(at, type) and issubclass(at, DataclassAPI):
-                return DatametaAPI(cls=at, name=attr_val)
-            return attr_val
-        raise AttributeError(f"'{self._cls_.__name__}' object has no attribute '{item}'")
+        attrs = {k: v for base in reversed(self._cls_.mro()) if base is not object for k, v in base.__dict__.items()}
+        fs = attrs.get("__dataclass_fields__", {})
+        
+        is_prop = item in attrs and isinstance(attrs[item], property)
+        is_field = item in fs
+        is_private_field = f"_{item}_" in fs or f"_{item}" in fs
+        
+        if not (is_prop or is_field or is_private_field):
+            raise AttributeError(f"'{self._cls_.__name__}' object has no attribute '{item}'")
+            
+        attr_val = f"{self._name_}.{item}" if self._name_ and self._full_ else self._name_ if self._name_ else item
+        
+        t_str = ""
+        if is_prop:
+            t_str = str(attrs[item].fget.__annotations__.get("return", ""))
+        elif is_field:
+            t_str = str(fs[item].type)
+            if "InitVar" in t_str and is_private_field:
+                t_str = str(attrs.get("__annotations__", {}).get(item, ""))
+        elif is_private_field:
+            t_str = str(attrs.get("__annotations__", {}).get(item, ""))
+            
+        def get_all_subclasses(cls):
+            subs = cls.__subclasses__()
+            return subs + [s for sub in subs for s in get_all_subclasses(sub)]
+            
+        for sub in get_all_subclasses(DataclassAPI):
+            if sub.__name__ in t_str:
+                return DatametaAPI(cls=sub, name=attr_val, full=self._full_)
+                
+        return attr_val
+
+    def __str__(self) -> str:
+        return self._name_ if self._name_ else self._cls_.__name__
 
     def __repr__(self) -> str:
         return repr(self._name_ if self._name_ else self._cls_.__name__)
+        
+    def __eq__(self, other: Any) -> bool:
+        return str(self) == str(other)
+
+    def __hash__(self) -> int:
+        return hash(str(self))
 
 @dataclass
 class DataclassAPI:
@@ -70,7 +73,8 @@ class DataclassAPI:
 
     def __init_subclass__(cls, **kwargs):
         super(DataclassAPI, cls).__init_subclass__(**kwargs)
-        cls.ID = DatametaAPI(cls)
+        cls.ID = DatametaAPI(cls, full=False)
+        cls.OID = DatametaAPI(cls, full=True)
 
     def _parse_(self, name):
         f = getattr(self, name)

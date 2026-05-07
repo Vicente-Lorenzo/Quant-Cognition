@@ -75,13 +75,13 @@ class DatapointAPI(DataclassAPI):
             except Exception: pass
 
     def primary_keys(self) -> list[str]:
-        return [n for n, d in self.Structure.items() if isinstance(d, PrimaryKey) or (isinstance(d, (IdentityKey, ForeignKey)) and getattr(d, "primary", False))]
+        return [str(n) for n, d in self.Structure.items() if isinstance(d, PrimaryKey) or (isinstance(d, (IdentityKey, ForeignKey)) and getattr(d, "primary", False))]
 
     def foreign_keys(self) -> list[str]:
-        return [n for n, d in self.Structure.items() if isinstance(d, ForeignKey)]
+        return [str(n) for n, d in self.Structure.items() if isinstance(d, ForeignKey)]
 
     def identity_keys(self) -> list[str]:
-        return [n for n, d in self.Structure.items() if isinstance(d, IdentityKey) and not getattr(d, "primary", False)]
+        return [str(n) for n, d in self.Structure.items() if isinstance(d, IdentityKey) and not getattr(d, "primary", False)]
 
     def natural_keys(self) -> list[str]:
         return self.primary_keys()
