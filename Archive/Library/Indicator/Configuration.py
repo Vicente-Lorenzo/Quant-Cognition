@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Union, Callable
+from typing import Union, Callable, TYPE_CHECKING
 from dataclasses import dataclass, field
 
 from Library.Database.Dataclass import DataclassAPI
+
+if TYPE_CHECKING:
+    from Library.Market.Market import MarketAPI
+    from Library.Indicator.Base import BaseIndicatorAPI
 
 class IndicatorType(Enum):
     Baseline = 0
