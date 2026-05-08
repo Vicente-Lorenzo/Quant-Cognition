@@ -13,8 +13,11 @@ from Library.Market.Bar import BarAPI
 from Library.Market.Tick import TickAPI
 
 if TYPE_CHECKING:
-    from Library.Analyst import AnalystAPI
-    from Library.Manager import ManagerAPI
+    from Library.Market.Market import MarketAPI
+    from Library.Indicator.Fundamental import FundamentalAPI
+    from Library.Indicator.Technical import TechnicalAPI
+    from Library.Indicator.Sentimental import SentimentalAPI
+    from Library.Portfolio.Portfolio import PortfolioAPI
 
 class UpdateID(Enum):
     Complete = 0
@@ -39,41 +42,59 @@ class UpdateID(Enum):
 
 @dataclass(slots=True)
 class CompleteUpdate(DataclassAPI):
-    Analyst: AnalystAPI
-    Manager: ManagerAPI
+    Market: MarketAPI
+    Technical: TechnicalAPI
+    Fundamental: FundamentalAPI
+    Sentimental: SentimentalAPI
+    Portfolio: PortfolioAPI
 
 @dataclass(slots=True)
 class AccountUpdate(DataclassAPI):
-    Analyst: AnalystAPI
-    Manager: ManagerAPI
+    Market: MarketAPI
+    Technical: TechnicalAPI
+    Fundamental: FundamentalAPI
+    Sentimental: SentimentalAPI
+    Portfolio: PortfolioAPI
     Account: AccountAPI
 
 @dataclass(slots=True)
 class SecurityUpdate(DataclassAPI):
-    Analyst: AnalystAPI
-    Manager: ManagerAPI
+    Market: MarketAPI
+    Technical: TechnicalAPI
+    Fundamental: FundamentalAPI
+    Sentimental: SentimentalAPI
+    Portfolio: PortfolioAPI
     Security: SecurityAPI
 
 @dataclass(slots=True)
 class PositionUpdate(DataclassAPI):
-    Analyst: AnalystAPI
-    Manager: ManagerAPI
+    Market: MarketAPI
+    Technical: TechnicalAPI
+    Fundamental: FundamentalAPI
+    Sentimental: SentimentalAPI
+    Portfolio: PortfolioAPI
     Bar: BarAPI
     Account: AccountAPI
     Position: PositionAPI
 
 @dataclass(slots=True)
 class TradeUpdate(DataclassAPI):
-    Analyst: AnalystAPI
-    Manager: ManagerAPI
+    Market: MarketAPI
+    Technical: TechnicalAPI
+    Fundamental: FundamentalAPI
+    Sentimental: SentimentalAPI
+    Portfolio: PortfolioAPI
     Bar: BarAPI
     Account: AccountAPI
     Trade: TradeAPI
 
 @dataclass(slots=True)
 class PositionTradeUpdate(DataclassAPI):
-    Analyst: AnalystAPI
-    Manager: ManagerAPI
+    Market: MarketAPI
+    Technical: TechnicalAPI
+    Fundamental: FundamentalAPI
+    Sentimental: SentimentalAPI
+    Portfolio: PortfolioAPI
     Bar: BarAPI
     Account: AccountAPI
     Position: PositionAPI
@@ -81,14 +102,20 @@ class PositionTradeUpdate(DataclassAPI):
 
 @dataclass(slots=True)
 class BarUpdate(DataclassAPI):
-    Analyst: AnalystAPI
-    Manager: ManagerAPI
+    Market: MarketAPI
+    Technical: TechnicalAPI
+    Fundamental: FundamentalAPI
+    Sentimental: SentimentalAPI
+    Portfolio: PortfolioAPI
     Bar: BarAPI
 
 @dataclass(slots=True)
 class TickUpdate(DataclassAPI):
-    Analyst: AnalystAPI
-    Manager: ManagerAPI
+    Market: MarketAPI
+    Technical: TechnicalAPI
+    Fundamental: FundamentalAPI
+    Sentimental: SentimentalAPI
+    Portfolio: PortfolioAPI
     Tick: TickAPI
 
 Update = Union[CompleteUpdate, AccountUpdate, SecurityUpdate, PositionUpdate, TradeUpdate, PositionTradeUpdate, BarUpdate, TickUpdate]
