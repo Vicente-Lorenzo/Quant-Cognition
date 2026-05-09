@@ -1,0 +1,124 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from Library.Database.Dataframe import pl
+from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
+from Library.Indicator.Indicator import IndicatorMode
+from Library.Market.Series import SeriesAPI
+
+if TYPE_CHECKING:
+    from Library.Market.Market import MarketAPI
+
+class MovingAverageConvergenceDivergenceAPI(TechnicalAPI):
+
+    Type = TechnicalType.Momentum
+
+    def __init__(self, name: str, slow_period: int, fast_period: int, signal_period: int, mode: IndicatorMode) -> None:
+        window = slow_period + signal_period - 1
+        super().__init__(name=name, window=window, mode=mode)
+        self.SlowPeriod: int = slow_period
+        self.FastPeriod: int = fast_period
+        self.SignalPeriod: int = signal_period
+        self.MACD = SeriesAPI(f"{self.Name}.MACD")
+        self.Signal = SeriesAPI(f"{self.Name}.Signal")
+        self.Histogram = SeriesAPI(f"{self.Name}.Histogram")
+        self._data_ = None
+
+    def init_data(self, market: MarketAPI) -> None:
+        self._data_ = self.calculate(market, batch=True)
+        self.MACD.init_data(self._data_)
+        self.Signal.init_data(self._data_)
+        return self.Histogram.init_data(self._data_)
+
+    def update_data(self, market: MarketAPI) -> None:
+        if self._data_ is None: return self.init_data(market)
+        df = self.calculate(market, batch=False)
+        self._data_ = self._data_.vstack(df)
+        self.MACD.init_data(self._data_)
+        self.Signal.init_data(self._data_)
+        return self.Histogram.init_data(self._data_)
+
+    def update_offset(self, offset: int = 1) -> None:
+        self.MACD.update_offset(offset)
+        self.Signal.update_offset(offset)
+        self.Histogram.update_offset(offset)
+
+    def _pad_(self) -> pl.DataFrame:
+        return pl.DataFrame({
+            f"{self.Name}.FastEMA": pl.Series([None], dtype=pl.Float64),
+            f"{self.Name}.SlowEMA": pl.Series([None], dtype=pl.Float64),
+            f"{self.Name}.MACD": pl.Series([None], dtype=pl.Float64),
+            f"{self.Name}.Signal": pl.Series([None], dtype=pl.Float64),
+            f"{self.Name}.Histogram": pl.Series([None], dtype=pl.Float64)
+        })
+
+    def calculate(self, market: MarketAPI, batch: bool = False) -> pl.DataFrame:
+        if batch: return self.batch(market)
+        return self.stream(market)
+
+    def batch(self, market: MarketAPI) -> pl.DataFrame:
+        series = market.CloseTicks.Bid.tail(dataframe=True)
+        if series.is_empty(): return self._pad_()
+        fast_ema = series.ewm_mean(span=self.FastPeriod, adjust=False)
+        slow_ema = series.ewm_mean(span=self.SlowPeriod, adjust=False)
+        macd = fast_ema - slow_ema
+        nulls = [None] * (self.SlowPeriod - 1)
+        if len(macd) > self.SlowPeriod - 1:
+            macd = pl.Series(nulls + macd.to_list()[self.SlowPeriod - 1:])
+        else:
+            macd = pl.Series([None] * len(macd))
+        signal = macd.ewm_mean(span=self.SignalPeriod, adjust=False, ignore_nulls=True)
+        if len(signal) > self.Window - 1:
+            signal = pl.Series([None] * (self.Window - 1) + signal.to_list()[self.Window - 1:])
+        else:
+            signal = pl.Series([None] * len(signal))
+        histogram = macd - signal
+        return pl.DataFrame({
+            f"{self.Name}.FastEMA": fast_ema,
+            f"{self.Name}.SlowEMA": slow_ema,
+            f"{self.Name}.MACD": macd,
+            f"{self.Name}.Signal": signal,
+            f"{self.Name}.Histogram": histogram
+        })
+
+    def stream(self, market: MarketAPI) -> pl.DataFrame:
+        prev_row = self._data_.row(-1, named=True) if len(self._data_) > 0 else {}
+        prev_fast = prev_row.get(f"{self.Name}.FastEMA")
+        prev_slow = prev_row.get(f"{self.Name}.SlowEMA")
+        prev_signal = prev_row.get(f"{self.Name}.Signal")
+        new_price = market.CloseTicks.Bid.last()
+        if new_price is None: return self._pad_()
+        alpha_fast = 2 / (self.FastPeriod + 1)
+        alpha_slow = 2 / (self.SlowPeriod + 1)
+        alpha_signal = 2 / (self.SignalPeriod + 1)
+        if prev_fast is None:
+            prices = market.CloseTicks.Bid.tail(self.SlowPeriod, dataframe=True)
+            if len(prices) < self.SlowPeriod: return self._pad_()
+            new_fast = prices.tail(self.FastPeriod).mean()
+            new_slow = prices.mean()
+            new_macd = new_fast - new_slow
+            new_signal = None
+            new_hist = None
+        else:
+            new_fast = (new_price - prev_fast) * alpha_fast + prev_fast
+            new_slow = (new_price - prev_slow) * alpha_slow + prev_slow
+            new_macd = new_fast - new_slow
+            if prev_signal is None:
+                macds = self.MACD.tail(self.SignalPeriod - 1, dataframe=True).drop_nulls()
+                if len(macds) == self.SignalPeriod - 1:
+                    new_signal = (macds.sum() + new_macd) / self.SignalPeriod
+                    new_hist = new_macd - new_signal
+                else:
+                    new_signal = None
+                    new_hist = None
+            else:
+                new_signal = (new_macd - prev_signal) * alpha_signal + prev_signal
+                new_hist = new_macd - new_signal
+        return pl.DataFrame({
+            f"{self.Name}.FastEMA": pl.Series([new_fast], dtype=pl.Float64),
+            f"{self.Name}.SlowEMA": pl.Series([new_slow], dtype=pl.Float64),
+            f"{self.Name}.MACD": pl.Series([new_macd], dtype=pl.Float64),
+            f"{self.Name}.Signal": pl.Series([new_signal], dtype=pl.Float64),
+            f"{self.Name}.Histogram": pl.Series([new_hist], dtype=pl.Float64)
+        })
