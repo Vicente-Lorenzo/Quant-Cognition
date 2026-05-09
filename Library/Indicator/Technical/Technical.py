@@ -30,9 +30,8 @@ class TechnicalAPI:
         for k, v in indicators.items():
             setattr(self, k, v)
 
-    def _pad_(self) -> pl.DataFrame:
-        from Library.Database.Dataframe import pl
-        return pl.DataFrame()
+    def _extract_(self, market: MarketAPI) -> pl.Series:
+        return market.Volume.Price.tail()
 
     def init_data(self, market: MarketAPI) -> None:
         for ind in self._indicators_:
@@ -45,3 +44,7 @@ class TechnicalAPI:
     def update_offset(self, offset: int = 1) -> None:
         for ind in self._indicators_:
             if hasattr(ind, "update_offset"): ind.update_offset(offset)
+
+    def _pad_(self) -> pl.DataFrame:
+        from Library.Database.Dataframe import pl
+        return pl.DataFrame()
