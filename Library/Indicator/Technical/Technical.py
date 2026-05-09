@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Union, TYPE_CHECKING, ClassVar
+
 from Library.Database.Enumeration import Enumeration
 from Library.Indicator.Indicator import IndicatorMode
 
