@@ -26,6 +26,7 @@ class TickAPI(DatapointAPI):
     Timestamp: InitVar[Union[datetime, TimestampAPI, None]] = field(default=MISSING)
 
     Ask: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
+    Mid: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
     Bid: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
 
     AskBaseConversion: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
@@ -38,6 +39,7 @@ class TickAPI(DatapointAPI):
     _security_: Union[SecurityAPI, None] = field(default=None, init=False, repr=False)
     _timestamp_: Union[TimestampAPI, None] = field(default=None, init=False, repr=False)
     _ask_: Union[PriceAPI, None] = field(default=None, init=False, repr=False)
+    _mid_: Union[PriceAPI, None] = field(default=None, init=False, repr=False)
     _bid_: Union[PriceAPI, None] = field(default=None, init=False, repr=False)
     _ask_base_conversion_: Union[PriceAPI, None] = field(default=None, init=False, repr=False)
     _bid_base_conversion_: Union[PriceAPI, None] = field(default=None, init=False, repr=False)
@@ -51,6 +53,7 @@ class TickAPI(DatapointAPI):
             self.ID.Timestamp: PrimaryKey(pl.Datetime),
             self.ID.Security: ForeignKey(pl.Int64, reference=f'"{SecurityAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")', primary=True),
             self.ID.Ask: pl.Float64(),
+            self.ID.Mid: pl.Float64(),
             self.ID.Bid: pl.Float64(),
             self.ID.AskBaseConversion: pl.Float64(),
             self.ID.BidBaseConversion: pl.Float64(),
@@ -69,6 +72,7 @@ class TickAPI(DatapointAPI):
                       security: Union[int, str, SecurityAPI, None],
                       timestamp: Union[datetime, TimestampAPI, None],
                       ask: Union[float, PriceAPI, None],
+                      mid: Union[float, PriceAPI, None],
                       bid: Union[float, PriceAPI, None],
                       ask_base_conversion: Union[float, PriceAPI, None],
                       bid_base_conversion: Union[float, PriceAPI, None],
@@ -77,6 +81,7 @@ class TickAPI(DatapointAPI):
         security = coerce(security)
         timestamp = coerce(timestamp)
         ask = coerce(ask)
+        mid = coerce(mid)
         bid = coerce(bid)
         ask_base_conversion = coerce(ask_base_conversion)
         bid_base_conversion = coerce(bid_base_conversion)
@@ -93,11 +98,15 @@ class TickAPI(DatapointAPI):
         contract = self._security_._contract_ if self._security_ is not None else None
         if isinstance(ask, PriceAPI): self._ask_ = ask
         elif ask is not MISSING and ask is not None: self._ask_ = PriceAPI(Price=ask, Reference=None, Contract=contract)
+        if isinstance(mid, PriceAPI): self._mid_ = mid
+        elif mid is not MISSING and mid is not None: self._mid_ = PriceAPI(Price=mid, Reference=None, Contract=contract)
         if isinstance(bid, PriceAPI): self._bid_ = bid
         elif bid is not MISSING and bid is not None: self._bid_ = PriceAPI(Price=bid, Reference=None, Contract=contract)
         if self._ask_ is not None and self._bid_ is not None:
             if self._ask_.Reference is None: self._ask_.Reference = self._bid_.Price
             if self._bid_.Reference is None: self._bid_.Reference = self._ask_.Price
+            if self._mid_ is None:
+                self._mid_ = PriceAPI(Price=(self._ask_.Price + self._bid_.Price) / 2, Reference=None, Contract=contract)
         def _init_conv_(val: Union[float, PriceAPI, None]) -> Union[PriceAPI, None]:
             if isinstance(val, PriceAPI): return val
             if val is not MISSING and val is not None: return PriceAPI(Price=val, Reference=None, Contract=contract)
@@ -122,6 +131,7 @@ class TickAPI(DatapointAPI):
         elif val is not None: self._security_ = SecurityAPI(UID=val, db=self._db_, autoload=self._autoload_)
         contract = self._security_._contract_ if self._security_ is not None else None
         if self._ask_: self._ask_.Contract = contract
+        if self._mid_: self._mid_.Contract = contract
         if self._bid_: self._bid_.Contract = contract
         if self._ask_base_conversion_: self._ask_base_conversion_.Contract = contract
         if self._bid_base_conversion_: self._bid_base_conversion_.Contract = contract
@@ -232,12 +242,19 @@ class TickAPI(DatapointAPI):
         return PriceAPI(Price=self._ask_.Price - self._bid_.Price, Reference=self._ask_.Price, Contract=contract)
 
     @property
-    def Mid(self) -> Union[float, None]:
-        if self._ask_ is None or self._bid_ is None or self._ask_.Price is None or self._bid_.Price is None: return None
-        return (self._ask_.Price + self._bid_.Price) / 2
+    @overridefield
+    def Mid(self) -> Union[PriceAPI, None]:
+        return self._mid_
+    @Mid.setter
+    def Mid(self, val: Union[float, PriceAPI, None]) -> None:
+        if isinstance(val, PriceAPI): self._mid_ = val
+        elif val is not None:
+            if self._mid_: self._mid_.Price = val
+            else:
+                contract = self._security_._contract_ if self._security_ is not None else None
+                self._mid_ = PriceAPI(Price=val, Reference=None, Contract=contract)
 
     @property
     def InvertedMid(self) -> Union[float, None]:
-        mid = self.Mid
-        if mid is None or not mid: return None
-        return 1.0 / mid
+        if self._mid_ is None or not self._mid_.Price: return None
+        return 1.0 / self._mid_.Price

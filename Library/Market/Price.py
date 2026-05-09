@@ -15,6 +15,11 @@ class Direction(Enumeration):
     Neutral = 0
     Sell = -1
 
+class PriceMode(Enumeration):
+    Ask = 0
+    Bid = 1
+    Mid = 2
+
 @dataclass(kw_only=True)
 class PriceAPI(DataclassAPI):
 
