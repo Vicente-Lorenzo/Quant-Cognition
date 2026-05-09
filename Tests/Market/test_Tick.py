@@ -6,7 +6,7 @@ from Library.Market.Price import PriceAPI
 from Library.Universe.Security import SecurityAPI
 def test_tick_initialization():
     now = datetime.now()
-    tick_args = (100, now, 1.1005, 1.1000, 1.0, 1.0, 1.0, 1.0)
+    tick_args = (100, now, 1.1005, 1.10025, 1.1000, 1.0, 1.0, 1.0, 1.0)
     tick = TickAPI(*tick_args)
     assert tick.Security is not None
     assert tick.Security.UID == 100
@@ -16,7 +16,7 @@ def test_tick_initialization():
 def test_tick_properties():
     now = datetime.now()
     tick = TickAPI(1, now, Ask=1.1005, Bid=1.1000)
-    assert tick.Mid == 1.10025
+    assert tick.Mid.Price == 1.10025
     assert tick.Spread is not None
     assert round(tick.Spread.Price, 4) == 0.0005
     assert tick.InvertedAsk == 1.0 / 1.1005
@@ -33,7 +33,7 @@ def test_tick_db_operations(db):
     sec = SecurityAPI(Provider="TestProv", Category="Forex", Ticker="EURUSD", Contract=ContractType.Spot, db=db, migrate=True, autoload=True)
     sec.save(by="Tester")
     now = datetime(2023, 1, 1, 12, 0, 0)
-    tick_data = (sec.UID, now, 1.1005, 1.1000, 1.0, 1.0, 1.0, 1.0)
+    tick_data = (sec.UID, now, 1.1005, 1.10025, 1.1000, 1.0, 1.0, 1.0, 1.0)
     tick = TickAPI(*tick_data, db=db, migrate=True)
     tick.save(by="Tester")
     loaded_tick = TickAPI(sec.UID, now, db=db, autoload=True)

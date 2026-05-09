@@ -140,7 +140,6 @@ def test_series_group_crossover():
     })
     market.init_data(data)
     
-    # Close Ask (1.0 -> 1.3) crosses Open Ask (1.1 -> 1.1)
     res = market.CloseTicks.crossover(market.OpenTicks, dataframe=False)
     df_res = market.CloseTicks.crossover(market.OpenTicks, dataframe=True)
     assert df_res["CloseTick.Ask"][0] == True
