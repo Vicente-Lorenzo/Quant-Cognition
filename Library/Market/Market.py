@@ -7,6 +7,7 @@ from typing import Union, ClassVar, TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
+from Library.Database.Enumeration import Enumeration
 from Library.Database.Query import QueryAPI
 from Library.Market.Series import SeriesAPI
 
@@ -15,6 +16,11 @@ if TYPE_CHECKING:
     from Library.Market.Tick import TickAPI
     from Library.Market.Bar import BarAPI
 
+class PriceMode(Enumeration):
+    Ask = 0
+    Bid = 1
+    Mid = 2
+
 @dataclass(kw_only=True)
 class MarketAPI(DatapointAPI):
 
@@ -22,6 +28,7 @@ class MarketAPI(DatapointAPI):
     Schema: ClassVar[str] = "Market"
     Table: ClassVar[str] = "Market"
 
+    mode: PriceMode = field(default=PriceMode.Bid, repr=False)
     _offset_: int = field(default=1, init=False)
     _data_: Union[pl.DataFrame, None] = field(default=None, init=False)
 
@@ -31,13 +38,13 @@ class MarketAPI(DatapointAPI):
                       autosave: bool,
                       autoload: bool,
                       autooverload: bool) -> None:
-        self.Ticks = SeriesAPI("", multiple=True)
-        self.GapTicks = SeriesAPI("GapTick", multiple=True)
-        self.OpenTicks = SeriesAPI("OpenTick", multiple=True)
-        self.HighTicks = SeriesAPI("HighTick", multiple=True)
-        self.LowTicks = SeriesAPI("LowTick", multiple=True)
-        self.CloseTicks = SeriesAPI("CloseTick", multiple=True)
-        self.Volume = SeriesAPI("Volume", multiple=False)
+        self.Ticks = SeriesAPI("", multiple=True, mode=self.mode)
+        self.GapTicks = SeriesAPI("GapTick", multiple=True, mode=self.mode)
+        self.OpenTicks = SeriesAPI("OpenTick", multiple=True, mode=self.mode)
+        self.HighTicks = SeriesAPI("HighTick", multiple=True, mode=self.mode)
+        self.LowTicks = SeriesAPI("LowTick", multiple=True, mode=self.mode)
+        self.CloseTicks = SeriesAPI("CloseTick", multiple=True, mode=self.mode)
+        self.Volume = SeriesAPI("Volume", multiple=False, mode=self.mode)
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     @staticmethod
