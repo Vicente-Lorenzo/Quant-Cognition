@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Union, TYPE_CHECKING
+
 from Library.Database.Enumeration import Enumeration
 
 if TYPE_CHECKING:
@@ -17,7 +18,6 @@ def parse_technical(parameters: Union[dict, None]) -> TechnicalAPI:
     from Library.Indicator.Technical import TechnicalAPI
     if not parameters:
         return TechnicalAPI(name="Technical", window=None, mode=IndicatorMode.Off)
-    
     indicators = {}
     for name, config in parameters.items():
         if not config: continue
@@ -59,14 +59,14 @@ def parse_technical(parameters: Union[dict, None]) -> TechnicalAPI:
                 window = config[1] if len(config) > 1 else 14
                 ma_type = MovingAverageType.parse(config[2]) if len(config) > 2 else MovingAverageType.Exponential
                 mode_val = config[3] if len(config) > 3 else IndicatorMode.Off
-                indicators[name] = DoubleMovingAverageAPI(name=name, window=window, ma_type=ma_type, mode=IndicatorMode.parse(mode_val))
+                indicators[name] = DoubleMovingAverageAPI(name=name, window=window, type=ma_type, mode=IndicatorMode.parse(mode_val))
             case "TMA":
                 from Library.Indicator.Technical.Baseline.TMA import TripleMovingAverageAPI
                 from Library.Indicator.Technical.Baseline.MA import MovingAverageType
                 window = config[1] if len(config) > 1 else 14
                 ma_type = MovingAverageType.parse(config[2]) if len(config) > 2 else MovingAverageType.Exponential
                 mode_val = config[3] if len(config) > 3 else IndicatorMode.Off
-                indicators[name] = TripleMovingAverageAPI(name=name, window=window, ma_type=ma_type, mode=IndicatorMode.parse(mode_val))
+                indicators[name] = TripleMovingAverageAPI(name=name, window=window, type=ma_type, mode=IndicatorMode.parse(mode_val))
             case "SMAC":
                 from Library.Indicator.Technical.Overlap.SMAC import SimpleMovingAverageCrossAPI
                 fast = config[1] if len(config) > 1 else 5
@@ -110,7 +110,7 @@ def parse_technical(parameters: Union[dict, None]) -> TechnicalAPI:
                 slow = config[2] if len(config) > 2 else 20
                 ma_type = MovingAverageType.parse(config[3]) if len(config) > 3 else MovingAverageType.Exponential
                 mode_val = config[4] if len(config) > 4 else IndicatorMode.Off
-                indicators[name] = DoubleMovingAverageCrossAPI(name=name, fast_window=fast, slow_window=slow, ma_type=ma_type, mode=IndicatorMode.parse(mode_val))
+                indicators[name] = DoubleMovingAverageCrossAPI(name=name, fast_window=fast, slow_window=slow, type=ma_type, mode=IndicatorMode.parse(mode_val))
             case "TMAC":
                 from Library.Indicator.Technical.Overlap.TMAC import TripleMovingAverageCrossAPI
                 from Library.Indicator.Technical.Baseline.MA import MovingAverageType
@@ -118,7 +118,7 @@ def parse_technical(parameters: Union[dict, None]) -> TechnicalAPI:
                 slow = config[2] if len(config) > 2 else 20
                 ma_type = MovingAverageType.parse(config[3]) if len(config) > 3 else MovingAverageType.Exponential
                 mode_val = config[4] if len(config) > 4 else IndicatorMode.Off
-                indicators[name] = TripleMovingAverageCrossAPI(name=name, fast_window=fast, slow_window=slow, ma_type=ma_type, mode=IndicatorMode.parse(mode_val))
+                indicators[name] = TripleMovingAverageCrossAPI(name=name, fast_window=fast, slow_window=slow, type=ma_type, mode=IndicatorMode.parse(mode_val))
             case "ATR":
                 from Library.Indicator.Technical.Volatility.ATR import AverageTrueRangeAPI
                 window = config[1] if len(config) > 1 else 14
@@ -133,7 +133,6 @@ def parse_technical(parameters: Union[dict, None]) -> TechnicalAPI:
                 indicators[name] = MovingAverageConvergenceDivergenceAPI(name=name, slow_period=slow, fast_period=fast, signal_period=signal, mode=IndicatorMode.parse(mode_val))
             case _:
                 pass
-                
     return TechnicalAPI(name="Technical", window=None, mode=IndicatorMode.Off, **indicators)
 
 def parse_fundamental(parameters: Union[dict, None]) -> FundamentalAPI:
