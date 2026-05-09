@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 from Library.Database.Dataframe import pl
 from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
@@ -25,15 +25,18 @@ class MovingAverageConvergenceDivergenceAPI(TechnicalAPI):
         self.Histogram = SeriesAPI(f"{self.Name}.Histogram")
         self._data_ = None
 
+    def _extract_(self, market: MarketAPI) -> pl.Series:
+        return market.CloseTicks.Price.tail()
+
     def init_data(self, market: MarketAPI) -> None:
-        self._data_ = self.calculate(market, batch=True)
+        self._data_ = self.calculate(self._extract_(market), batch=True)
         self.MACD.init_data(self._data_)
         self.Signal.init_data(self._data_)
         return self.Histogram.init_data(self._data_)
 
     def update_data(self, market: MarketAPI) -> None:
         if self._data_ is None: return self.init_data(market)
-        df = self.calculate(market, batch=False)
+        df = self.calculate(self._extract_(market), batch=False)
         self._data_ = self._data_.vstack(df)
         self.MACD.init_data(self._data_)
         self.Signal.init_data(self._data_)
@@ -53,12 +56,8 @@ class MovingAverageConvergenceDivergenceAPI(TechnicalAPI):
             f"{self.Name}.Histogram": pl.Series([None], dtype=pl.Float64)
         })
 
-    def calculate(self, market: MarketAPI, batch: bool = False) -> pl.DataFrame:
-        if batch: return self.batch(market)
-        return self.stream(market)
-
-    def batch(self, market: MarketAPI) -> pl.DataFrame:
-        series = market.CloseTicks.Bid.tail(dataframe=True)
+    def batch(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
+        series = data
         if series.is_empty(): return self._pad_()
         fast_ema = series.ewm_mean(span=self.FastPeriod, adjust=False)
         slow_ema = series.ewm_mean(span=self.SlowPeriod, adjust=False)
@@ -82,18 +81,18 @@ class MovingAverageConvergenceDivergenceAPI(TechnicalAPI):
             f"{self.Name}.Histogram": histogram
         })
 
-    def stream(self, market: MarketAPI) -> pl.DataFrame:
+    def stream(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
         prev_row = self._data_.row(-1, named=True) if len(self._data_) > 0 else {}
         prev_fast = prev_row.get(f"{self.Name}.FastEMA")
         prev_slow = prev_row.get(f"{self.Name}.SlowEMA")
         prev_signal = prev_row.get(f"{self.Name}.Signal")
-        new_price = market.CloseTicks.Bid.last()
+        new_price = (data[-1] if len(data) > 0 else None)
         if new_price is None: return self._pad_()
         alpha_fast = 2 / (self.FastPeriod + 1)
         alpha_slow = 2 / (self.SlowPeriod + 1)
         alpha_signal = 2 / (self.SignalPeriod + 1)
         if prev_fast is None:
-            prices = market.CloseTicks.Bid.tail(self.SlowPeriod, dataframe=True)
+            prices = data.tail(self.SlowPeriod)
             if len(prices) < self.SlowPeriod: return self._pad_()
             new_fast = prices.tail(self.FastPeriod).mean()
             new_slow = prices.mean()
@@ -122,3 +121,7 @@ class MovingAverageConvergenceDivergenceAPI(TechnicalAPI):
             f"{self.Name}.Signal": pl.Series([new_signal], dtype=pl.Float64),
             f"{self.Name}.Histogram": pl.Series([new_hist], dtype=pl.Float64)
         })
+
+    def calculate(self, data: Union[pl.Series, pl.DataFrame], batch: bool = False) -> pl.DataFrame:
+        if batch: return self.batch(data)
+        return self.stream(data)
