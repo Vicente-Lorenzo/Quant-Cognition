@@ -188,9 +188,5 @@ class TradeAPI(PositionAPI):
         return seconds / 86400.0 if seconds is not None else None
 
     @property
-    def HoldingPeriod(self) -> Union[float, None]:
-        return self.Duration
-
-    @property
     def IsClosed(self) -> bool:
         return self._exit_timestamp_ is not None
