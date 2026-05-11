@@ -8,7 +8,9 @@ from typing import Union, ClassVar, TYPE_CHECKING
 from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Query import QueryAPI
-from Library.Market.Price import Direction
+from Library.Market.Price import Direction, PriceAPI
+from Library.Market.Tick import TickAPI
+from Library.Portfolio.PnL import PnLAPI
 from Library.Utility.Typing import MISSING
 
 if TYPE_CHECKING:
@@ -17,7 +19,6 @@ if TYPE_CHECKING:
     from Library.Portfolio.Order import OrderAPI
     from Library.Portfolio.Position import PositionAPI
     from Library.Portfolio.Trade import TradeAPI
-    from Library.Market.Tick import TickAPI
     from Library.Market.Bar import BarAPI
     from Library.Parameters import Parameters
     from Library.Universe.Security import SecurityAPI
@@ -194,38 +195,57 @@ class PortfolioAPI(DatapointAPI):
             self._trades_.extend(trades)
 
     def update_data(self, data: Union[TickAPI, BarAPI]) -> None:
-        from Library.Market.Tick import TickAPI
         from Library.Portfolio.Statistic import calculate_pnl_difference, calculate_gross_pnl, calculate_net_pnl
+        if isinstance(data, TickAPI):
+            bid, ask, timestamp = data.Bid.Price, data.Ask.Price, data.Timestamp.DateTime
+            high_bid = low_bid = bid
+            high_ask = low_ask = ask
+        else:
+            bid, ask, timestamp = data.CloseTick.Bid.Price, data.CloseTick.Ask.Price, data.Timestamp.DateTime
+            high_bid = data.HighTick.Bid.Price if data.HighTick and data.HighTick.Bid else bid
+            low_bid = data.LowTick.Bid.Price if data.LowTick and data.LowTick.Bid else bid
+            high_ask = data.HighTick.Ask.Price if data.HighTick and data.HighTick.Ask else ask
+            low_ask = data.LowTick.Ask.Price if data.LowTick and data.LowTick.Ask else ask
         for pos in self._positions_.values():
-            if isinstance(data, TickAPI):
-                bid, ask, timestamp = data.Bid.Price, data.Ask.Price, data.Timestamp.DateTime
-            else:
-                bid, ask, timestamp = data.CloseTick.Bid.Price, data.CloseTick.Ask.Price, data.Timestamp.DateTime
+            if pos.NetPnL is None or pos.EntryPrice is None: continue
             current_price = bid if pos.IsLong else ask
-            if pos.NetPnL:
-                pnl_diff = calculate_pnl_difference(current_price, pos.EntryPrice.Price, pos.IsLong)
-                if pos.GrossPnL: pos.GrossPnL.PnL = calculate_gross_pnl(pnl_diff, pos.Volume)
-                pos.NetPnL.PnL = calculate_net_pnl(pos.GrossPnL.PnL if pos.GrossPnL else 0.0,
-                                                   pos.CommissionPnL.PnL if pos.CommissionPnL else 0.0,
-                                                   pos.SwapPnL.PnL if pos.SwapPnL else 0.0)
-                if pos.EntryTimestamp:
-                    duration_sec = (timestamp - pos.EntryTimestamp.DateTime).total_seconds()
-                    pos.NetPnL.Duration = duration_sec if duration_sec > 0 else None
-                if self._account_ and self._account_.Balance: pos.NetPnL.Reference = self._account_.Balance
-                
-                if pos.MaxRunupPnL and (pos.MaxRunupPnL.PnL is None or pos.NetPnL.PnL > pos.MaxRunupPnL.PnL):
-                    pos.MaxRunupPnL.PnL = pos.NetPnL.PnL
-                    pos.MaxRunupPnL.Reference = pos.NetPnL.Reference
-                    pos.MaxRunupPnL.Duration = pos.NetPnL.Duration
-                if pos.MaxDrawdownPnL and (pos.MaxDrawdownPnL.PnL is None or pos.NetPnL.PnL < pos.MaxDrawdownPnL.PnL):
-                    pos.MaxDrawdownPnL.PnL = pos.NetPnL.PnL
-                    pos.MaxDrawdownPnL.Reference = pos.NetPnL.Reference
-                    pos.MaxDrawdownPnL.Duration = pos.NetPnL.Duration
-                    
-            if pos.MaxRunupPrice is None or (pos.IsLong and current_price > pos.MaxRunupPrice.Price) or (pos.IsShort and current_price < pos.MaxRunupPrice.Price):
-                if pos.MaxRunupPrice: pos.MaxRunupPrice.Price = current_price
-            if pos.MaxDrawdownPrice is None or (pos.IsLong and current_price < pos.MaxDrawdownPrice.Price) or (pos.IsShort and current_price > pos.MaxDrawdownPrice.Price):
-                if pos.MaxDrawdownPrice: pos.MaxDrawdownPrice.Price = current_price
+            best_price = high_bid if pos.IsLong else low_ask
+            worst_price = low_bid if pos.IsLong else high_ask
+            entry_price = pos.EntryPrice.Price
+            comm = pos.CommissionPnL.PnL if pos.CommissionPnL else 0.0
+            swap = pos.SwapPnL.PnL if pos.SwapPnL else 0.0
+            pnl_diff = calculate_pnl_difference(current_price, entry_price, pos.IsLong)
+            if pos.GrossPnL: pos.GrossPnL.PnL = calculate_gross_pnl(pnl_diff, pos.Volume)
+            pos.NetPnL.PnL = calculate_net_pnl(pos.GrossPnL.PnL if pos.GrossPnL else 0.0, comm, swap)
+            if pos.EntryTimestamp:
+                duration_sec = (timestamp - pos.EntryTimestamp.DateTime).total_seconds()
+                pos.NetPnL.Duration = duration_sec if duration_sec > 0 else None
+            if self._account_ and self._account_.Balance: pos.NetPnL.Reference = self._account_.Balance
+            ref_balance = pos.NetPnL.Reference
+            duration = pos.NetPnL.Duration
+            contract = pos.Security.Contract if pos.Security else None
+            best_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(best_price, entry_price, pos.IsLong), pos.Volume), comm, swap)
+            worst_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(worst_price, entry_price, pos.IsLong), pos.Volume), comm, swap)
+            if pos._max_runup_price_ is None:
+                pos._max_runup_price_ = PriceAPI(Price=best_price, Reference=entry_price, Contract=contract)
+            elif (pos.IsLong and best_price > pos._max_runup_price_.Price) or (pos.IsShort and best_price < pos._max_runup_price_.Price):
+                pos._max_runup_price_.Price = best_price
+            if pos._max_drawdown_price_ is None:
+                pos._max_drawdown_price_ = PriceAPI(Price=worst_price, Reference=entry_price, Contract=contract)
+            elif (pos.IsLong and worst_price < pos._max_drawdown_price_.Price) or (pos.IsShort and worst_price > pos._max_drawdown_price_.Price):
+                pos._max_drawdown_price_.Price = worst_price
+            if pos._max_runup_pnl_ is None:
+                pos._max_runup_pnl_ = PnLAPI(PnL=best_pnl, Reference=ref_balance, Duration=duration)
+            elif best_pnl > pos._max_runup_pnl_.PnL:
+                pos._max_runup_pnl_.PnL = best_pnl
+                pos._max_runup_pnl_.Reference = ref_balance
+                pos._max_runup_pnl_.Duration = duration
+            if pos._max_drawdown_pnl_ is None:
+                pos._max_drawdown_pnl_ = PnLAPI(PnL=worst_pnl, Reference=ref_balance, Duration=duration)
+            elif worst_pnl < pos._max_drawdown_pnl_.PnL:
+                pos._max_drawdown_pnl_.PnL = worst_pnl
+                pos._max_drawdown_pnl_.Reference = ref_balance
+                pos._max_drawdown_pnl_.Duration = duration
 
     def open_order(self, order: OrderAPI) -> None:
         self._orders_[order.UID] = order
@@ -238,33 +258,84 @@ class PortfolioAPI(DatapointAPI):
         if order_uid in self._orders_:
             del self._orders_[order_uid]
 
+    @staticmethod
+    def _inherit_position_state_(src: PositionAPI, dst: PositionAPI) -> None:
+        if dst._type_ is None: dst._type_ = src._type_
+        if dst._direction_ is None: dst._direction_ = src._direction_
+        if dst._security_ is None: dst._security_ = src._security_
+        if dst._order_ is None: dst._order_ = src._order_
+        if dst._entry_timestamp_ is None: dst._entry_timestamp_ = src._entry_timestamp_
+        if dst._entry_price_ is None: dst._entry_price_ = src._entry_price_
+        if dst._stop_loss_price_ is None: dst._stop_loss_price_ = src._stop_loss_price_
+        if dst._take_profit_price_ is None: dst._take_profit_price_ = src._take_profit_price_
+        if dst._stop_loss_pnl_ is None: dst._stop_loss_pnl_ = src._stop_loss_pnl_
+        if dst._take_profit_pnl_ is None: dst._take_profit_pnl_ = src._take_profit_pnl_
+        if dst._max_runup_price_ is None: dst._max_runup_price_ = src._max_runup_price_
+        if dst._max_drawdown_price_ is None: dst._max_drawdown_price_ = src._max_drawdown_price_
+        if dst._max_runup_pnl_ is None: dst._max_runup_pnl_ = src._max_runup_pnl_
+        if dst._max_drawdown_pnl_ is None: dst._max_drawdown_pnl_ = src._max_drawdown_pnl_
+        if dst._entry_balance_ is None: dst._entry_balance_ = src._entry_balance_
+        if dst.Volume is None: dst.Volume = src.Volume
+        if dst.Quantity is None: dst.Quantity = src.Quantity
+        if dst.UsedMargin is None: dst.UsedMargin = src.UsedMargin
+        if dst.MidBalance is None: dst.MidBalance = src.MidBalance
+        if dst.Label is None: dst.Label = src.Label
+        if dst.Comment is None: dst.Comment = src.Comment
+
     def open_position(self, order_uid: int, position: PositionAPI) -> None:
         if order_uid in self._orders_:
             del self._orders_[order_uid]
         self._positions_[position.UID] = position
-        position.EntryBalance = self._account_.Balance if self._account_ else 0.0
+        base = self._account_.Balance if self._account_ else 0.0
+        position._entry_balance_ = base
+        position.MidBalance = base
 
     def modify_position(self, position: PositionAPI) -> None:
         if position.UID in self._positions_:
+            old_pos = self._positions_[position.UID]
+            self._inherit_position_state_(old_pos, position)
             self._positions_[position.UID] = position
 
-    def close_position(self, position_uid: int, trade: TradeAPI) -> None:
+    def close_position(self, position_uid: int, position: Union[PositionAPI, None], trade: TradeAPI) -> None:
         if position_uid in self._positions_:
             old_pos = self._positions_[position_uid]
-            if trade.MaxDrawdownPnL is None: trade.MaxDrawdownPnL = old_pos.MaxDrawdownPnL
-            if old_pos.MaxDrawdownPrice:
-                trade.MaxDrawdownPrice = old_pos.MaxDrawdownPrice
-            trade.EntryBalance = old_pos.EntryBalance
-            if self._account_ and trade.NetPnL:
-                trade.ExitBalance = trade.EntryBalance + (trade.NetPnL.PnL or 0.0) if trade.EntryBalance else 0.0
-                self._account_.Balance += (trade.NetPnL.PnL or 0.0)
-            del self._positions_[position_uid]
+            self._inherit_position_state_(old_pos, trade)
+            if trade._position_ is None: trade._position_ = old_pos
+            trade._entry_balance_ = old_pos._entry_balance_
+            if trade.ExitPrice and trade.ExitPrice.Price is not None:
+                exit_price = trade.ExitPrice.Price
+                if trade._max_runup_price_ and ((trade.IsLong and exit_price > trade._max_runup_price_.Price) or (trade.IsShort and exit_price < trade._max_runup_price_.Price)):
+                    trade._max_runup_price_.Price = exit_price
+                if trade._max_drawdown_price_ and ((trade.IsLong and exit_price < trade._max_drawdown_price_.Price) or (trade.IsShort and exit_price > trade._max_drawdown_price_.Price)):
+                    trade._max_drawdown_price_.Price = exit_price
+            net = trade.NetPnL.PnL if (trade.NetPnL and trade.NetPnL.PnL is not None) else 0.0
+            if trade.NetPnL:
+                if trade._max_runup_pnl_ and net > trade._max_runup_pnl_.PnL:
+                    trade._max_runup_pnl_.PnL = net
+                    trade._max_runup_pnl_.Reference = trade.NetPnL.Reference
+                    trade._max_runup_pnl_.Duration = trade.NetPnL.Duration
+                if trade._max_drawdown_pnl_ and net < trade._max_drawdown_pnl_.PnL:
+                    trade._max_drawdown_pnl_.PnL = net
+                    trade._max_drawdown_pnl_.Reference = trade.NetPnL.Reference
+                    trade._max_drawdown_pnl_.Duration = trade.NetPnL.Duration
+            base = old_pos.MidBalance if old_pos.MidBalance is not None else (old_pos._entry_balance_ or 0.0)
+            new_mid = base + net
+            old_pos.MidBalance = new_mid
+            trade.MidBalance = new_mid
+            trade._exit_balance_ = new_mid
+            if self._account_: self._account_.Balance += net
+            if position is not None:
+                self._inherit_position_state_(old_pos, position)
+                position.MidBalance = new_mid
+                self._positions_[position_uid] = position
+            else:
+                del self._positions_[position_uid]
         self._trades_.append(trade)
 
     def calculate_statistics(self, start: datetime, stop: datetime) -> pl.DataFrame:
         from Library.Portfolio.Statistic import generate_net_report
         if not self._account_: return pl.DataFrame()
-        return generate_net_report(self.Trades, self.Positions, self._account_, start, stop)
+        return generate_net_report(self.Positions, self.Trades, self._account_, start, stop)
 
     @property
     def BuyOrders(self) -> list[OrderAPI]:
@@ -291,19 +362,27 @@ class PortfolioAPI(DatapointAPI):
         return [t for t in self._trades_ if t.IsShort]
 
     @property
+    def RealizedPnL(self) -> float:
+        return sum((t.NetPnL.PnL or 0.0) for t in self._trades_ if t.NetPnL)
+
+    @property
     def UnrealizedPnL(self) -> float:
         return sum((p.NetPnL.PnL or 0.0) for p in self._positions_.values() if p.NetPnL)
 
     @property
+    def NetPnL(self) -> float:
+        return self.RealizedPnL + self.UnrealizedPnL
+
+    @property
     def Direction(self) -> Direction:
         from Library.Portfolio.Statistic import calculate_direction
-        return calculate_direction(self.UnrealizedPnL)
+        return calculate_direction(self.NetPnL)
 
     @property
     def Return(self) -> Union[float, None]:
         from Library.Portfolio.Statistic import calculate_pnl_return
         if not self._account_ or not self._account_.Balance: return None
-        return calculate_pnl_return(self.UnrealizedPnL, self._account_.Balance)
+        return calculate_pnl_return(self.NetPnL, self._account_.Balance)
 
     @property
     def LogReturn(self) -> Union[float, None]:
@@ -326,26 +405,29 @@ class PortfolioAPI(DatapointAPI):
         if log_ret is None: return None
         return calculate_log_percentage(log_ret)
 
+    def _first_entry_(self) -> Union[datetime, None]:
+        timestamps = [p.EntryTimestamp.DateTime for p in self._positions_.values() if p.EntryTimestamp]
+        timestamps.extend(t.EntryTimestamp.DateTime for t in self._trades_ if t.EntryTimestamp)
+        return min(timestamps) if timestamps else None
+
     @property
     def AnnualizedReturn(self) -> Union[float, None]:
         from Library.Portfolio.Statistic import calculate_annualized_return
         ret = self.Return
-        if ret is None or not self._positions_: return None
-        first = min(p.EntryTimestamp.DateTime for p in self._positions_.values() if p.EntryTimestamp)
+        if ret is None: return None
+        first = self._first_entry_()
         if not first: return None
-        now = datetime.now()
-        duration_sec = (now - first).total_seconds()
+        duration_sec = (datetime.now() - first).total_seconds()
         return calculate_annualized_return(ret, duration_sec)
 
     @property
     def AnnualizedLogReturn(self) -> Union[float, None]:
         from Library.Portfolio.Statistic import calculate_annualized_log_return
         log_ret = self.LogReturn
-        if log_ret is None or not self._positions_: return None
-        first = min(p.EntryTimestamp.DateTime for p in self._positions_.values() if p.EntryTimestamp)
+        if log_ret is None: return None
+        first = self._first_entry_()
         if not first: return None
-        now = datetime.now()
-        duration_sec = (now - first).total_seconds()
+        duration_sec = (datetime.now() - first).total_seconds()
         return calculate_annualized_log_return(log_ret, duration_sec)
 
     @property

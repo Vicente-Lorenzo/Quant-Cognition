@@ -20,7 +20,7 @@ def test_statistic_report_empty():
     assert report_u.shape == (73, 7)
     assert "Unrealized Buy Metrics (Individual)" in report_u.columns
 
-    report_n = generate_net_report(trades_df, positions_df, account, start, stop)
+    report_n = generate_net_report(positions_df, trades_df, account, start, stop)
     assert report_n.shape == (73, 7)
     assert "Net Buy Metrics (Individual)" in report_n.columns
 
@@ -58,7 +58,7 @@ def test_statistic_report_populated():
     report_u = generate_unrealized_report(positions_df, account, start, stop)
     assert not report_u.is_empty()
     
-    report_n = generate_net_report(trades_df, positions_df, account, start, stop)
+    report_n = generate_net_report(positions_df, trades_df, account, start, stop)
     assert not report_n.is_empty()
     
     assert "Realized Total Metrics (Individual)" in report_r.columns

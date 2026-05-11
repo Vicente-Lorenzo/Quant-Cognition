@@ -6,6 +6,8 @@ from typing import Union, TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
 from Library.Market.Price import Direction
+from Library.Portfolio.Position import PositionAPI
+from Library.Portfolio.Trade import TradeAPI
 
 if TYPE_CHECKING:
     from Library.Portfolio.Account import AccountAPI
@@ -239,72 +241,56 @@ Metrics = [
 ]
 
 def sort_items(df: pl.DataFrame) -> pl.DataFrame:
-    from Library.Portfolio.Position import PositionAPI
     entry_ts = str(PositionAPI.ID.EntryTimestamp)
     if df.is_empty() or entry_ts not in df.columns: return df
     return df.sort(by=entry_ts, descending=False)
 
 def aggregate_items(df: pl.DataFrame) -> pl.DataFrame:
-    from Library.Portfolio.Position import PositionAPI
-    from Library.Portfolio.Trade import TradeAPI
-    if df.is_empty() or "Position" not in df.columns: return df
-    
-    uid_col = str(PositionAPI.ID.UID)
-    dir_col = str(PositionAPI.ID.Direction)
-    entry_ts = str(PositionAPI.ID.EntryTimestamp)
-    entry_price = str(PositionAPI.ID.EntryPrice)
-    vol_col = str(PositionAPI.ID.Volume)
-    gross_pnl = str(PositionAPI.ID.GrossPnL)
-    comm_pnl = str(PositionAPI.ID.CommissionPnL)
-    swap_pnl = str(PositionAPI.ID.SwapPnL)
-    net_pnl = str(PositionAPI.ID.NetPnL)
-    entry_bal = str(PositionAPI.ID.EntryBalance)
+    position = str(TradeAPI.ID.Position)
+    if df.is_empty() or position not in df.columns: return df
 
-    exit_ts = str(TradeAPI.ID.ExitTimestamp)
-    exit_price = str(TradeAPI.ID.ExitPrice)
-    exit_bal = str(TradeAPI.ID.ExitBalance)
+    def _take_(col: str, op):
+        return op(pl.col(col)) if col in df.columns else pl.lit(0.0).alias(col)
 
     agg_exprs = [
-        pl.col(uid_col).first(),
-        pl.col(dir_col).first(),
-        pl.col(entry_ts).min(),
-        pl.col(entry_price).first(),
-        pl.col(vol_col).sum(),
-        pl.col("Points").sum() if "Points" in df.columns else pl.lit(0.0).alias("Points"),
-        pl.col("Pips").sum() if "Pips" in df.columns else pl.lit(0.0).alias("Pips"),
-        pl.col(gross_pnl).sum() if gross_pnl in df.columns else pl.lit(0.0).alias(gross_pnl),
-        pl.col(comm_pnl).sum() if comm_pnl in df.columns else pl.lit(0.0).alias(comm_pnl),
-        pl.col(swap_pnl).sum() if swap_pnl in df.columns else pl.lit(0.0).alias(swap_pnl),
-        pl.col(net_pnl).sum() if net_pnl in df.columns else pl.lit(0.0).alias(net_pnl),
-        pl.col("MaxDrawdownPoints").min() if "MaxDrawdownPoints" in df.columns else pl.lit(0.0).alias("MaxDrawdownPoints"),
-        pl.col("MaxDrawdownPips").min() if "MaxDrawdownPips" in df.columns else pl.lit(0.0).alias("MaxDrawdownPips"),
-        pl.col("MaxRunupPoints").max() if "MaxRunupPoints" in df.columns else pl.lit(0.0).alias("MaxRunupPoints"),
-        pl.col("MaxRunupPips").max() if "MaxRunupPips" in df.columns else pl.lit(0.0).alias("MaxRunupPips"),
-        pl.col("Return").sum() if "Return" in df.columns else pl.lit(0.0).alias("Return"),
-        pl.col("LogReturn").sum() if "LogReturn" in df.columns else pl.lit(0.0).alias("LogReturn"),
-        pl.col("MaxDrawdownReturn").min() if "MaxDrawdownReturn" in df.columns else pl.lit(0.0).alias("MaxDrawdownReturn"),
-        pl.col("RiskAdjustedReturn").sum() if "RiskAdjustedReturn" in df.columns else pl.lit(0.0).alias("RiskAdjustedReturn"),
-        pl.col(entry_bal).first() if entry_bal in df.columns else pl.lit(0.0).alias(entry_bal),
+        pl.col(str(PositionAPI.ID.UID)).first(),
+        pl.col(str(PositionAPI.ID.Direction)).first(),
+        pl.col(str(PositionAPI.ID.EntryTimestamp)).min(),
+        pl.col(str(PositionAPI.ID.EntryPrice)).first(),
+        pl.col(str(PositionAPI.ID.Volume)).sum(),
+        _take_(str(PositionAPI.ID.Points), lambda x: x.sum()),
+        _take_(str(PositionAPI.ID.Pips), lambda x: x.sum()),
+        _take_(str(PositionAPI.ID.GrossPnL), lambda x: x.sum()),
+        _take_(str(PositionAPI.ID.CommissionPnL), lambda x: x.sum()),
+        _take_(str(PositionAPI.ID.SwapPnL), lambda x: x.sum()),
+        _take_(str(PositionAPI.ID.NetPnL), lambda x: x.sum()),
+        _take_(str(PositionAPI.ID.MaxRunupPoints), lambda x: x.max()),
+        _take_(str(PositionAPI.ID.MaxRunupPips), lambda x: x.max()),
+        _take_(str(PositionAPI.ID.MaxDrawdownPoints), lambda x: x.min()),
+        _take_(str(PositionAPI.ID.MaxDrawdownPips), lambda x: x.min()),
+        _take_(str(PositionAPI.ID.Return), lambda x: x.sum()),
+        _take_(str(PositionAPI.ID.LogReturn), lambda x: x.sum()),
+        _take_(str(PositionAPI.ID.MaxDrawdownReturn), lambda x: x.min()),
+        _take_(str(PositionAPI.ID.RiskAdjustedReturn), lambda x: x.sum()),
+        _take_(str(PositionAPI.ID.EntryBalance), lambda x: x.first()),
+        _take_(str(PositionAPI.ID.MidBalance), lambda x: x.last()),
     ]
-
+    exit_ts = str(TradeAPI.ID.ExitTimestamp)
     if exit_ts in df.columns:
         agg_exprs.extend([
             pl.col(exit_ts).max(),
-            pl.col(exit_price).last(),
-            pl.col(exit_bal).last() if exit_bal in df.columns else pl.lit(0.0).alias(exit_bal)
+            pl.col(str(TradeAPI.ID.ExitPrice)).last(),
+            _take_(str(TradeAPI.ID.ExitBalance), lambda x: x.last()),
         ])
-        
-    return df.group_by("Position").agg(agg_exprs)
+    return df.group_by(position).agg(agg_exprs)
 
 def split_buy_sell(df: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
-    from Library.Portfolio.Position import PositionAPI
-    dir_col = str(PositionAPI.ID.Direction)
-    if df.is_empty() or dir_col not in df.columns: return df, df
-    return (df.filter(pl.col(dir_col) == Direction.Buy.name),
-            df.filter(pl.col(dir_col) == Direction.Sell.name))
+    direction = str(PositionAPI.ID.Direction)
+    if df.is_empty() or direction not in df.columns: return df, df
+    return (df.filter(pl.col(direction) == Direction.Buy.name),
+            df.filter(pl.col(direction) == Direction.Sell.name))
 
 def split_winning_losing(df: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
-    from Library.Portfolio.Position import PositionAPI
     net_pnl = str(PositionAPI.ID.NetPnL)
     if df.is_empty() or net_pnl not in df.columns: return df, df
     return (df.filter(pl.col(net_pnl) > 0),
@@ -331,10 +317,11 @@ def calculate_expected(winning_perc: float, avg_win: float, losing_perc: float, 
     return (winning_perc / 100.0 * avg_win) - (losing_perc / 100.0 * abs(avg_loss))
 
 def calculate_return_and_volatility(df: pl.DataFrame) -> tuple[float, float, float]:
-    if df.is_empty() or "LogReturn" not in df.columns: return 0.0, 0.0, 0.0
-    exp_log = df["LogReturn"].mean()
-    tot_log = df["LogReturn"].sum()
-    vol_log = df["LogReturn"].std()
+    log_ret = str(PositionAPI.ID.LogReturn)
+    if df.is_empty() or log_ret not in df.columns: return 0.0, 0.0, 0.0
+    exp_log = df[log_ret].mean()
+    tot_log = df[log_ret].sum()
+    vol_log = df[log_ret].std()
     exp_ret = (math.exp(exp_log) - 1.0) * 100.0 if exp_log else 0.0
     tot_ret = (math.exp(tot_log) - 1.0) * 100.0 if tot_log else 0.0
     vol_ret = math.sqrt(math.exp((vol_log or 0.0)**2) - 1.0) * 100.0 if vol_log else 0.0
@@ -359,7 +346,6 @@ def calculate_profit_factor(win_pnl: float, loss_pnl: float) -> float:
     return win_pnl / abs(loss_pnl) if loss_pnl else 0.0
 
 def calculate_drawdown(initial_balance: float, df: pl.DataFrame) -> tuple[float, float, float, float]:
-    from Library.Portfolio.Position import PositionAPI
     net_pnl = str(PositionAPI.ID.NetPnL)
     if df.is_empty() or net_pnl not in df.columns: return 0.0, 0.0, 0.0, 0.0
     cum_bal = df[net_pnl].cum_sum() + initial_balance
@@ -373,7 +359,6 @@ def calculate_drawdown(initial_balance: float, df: pl.DataFrame) -> tuple[float,
     return max_dd_val, max_dd_pct, mean_dd_val, mean_dd_pct
 
 def calculate_runup(initial_balance: float, df: pl.DataFrame) -> tuple[float, float, float, float]:
-    from Library.Portfolio.Position import PositionAPI
     net_pnl = str(PositionAPI.ID.NetPnL)
     if df.is_empty() or net_pnl not in df.columns: return 0.0, 0.0, 0.0, 0.0
     cum_bal = df[net_pnl].cum_sum() + initial_balance
@@ -387,22 +372,16 @@ def calculate_runup(initial_balance: float, df: pl.DataFrame) -> tuple[float, fl
     return max_ru_val, max_ru_pct, mean_ru_val, mean_ru_pct
 
 def calculate_holding_times(df: pl.DataFrame, stop: date) -> tuple[float, float, float]:
-    from Library.Portfolio.Position import PositionAPI
-    from Library.Portfolio.Trade import TradeAPI
     entry_ts = str(PositionAPI.ID.EntryTimestamp)
     exit_ts = str(TradeAPI.ID.ExitTimestamp)
     if df.is_empty() or entry_ts not in df.columns: return 0.0, 0.0, 0.0
     if exit_ts in df.columns:
         h_times = df[exit_ts] - df[entry_ts]
     else:
-        if isinstance(stop, date) and not isinstance(stop, datetime):
-            stop_dt = datetime.combine(stop, datetime.min.time())
-        else:
-            stop_dt = stop
+        stop_dt = datetime.combine(stop, datetime.min.time()) if isinstance(stop, date) and not isinstance(stop, datetime) else stop
         h_times = pl.Series([stop_dt] * len(df)) - df[entry_ts]
-    
-    def fmt(td: timedelta): return td.days + (td.seconds // 3600) / 100.0 if td else 0.0
-    return fmt(h_times.max()), fmt(h_times.mean()), fmt(h_times.min())
+    def _days_(td: timedelta) -> float: return td.total_seconds() / 86400.0 if td else 0.0
+    return _days_(h_times.max()), _days_(h_times.mean()), _days_(h_times.min())
 
 def calculate_sharpe(ann_ret: float, ann_vol: float, rfr: float = 0.0) -> float:
     ann_vol = ann_vol if ann_vol else 1e-2
@@ -421,41 +400,42 @@ def calculate_fitness(ann_ret: float, mean_dd_pct: float, rfr: float = 0.0) -> f
     return (ann_ret - rfr) / abs(mean_dd_pct)
 
 def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.DataFrame) -> dict:
-    from Library.Portfolio.Position import PositionAPI
+    points = str(PositionAPI.ID.Points)
+    pips = str(PositionAPI.ID.Pips)
+    net_pnl = str(PositionAPI.ID.NetPnL)
     gross_pnl_col = str(PositionAPI.ID.GrossPnL)
-    comm_pnl_col = str(PositionAPI.ID.CommissionPnL)
+    commission_pnl_col = str(PositionAPI.ID.CommissionPnL)
     swap_pnl_col = str(PositionAPI.ID.SwapPnL)
-    net_pnl_col = str(PositionAPI.ID.NetPnL)
 
     win_df, loss_df = split_winning_losing(df)
     total_n = calculate_total(df)
-    total_points = calculate_sum(df, "Points")
-    total_pips = calculate_sum(df, "Pips")
-    
+    total_points = calculate_sum(df, points)
+    total_pips = calculate_sum(df, pips)
+
     win_n = calculate_total(win_df)
-    win_points = calculate_sum(win_df, "Points")
-    win_pips = calculate_sum(win_df, "Pips")
-    
+    win_points = calculate_sum(win_df, points)
+    win_pips = calculate_sum(win_df, pips)
+
     loss_n = calculate_total(loss_df)
-    loss_points = calculate_sum(loss_df, "Points")
-    loss_pips = calculate_sum(loss_df, "Pips")
-    
+    loss_points = calculate_sum(loss_df, points)
+    loss_pips = calculate_sum(loss_df, pips)
+
     win_rate = calculate_rate_perc(win_n, total_n)
     loss_rate = calculate_rate_perc(loss_n, total_n)
-    
-    win_max_trade, win_avg_trade, win_min_trade = calculate_min_avg_max(win_n, win_df, net_pnl_col)
-    loss_min_trade, loss_avg_trade, loss_max_trade = calculate_min_avg_max(loss_n, loss_df, net_pnl_col)
-    win_max_pts, win_avg_pts, win_min_pts = calculate_min_avg_max(win_n, win_df, "Points")
-    loss_min_pts, loss_avg_pts, loss_max_pts = calculate_min_avg_max(loss_n, loss_df, "Points")
-    win_max_pips, win_avg_pips, win_min_pips = calculate_min_avg_max(win_n, win_df, "Pips")
-    loss_min_pips, loss_avg_pips, loss_max_pips = calculate_min_avg_max(loss_n, loss_df, "Pips")
-    
+
+    win_max_trade, win_avg_trade, win_min_trade = calculate_min_avg_max(win_n, win_df, net_pnl)
+    loss_min_trade, loss_avg_trade, loss_max_trade = calculate_min_avg_max(loss_n, loss_df, net_pnl)
+    win_max_pts, win_avg_pts, win_min_pts = calculate_min_avg_max(win_n, win_df, points)
+    loss_min_pts, loss_avg_pts, loss_max_pts = calculate_min_avg_max(loss_n, loss_df, points)
+    win_max_pips, win_avg_pips, win_min_pips = calculate_min_avg_max(win_n, win_df, pips)
+    loss_min_pips, loss_avg_pips, loss_max_pips = calculate_min_avg_max(loss_n, loss_df, pips)
+
     gross_pnl = calculate_sum(df, gross_pnl_col)
-    comm_pnl = calculate_sum(df, comm_pnl_col)
+    comm_pnl = calculate_sum(df, commission_pnl_col)
     swap_pnl = calculate_sum(df, swap_pnl_col)
-    win_pnl = calculate_sum(win_df, net_pnl_col)
-    loss_pnl = calculate_sum(loss_df, net_pnl_col)
-    total_pnl = calculate_sum(df, net_pnl_col)
+    win_pnl = calculate_sum(win_df, net_pnl)
+    loss_pnl = calculate_sum(loss_df, net_pnl)
+    total_pnl = calculate_sum(df, net_pnl)
     
     exp_win_ret, win_ret, win_vol = calculate_return_and_volatility(win_df)
     exp_loss_ret, loss_ret, loss_vol = calculate_return_and_volatility(loss_df)
@@ -569,9 +549,7 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
     }
 
 def dependent_metrics(initial_balance: float, start: date, stop: date, df: pl.DataFrame, buy_col: str, sell_col: str, total_col: str) -> pl.DataFrame:
-    from Library.Portfolio.Position import PositionAPI
     net_pnl = str(PositionAPI.ID.NetPnL)
-
     buy_df, sell_df = split_buy_sell(df)
     buy_metrics = independent_metrics(initial_balance, start, stop, buy_df)
     sell_metrics = independent_metrics(initial_balance, start, stop, sell_df)
@@ -623,22 +601,22 @@ def dependent_metrics(initial_balance: float, start: date, stop: date, df: pl.Da
     }, strict=False)
 
 def _safe_df_(df: pl.DataFrame) -> pl.DataFrame:
-    from Library.Portfolio.Position import PositionAPI
-    from Library.Portfolio.Trade import TradeAPI
-    if df.is_empty():
-        required_cols = [
-            str(PositionAPI.ID.UID), "Position", str(PositionAPI.ID.Direction), str(PositionAPI.ID.EntryTimestamp), str(TradeAPI.ID.ExitTimestamp), 
-            str(PositionAPI.ID.EntryPrice), str(TradeAPI.ID.ExitPrice), str(PositionAPI.ID.Volume), "Points", "Pips", 
-            str(PositionAPI.ID.GrossPnL), str(PositionAPI.ID.CommissionPnL), str(PositionAPI.ID.SwapPnL), str(PositionAPI.ID.NetPnL), 
-            "MaxDrawdownPoints", "MaxDrawdownPips", "MaxRunupPoints", "MaxRunupPips", "Return", "LogReturn", "MaxDrawdownReturn", "RiskAdjustedReturn", 
-            str(PositionAPI.ID.EntryBalance), str(TradeAPI.ID.ExitBalance)
-        ]
-        schema: dict[str, pl.DataType] = {col: pl.Float64() for col in required_cols}
-        schema[str(PositionAPI.ID.EntryTimestamp)] = pl.Datetime()
-        schema[str(TradeAPI.ID.ExitTimestamp)] = pl.Datetime()
-        schema[str(PositionAPI.ID.Direction)] = pl.String()
-        return pl.DataFrame(schema=schema)
-    return df
+    if not df.is_empty(): return df
+    float_cols = [
+        str(PositionAPI.ID.UID), str(TradeAPI.ID.Position), str(PositionAPI.ID.EntryPrice), str(TradeAPI.ID.ExitPrice),
+        str(PositionAPI.ID.Volume), str(PositionAPI.ID.Points), str(PositionAPI.ID.Pips),
+        str(PositionAPI.ID.GrossPnL), str(PositionAPI.ID.CommissionPnL), str(PositionAPI.ID.SwapPnL), str(PositionAPI.ID.NetPnL),
+        str(PositionAPI.ID.MaxRunupPoints), str(PositionAPI.ID.MaxRunupPips),
+        str(PositionAPI.ID.MaxDrawdownPoints), str(PositionAPI.ID.MaxDrawdownPips),
+        str(PositionAPI.ID.Return), str(PositionAPI.ID.LogReturn),
+        str(PositionAPI.ID.MaxDrawdownReturn), str(PositionAPI.ID.RiskAdjustedReturn),
+        str(PositionAPI.ID.EntryBalance), str(PositionAPI.ID.MidBalance), str(TradeAPI.ID.ExitBalance),
+    ]
+    schema: dict[str, pl.DataType] = {col: pl.Float64() for col in float_cols}
+    schema[str(PositionAPI.ID.EntryTimestamp)] = pl.Datetime()
+    schema[str(TradeAPI.ID.ExitTimestamp)] = pl.Datetime()
+    schema[str(PositionAPI.ID.Direction)] = pl.String()
+    return pl.DataFrame(schema=schema)
 
 def generate_realized_report(trades_df: pl.DataFrame, account: AccountAPI, start: date, stop: date) -> pl.DataFrame:
     initial_balance = account.Balance or 0.0
@@ -664,10 +642,10 @@ def generate_unrealized_report(positions_df: pl.DataFrame, account: AccountAPI, 
     labels_df = pl.DataFrame({STATISTICS_METRICS_LABEL: Metrics})
     return pl.concat([labels_df, ind_df, agg_df], how="horizontal")
 
-def generate_net_report(trades_df: pl.DataFrame, positions_df: pl.DataFrame, account: AccountAPI, start: date, stop: date) -> pl.DataFrame:
+def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, account: AccountAPI, start: date, stop: date) -> pl.DataFrame:
     initial_balance = account.Balance or 0.0
-    safe_trades = _safe_df_(trades_df)
     safe_positions = _safe_df_(positions_df)
+    safe_trades = _safe_df_(trades_df)
 
     if not safe_trades.is_empty() and not safe_positions.is_empty():
         common_cols = set(safe_trades.columns).intersection(set(safe_positions.columns))
