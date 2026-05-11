@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from typing import Union, TYPE_CHECKING
 from dataclasses import dataclass, field
 
@@ -36,8 +35,8 @@ class PriceAPI(DataclassAPI):
 
     @property
     def LogPrice(self) -> Union[float, None]:
-        if self.Price <= 0: return None
-        return math.log(self.Price)
+        from Library.Portfolio.Statistic import calculate_log_value
+        return calculate_log_value(self.Price)
     @property
     def InvertedPrice(self) -> Union[float, None]:
         if not self.Price: return None
@@ -47,40 +46,36 @@ class PriceAPI(DataclassAPI):
         if self.Reference is None: return None
         return self.Price - self.Reference
     @property
-    def AbsoluteDistance(self) -> Union[float, None]:
-        d = self.Distance
-        return abs(d) if d is not None else None
+    def Return(self) -> Union[float, None]:
+        from Library.Portfolio.Statistic import calculate_price_return
+        return calculate_price_return(self.Price, self.Reference)
+    @property
+    def LogReturn(self) -> Union[float, None]:
+        from Library.Portfolio.Statistic import calculate_log_return
+        return calculate_log_return(self.Return)
     @property
     def Percentage(self) -> Union[float, None]:
-        if not self.Reference: return None
-        return (self.Price / self.Reference) - 1.0
+        from Library.Portfolio.Statistic import calculate_percentage
+        return calculate_percentage(self.Return)
     @property
     def LogPercentage(self) -> Union[float, None]:
-        pct = self.Percentage
-        if pct is None or pct <= -1.0: return None
-        return math.log1p(pct)
-    @property
-    def AbsolutePercentage(self) -> Union[float, None]:
-        pct = self.Percentage
-        return abs(pct) if pct is not None else None
-    @property
-    def AbsoluteLogPercentage(self) -> Union[float, None]:
-        lp = self.LogPercentage
-        return abs(lp) if lp is not None else None
+        from Library.Portfolio.Statistic import calculate_log_percentage
+        return calculate_log_percentage(self.LogReturn)
     @property
     def Direction(self) -> Union[Direction, None]:
+        from Library.Portfolio.Statistic import calculate_direction
         d = self.Distance
         if d is None: return None
-        return Direction.Buy if d > 0 else Direction.Sell if d < 0 else Direction.Neutral
+        return calculate_direction(d)
     @property
     def Ratio(self) -> Union[float, None]:
         if not self.Reference: return None
         return self.Price / self.Reference
     @property
-    def Pips(self) -> Union[float, None]:
-        if self.Contract is None or not self.Contract.PipSize: return None
-        return self.Price / self.Contract.PipSize
-    @property
     def Points(self) -> Union[float, None]:
         if self.Contract is None or not self.Contract.PointSize: return None
         return self.Price / self.Contract.PointSize
+    @property
+    def Pips(self) -> Union[float, None]:
+        if self.Contract is None or not self.Contract.PipSize: return None
+        return self.Price / self.Contract.PipSize
