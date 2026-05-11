@@ -180,7 +180,6 @@ class PositionAPI(DatapointAPI):
         if isinstance(security, SecurityAPI): self._security_ = security
         elif security is not MISSING and security is not None:
             self._security_ = SecurityAPI(UID=security, db=db, autoload=True)
-        order = coerce(order)
         if isinstance(order, OrderAPI): self._order_ = order
         elif order is not MISSING and order is not None:
             self._order_ = OrderAPI(UID=order, db=db, autoload=True)
@@ -429,36 +428,11 @@ class PositionAPI(DatapointAPI):
     @property
     def IsShort(self) -> bool:
         return self._direction_ == Direction.Sell
-    @property
-    def RiskReward(self) -> Union[float, None]:
-        if self._entry_price_ is None or self._stop_loss_price_ is None or self._take_profit_price_ is None: return None
-        ep, sl, tp = self._entry_price_.Price, self._stop_loss_price_.Price, self._take_profit_price_.Price
-        if ep is None or sl is None or tp is None: return None
-        risk, reward = abs(ep - sl), abs(tp - ep)
-        if not risk: return None
-        return reward / risk
-    @property
-    def RiskAmount(self) -> Union[float, None]:
-        if self._stop_loss_pnl_ and self._stop_loss_pnl_.PnL is not None:
-            return abs(self._stop_loss_pnl_.PnL)
-        return None
-
-    @property
-    def RewardAmount(self) -> Union[float, None]:
-        if self._take_profit_pnl_ and self._take_profit_pnl_.PnL is not None:
-            return abs(self._take_profit_pnl_.PnL)
-        return None
 
     @property
     def MarginUtilization(self) -> Union[float, None]:
         if not self.UsedMargin or not self._entry_balance_: return None
         return self.UsedMargin / self._entry_balance_
-
-    @property
-    def IsProfitable(self) -> Union[bool, None]:
-        if self._net_pnl_ and self._net_pnl_.PnL is not None:
-            return self._net_pnl_.PnL > 0
-        return None
 
     @property
     @overridefield
@@ -506,41 +480,23 @@ class PositionAPI(DatapointAPI):
 
     @property
     @overridefield
-    def MaxDrawdownPoints(self) -> Union[float, None]:
-        if self.MaxDrawdownPrice and self.MaxDrawdownPrice.Price and self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
-            diff = self.MaxDrawdownPrice.Price - self.EntryPrice.Price
-            diff = diff if self.IsLong else -diff
-            return diff / self.Security.Contract.PointSize
-        return 0.0
+    def AnnualizedReturn(self) -> Union[float, None]:
+        return self.NetPnL.AnnualizedReturn if self.NetPnL else None
 
     @property
     @overridefield
-    def MaxDrawdownPips(self) -> Union[float, None]:
-        if self.MaxDrawdownPrice and self.MaxDrawdownPrice.Price and self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
-            diff = self.MaxDrawdownPrice.Price - self.EntryPrice.Price
-            diff = diff if self.IsLong else -diff
-            return diff / self.Security.Contract.PipSize
-        return 0.0
+    def AnnualizedLogReturn(self) -> Union[float, None]:
+        return self.NetPnL.AnnualizedLogReturn if self.NetPnL else None
 
     @property
     @overridefield
-    def MaxDrawdownReturn(self) -> Union[float, None]:
-        return self.MaxDrawdownPnL.Return if self.MaxDrawdownPnL else 0.0
+    def AnnualizedPercentage(self) -> Union[float, None]:
+        return self.NetPnL.AnnualizedPercentage if self.NetPnL else None
 
     @property
     @overridefield
-    def MaxDrawdownLogReturn(self) -> Union[float, None]:
-        return self.MaxDrawdownPnL.LogReturn if self.MaxDrawdownPnL else 0.0
-
-    @property
-    @overridefield
-    def MaxDrawdownPercentage(self) -> Union[float, None]:
-        return self.MaxDrawdownPnL.Percentage if self.MaxDrawdownPnL else 0.0
-
-    @property
-    @overridefield
-    def MaxDrawdownLogPercentage(self) -> Union[float, None]:
-        return self.MaxDrawdownPnL.LogPercentage if self.MaxDrawdownPnL else 0.0
+    def AnnualizedLogPercentage(self) -> Union[float, None]:
+        return self.NetPnL.AnnualizedLogPercentage if self.NetPnL else None
 
     @property
     @overridefield
@@ -579,6 +535,44 @@ class PositionAPI(DatapointAPI):
     @overridefield
     def MaxRunupLogPercentage(self) -> Union[float, None]:
         return self.MaxRunupPnL.LogPercentage if self.MaxRunupPnL else 0.0
+
+    @property
+    @overridefield
+    def MaxDrawdownPoints(self) -> Union[float, None]:
+        if self.MaxDrawdownPrice and self.MaxDrawdownPrice.Price and self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
+            diff = self.MaxDrawdownPrice.Price - self.EntryPrice.Price
+            diff = diff if self.IsLong else -diff
+            return diff / self.Security.Contract.PointSize
+        return 0.0
+
+    @property
+    @overridefield
+    def MaxDrawdownPips(self) -> Union[float, None]:
+        if self.MaxDrawdownPrice and self.MaxDrawdownPrice.Price and self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
+            diff = self.MaxDrawdownPrice.Price - self.EntryPrice.Price
+            diff = diff if self.IsLong else -diff
+            return diff / self.Security.Contract.PipSize
+        return 0.0
+
+    @property
+    @overridefield
+    def MaxDrawdownReturn(self) -> Union[float, None]:
+        return self.MaxDrawdownPnL.Return if self.MaxDrawdownPnL else 0.0
+
+    @property
+    @overridefield
+    def MaxDrawdownLogReturn(self) -> Union[float, None]:
+        return self.MaxDrawdownPnL.LogReturn if self.MaxDrawdownPnL else 0.0
+
+    @property
+    @overridefield
+    def MaxDrawdownPercentage(self) -> Union[float, None]:
+        return self.MaxDrawdownPnL.Percentage if self.MaxDrawdownPnL else 0.0
+
+    @property
+    @overridefield
+    def MaxDrawdownLogPercentage(self) -> Union[float, None]:
+        return self.MaxDrawdownPnL.LogPercentage if self.MaxDrawdownPnL else 0.0
 
     @property
     @overridefield
