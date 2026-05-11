@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from typing import Union
 from dataclasses import dataclass, field
 
@@ -12,35 +11,52 @@ class PnLAPI(DataclassAPI):
 
     PnL: float = field(init=True, repr=True)
     Reference: Union[float, None] = field(default=None, init=True, repr=True)
+    Duration: Union[float, None] = field(default=None, init=True, repr=True)
 
     @property
     def UID(self) -> float:
         return self.PnL
 
     @property
-    def Absolute(self) -> float:
-        return abs(self.PnL)
+    def LogPnL(self) -> Union[float, None]:
+        from Library.Portfolio.Statistic import calculate_log_value
+        return calculate_log_value(self.PnL)
+
     @property
     def Direction(self) -> Direction:
-        return Direction.Buy if self.PnL > 0 else Direction.Sell if self.PnL < 0 else Direction.Neutral
+        from Library.Portfolio.Statistic import calculate_direction
+        return calculate_direction(self.PnL)
+
     @property
     def Return(self) -> Union[float, None]:
-        if not self.Reference: return None
-        return self.PnL / self.Reference
-    @property
-    def AbsoluteReturn(self) -> Union[float, None]:
-        ret = self.Return
-        return abs(ret) if ret is not None else None
-    @property
-    def Percentage(self) -> Union[float, None]:
-        ret = self.Return
-        return ret * 100.0 if ret is not None else None
+        from Library.Portfolio.Statistic import calculate_pnl_return
+        return calculate_pnl_return(self.PnL, self.Reference)
+
     @property
     def LogReturn(self) -> Union[float, None]:
-        ret = self.Return
-        if ret is None or ret <= -1.0: return None
-        return math.log1p(ret)
+        from Library.Portfolio.Statistic import calculate_log_return
+        return calculate_log_return(self.Return)
+
     @property
-    def AbsoluteLogReturn(self) -> Union[float, None]:
-        lr = self.LogReturn
-        return abs(lr) if lr is not None else None
+    def Percentage(self) -> Union[float, None]:
+        from Library.Portfolio.Statistic import calculate_percentage
+        return calculate_percentage(self.Return)
+
+    @property
+    def LogPercentage(self) -> Union[float, None]:
+        from Library.Portfolio.Statistic import calculate_log_percentage
+        return calculate_log_percentage(self.LogReturn)
+
+    @property
+    def AnnualizedReturn(self) -> Union[float, None]:
+        from Library.Portfolio.Statistic import calculate_annualized_return
+        ret = self.Return
+        if ret is None or not self.Duration or self.Duration <= 0.0: return None
+        return calculate_annualized_return(ret, self.Duration)
+
+    @property
+    def AnnualizedLogReturn(self) -> Union[float, None]:
+        from Library.Portfolio.Statistic import calculate_annualized_log_return
+        log_ret = self.LogReturn
+        if log_ret is None or not self.Duration or self.Duration <= 0.0: return None
+        return calculate_annualized_log_return(log_ret, self.Duration)
