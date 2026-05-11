@@ -202,7 +202,7 @@ class StatisticsAPI:
             pl.col(str(Trade.DrawdownReturn)).min().alias(Trade.DrawdownReturn),
             pl.col(str(Trade.NetReturn)).sum().alias(Trade.NetReturn),
             pl.col(str(Trade.NetLogReturn)).sum().alias(Trade.NetLogReturn),
-            pl.col(str(Trade.NetReturnDrawdown)).sum().alias(Trade.NetReturnDrawdown),
+            pl.col(str(Trade.ReturnOverMaxDrawdown)).sum().alias(Trade.ReturnOverMaxDrawdown),
             pl.col(str(Trade.BaseBalance)).first().alias(Trade.BaseBalance),
             pl.col(str(Trade.EntryBalance)).first().alias(Trade.EntryBalance),
             pl.col(str(Trade.ExitBalance)).last().alias(Trade.ExitBalance),
