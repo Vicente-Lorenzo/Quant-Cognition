@@ -55,7 +55,6 @@ def calculate_net_pnl(gross_pnl: float, commission_pnl: float, swap_pnl: float) 
     return gross_pnl + commission_pnl + swap_pnl
 
 
-# Report Constants
 STATISTICS_METRICS_LABEL = "Statistical Metrics"
 
 REALIZED_BUY_INDIVIDUAL = "Realized Buy Metrics (Individual)"
@@ -277,14 +276,14 @@ def aggregate_items(df: pl.DataFrame) -> pl.DataFrame:
         pl.col(comm_pnl).sum() if comm_pnl in df.columns else pl.lit(0.0).alias(comm_pnl),
         pl.col(swap_pnl).sum() if swap_pnl in df.columns else pl.lit(0.0).alias(swap_pnl),
         pl.col(net_pnl).sum() if net_pnl in df.columns else pl.lit(0.0).alias(net_pnl),
-        pl.col("DrawdownPoints").min() if "DrawdownPoints" in df.columns else pl.lit(0.0).alias("DrawdownPoints"),
-        pl.col("DrawdownPips").min() if "DrawdownPips" in df.columns else pl.lit(0.0).alias("DrawdownPips"),
-        pl.col("RunupPoints").max() if "RunupPoints" in df.columns else pl.lit(0.0).alias("RunupPoints"),
-        pl.col("RunupPips").max() if "RunupPips" in df.columns else pl.lit(0.0).alias("RunupPips"),
-        pl.col("NetReturn").sum() if "NetReturn" in df.columns else pl.lit(0.0).alias("NetReturn"),
-        pl.col("NetLogReturn").sum() if "NetLogReturn" in df.columns else pl.lit(0.0).alias("NetLogReturn"),
-        pl.col("DrawdownReturn").min() if "DrawdownReturn" in df.columns else pl.lit(0.0).alias("DrawdownReturn"),
-        pl.col("ReturnOverMaxDrawdown").sum() if "ReturnOverMaxDrawdown" in df.columns else pl.lit(0.0).alias("ReturnOverMaxDrawdown"),
+        pl.col("MaxDrawdownPoints").min() if "MaxDrawdownPoints" in df.columns else pl.lit(0.0).alias("MaxDrawdownPoints"),
+        pl.col("MaxDrawdownPips").min() if "MaxDrawdownPips" in df.columns else pl.lit(0.0).alias("MaxDrawdownPips"),
+        pl.col("MaxRunupPoints").max() if "MaxRunupPoints" in df.columns else pl.lit(0.0).alias("MaxRunupPoints"),
+        pl.col("MaxRunupPips").max() if "MaxRunupPips" in df.columns else pl.lit(0.0).alias("MaxRunupPips"),
+        pl.col("Return").sum() if "Return" in df.columns else pl.lit(0.0).alias("Return"),
+        pl.col("LogReturn").sum() if "LogReturn" in df.columns else pl.lit(0.0).alias("LogReturn"),
+        pl.col("MaxDrawdownReturn").min() if "MaxDrawdownReturn" in df.columns else pl.lit(0.0).alias("MaxDrawdownReturn"),
+        pl.col("RiskAdjustedReturn").sum() if "RiskAdjustedReturn" in df.columns else pl.lit(0.0).alias("RiskAdjustedReturn"),
         pl.col(entry_bal).first() if entry_bal in df.columns else pl.lit(0.0).alias(entry_bal),
     ]
 
@@ -332,10 +331,10 @@ def calculate_expected(winning_perc: float, avg_win: float, losing_perc: float, 
     return (winning_perc / 100.0 * avg_win) - (losing_perc / 100.0 * abs(avg_loss))
 
 def calculate_return_and_volatility(df: pl.DataFrame) -> tuple[float, float, float]:
-    if df.is_empty() or "NetLogReturn" not in df.columns: return 0.0, 0.0, 0.0
-    exp_log = df["NetLogReturn"].mean()
-    tot_log = df["NetLogReturn"].sum()
-    vol_log = df["NetLogReturn"].std()
+    if df.is_empty() or "LogReturn" not in df.columns: return 0.0, 0.0, 0.0
+    exp_log = df["LogReturn"].mean()
+    tot_log = df["LogReturn"].sum()
+    vol_log = df["LogReturn"].std()
     exp_ret = (math.exp(exp_log) - 1.0) * 100.0 if exp_log else 0.0
     tot_ret = (math.exp(tot_log) - 1.0) * 100.0 if tot_log else 0.0
     vol_ret = math.sqrt(math.exp((vol_log or 0.0)**2) - 1.0) * 100.0 if vol_log else 0.0
@@ -631,7 +630,7 @@ def _safe_df(df: pl.DataFrame) -> pl.DataFrame:
             str(PositionAPI.ID.UID), "Position", str(PositionAPI.ID.Direction), str(PositionAPI.ID.EntryTimestamp), str(TradeAPI.ID.ExitTimestamp), 
             str(PositionAPI.ID.EntryPrice), str(TradeAPI.ID.ExitPrice), str(PositionAPI.ID.Volume), "Points", "Pips", 
             str(PositionAPI.ID.GrossPnL), str(PositionAPI.ID.CommissionPnL), str(PositionAPI.ID.SwapPnL), str(PositionAPI.ID.NetPnL), 
-            "DrawdownPoints", "DrawdownPips", "RunupPoints", "RunupPips", "NetReturn", "NetLogReturn", "DrawdownReturn", "ReturnOverMaxDrawdown", 
+            "MaxDrawdownPoints", "MaxDrawdownPips", "MaxRunupPoints", "MaxRunupPips", "Return", "LogReturn", "MaxDrawdownReturn", "RiskAdjustedReturn", 
             str(PositionAPI.ID.EntryBalance), str(TradeAPI.ID.ExitBalance)
         ]
         schema: dict[str, pl.DataType] = {col: pl.Float64() for col in required_cols}

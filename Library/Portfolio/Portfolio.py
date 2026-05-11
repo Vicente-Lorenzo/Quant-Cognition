@@ -213,7 +213,6 @@ class PortfolioAPI(DatapointAPI):
                     pos.NetPnL.Duration = duration_sec if duration_sec > 0 else None
                 if self._account_ and self._account_.Balance: pos.NetPnL.Reference = self._account_.Balance
                 
-                # Update Max Runup & Drawdown PnL
                 if pos.MaxRunupPnL and (pos.MaxRunupPnL.PnL is None or pos.NetPnL.PnL > pos.MaxRunupPnL.PnL):
                     pos.MaxRunupPnL.PnL = pos.NetPnL.PnL
                     pos.MaxRunupPnL.Reference = pos.NetPnL.Reference
@@ -223,7 +222,6 @@ class PortfolioAPI(DatapointAPI):
                     pos.MaxDrawdownPnL.Reference = pos.NetPnL.Reference
                     pos.MaxDrawdownPnL.Duration = pos.NetPnL.Duration
                     
-            # Update Max Peak Prices
             if pos.MaxRunupPrice is None or (pos.IsLong and current_price > pos.MaxRunupPrice.Price) or (pos.IsShort and current_price < pos.MaxRunupPrice.Price):
                 if pos.MaxRunupPrice: pos.MaxRunupPrice.Price = current_price
             if pos.MaxDrawdownPrice is None or (pos.IsLong and current_price < pos.MaxDrawdownPrice.Price) or (pos.IsShort and current_price > pos.MaxDrawdownPrice.Price):
@@ -253,10 +251,10 @@ class PortfolioAPI(DatapointAPI):
     def close_position(self, position_uid: int, trade: TradeAPI) -> None:
         if position_uid in self._positions_:
             old_pos = self._positions_[position_uid]
-            if trade.MaxDrawdownPnL is None: trade.MaxDrawdownPnL = old_pos.MaxDrawdownPnL  # type: ignore
+            if trade.MaxDrawdownPnL is None: trade.MaxDrawdownPnL = old_pos.MaxDrawdownPnL
             if old_pos.MaxDrawdownPrice:
-                trade.MaxDrawdownPrice = old_pos.MaxDrawdownPrice  # type: ignore
-            trade.EntryBalance = old_pos.EntryBalance  # type: ignore
+                trade.MaxDrawdownPrice = old_pos.MaxDrawdownPrice
+            trade.EntryBalance = old_pos.EntryBalance
             if self._account_ and trade.NetPnL:
                 trade.ExitBalance = trade.EntryBalance + (trade.NetPnL.PnL or 0.0) if trade.EntryBalance else 0.0
                 self._account_.Balance += (trade.NetPnL.PnL or 0.0)
@@ -349,6 +347,16 @@ class PortfolioAPI(DatapointAPI):
         now = datetime.now()
         duration_sec = (now - first).total_seconds()
         return calculate_annualized_log_return(log_ret, duration_sec)
+
+    @property
+    def AnnualizedPercentage(self) -> Union[float, None]:
+        from Library.Portfolio.Statistic import calculate_percentage
+        return calculate_percentage(self.AnnualizedReturn)
+
+    @property
+    def AnnualizedLogPercentage(self) -> Union[float, None]:
+        from Library.Portfolio.Statistic import calculate_log_percentage
+        return calculate_log_percentage(self.AnnualizedLogReturn)
 
     @property
     def Trades(self) -> pl.DataFrame:

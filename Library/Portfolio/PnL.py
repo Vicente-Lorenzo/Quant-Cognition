@@ -60,3 +60,13 @@ class PnLAPI(DataclassAPI):
         log_ret = self.LogReturn
         if log_ret is None or not self.Duration or self.Duration <= 0.0: return None
         return calculate_annualized_log_return(log_ret, self.Duration)
+
+    @property
+    def AnnualizedPercentage(self) -> Union[float, None]:
+        from Library.Portfolio.Statistic import calculate_percentage
+        return calculate_percentage(self.AnnualizedReturn)
+
+    @property
+    def AnnualizedLogPercentage(self) -> Union[float, None]:
+        from Library.Portfolio.Statistic import calculate_log_percentage
+        return calculate_log_percentage(self.AnnualizedLogReturn)

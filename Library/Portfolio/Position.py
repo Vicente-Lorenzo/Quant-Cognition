@@ -359,18 +359,18 @@ class PositionAPI(DatapointAPI):
 
     @property
     @overridefield
-    def MaxRunUpPnL(self) -> Union[PnLAPI, None]:
+    def MaxRunupPnL(self) -> Union[PnLAPI, None]:
         return self._max_runup_pnl_
-    @MaxRunUpPnL.setter
-    def MaxRunUpPnL(self, val: Union[float, PnLAPI, None]) -> None:
+    @MaxRunupPnL.setter
+    def MaxRunupPnL(self, val: Union[float, PnLAPI, None]) -> None:
         self._max_runup_pnl_ = self._assign_pnl_(self._max_runup_pnl_, val)
 
     @property
     @overridefield
-    def MaxDrawDownPnL(self) -> Union[PnLAPI, None]:
+    def MaxDrawdownPnL(self) -> Union[PnLAPI, None]:
         return self._max_drawdown_pnl_
-    @MaxDrawDownPnL.setter
-    def MaxDrawDownPnL(self, val: Union[float, PnLAPI, None]) -> None:
+    @MaxDrawdownPnL.setter
+    def MaxDrawdownPnL(self, val: Union[float, PnLAPI, None]) -> None:
         self._max_drawdown_pnl_ = self._assign_pnl_(self._max_drawdown_pnl_, val)
 
     @property
@@ -486,7 +486,27 @@ class PositionAPI(DatapointAPI):
 
     @property
     @overridefield
-    def DrawdownPoints(self) -> Union[float, None]:
+    def Return(self) -> Union[float, None]:
+        return self.NetPnL.Return if self.NetPnL else 0.0
+
+    @property
+    @overridefield
+    def LogReturn(self) -> Union[float, None]:
+        return self.NetPnL.LogReturn if self.NetPnL else 0.0
+
+    @property
+    @overridefield
+    def Percentage(self) -> Union[float, None]:
+        return self.NetPnL.Percentage if self.NetPnL else 0.0
+
+    @property
+    @overridefield
+    def LogPercentage(self) -> Union[float, None]:
+        return self.NetPnL.LogPercentage if self.NetPnL else 0.0
+
+    @property
+    @overridefield
+    def MaxDrawdownPoints(self) -> Union[float, None]:
         if self.MaxDrawdownPrice and self.MaxDrawdownPrice.Price and self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
             diff = self.MaxDrawdownPrice.Price - self.EntryPrice.Price
             diff = diff if self.IsLong else -diff
@@ -495,7 +515,7 @@ class PositionAPI(DatapointAPI):
 
     @property
     @overridefield
-    def DrawdownPips(self) -> Union[float, None]:
+    def MaxDrawdownPips(self) -> Union[float, None]:
         if self.MaxDrawdownPrice and self.MaxDrawdownPrice.Price and self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
             diff = self.MaxDrawdownPrice.Price - self.EntryPrice.Price
             diff = diff if self.IsLong else -diff
@@ -504,7 +524,27 @@ class PositionAPI(DatapointAPI):
 
     @property
     @overridefield
-    def RunupPoints(self) -> Union[float, None]:
+    def MaxDrawdownReturn(self) -> Union[float, None]:
+        return self.MaxDrawdownPnL.Return if self.MaxDrawdownPnL else 0.0
+
+    @property
+    @overridefield
+    def MaxDrawdownLogReturn(self) -> Union[float, None]:
+        return self.MaxDrawdownPnL.LogReturn if self.MaxDrawdownPnL else 0.0
+
+    @property
+    @overridefield
+    def MaxDrawdownPercentage(self) -> Union[float, None]:
+        return self.MaxDrawdownPnL.Percentage if self.MaxDrawdownPnL else 0.0
+
+    @property
+    @overridefield
+    def MaxDrawdownLogPercentage(self) -> Union[float, None]:
+        return self.MaxDrawdownPnL.LogPercentage if self.MaxDrawdownPnL else 0.0
+
+    @property
+    @overridefield
+    def MaxRunupPoints(self) -> Union[float, None]:
         if self.MaxRunupPrice and self.MaxRunupPrice.Price and self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
             diff = self.MaxRunupPrice.Price - self.EntryPrice.Price
             diff = diff if self.IsLong else -diff
@@ -513,7 +553,7 @@ class PositionAPI(DatapointAPI):
 
     @property
     @overridefield
-    def RunupPips(self) -> Union[float, None]:
+    def MaxRunupPips(self) -> Union[float, None]:
         if self.MaxRunupPrice and self.MaxRunupPrice.Price and self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
             diff = self.MaxRunupPrice.Price - self.EntryPrice.Price
             diff = diff if self.IsLong else -diff
@@ -522,34 +562,47 @@ class PositionAPI(DatapointAPI):
 
     @property
     @overridefield
-    def NetReturn(self) -> Union[float, None]:
-        if self.NetPnL and self.NetPnL.Return is not None:
-            return self.NetPnL.Return
-        return 0.0
+    def MaxRunupReturn(self) -> Union[float, None]:
+        return self.MaxRunupPnL.Return if self.MaxRunupPnL else 0.0
 
     @property
     @overridefield
-    def NetLogReturn(self) -> Union[float, None]:
-        if self.NetPnL and self.NetPnL.LogReturn is not None:
-            return self.NetPnL.LogReturn
-        return 0.0
+    def MaxRunupLogReturn(self) -> Union[float, None]:
+        return self.MaxRunupPnL.LogReturn if self.MaxRunupPnL else 0.0
 
     @property
     @overridefield
-    def DrawdownReturn(self) -> Union[float, None]:
-        if self.MaxDrawdownPnL and self.MaxDrawdownPnL.Return is not None:
-            return self.MaxDrawdownPnL.Return
-        return 0.0
+    def MaxRunupPercentage(self) -> Union[float, None]:
+        return self.MaxRunupPnL.Percentage if self.MaxRunupPnL else 0.0
 
     @property
     @overridefield
-    def ReturnOverMaxDrawdown(self) -> Union[float, None]:
-        if self.NetPnL and self.MaxDrawdownPnL and self.MaxDrawdownPnL.Return:
-            ret = self.NetPnL.Return
-            dd_ret = self.MaxDrawdownPnL.Return
-            if dd_ret != 0:
-                return ret / abs(dd_ret)
-        return 0.0
+    def MaxRunupLogPercentage(self) -> Union[float, None]:
+        return self.MaxRunupPnL.LogPercentage if self.MaxRunupPnL else 0.0
+
+    @property
+    @overridefield
+    def RiskAdjustedReturn(self) -> Union[float, None]:
+        ret, dd = self.Return, self.MaxDrawdownReturn
+        return ret / abs(dd) if ret is not None and dd and dd != 0 else 0.0
+
+    @property
+    @overridefield
+    def RiskAdjustedLogReturn(self) -> Union[float, None]:
+        ret, dd = self.LogReturn, self.MaxDrawdownLogReturn
+        return ret / abs(dd) if ret is not None and dd and dd != 0 else 0.0
+
+    @property
+    @overridefield
+    def RiskAdjustedPercentage(self) -> Union[float, None]:
+        ret, dd = self.Percentage, self.MaxDrawdownPercentage
+        return ret / abs(dd) if ret is not None and dd and dd != 0 else 0.0
+
+    @property
+    @overridefield
+    def RiskAdjustedLogPercentage(self) -> Union[float, None]:
+        ret, dd = self.LogPercentage, self.MaxDrawdownLogPercentage
+        return ret / abs(dd) if ret is not None and dd and dd != 0 else 0.0
 
     @property
     @overridefield
