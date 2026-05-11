@@ -16,6 +16,19 @@ from Library.Portfolio.Position import (
     PositionAPI
 )
 from Library.Portfolio.Trade import TradeAPI
+from Library.Portfolio.Statistic import (
+    generate_realized_report,
+    generate_unrealized_report,
+    generate_net_report
+)
+from Library.Portfolio.Sizing import (
+    calculate_normalized_volume,
+    calculate_fixed_amount_volume,
+    calculate_fixed_fractional_volume,
+    calculate_kelly_criterion_volume,
+    calculate_volatility_target_volume,
+    calculate_risk_parity_volume
+)
 from Library.Portfolio.Portfolio import PortfolioAPI
 
 __all__ = [
@@ -31,5 +44,14 @@ __all__ = [
     "PositionType",
     "PositionAPI",
     "TradeAPI",
+    "generate_realized_report",
+    "generate_unrealized_report",
+    "generate_net_report",
+    "calculate_normalized_volume",
+    "calculate_fixed_amount_volume",
+    "calculate_fixed_fractional_volume",
+    "calculate_kelly_criterion_volume",
+    "calculate_volatility_target_volume",
+    "calculate_risk_parity_volume",
     "PortfolioAPI"
 ]
