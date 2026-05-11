@@ -1,9 +1,20 @@
-from typing import Union
-from Library.Classes import PositionType, Direction, TechnicalMode
-from Library.Parameters import Parameters
+from __future__ import annotations
 
-from Library.Utility import *
-from Library.Engine import MachineAPI
+from typing import Union, TYPE_CHECKING
+from Library.Portfolio import PositionType, Direction
+from Library.Utility import TechnicalMode
+
+if TYPE_CHECKING:
+    from Library.Parameters import Parameters
+    from Library.Engine import MachineAPI
+    from Library.Utility import (
+        PositionUpdate,
+        PositionTradeUpdate,
+        TradeUpdate,
+        TickUpdate,
+        BarUpdate
+    )
+
 from Library.Strategy import StrategyAPI
 
 class NNFXStrategyAPI(StrategyAPI):
@@ -11,16 +22,16 @@ class NNFXStrategyAPI(StrategyAPI):
     def __init__(self,
                  money_management: Parameters,
                  risk_management: Parameters,
-                 signal_management: Parameters):
+                 signal_management: Parameters) -> None:
 
         super().__init__(money_management, risk_management, signal_management)
 
-        self._risk_percentage, = self.MoneyManagement.RiskPercentage
+        self._risk_percentage_, = self.MoneyManagement.RiskPercentage
 
-        self._stop_loss_scale, = self.RiskManagement.StopLossScale
-        self._scaling_out_scale, = self.RiskManagement.ScalingOutScale
-        self._scaling_out_percentage, = self.RiskManagement.ScalingOutPercentage
-        self._trailing_stop_loss_scale, = self.RiskManagement.TrailingStopLossScale
+        self._stop_loss_scale_, = self.RiskManagement.StopLossScale
+        self._scaling_out_scale_, = self.RiskManagement.ScalingOutScale
+        self._scaling_out_percentage_, = self.RiskManagement.ScalingOutPercentage
+        self._trailing_stop_loss_scale_, = self.RiskManagement.TrailingStopLossScale
 
         modes = {
             "Baseline": self.SignalManagement.BaselineMode,
@@ -39,85 +50,96 @@ class NNFXStrategyAPI(StrategyAPI):
         for technical_name, (normal_entry_mode, continuation_entry_mode, normal_exit_mode) in modes.items():
             match normal_entry_mode:
                 case TechnicalMode.Filter.name:
-                    normal_entries_buy.append(lambda update, tname=technical_name: getattr(update.Analyst, tname).filter_buy(update.Analyst.Market))
-                    normal_entries_sell.append(lambda update, tname=technical_name: getattr(update.Analyst, tname).filter_sell(update.Analyst.Market))
+                    normal_entries_buy.append(lambda update, tname=technical_name: getattr(update.Indicator, tname).filter_buy(update.Market))
+                    normal_entries_sell.append(lambda update, tname=technical_name: getattr(update.Indicator, tname).filter_sell(update.Market))
                 case TechnicalMode.Signal.name:
-                    normal_entries_buy.append(lambda update, tname=technical_name: getattr(update.Analyst, tname).signal_buy(update.Analyst.Market))
-                    normal_entries_sell.append(lambda update, tname=technical_name: getattr(update.Analyst, tname).signal_sell(update.Analyst.Market))
+                    normal_entries_buy.append(lambda update, tname=technical_name: getattr(update.Indicator, tname).signal_buy(update.Market))
+                    normal_entries_sell.append(lambda update, tname=technical_name: getattr(update.Indicator, tname).signal_sell(update.Market))
             match continuation_entry_mode:
                 case TechnicalMode.Filter.name:
-                    continuation_entries_buy.append(lambda update, tname=technical_name: getattr(update.Analyst, tname).filter_buy(update.Analyst.Market))
-                    continuation_entries_sell.append(lambda update, tname=technical_name: getattr(update.Analyst, tname).filter_sell(update.Analyst.Market))
+                    continuation_entries_buy.append(lambda update, tname=technical_name: getattr(update.Indicator, tname).filter_buy(update.Market))
+                    continuation_entries_sell.append(lambda update, tname=technical_name: getattr(update.Indicator, tname).filter_sell(update.Market))
                 case TechnicalMode.Signal.name:
-                    continuation_entries_buy.append(lambda update, tname=technical_name: getattr(update.Analyst, tname).signal_buy(update.Analyst.Market))
-                    continuation_entries_sell.append(lambda update, tname=technical_name: getattr(update.Analyst, tname).signal_sell(update.Analyst.Market))
+                    continuation_entries_buy.append(lambda update, tname=technical_name: getattr(update.Indicator, tname).signal_buy(update.Market))
+                    continuation_entries_sell.append(lambda update, tname=technical_name: getattr(update.Indicator, tname).signal_sell(update.Market))
             match normal_exit_mode:
                 case TechnicalMode.Filter.name:
-                    normal_exits_buy.append(lambda update, tname=technical_name: getattr(update.Analyst, tname).filter_sell(update.Analyst.Market))
-                    normal_exits_sell.append(lambda update, tname=technical_name: getattr(update.Analyst, tname).filter_buy(update.Analyst.Market))
+                    normal_exits_buy.append(lambda update, tname=technical_name: getattr(update.Indicator, tname).filter_sell(update.Market))
+                    normal_exits_sell.append(lambda update, tname=technical_name: getattr(update.Indicator, tname).filter_buy(update.Market))
                 case TechnicalMode.Signal.name:
-                    normal_exits_buy.append(lambda update, tname=technical_name: getattr(update.Analyst, tname).signal_sell(update.Analyst.Market))
-                    normal_exits_sell.append(lambda update, tname=technical_name: getattr(update.Analyst, tname).signal_buy(update.Analyst.Market))
+                    normal_exits_buy.append(lambda update, tname=technical_name: getattr(update.Indicator, tname).signal_sell(update.Market))
+                    normal_exits_sell.append(lambda update, tname=technical_name: getattr(update.Indicator, tname).signal_buy(update.Market))
 
-        self._normal_entry_buy = lambda update: all(f(update) for f in normal_entries_buy) if normal_entries_buy else False
-        self._normal_entry_sell = lambda update: all(f(update) for f in normal_entries_sell) if normal_entries_sell else False
-        self._continuation_entry_buy = lambda update: all(f(update) for f in continuation_entries_buy) if continuation_entries_buy else False
-        self._continuation_entry_sell = lambda update: all(f(update) for f in continuation_entries_sell) if continuation_entries_sell else False
-        self._normal_exit_buy = lambda update: any(f(update) for f in normal_exits_buy) if normal_exits_buy else False
-        self._normal_exit_sell = lambda update: any(f(update) for f in normal_exits_sell) if normal_exits_sell else False
+        self._normal_entry_buy_ = lambda update: all(f(update) for f in normal_entries_buy) if normal_entries_buy else False
+        self._normal_entry_sell_ = lambda update: all(f(update) for f in normal_entries_sell) if normal_entries_sell else False
+        self._continuation_entry_buy_ = lambda update: all(f(update) for f in continuation_entries_buy) if continuation_entries_buy else False
+        self._continuation_entry_sell_ = lambda update: all(f(update) for f in continuation_entries_sell) if continuation_entries_sell else False
+        self._normal_exit_buy_ = lambda update: any(f(update) for f in normal_exits_buy) if normal_exits_buy else False
+        self._normal_exit_sell_ = lambda update: any(f(update) for f in normal_exits_sell) if normal_exits_sell else False
 
-        self._last_position_id: Union[int, None] = None
-        self._last_position_atr: Union[float, None] = None
-        self._last_position_trade_type: Union[Direction, None] = None
+        self._last_position_id_: Union[int, None] = None
+        self._last_position_atr_: Union[float, None] = None
+        self._last_position_trade_type_: Union[Direction, None] = None
 
     def define_so_buy_action(self, update: PositionUpdate):
-        self._last_position_id = update.Position.PositionID
-        return [BidAboveTargetAction(update.Position.EntryPrice.Price + self._scaling_out_scale * self._last_position_atr)]
+        from Library.Utility import BidAboveTargetAction
+        self._last_position_id_ = update.Position.UID
+        return [BidAboveTargetAction(update.Position.EntryPrice.Price + self._scaling_out_scale_ * self._last_position_atr_)]
 
     def define_so_sell_action(self, update: PositionUpdate):
-        self._last_position_id = update.Position.PositionID
-        return [AskBelowTargetAction(update.Position.EntryPrice.Price - self._scaling_out_scale * self._last_position_atr)]
+        from Library.Utility import AskBelowTargetAction
+        self._last_position_id_ = update.Position.UID
+        return [AskBelowTargetAction(update.Position.EntryPrice.Price - self._scaling_out_scale_ * self._last_position_atr_)]
 
     def close_buy_partially_action(self, update: TickUpdate):
-        position = update.Manager.Positions.Buys[self._last_position_id]
-        volume = position.Volume * (1.0 - self._scaling_out_percentage / 100)
-        volume = update.Manager.normalize_volume(volume) if volume else volume
-        return [ModifyBuyVolumeAction(self._last_position_id, volume)]
+        from Library.Utility import ModifyBuyVolumeAction
+        position = update.Portfolio._positions_[self._last_position_id_]
+        volume = position.Volume * (1.0 - self._scaling_out_percentage_ / 100)
+        # volume = update.Manager.normalize_volume(volume) # Need to implement normalization in Portfolio
+        return [ModifyBuyVolumeAction(self._last_position_id_, volume)]
 
     def close_sell_partially_action(self, update: TickUpdate):
-        position = update.Manager.Positions.Sells[self._last_position_id]
-        volume = position.Volume * (1.0 - self._scaling_out_percentage / 100)
-        volume = update.Manager.normalize_volume(volume) if volume else volume
-        return [ModifySellVolumeAction(self._last_position_id, volume)]
+        from Library.Utility import ModifySellVolumeAction
+        position = update.Portfolio._positions_[self._last_position_id_]
+        volume = position.Volume * (1.0 - self._scaling_out_percentage_ / 100)
+        return [ModifySellVolumeAction(self._last_position_id_, volume)]
 
     def breakeven_buy_action(self, update: PositionTradeUpdate):
-        return [ModifyBuyStopLossAction(self._last_position_id, update.Position.EntryPrice.Price)]
+        from Library.Utility import ModifyBuyStopLossAction
+        return [ModifyBuyStopLossAction(self._last_position_id_, update.Position.EntryPrice.Price)]
 
     def breakeven_sell_action(self, update: PositionTradeUpdate):
-        return [ModifySellStopLossAction(self._last_position_id, update.Position.EntryPrice.Price)]
+        from Library.Utility import ModifySellStopLossAction
+        return [ModifySellStopLossAction(self._last_position_id_, update.Position.EntryPrice.Price)]
 
     def define_tsl_buy_action(self, update: PositionUpdate):
-        return [BidAboveTargetAction(update.Position.StopLoss.Price + self._trailing_stop_loss_scale * self._last_position_atr + update.Manager.Symbol.PointSize)]
+        from Library.Utility import BidAboveTargetAction
+        return [BidAboveTargetAction(update.Position.StopLossPrice.Price + self._trailing_stop_loss_scale_ * self._last_position_atr_ + update.Portfolio._security_.Contract.PointSize)]
 
     def define_tsl_sell_action(self, update: PositionUpdate):
-        return [AskBelowTargetAction(update.Position.StopLoss.Price - self._trailing_stop_loss_scale * self._last_position_atr - update.Manager.Symbol.PointSize)]
+        from Library.Utility import AskBelowTargetAction
+        return [AskBelowTargetAction(update.Position.StopLossPrice.Price - self._trailing_stop_loss_scale_ * self._last_position_atr_ - update.Portfolio._security_.Contract.PointSize)]
 
     def detected_tsl_buy_action(self, update: TickUpdate):
-        return [ModifyBuyStopLossAction(self._last_position_id, update.Tick.Bid.Price - self._trailing_stop_loss_scale * self._last_position_atr)]
+        from Library.Utility import ModifyBuyStopLossAction
+        return [ModifyBuyStopLossAction(self._last_position_id_, update.Tick.Bid.Price - self._trailing_stop_loss_scale_ * self._last_position_atr_)]
 
     def detected_tsl_sell_action(self, update: TickUpdate):
-        return [ModifySellStopLossAction(self._last_position_id, update.Tick.Ask.Price + self._trailing_stop_loss_scale * self._last_position_atr)]
+        from Library.Utility import ModifySellStopLossAction
+        return [ModifySellStopLossAction(self._last_position_id_, update.Tick.Ask.Price + self._trailing_stop_loss_scale_ * self._last_position_atr_)]
 
     @staticmethod
     def undefine_tsl_buy_action(_: TradeUpdate):
+        from Library.Utility import BidAboveTargetAction
         return [BidAboveTargetAction(None)]
 
     @staticmethod
     def undefine_tsl_sell_action(_: TradeUpdate):
+        from Library.Utility import AskBelowTargetAction
         return [AskBelowTargetAction(None)]
 
     def risk_management(self):
-
+        from Library.Engine import MachineAPI
         risk_engine = MachineAPI("Risk Management")
 
         initialisation = risk_engine.create_state(name="Initialisation", end=False)
@@ -163,47 +185,52 @@ class NNFXStrategyAPI(StrategyAPI):
         return risk_engine
 
     def calculate_position(self, update: BarUpdate):
-        self._last_position_atr = update.Analyst.Volatility.Result.last()
-        sl_pips = self._stop_loss_scale * self._last_position_atr / update.Manager.Symbol.PipSize
-        volume = update.Manager.volume_by_risk(self._risk_percentage, sl_pips)
+        self._last_position_atr_ = update.Indicator.Volatility.Result.last()
+        sl_pips = self._stop_loss_scale_ * self._last_position_atr_ / update.Portfolio._security_.Contract.PipSize
+        from Library.Portfolio.Sizing import SizingAPI
+        volume = SizingAPI.volume_by_risk(self._risk_percentage_, sl_pips, update.Portfolio._account_, update.Portfolio._security_.Contract)
         return volume, sl_pips
 
     def open_buy_position(self, update: BarUpdate, position_type: PositionType):
-        self._last_position_trade_type = Direction.Buy
+        from Library.Utility import OpenBuyAction
+        self._last_position_trade_type_ = Direction.Buy
         volume, sl_pips = self.calculate_position(update)
         return self.close_sell_position(update) + [OpenBuyAction(position_type, volume, sl_pips, None)]
 
     def open_sell_position(self, update: BarUpdate, position_type: PositionType):
-        self._last_position_trade_type = Direction.Sell
+        from Library.Utility import OpenSellAction
+        self._last_position_trade_type_ = Direction.Sell
         volume, sl_pips = self.calculate_position(update)
         return self.close_buy_position(update) + [OpenSellAction(position_type, volume, sl_pips, None)]
 
     def close_buy_position(self, update: BarUpdate):
-        return [CloseBuyAction(self._last_position_id)] if update.Manager.Positions.Buys else []
+        from Library.Utility import CloseBuyAction
+        return [CloseBuyAction(self._last_position_id_)] if update.Portfolio.BuyPositions else []
 
     def close_sell_position(self, update: BarUpdate):
-        return [CloseSellAction(self._last_position_id)] if update.Manager.Positions.Sells else []
+        from Library.Utility import CloseSellAction
+        return [CloseSellAction(self._last_position_id_)] if update.Portfolio.SellPositions else []
 
     def update_position(self, update: BarUpdate):
-        if not update.Manager.Positions.Buys:
-            if self._normal_entry_buy(update):
+        if not update.Portfolio.BuyPositions:
+            if self._normal_entry_buy_(update):
                 return self.open_buy_position(update, PositionType.Normal)
-            if self._last_position_trade_type and self._last_position_trade_type == Direction.Buy and self._continuation_entry_buy(update):
+            if self._last_position_trade_type_ and self._last_position_trade_type_ == Direction.Buy and self._continuation_entry_buy_(update):
                 return self.open_buy_position(update, PositionType.Continuation)
-        elif self._normal_exit_buy(update):
+        elif self._normal_exit_buy_(update):
             return self.close_buy_position(update)
 
-        if not update.Manager.Positions.Sells:
-            if self._normal_entry_sell(update):
+        if not update.Portfolio.SellPositions:
+            if self._normal_entry_sell_(update):
                 return self.open_sell_position(update, PositionType.Normal)
-            if self._last_position_trade_type and self._last_position_trade_type == Direction.Sell and self._continuation_entry_sell(update):
+            if self._last_position_trade_type_ and self._last_position_trade_type_ == Direction.Sell and self._continuation_entry_sell_(update):
                 return self.open_sell_position(update, PositionType.Continuation)
-        elif self._normal_exit_sell(update):
+        elif self._normal_exit_sell_(update):
             return self.close_sell_position(update)
         return None
 
     def signal_management(self):
-
+        from Library.Engine import MachineAPI
         signal_engine = MachineAPI("Signal Management")
 
         initialisation = signal_engine.create_state(name="Initialisation", end=False)

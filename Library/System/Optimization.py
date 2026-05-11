@@ -16,8 +16,8 @@ from Library.Classes import *
 from Library.Parameters import Parameters
 from Library.Utils import timer, image, gantt
 
-from Library.Analyst import AnalystAPI, TechnicalsAPI
-from Library.Manager import ManagerAPI, StatisticsAPI
+from Library.Market import MarketAPI, MARGIN
+from Library.Portfolio import StatisticsAPI
 from Library.Strategy import StrategyAPI
 from Library.System import BacktestingSystemAPI
 
@@ -149,19 +149,20 @@ class OptimizationSystemAPI(BacktestingSystemAPI):
 
     @staticmethod
     def unpack_degrees_of_freedom_window(dof_stages: list[dict]) -> int:
+        from Library.Market.Indicators import IndicatorsAPI
         def unpack_engine(engine_parameters: dict) -> int:
 
             def unpack_literal_window(candidate: list) -> int:
                 tparams = candidate[1:]
                 if not tparams:
-                    return AnalystAPI.MARGIN
-                return max(tparams) + AnalystAPI.MARGIN
+                    return MARGIN
+                return max(tparams) + MARGIN
 
             def unpack_technical_window(candidate: Technical) -> int:
                 tparams = candidate.Parameters
-                window = AnalystAPI.MARGIN
+                window = MARGIN
                 for sublist in tparams.values():
-                    window = max(window, sum([sub[1] for sub in sublist]) + AnalystAPI.MARGIN)
+                    window = max(window, sum([sub[1] for sub in sublist]) + MARGIN)
                 return window
 
             max_window = 0
@@ -171,10 +172,10 @@ class OptimizationSystemAPI(BacktestingSystemAPI):
                         technical_list = parameter_value[0]
                         for technical_candidate in technical_list:
                             try:
-                                for _, technical in TechnicalsAPI.find(TechnicalType(TechnicalType[technical_candidate])).items():
+                                for _, technical in IndicatorsAPI.find(TechnicalType(TechnicalType[technical_candidate])).items():
                                     max_window = max(max_window, unpack_technical_window(technical))
                             except KeyError:
-                                technical = getattr(TechnicalsAPI, technical_candidate)
+                                technical = getattr(IndicatorsAPI, technical_candidate)
                                 max_window = max(max_window, unpack_technical_window(technical))
                     else:
                         for technical_candidate in parameter_value:
@@ -196,6 +197,7 @@ class OptimizationSystemAPI(BacktestingSystemAPI):
 
     @staticmethod
     def unpack_coarse_to_fine_parameters(dof_stage: dict, ctf_params: list[Parameters]) -> Union[dict, None]:
+        from Library.Market.Indicators import IndicatorsAPI
         ctf_runs = len(ctf_params)
         def unpack_engine(engine_name: str, engine_parameters: Parameters) -> tuple[bool, dict]:
             def unpack_combos(tid: str, tparams: dict, tconstraints: Callable) -> tuple[bool, list]:
@@ -232,12 +234,12 @@ class OptimizationSystemAPI(BacktestingSystemAPI):
                         all_combos = []
                         for technical_candidate in technical_list:
                             try:
-                                for technical_id, technical in TechnicalsAPI.find(TechnicalType(TechnicalType[technical_candidate])).items():
+                                for technical_id, technical in IndicatorsAPI.find(TechnicalType(TechnicalType[technical_candidate])).items():
                                     extend, combos = unpack_combos(technical_id, technical.Parameters, technical.Constraints)
                                     all_combos.extend(combos)
                                     tune = True
                             except KeyError:
-                                technical = getattr(TechnicalsAPI, technical_id := technical_candidate)
+                                technical = getattr(IndicatorsAPI, technical_id := technical_candidate)
                                 extend, combos = unpack_combos(technical_id, technical.Parameters, technical.Constraints)
                                 if extend:
                                     tune = True
@@ -308,7 +310,7 @@ class OptimizationSystemAPI(BacktestingSystemAPI):
             group=self._group,
             symbol=self._symbol,
             timeframe=self._timeframe,
-            strategy=self._strategy,
+            strategy=self._strategy_,
             parameters=parameters,
             start=start,
             stop=stop,
@@ -318,9 +320,10 @@ class OptimizationSystemAPI(BacktestingSystemAPI):
             swap=self.swap
         )
 
-        thread.strategy = self._strategy(money_management=parameters.MoneyManagement, risk_management=parameters.RiskManagement, signal_management=parameters.SignalManagement)
-        thread.analyst = AnalystAPI(analyst_management=parameters.AnalystManagement)
-        thread.manager = ManagerAPI(manager_management=parameters.ManagerManagement)
+        thread.strategy = self._strategy_(money_management=parameters.MoneyManagement, risk_management=parameters.RiskManagement, signal_management=parameters.SignalManagement)
+        from Library.Portfolio import PortfolioAPI
+        thread.market = MarketAPI(analyst_management=parameters.AnalystManagement)
+        thread.portfolio = PortfolioAPI(manager_management=parameters.ManagerManagement)
 
         thread.tick_df = self.tick_df
         thread.bar_df = self.bar_df
@@ -506,13 +509,16 @@ class OptimizationSystemAPI(BacktestingSystemAPI):
         self._log.telegram.info(lambda: image(wf_df))
         self._log.file.info(lambda: f"Completed Optimization {wf_df}")
 
-        self.strategy = self._strategy(
+        self.strategy = self._strategy_(
             money_management=opt_parameters.MoneyManagement,
             risk_management=opt_parameters.RiskManagement,
             signal_management=opt_parameters.SignalManagement
         )
-        self.analyst = AnalystAPI(analyst_management=opt_parameters.AnalystManagement)
-        self.manager = ManagerAPI(manager_management=opt_parameters.ManagerManagement)
+        from Library.Indicator import IndicatorAPI
+        self.market = MarketAPI(parameters=None)
+        self.indicator = IndicatorAPI(parameters=opt_parameters.AnalystManagement)
+        from Library.Portfolio import PortfolioAPI
+        self.portfolio = PortfolioAPI(parameters=opt_parameters.ManagerManagement)
 
         self._log.telegram.level(VerboseType.Exception)
         super().run()

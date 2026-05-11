@@ -1,11 +1,21 @@
-from typing import Union
+from __future__ import annotations
+
+from typing import Union, TYPE_CHECKING
 from abc import ABC, abstractmethod
 
 from Library.Logging import HandlerAPI
-from Library.Parameters import Parameters
 
-from Library.Utility import *
-from Library.Engine import MachineAPI
+if TYPE_CHECKING:
+    from Library.Parameters import Parameters
+    from Library.Engine import MachineAPI
+    from Library.Utility import (
+        PositionUpdate,
+        PositionTradeUpdate,
+        TradeUpdate,
+        AccountUpdate,
+        SymbolUpdate,
+        BarUpdate
+    )
 
 class StrategyAPI(ABC):
 
@@ -23,43 +33,43 @@ class StrategyAPI(ABC):
     def __init__(self,
                  money_management: Parameters,
                  risk_management: Parameters,
-                 signal_management: Parameters):
+                 signal_management: Parameters) -> None:
 
         self.MoneyManagement: Parameters = money_management
         self.RiskManagement: Parameters = risk_management
         self.SignalManagement: Parameters = signal_management
 
-        self._log: HandlerAPI = HandlerAPI(Class=self.__class__.__name__, Subclass="Strategy Management")
+        self._log_: HandlerAPI = HandlerAPI(Class=self.__class__.__name__, Subclass="Strategy Management")
 
-    def _log_opened_buy(self, update: PositionUpdate):
-        self._log.alert(lambda: StrategyAPI.OPENED_BUY.format(update.Position.PositionType.name))
+    def _log_opened_buy_(self, update: PositionUpdate) -> None:
+        self._log_.alert(lambda: StrategyAPI.OPENED_BUY.format(update.Position.Type.name))
 
-    def _log_opened_sell(self, update: PositionUpdate):
-        self._log.alert(lambda: StrategyAPI.OPENED_SELL.format(update.Position.PositionType.name))
+    def _log_opened_sell_(self, update: PositionUpdate) -> None:
+        self._log_.alert(lambda: StrategyAPI.OPENED_SELL.format(update.Position.Type.name))
 
-    def _log_modified_volume_buy(self, update: PositionTradeUpdate):
-        self._log.alert(lambda: StrategyAPI.MODIFIED_VOLUME_BUY.format(update.Position.PositionType.name))
+    def _log_modified_volume_buy_(self, update: PositionTradeUpdate) -> None:
+        self._log_.alert(lambda: StrategyAPI.MODIFIED_VOLUME_BUY.format(update.Position.Type.name))
 
-    def _log_modified_volume_sell(self, update: PositionTradeUpdate):
-        self._log.alert(lambda: StrategyAPI.MODIFIED_VOLUME_SELL.format(update.Position.PositionType.name))
+    def _log_modified_volume_sell_(self, update: PositionTradeUpdate) -> None:
+        self._log_.alert(lambda: StrategyAPI.MODIFIED_VOLUME_SELL.format(update.Position.Type.name))
 
-    def _log_modified_stop_loss_buy(self, update: PositionUpdate):
-        self._log.alert(lambda: StrategyAPI.MODIFIED_STOPLOSS_BUY.format(update.Position.PositionType.name))
+    def _log_modified_stop_loss_buy_(self, update: PositionUpdate) -> None:
+        self._log_.alert(lambda: StrategyAPI.MODIFIED_STOPLOSS_BUY.format(update.Position.Type.name))
 
-    def _log_modified_stop_loss_sell(self, update: PositionUpdate):
-        self._log.alert(lambda: StrategyAPI.MODIFIED_STOPLOSS_SELL.format(update.Position.PositionType.name))
+    def _log_modified_stop_loss_sell_(self, update: PositionUpdate) -> None:
+        self._log_.alert(lambda: StrategyAPI.MODIFIED_STOPLOSS_SELL.format(update.Position.Type.name))
 
-    def _log_modified_take_profit_buy(self, update: PositionUpdate):
-        self._log.alert(lambda: StrategyAPI.MODIFIED_TAKEPROFIT_BUY.format(update.Position.PositionType.name))
+    def _log_modified_take_profit_buy_(self, update: PositionUpdate) -> None:
+        self._log_.alert(lambda: StrategyAPI.MODIFIED_TAKEPROFIT_BUY.format(update.Position.Type.name))
 
-    def _log_modified_take_profit_sell(self, update: PositionUpdate):
-        self._log.alert(lambda: StrategyAPI.MODIFIED_TAKEPROFIT_SELL.format(update.Position.PositionType.name))
+    def _log_modified_take_profit_sell_(self, update: PositionUpdate) -> None:
+        self._log_.alert(lambda: StrategyAPI.MODIFIED_TAKEPROFIT_SELL.format(update.Position.Type.name))
 
-    def _log_closed_buy(self, update: TradeUpdate):
-        self._log.alert(lambda: StrategyAPI.CLOSED_BUY.format(update.Trade.PositionType.name))
+    def _log_closed_buy_(self, update: TradeUpdate) -> None:
+        self._log_.alert(lambda: StrategyAPI.CLOSED_BUY.format(update.Trade.Type.name))
 
-    def _log_closed_sell(self, update: TradeUpdate):
-        self._log.alert(lambda: StrategyAPI.CLOSED_SELL.format(update.Trade.PositionType.name))
+    def _log_closed_sell_(self, update: TradeUpdate) -> None:
+        self._log_.alert(lambda: StrategyAPI.CLOSED_SELL.format(update.Trade.Type.name))
 
     @abstractmethod
     def risk_management(self) -> Union[MachineAPI, None]:
@@ -70,7 +80,7 @@ class StrategyAPI(ABC):
         raise NotImplementedError
 
     def strategy_management(self) -> Union[MachineAPI, None]:
-
+        from Library.Engine import MachineAPI
         strategy_engine = MachineAPI("Strategy Management")
 
         initialisation = strategy_engine.create_state(name="Initialisation", end=False)
@@ -78,78 +88,73 @@ class StrategyAPI(ABC):
         termination = strategy_engine.create_state(name="Termination", end=True)
 
         def init_account(update: AccountUpdate):
-            update.Manager.update_account(update.Account)
+            update.Portfolio.update_account(update.Account)
 
         def init_symbol(update: SymbolUpdate):
-            update.Manager.init_symbol(update.Security)
+            update.Portfolio._security_ = update.Security
 
         def update_bar(update: BarUpdate):
-            update.Manager.update_symbol(update.Bar)
-            update.Manager.Positions.update_position(update.Manager.Symbol, update.Bar)
+            update.Portfolio.update_market_data(update.Bar)
 
         def update_opened_buy(update: PositionUpdate):
-            update.Manager.update_account(update.Account)
-            update.Manager.Positions.update_position(update.Manager.Symbol, update.Bar)
-            update.Manager.Positions.open_position_buy(update.Manager.Account, update.Position)
-            self._log_opened_buy(update)
+            update.Portfolio.update_account(update.Account)
+            update.Portfolio.update_market_data(update.Bar)
+            update.Portfolio.fill_position(update.Position.Order.UID if update.Position.Order else 0, update.Position)
+            self._log_opened_buy_(update)
 
         def update_opened_sell(update: PositionUpdate):
-            update.Manager.update_account(update.Account)
-            update.Manager.Positions.update_position(update.Manager.Symbol, update.Bar)
-            update.Manager.Positions.open_position_sell(update.Manager.Account, update.Position)
-            self._log_opened_sell(update)
+            update.Portfolio.update_account(update.Account)
+            update.Portfolio.update_market_data(update.Bar)
+            update.Portfolio.fill_position(update.Position.Order.UID if update.Position.Order else 0, update.Position)
+            self._log_opened_sell_(update)
 
         def update_modified_buy_volume(update: PositionTradeUpdate):
-            update.Manager.update_account(update.Account)
-            update.Manager.Positions.update_position(update.Manager.Symbol, update.Bar)
-            update.Manager.Positions.modify_position_trade_buy(update.Position, update.Trade)
-            update.Manager.Statistics.update_data(update.Trade)
-            self._log_modified_volume_buy(update)
+            update.Portfolio.update_account(update.Account)
+            update.Portfolio.update_market_data(update.Bar)
+            update.Portfolio.close_trade(update.Position.UID, update.Trade)
+            self._log_modified_volume_buy_(update)
 
         def update_modified_buy_stop_loss(update: PositionUpdate):
-            update.Manager.update_account(update.Account)
-            update.Manager.Positions.update_position(update.Manager.Symbol, update.Bar)
-            update.Manager.Positions.modify_position_buy(update.Position)
-            self._log_modified_stop_loss_buy(update)
+            update.Portfolio.update_account(update.Account)
+            update.Portfolio.update_market_data(update.Bar)
+            update.Portfolio.modify_position(update.Position)
+            self._log_modified_stop_loss_buy_(update)
 
         def update_modified_buy_take_profit(update: PositionUpdate):
-            update.Manager.update_account(update.Account)
-            update.Manager.Positions.update_position(update.Manager.Symbol, update.Bar)
-            update.Manager.Positions.modify_position_buy(update.Position)
-            self._log_modified_take_profit_buy(update)
+            update.Portfolio.update_account(update.Account)
+            update.Portfolio.update_market_data(update.Bar)
+            update.Portfolio.modify_position(update.Position)
+            self._log_modified_take_profit_buy_(update)
 
         def update_modified_sell_volume(update: PositionTradeUpdate):
-            update.Manager.update_account(update.Account)
-            update.Manager.Positions.update_position(update.Manager.Symbol, update.Bar)
-            update.Manager.Positions.modify_position_trade_sell(update.Position, update.Trade)
-            update.Manager.Statistics.update_data(update.Trade)
-            self._log_modified_volume_sell(update)
+            update.Portfolio.update_account(update.Account)
+            update.Portfolio.update_market_data(update.Bar)
+            update.Portfolio.close_trade(update.Position.UID, update.Trade)
+            self._log_modified_volume_sell_(update)
 
         def update_modified_sell_stop_loss(update: PositionUpdate):
-            update.Manager.update_account(update.Account)
-            update.Manager.Positions.update_position(update.Manager.Symbol, update.Bar)
-            update.Manager.Positions.modify_position_sell(update.Position)
-            self._log_modified_stop_loss_sell(update)
+            update.Portfolio.update_account(update.Account)
+            update.Portfolio.update_market_data(update.Bar)
+            update.Portfolio.modify_position(update.Position)
+            self._log_modified_stop_loss_sell_(update)
 
         def update_modified_sell_take_profit(update: PositionUpdate):
-            update.Manager.update_account(update.Account)
-            update.Manager.Positions.update_position(update.Manager.Symbol, update.Bar)
-            update.Manager.Positions.modify_position_sell(update.Position)
-            self._log_modified_take_profit_sell(update)
+            update.Portfolio.update_account(update.Account)
+            update.Portfolio.update_market_data(update.Bar)
+            update.Portfolio.modify_position(update.Position)
+            self._log_modified_take_profit_sell_(update)
 
         def update_closed_buy(update: TradeUpdate):
-            update.Manager.update_account(update.Account)
-            update.Manager.Positions.update_position(update.Manager.Symbol, update.Bar)
-            update.Manager.Positions.close_position_buy(update.Trade)
-            update.Manager.Statistics.update_data(update.Trade)
-            self._log_closed_buy(update)
+            update.Portfolio.update_account(update.Account)
+            update.Portfolio.update_market_data(update.Bar)
+            update.Portfolio.close_trade(update.Trade.Position.UID if update.Trade.Position else 0, update.Trade)
+            self._log_closed_buy_(update)
 
         def update_closed_sell(update: TradeUpdate):
-            update.Manager.update_account(update.Account)
-            update.Manager.Positions.update_position(update.Manager.Symbol, update.Bar)
-            update.Manager.Positions.close_position_sell(update.Trade)
-            update.Manager.Statistics.update_data(update.Trade)
-            self._log_closed_sell(update)
+            update.Portfolio.update_account(update.Account)
+            update.Portfolio.update_market_data(update.Bar)
+            update.Portfolio.close_trade(update.Trade.Position.UID if update.Trade.Position else 0, update.Trade)
+            self._log_closed_sell_(update)
 
         initialisation.on_account(to=initialisation, action=init_account, reason="Account Initialized")
         initialisation.on_symbol(to=initialisation, action=init_symbol, reason="Symbol Initialized")

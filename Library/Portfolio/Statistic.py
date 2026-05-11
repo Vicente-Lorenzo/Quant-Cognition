@@ -284,7 +284,7 @@ def aggregate_items(df: pl.DataFrame) -> pl.DataFrame:
         pl.col("NetReturn").sum() if "NetReturn" in df.columns else pl.lit(0.0).alias("NetReturn"),
         pl.col("NetLogReturn").sum() if "NetLogReturn" in df.columns else pl.lit(0.0).alias("NetLogReturn"),
         pl.col("DrawdownReturn").min() if "DrawdownReturn" in df.columns else pl.lit(0.0).alias("DrawdownReturn"),
-        pl.col("NetReturnDrawdown").sum() if "NetReturnDrawdown" in df.columns else pl.lit(0.0).alias("NetReturnDrawdown"),
+        pl.col("ReturnOverMaxDrawdown").sum() if "ReturnOverMaxDrawdown" in df.columns else pl.lit(0.0).alias("ReturnOverMaxDrawdown"),
         pl.col(entry_bal).first() if entry_bal in df.columns else pl.lit(0.0).alias(entry_bal),
     ]
 
@@ -363,7 +363,7 @@ def calculate_drawdown(initial_balance: float, df: pl.DataFrame) -> tuple[float,
     from Library.Portfolio.Position import PositionAPI
     net_pnl = str(PositionAPI.ID.NetPnL)
     if df.is_empty() or net_pnl not in df.columns: return 0.0, 0.0, 0.0, 0.0
-    cum_bal = df[net_pnl].cum_sum() + initial_balance
+    cum_bal: pl.Series = df[net_pnl].cum_sum() + initial_balance
     run_max = cum_bal.cum_max()
     dd = run_max - cum_bal
     max_dd_val = dd.max()
@@ -377,7 +377,7 @@ def calculate_runup(initial_balance: float, df: pl.DataFrame) -> tuple[float, fl
     from Library.Portfolio.Position import PositionAPI
     net_pnl = str(PositionAPI.ID.NetPnL)
     if df.is_empty() or net_pnl not in df.columns: return 0.0, 0.0, 0.0, 0.0
-    cum_bal = df[net_pnl].cum_sum() + initial_balance
+    cum_bal: pl.Series = df[net_pnl].cum_sum() + initial_balance
     run_min = cum_bal.cum_min()
     ru = cum_bal - run_min
     max_ru_val = ru.max()
@@ -631,10 +631,10 @@ def _safe_df(df: pl.DataFrame) -> pl.DataFrame:
             str(PositionAPI.ID.UID), "Position", str(PositionAPI.ID.Direction), str(PositionAPI.ID.EntryTimestamp), str(TradeAPI.ID.ExitTimestamp), 
             str(PositionAPI.ID.EntryPrice), str(TradeAPI.ID.ExitPrice), str(PositionAPI.ID.Volume), "Points", "Pips", 
             str(PositionAPI.ID.GrossPnL), str(PositionAPI.ID.CommissionPnL), str(PositionAPI.ID.SwapPnL), str(PositionAPI.ID.NetPnL), 
-            "DrawdownPoints", "DrawdownPips", "RunupPoints", "RunupPips", "NetReturn", "NetLogReturn", "DrawdownReturn", "NetReturnDrawdown", 
+            "DrawdownPoints", "DrawdownPips", "RunupPoints", "RunupPips", "NetReturn", "NetLogReturn", "DrawdownReturn", "ReturnOverMaxDrawdown", 
             str(PositionAPI.ID.EntryBalance), str(TradeAPI.ID.ExitBalance)
         ]
-        schema = {col: pl.Float64() for col in required_cols}
+        schema: dict[str, pl.DataType] = {col: pl.Float64() for col in required_cols}
         schema[str(PositionAPI.ID.EntryTimestamp)] = pl.Datetime()
         schema[str(TradeAPI.ID.ExitTimestamp)] = pl.Datetime()
         schema[str(PositionAPI.ID.Direction)] = pl.String()

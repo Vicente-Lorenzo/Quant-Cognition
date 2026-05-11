@@ -39,23 +39,35 @@ class TradeAPI(PositionAPI):
     @property
     def Structure(self) -> dict:
         from Library.Universe.Security import SecurityAPI
+        from Library.Portfolio.Order import OrderAPI
+        from Library.Universe.Universe import UniverseAPI
         s = super().Structure
         cols = {
             self.ID.UID: IdentityKey(pl.Int64),
-            self.ID.Security: ForeignKey(pl.Int64, reference=f'"{SecurityAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
+            self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
             self.ID.Position: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{PositionAPI.Table}"("{PositionAPI.ID.UID}")'),
+            self.ID.Order: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{OrderAPI.Table}"("{OrderAPI.ID.UID}")'),
             self.ID.Type: pl.String(),
             self.ID.Direction: pl.String(),
             self.ID.Volume: pl.Float64(),
             self.ID.Quantity: pl.Float64(),
             self.ID.EntryTimestamp: pl.Datetime(),
-            self.ID.ExitTimestamp: pl.Datetime(),
             self.ID.EntryPrice: pl.Float64(),
+            self.ID.StopLossPrice: pl.Float64(),
+            self.ID.TakeProfitPrice: pl.Float64(),
+            self.ID.MaxRunupPrice: pl.Float64(),
+            self.ID.MaxDrawdownPrice: pl.Float64(),
+            self.ID.ExitTimestamp: pl.Datetime(),
             self.ID.ExitPrice: pl.Float64(),
+            self.ID.StopLossPnL: pl.Float64(),
+            self.ID.TakeProfitPnL: pl.Float64(),
+            self.ID.MaxRunupPnL: pl.Float64(),
+            self.ID.MaxDrawdownPnL: pl.Float64(),
             self.ID.GrossPnL: pl.Float64(),
             self.ID.CommissionPnL: pl.Float64(),
             self.ID.SwapPnL: pl.Float64(),
             self.ID.NetPnL: pl.Float64(),
+            self.ID.UsedMargin: pl.Float64(),
             self.ID.EntryBalance: pl.Float64(),
             self.ID.MidBalance: pl.Float64(),
             self.ID.ExitBalance: pl.Float64(),

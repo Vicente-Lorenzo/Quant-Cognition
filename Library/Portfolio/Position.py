@@ -60,17 +60,6 @@ class PositionAPI(DatapointAPI):
     SwapPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
     NetPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
 
-    Points: Union[float, None] = field(init=False, repr=False, default=None)
-    Pips: Union[float, None] = field(init=False, repr=False, default=None)
-    RunupPoints: Union[float, None] = field(init=False, repr=False, default=None)
-    RunupPips: Union[float, None] = field(init=False, repr=False, default=None)
-    DrawdownPoints: Union[float, None] = field(init=False, repr=False, default=None)
-    DrawdownPips: Union[float, None] = field(init=False, repr=False, default=None)
-    NetReturn: Union[float, None] = field(init=False, repr=False, default=None)
-    NetLogReturn: Union[float, None] = field(init=False, repr=False, default=None)
-    DrawdownReturn: Union[float, None] = field(init=False, repr=False, default=None)
-    NetReturnDrawdown: Union[float, None] = field(init=False, repr=False, default=None)
-
     EntryBalance: InitVar[Union[float, None]] = field(default=MISSING)
 
     Order: InitVar[Union[int, OrderAPI, None]] = field(default=MISSING)
@@ -119,8 +108,8 @@ class PositionAPI(DatapointAPI):
             self.ID.ExitPrice: pl.Float64(),
             self.ID.StopLossPnL: pl.Float64(),
             self.ID.TakeProfitPnL: pl.Float64(),
-            self.ID.MaxRunUpPnL: pl.Float64(),
-            self.ID.MaxDrawDownPnL: pl.Float64(),
+            self.ID.MaxRunupPnL: pl.Float64(),
+            self.ID.MaxDrawdownPnL: pl.Float64(),
             self.ID.GrossPnL: pl.Float64(),
             self.ID.CommissionPnL: pl.Float64(),
             self.ID.SwapPnL: pl.Float64(),
@@ -472,6 +461,7 @@ class PositionAPI(DatapointAPI):
         return None
 
     @property
+    @overridefield
     def Points(self) -> Union[float, None]:
         if self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
             exit_price = getattr(self, "ExitPrice", None)
@@ -481,10 +471,9 @@ class PositionAPI(DatapointAPI):
                 diff = diff if self.IsLong else -diff
                 return diff / self.Security.Contract.PointSize
         return 0.0
-    @Points.setter
-    def Points(self, val) -> None: pass
 
     @property
+    @overridefield
     def Pips(self) -> Union[float, None]:
         if self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
             exit_price = getattr(self, "ExitPrice", None)
@@ -494,90 +483,79 @@ class PositionAPI(DatapointAPI):
                 diff = diff if self.IsLong else -diff
                 return diff / self.Security.Contract.PipSize
         return 0.0
-    @Pips.setter
-    def Pips(self, val) -> None: pass
 
     @property
+    @overridefield
     def DrawdownPoints(self) -> Union[float, None]:
         if self.MaxDrawdownPrice and self.MaxDrawdownPrice.Price and self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
             diff = self.MaxDrawdownPrice.Price - self.EntryPrice.Price
             diff = diff if self.IsLong else -diff
             return diff / self.Security.Contract.PointSize
         return 0.0
-    @DrawdownPoints.setter
-    def DrawdownPoints(self, val) -> None: pass
 
     @property
+    @overridefield
     def DrawdownPips(self) -> Union[float, None]:
         if self.MaxDrawdownPrice and self.MaxDrawdownPrice.Price and self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
             diff = self.MaxDrawdownPrice.Price - self.EntryPrice.Price
             diff = diff if self.IsLong else -diff
             return diff / self.Security.Contract.PipSize
         return 0.0
-    @DrawdownPips.setter
-    def DrawdownPips(self, val) -> None: pass
 
     @property
+    @overridefield
     def RunupPoints(self) -> Union[float, None]:
         if self.MaxRunupPrice and self.MaxRunupPrice.Price and self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
             diff = self.MaxRunupPrice.Price - self.EntryPrice.Price
             diff = diff if self.IsLong else -diff
             return diff / self.Security.Contract.PointSize
         return 0.0
-    @RunupPoints.setter
-    def RunupPoints(self, val) -> None: pass
 
     @property
+    @overridefield
     def RunupPips(self) -> Union[float, None]:
         if self.MaxRunupPrice and self.MaxRunupPrice.Price and self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
             diff = self.MaxRunupPrice.Price - self.EntryPrice.Price
             diff = diff if self.IsLong else -diff
             return diff / self.Security.Contract.PipSize
         return 0.0
-    @RunupPips.setter
-    def RunupPips(self, val) -> None: pass
 
     @property
+    @overridefield
     def NetReturn(self) -> Union[float, None]:
         if self.NetPnL and self.NetPnL.Return is not None:
             return self.NetPnL.Return
         return 0.0
-    @NetReturn.setter
-    def NetReturn(self, val) -> None: pass
 
     @property
+    @overridefield
     def NetLogReturn(self) -> Union[float, None]:
         if self.NetPnL and self.NetPnL.LogReturn is not None:
             return self.NetPnL.LogReturn
         return 0.0
-    @NetLogReturn.setter
-    def NetLogReturn(self, val) -> None: pass
 
     @property
+    @overridefield
     def DrawdownReturn(self) -> Union[float, None]:
         if self.MaxDrawdownPnL and self.MaxDrawdownPnL.Return is not None:
             return self.MaxDrawdownPnL.Return
         return 0.0
-    @DrawdownReturn.setter
-    def DrawdownReturn(self, val) -> None: pass
 
     @property
-    def NetReturnDrawdown(self) -> Union[float, None]:
+    @overridefield
+    def ReturnOverMaxDrawdown(self) -> Union[float, None]:
         if self.NetPnL and self.MaxDrawdownPnL and self.MaxDrawdownPnL.Return:
             ret = self.NetPnL.Return
             dd_ret = self.MaxDrawdownPnL.Return
             if dd_ret != 0:
                 return ret / abs(dd_ret)
         return 0.0
-    @NetReturnDrawdown.setter
-    def NetReturnDrawdown(self, val) -> None: pass
 
     @property
+    @overridefield
     def Leverage(self) -> Union[float, None]:
         if not self.UsedMargin or self.Volume is None: return None
         return self.Volume / self.UsedMargin
-    @Leverage.setter
-    def Leverage(self, val) -> None: pass
 
     @property
     @overridefield

@@ -13,8 +13,8 @@ from Library.Parameters import ParametersAPI, Parameters
 from Library.Utils import timer, equals, datetime_to_string, string_to_datetime
 
 from Library.Utility import *
-from Library.Analyst import AnalystAPI
-from Library.Manager import ManagerAPI
+from Library.Market import MarketAPI
+from Library.Portfolio import PortfolioAPI
 from Library.Engine import MachineAPI
 from Library.Strategy import StrategyAPI
 from Library.System import SystemAPI
@@ -123,17 +123,16 @@ class BacktestingSystemAPI(SystemAPI):
         self._bid_below_target: Union[float, None] = None
 
     def __enter__(self):
-        if self.strategy is None:
-            self.strategy = self._strategy(money_management=self.parameters.MoneyManagement, risk_management=self.parameters.RiskManagement, signal_management=self.parameters.SignalManagement)
+        self.strategy = self._strategy_(money_management=self.parameters.MoneyManagement, risk_management=self.parameters.RiskManagement, signal_management=self.parameters.SignalManagement)
 
-        if self.analyst is None:
-            self.analyst = AnalystAPI(analyst_management=self.parameters.AnalystManagement)
+        self.market = MarketAPI(parameters=None) # Or remove entirely if not needed
+        from Library.Indicator import IndicatorAPI
+        self.indicator = IndicatorAPI(parameters=self.parameters.AnalystManagement)
 
-        if self.manager is None:
-            self.manager = ManagerAPI(manager_management=self.parameters.ManagerManagement)
+        self.portfolio = PortfolioAPI(parameters=self.parameters.ManagerManagement)
 
         if self.window is None:
-            self.window = self.analyst.Window
+            self.window = self.indicator._window_
 
         if self.account_data is None:
             self.account_data: Account = Account(
@@ -860,15 +859,19 @@ class BacktestingSystemAPI(SystemAPI):
         termination = system_engine.create_state(name="Termination", end=True)
 
         def init_market(update: CompleteUpdate):
-            update.Analyst.init_market_data(self.bar_df)
-            update.Analyst.update_market_offset(self.offset)
+            update.Market.init_data(self.bar_df)
+            update.Indicator.init_data(update.Market)
+            update.Market.update_offset(self.offset)
+            update.Indicator.update_offset(self.offset)
 
         def update_market(update: BarUpdate):
             self._offset -= 1
-            update.Analyst.update_market_offset(self._offset)
+            update.Market.update_offset(self._offset)
+            update.Indicator.update_offset(self._offset)
 
         def update_results(update: CompleteUpdate):
-            self.individual_trades, self.aggregated_trades, self.statistics = update.Manager.Statistics.data(self.account_data, self._start_date, self._stop_date)
+            from Library.Portfolio.Statistics import StatisticsAPI
+            self.individual_trades, self.aggregated_trades, self.statistics = StatisticsAPI.data(update.Portfolio.TradesDataframe, self.account_data, self._start_date, self._stop_date)
             self._log.warning(lambda: str(self.individual_trades))
             self._log.warning(lambda: str(self.aggregated_trades))
             self._log.warning(lambda: str(self.statistics))
@@ -891,4 +894,4 @@ class BacktestingSystemAPI(SystemAPI):
 
         self._update_id_queue.put(UpdateID.Complete)
 
-        self.deploy(strategy=self.strategy, analyst=self.analyst, manager=self.manager)
+        self.deploy(strategy=self.strategy, market=self.market, indicator=self.indicator, portfolio=self.portfolio)

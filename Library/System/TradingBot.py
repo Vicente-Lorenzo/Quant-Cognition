@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Union
 import clr
 clr.AddReference("cAlgo.API")
@@ -9,7 +11,7 @@ from Library.Strategy import DownloadStrategyAPI, NNFXStrategyAPI, DDPGStrategyA
 from Library.Classes import StrategyType
 from Library.System.Trading import TradingSystemAPI
 
-_STRATEGIES = {
+_STRATEGIES_ = {
     StrategyType.Download.name: DownloadStrategyAPI,
     StrategyType.NNFX.name: NNFXStrategyAPI,
     StrategyType.DDPG.name: DDPGStrategyAPI
@@ -25,7 +27,7 @@ class TradingBot:
         self.telegram = telegram
         self.file = file
         self.system: Union[TradingSystemAPI, None] = None
-        self._log: Union[HandlerAPI, None] = None
+        self._log_: Union[HandlerAPI, None] = None
 
     def on_start(self) -> None:
         broker = self.api.Account.BrokerName.replace(" ", "")
@@ -44,9 +46,9 @@ class TradingBot:
         TelegramAPI.setup(VerboseType[self.telegram], uid=self.group)
         FileAPI.setup(VerboseType[self.file], uid=["Trading"])
 
-        self._log = HandlerAPI(Class="TradingBot", Subclass="Bootstrap")
+        self._log_ = HandlerAPI(Class="TradingBot", Subclass="Bootstrap")
 
-        strategy_cls = _STRATEGIES[self.strategy_name]
+        strategy_cls = _STRATEGIES_[self.strategy_name]
         parameters = ParametersAPI()[broker][self.group][symbol][timeframe].Trading[self.strategy_name]
 
         self.system = TradingSystemAPI(
@@ -75,9 +77,9 @@ class TradingBot:
             self.system.__exit__(None, None, None)
 
     def on_error(self, error) -> None:
-        if self._log is not None:
-            self._log.error(lambda: f"Error: {error}")
+        if self._log_ is not None:
+            self._log_.error(lambda: f"Error: {error}")
 
     def on_exception(self, exception) -> None:
-        if self._log is not None:
-            self._log.exception(lambda: f"Exception: {exception}")
+        if self._log_ is not None:
+            self._log_.exception(lambda: f"Exception: {exception}")

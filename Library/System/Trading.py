@@ -4,22 +4,16 @@ from datetime import datetime
 from dataclasses import dataclass
 
 from Library.Database import DatabaseAPI
+from Library.Database.Dataframe import pl
 from Library.Parameters import Parameters
 from Library.Utils import timer
 
 from Library.Utility import *
 from Library.Engine import MachineAPI
-from Library.Analyst import AnalystAPI
-from Library.Manager import ManagerAPI
-from Library.Strategy import StrategyAPI
+from Library.Market import MarketAPI, TickAPI, BarAPI
+from Library.Portfolio import PortfolioAPI, AccountAPI, PositionAPI, TradeAPI, AccountType, Environment, MarginMode
+from Library.Universe import ContractAPI, ContractType, SecurityAPI
 from Library.System import SystemAPI
-
-from Library.Portfolio.Account import AccountAPI, AccountType, AssetType, MarginMode
-from Library.Universe.Contract import ContractAPI, CommissionMode, SwapMode, DayOfWeek
-from Library.Portfolio.Position import PositionAPI, PositionType, Direction
-from Library.Portfolio.Trade import TradeAPI
-from Library.Market.Bar import BarAPI
-from Library.Market.Tick import TickAPI
 
 @dataclass(slots=True)
 class _TickSnapshot:
@@ -79,7 +73,7 @@ class TradingSystemAPI(SystemAPI):
         self._low_tick: Union[_TickSnapshot, None] = None
         self._close_tick: Union[_TickSnapshot, None] = None
 
-        self._positions: dict[int, _LastPositionData] = {}
+        self._positions_cache: dict[int, _LastPositionData] = {}
 
         self._ask_above_target: Union[float, None] = None
         self._ask_below_target: Union[float, None] = None
@@ -89,13 +83,15 @@ class TradingSystemAPI(SystemAPI):
         self._bar_db: Union[DatabaseAPI, None] = None
 
     def __enter__(self):
-        self.strategy = self._strategy(
+        self.strategy = self._strategy_(
             money_management=self.parameters.MoneyManagement,
             risk_management=self.parameters.RiskManagement,
             signal_management=self.parameters.SignalManagement
         )
-        self.analyst = AnalystAPI(analyst_management=self.parameters.AnalystManagement)
-        self.manager = ManagerAPI(manager_management=self.parameters.ManagerManagement)
+        self.market = MarketAPI(parameters=None)
+        from Library.Indicator import IndicatorAPI
+        self.indicator = IndicatorAPI(parameters=self.parameters.AnalystManagement)
+        self.portfolio = PortfolioAPI(parameters=self.parameters.ManagerManagement)
 
         self._bar_db = DatabaseAPI(
             broker=self._broker,
@@ -181,126 +177,62 @@ class TradingSystemAPI(SystemAPI):
     def _snapshot_bar(self, tick_volume: float) -> BarAPI:
         return BarAPI(
             Timestamp=self._bar_timestamp,
-            gap_timestamp=self._gap_tick.Timestamp,
-            gap_ask=self._gap_tick.Ask,
-            gap_bid=self._gap_tick.Bid,
-            gap_ask_base_conversion=self._gap_tick.AskBaseConversion,
-            gap_bid_base_conversion=self._gap_tick.BidBaseConversion,
-            gap_ask_quote_conversion=self._gap_tick.AskQuoteConversion,
-            gap_bid_quote_conversion=self._gap_tick.BidQuoteConversion,
-            open_timestamp=self._open_tick.Timestamp,
-            open_ask=self._open_tick.Ask,
-            open_bid=self._open_tick.Bid,
-            open_ask_base_conversion=self._open_tick.AskBaseConversion,
-            open_bid_base_conversion=self._open_tick.BidBaseConversion,
-            open_ask_quote_conversion=self._open_tick.AskQuoteConversion,
-            open_bid_quote_conversion=self._open_tick.BidQuoteConversion,
-            high_timestamp=self._high_tick.Timestamp,
-            high_ask=self._high_tick.Ask,
-            high_bid=self._high_tick.Bid,
-            high_ask_base_conversion=self._high_tick.AskBaseConversion,
-            high_bid_base_conversion=self._high_tick.BidBaseConversion,
-            high_ask_quote_conversion=self._high_tick.AskQuoteConversion,
-            high_bid_quote_conversion=self._high_tick.BidQuoteConversion,
-            low_timestamp=self._low_tick.Timestamp,
-            low_ask=self._low_tick.Ask,
-            low_bid=self._low_tick.Bid,
-            low_ask_base_conversion=self._low_tick.AskBaseConversion,
-            low_bid_base_conversion=self._low_tick.BidBaseConversion,
-            low_ask_quote_conversion=self._low_tick.AskQuoteConversion,
-            low_bid_quote_conversion=self._low_tick.BidQuoteConversion,
-            close_timestamp=self._close_tick.Timestamp,
-            close_ask=self._close_tick.Ask,
-            close_bid=self._close_tick.Bid,
-            close_ask_base_conversion=self._close_tick.AskBaseConversion,
-            close_bid_base_conversion=self._close_tick.BidBaseConversion,
-            close_ask_quote_conversion=self._close_tick.AskQuoteConversion,
-            close_bid_quote_conversion=self._close_tick.BidQuoteConversion,
-            TickVolume=tick_volume,
-            symbol=self.manager.Symbol
+            Security=self.portfolio._security_,
+            Timeframe=self._timeframe,
+            Volume=tick_volume,
+            # Ticks will be mapped to proper fields in BarAPI if needed
+            db=self._bar_db
         )
 
     def _convert_account(self, acc) -> AccountAPI:
         return AccountAPI(
-            AccountType=AccountType(acc.AccountType),
-            AssetType=AssetType[acc.Asset.Name],
+            UID=acc.Number,
+            Environment=Environment.Demo if acc.IsDemo else Environment.Live,
+            AccountType=AccountType.Hedged if acc.AccountType == 0 else AccountType.Netted,
+            MarginMode=MarginMode.Max, # Placeholder
+            Asset=acc.Asset.Name,
             Balance=acc.Balance,
             Equity=acc.Equity,
             Credit=acc.Credit,
             Leverage=acc.PreciseLeverage,
             MarginUsed=acc.Margin,
             MarginFree=acc.FreeMargin,
-            MarginLevel=acc.MarginLevel if acc.MarginLevel is not None else None,
+            MarginLevel=acc.MarginLevel,
             MarginStopLevel=acc.StopOutLevel,
-            MarginMode=MarginMode(acc.TotalMarginCalculationType)
-        )
-
-    def _convert_symbol(self, sym) -> ContractAPI:
-        return ContractAPI(
-            BaseAssetType=AssetType[sym.BaseAsset.Name],
-            QuoteAssetType=AssetType[sym.QuoteAsset.Name],
-            Digits=sym.Digits,
-            PointSize=sym.TickSize,
-            PipSize=sym.PipSize,
-            LotSize=sym.LotSize,
-            VolumeMin=sym.VolumeInUnitsMin,
-            VolumeMax=sym.VolumeInUnitsMax,
-            VolumeStep=sym.VolumeInUnitsStep,
-            Commission=sym.Commission,
-            CommissionMode=CommissionMode(sym.CommissionType),
-            SwapLong=sym.SwapLong,
-            SwapShort=sym.SwapShort,
-            SwapMode=SwapMode(sym.SwapCalculationType),
-            SwapExtraDay=Day((sym.Swap3DaysRollover - 1) % 7 if sym.Swap3DaysRollover is not None else 2)
+            db=self._bar_db
         )
 
     def _convert_position(self, pos) -> PositionAPI:
-        try:
-            pos_type = PositionType[pos.Comment]
-        except (KeyError, TypeError):
-            pos_type = PositionType.Normal
         return PositionAPI(
-            PositionID=pos.Id,
-            Type=pos_type,
-            Direction=Direction(int(pos.Direction)),
+            UID=pos.Id,
+            Security=self.portfolio._security_,
+            Direction=Direction.Buy if int(pos.Direction) == 0 else Direction.Sell,
             Volume=pos.VolumeInUnits,
             Quantity=pos.Quantity,
             EntryTimestamp=pos.EntryTime,
             EntryPrice=pos.EntryPrice,
-            StopLossPrice=pos.StopLoss if pos.StopLoss is not None else None,
-            TakeProfitPrice=pos.TakeProfit if pos.TakeProfit is not None else None,
+            StopLossPrice=pos.StopLoss,
+            TakeProfitPrice=pos.TakeProfit,
             ExitPrice=pos.CurrentPrice,
-            GrossPnL=pos.GrossProfit,
-            CommissionPnL=pos.Commissions,
-            SwapPnL=pos.Swap,
             NetPnL=pos.NetProfit,
             UsedMargin=pos.Margin,
-            contract=self.manager.Symbol,
-            entry_balance=self.manager.Account.Balance if self.manager.Account else 0.0
+            db=self._bar_db
         )
 
     def _convert_trade(self, trd) -> TradeAPI:
-        try:
-            pos_type = PositionType[trd.Comment]
-        except (KeyError, TypeError):
-            pos_type = PositionType.Normal
         return TradeAPI(
-            PositionID=trd.PositionId,
-            TradeID=trd.ClosingDealId,
-            Type=pos_type,
-            Direction=Direction(int(trd.Direction)),
+            UID=trd.ClosingDealId,
+            Position=trd.PositionId,
+            Security=self.portfolio._security_,
+            Direction=Direction.Buy if int(trd.Direction) == 0 else Direction.Sell,
             Volume=trd.VolumeInUnits,
             Quantity=trd.Quantity,
             EntryTimestamp=trd.EntryTime,
             ExitTimestamp=trd.ClosingTime,
             EntryPrice=trd.EntryPrice,
             ExitPrice=trd.ClosingPrice,
-            GrossPnL=trd.GrossProfit,
-            CommissionPnL=trd.Commissions,
-            SwapPnL=trd.Swap,
             NetPnL=trd.NetProfit,
-            contract=self.manager.Symbol,
-            entry_balance=self.manager.Account.Balance if self.manager.Account else 0.0
+            db=self._bar_db
         )
 
     def _is_own_position(self, pos) -> bool:
@@ -332,7 +264,7 @@ class TradingSystemAPI(SystemAPI):
     def receive_update_account(self) -> AccountAPI:
         return self.queue.get()
 
-    def receive_update_symbol(self) -> ContractAPI:
+    def receive_update_symbol(self) -> SecurityAPI:
         return self.queue.get()
 
     def receive_update_position(self) -> PositionAPI:
@@ -429,19 +361,22 @@ class TradingSystemAPI(SystemAPI):
             self._sync_buffer.append(update.Bar)
 
         def init_market(update: CompleteUpdate):
-            self._initial_account = update.Manager.Account
+            self._initial_account = update.Portfolio._account_
             self._start_timestamp = self._sync_buffer[-1].Timestamp.DateTime if self._sync_buffer else None
-            update.Analyst.init_market_data(self._sync_buffer)
+            df = pl.from_dicts([b.dict() for b in self._sync_buffer]) if self._sync_buffer else pl.DataFrame()
+            update.Market.init_data(df)
+            update.Indicator.init_data(update.Market)
 
         def update_market(update: BarUpdate):
             self._stop_timestamp = update.Bar.Timestamp.DateTime
-            update.Analyst.update_market_data(update.Bar)
+            update.Market.update_data(update.Bar)
+            update.Indicator.update_data(update.Market)
 
         def update_database(update: CompleteUpdate):
-            self._bar_db.push_symbol_data(update.Manager.Symbol)
-            self._bar_db.push_market_data(update.Analyst.Market.data())
-            self.individual_trades, self.aggregated_trades, self.statistics = update.Manager.Statistics.data(
-                self._initial_account, self._start_timestamp, self._stop_timestamp
+            self._bar_db.push_market_data(update.Market.dataframe())
+            from Library.Portfolio.Statistics import StatisticsAPI
+            self.individual_trades, self.aggregated_trades, self.statistics = StatisticsAPI.data(
+                update.Portfolio.TradesDataframe, self._initial_account, self._start_timestamp, self._stop_timestamp
             )
 
         initialization.on_bar_closed(to=initialization, action=sync_market, reason=None)
@@ -488,7 +423,7 @@ class TradingSystemAPI(SystemAPI):
             BidBaseConversion=tick.BidBaseConversion,
             AskQuoteConversion=tick.AskQuoteConversion,
             BidQuoteConversion=tick.BidQuoteConversion,
-            symbol=self.manager.Symbol
+            Security=self.portfolio._security_
         ))
         self.queue.put(UpdateID.Complete)
 
@@ -509,7 +444,7 @@ class TradingSystemAPI(SystemAPI):
             pos = args.Position
             if not self._is_own_position(pos):
                 return
-            self._positions[pos.Id] = _LastPositionData(
+            self._positions_cache[pos.Id] = _LastPositionData(
                 Volume=pos.VolumeInUnits,
                 StopLoss=pos.StopLoss,
                 TakeProfit=pos.TakeProfit
@@ -529,7 +464,7 @@ class TradingSystemAPI(SystemAPI):
             pos = args.Position
             if not self._is_own_position(pos):
                 return
-            last = self._positions.get(pos.Id)
+            last = self._positions_cache.get(pos.Id)
             if last is None:
                 return
 
@@ -581,7 +516,7 @@ class TradingSystemAPI(SystemAPI):
             self.queue.put(self._convert_account(self.api.Account))
             self.queue.put(self._convert_trade(trade) if trade is not None else None)
             self.queue.put(UpdateID.Complete)
-            self._positions.pop(pos.Id, None)
+            self._positions_cache.pop(pos.Id, None)
         except Exception as e:
             self._log.exception(lambda m=str(e): f"on_position_closed: {m}")
             self.api.Stop()
@@ -602,7 +537,7 @@ class TradingSystemAPI(SystemAPI):
         self.queue.put(UpdateID.Account)
         self.queue.put(self._convert_account(self.api.Account))
         self.queue.put(UpdateID.Symbol)
-        self.queue.put(self._convert_symbol(self.api.Symbol))
+        # Use SecurityAPI for symbol update
+        self.queue.put(self.portfolio._security_)
         self.queue.put(UpdateID.Complete)
-        self.deploy(strategy=self.strategy, analyst=self.analyst, manager=self.manager)
-self.analyst, manager=self.manager)
+        self.deploy(strategy=self.strategy, market=self.market, indicator=self.indicator, portfolio=self.portfolio)

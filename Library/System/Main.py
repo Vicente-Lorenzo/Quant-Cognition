@@ -9,7 +9,7 @@ from Library.Classes import VerboseType, AssetType, SpreadType, CommissionType, 
 from Library.Parameters import ParametersAPI, Parameters
 from Library.Utils import timer
 
-from Library.Manager import StatisticsAPI
+from Library.Portfolio import StatisticsAPI
 from Library.Strategy import *
 from Library.System import *
 
@@ -157,9 +157,10 @@ def main():
                 fitness=args.fitness
             )
 
-    with system:
-        system.start()
-        system.join()
+    if system is not None:
+        with system:
+            system.start()
+            system.join()
 
 if __name__ == "__main__":
     main()
