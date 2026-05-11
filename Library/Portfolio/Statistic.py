@@ -362,7 +362,7 @@ def calculate_drawdown(initial_balance: float, df: pl.DataFrame) -> tuple[float,
     from Library.Portfolio.Position import PositionAPI
     net_pnl = str(PositionAPI.ID.NetPnL)
     if df.is_empty() or net_pnl not in df.columns: return 0.0, 0.0, 0.0, 0.0
-    cum_bal: pl.Series = df[net_pnl].cum_sum() + initial_balance
+    cum_bal = df[net_pnl].cum_sum() + initial_balance
     run_max = cum_bal.cum_max()
     dd = run_max - cum_bal
     max_dd_val = dd.max()
@@ -376,7 +376,7 @@ def calculate_runup(initial_balance: float, df: pl.DataFrame) -> tuple[float, fl
     from Library.Portfolio.Position import PositionAPI
     net_pnl = str(PositionAPI.ID.NetPnL)
     if df.is_empty() or net_pnl not in df.columns: return 0.0, 0.0, 0.0, 0.0
-    cum_bal: pl.Series = df[net_pnl].cum_sum() + initial_balance
+    cum_bal = df[net_pnl].cum_sum() + initial_balance
     run_min = cum_bal.cum_min()
     ru = cum_bal - run_min
     max_ru_val = ru.max()
@@ -622,7 +622,7 @@ def dependent_metrics(initial_balance: float, start: date, stop: date, df: pl.Da
         total_col: [total_metrics[k] for k in Metrics]
     }, strict=False)
 
-def _safe_df(df: pl.DataFrame) -> pl.DataFrame:
+def _safe_df_(df: pl.DataFrame) -> pl.DataFrame:
     from Library.Portfolio.Position import PositionAPI
     from Library.Portfolio.Trade import TradeAPI
     if df.is_empty():
@@ -642,7 +642,7 @@ def _safe_df(df: pl.DataFrame) -> pl.DataFrame:
 
 def generate_realized_report(trades_df: pl.DataFrame, account: AccountAPI, start: date, stop: date) -> pl.DataFrame:
     initial_balance = account.Balance or 0.0
-    safe_trades = _safe_df(trades_df)
+    safe_trades = _safe_df_(trades_df)
     
     ind = sort_items(safe_trades)
     ind_df = dependent_metrics(initial_balance, start, stop, ind, REALIZED_BUY_INDIVIDUAL, REALIZED_SELL_INDIVIDUAL, REALIZED_TOTAL_INDIVIDUAL)
@@ -654,7 +654,7 @@ def generate_realized_report(trades_df: pl.DataFrame, account: AccountAPI, start
 
 def generate_unrealized_report(positions_df: pl.DataFrame, account: AccountAPI, start: date, stop: date) -> pl.DataFrame:
     initial_balance = account.Balance or 0.0
-    safe_positions = _safe_df(positions_df)
+    safe_positions = _safe_df_(positions_df)
     
     ind = sort_items(safe_positions)
     ind_df = dependent_metrics(initial_balance, start, stop, ind, UNREALIZED_BUY_INDIVIDUAL, UNREALIZED_SELL_INDIVIDUAL, UNREALIZED_TOTAL_INDIVIDUAL)
@@ -666,8 +666,8 @@ def generate_unrealized_report(positions_df: pl.DataFrame, account: AccountAPI, 
 
 def generate_net_report(trades_df: pl.DataFrame, positions_df: pl.DataFrame, account: AccountAPI, start: date, stop: date) -> pl.DataFrame:
     initial_balance = account.Balance or 0.0
-    safe_trades = _safe_df(trades_df)
-    safe_positions = _safe_df(positions_df)
+    safe_trades = _safe_df_(trades_df)
+    safe_positions = _safe_df_(positions_df)
 
     if not safe_trades.is_empty() and not safe_positions.is_empty():
         common_cols = set(safe_trades.columns).intersection(set(safe_positions.columns))
