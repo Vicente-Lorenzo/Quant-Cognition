@@ -403,19 +403,6 @@ class OrderAPI(DatapointAPI):
     def ExecutionRatio(self) -> Union[float, None]:
         if not self.Volume or self.ExecutedVolume is None: return None
         return self.ExecutedVolume / self.Volume
-    @property
-    def RiskAmount(self) -> Union[float, None]:
-        if self._execution_price_ and self._stop_loss_price_ and self.Volume:
-            if self.Contract and self.Contract.LotSize:
-                return abs(self._execution_price_.Price - self._stop_loss_price_.Price) * self.Volume * self.Contract.LotSize
-        return None
-
-    @property
-    def RewardAmount(self) -> Union[float, None]:
-        if self._execution_price_ and self._take_profit_price_ and self.Volume:
-            if self.Contract and self.Contract.LotSize:
-                return abs(self._take_profit_price_.Price - self._execution_price_.Price) * self.Volume * self.Contract.LotSize
-        return None
 
     @property
     def UnfilledVolume(self) -> Union[float, None]:
