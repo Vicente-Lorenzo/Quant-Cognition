@@ -13,6 +13,7 @@ For all shell executions, use the following patterns:
 - **C# Build:** `dotnet build Sources/`.
 - **Git Repository:** The project root (`cAlgo`) is a dedicated Git repository.
 - **File Staging:** Any tool-driven operation that creates a new file must be immediately followed by `git add <file_path>` to automate the staging process.
+- **Git Commits:** **NEVER commit changes.** You may stage files using `git add`, but leave the final `git commit` to the user so they always have the final word.
 
 ## CODING PHILOSOPHY
 1. **Precision & Accuracy:** Prioritize correct, working code over speed.
