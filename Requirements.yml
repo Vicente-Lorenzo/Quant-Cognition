@@ -58,3 +58,4 @@ dependencies:
 
     - pip:
         - ctrader-open-api
+        - pyzmq
