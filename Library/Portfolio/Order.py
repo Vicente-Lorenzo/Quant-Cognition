@@ -9,7 +9,7 @@ from Library.Database.Database import IdentityKey, ForeignKey, DatabaseAPI
 from Library.Database.Datapoint import DatapointAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Database.Dataclass import overridefield, coerce
-from Library.Database.Enumeration import Enumeration
+from Library.Database.Enumeration import EnumerationAPI
 from Library.Portfolio.Position import PositionAPI
 from Library.Universe.Universe import UniverseAPI
 from Library.Market.Timestamp import TimestampAPI
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from Library.Universe.Security import SecurityAPI
     from Library.Universe.Contract import ContractAPI
 
-class OrderType(Enumeration):
+class OrderType(EnumerationAPI):
     Market = 1
     Limit = 2
     Stop = 3
@@ -28,14 +28,14 @@ class OrderType(Enumeration):
     MarketRange = 5
     StopLimit = 6
 
-class OrderStatus(Enumeration):
+class OrderStatus(EnumerationAPI):
     Accepted = 1
     Filled = 2
     Rejected = 3
     Expired = 4
     Cancelled = 5
 
-class TimeInForce(Enumeration):
+class TimeInForce(EnumerationAPI):
     GoodTillDate = 1
     GoodTillCancel = 2
     ImmediateOrCancel = 3

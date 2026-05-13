@@ -4,13 +4,13 @@ from typing import TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
 from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
-from Library.Database.Enumeration import Enumeration
+from Library.Database.Enumeration import EnumerationAPI
 from Library.Indicator.Indicator import IndicatorMode
 
 if TYPE_CHECKING:
     from Library.Market.Market import MarketAPI
 
-class MovingAverageType(Enumeration):
+class MovingAverageType(EnumerationAPI):
     Simple = 0
     Exponential = 1
     Weighted = 2

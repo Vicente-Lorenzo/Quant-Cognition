@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from typing import Union, TYPE_CHECKING
 
-from Library.Database.Enumeration import Enumeration
+from Library.Database.Enumeration import EnumerationAPI
 
 if TYPE_CHECKING:
     from Library.Indicator.Technical.Technical import TechnicalAPI
     from Library.Indicator.Fundamental.Fundamental import FundamentalAPI
     from Library.Indicator.Sentimental.Sentimental import SentimentalAPI
 
-class IndicatorMode(Enumeration):
+class IndicatorMode(EnumerationAPI):
     Off = 0
     Filter = 1
     Signal = 2

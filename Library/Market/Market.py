@@ -7,7 +7,7 @@ from typing import Union, ClassVar, TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
-from Library.Database.Enumeration import Enumeration
+from Library.Database.Enumeration import EnumerationAPI
 from Library.Database.Query import QueryAPI
 from Library.Market.Series import SeriesAPI
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from Library.Market.Tick import TickAPI
     from Library.Market.Bar import BarAPI
 
-class PriceMode(Enumeration):
+class PriceMode(EnumerationAPI):
     Ask = 0
     Mid = 1
     Bid = 2

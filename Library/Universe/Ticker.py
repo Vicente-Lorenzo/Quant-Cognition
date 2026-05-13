@@ -5,7 +5,7 @@ from typing import Union, ClassVar, TYPE_CHECKING
 from dataclasses import dataclass, field, InitVar
 
 from Library.Database.Dataframe import pl
-from Library.Database.Enumeration import Enumeration
+from Library.Database.Enumeration import EnumerationAPI
 from Library.Database.Dataclass import overridefield, coerce
 from Library.Database.Database import PrimaryKey, ForeignKey
 from Library.Universe.Category import CategoryAPI
@@ -19,7 +19,7 @@ _PREFIX_PATTERN_ = re.compile(r"^[^:]+:")
 _TRIM_PATTERN_ = re.compile(r"[#.+\-_]+$")
 _SUFFIX_LIST_ = sorted([".m", ".micro", ".pro", ".p", ".raw", ".ecn", ".s", ".std", ".i", ".ins", ".z", ".v", ".x", ".plus", "+", "-", "_sb", ".c", ".cfd"], key=len, reverse=True)
 
-class ContractType(Enumeration):
+class ContractType(EnumerationAPI):
     Spot = 0
     CFD = 1
     Option = 2

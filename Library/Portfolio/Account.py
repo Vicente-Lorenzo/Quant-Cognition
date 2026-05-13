@@ -8,23 +8,23 @@ from Library.Database.Database import PrimaryKey, ForeignKey
 from Library.Database.Datapoint import DatapointAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Database.Dataclass import overridefield, coerce
-from Library.Database.Enumeration import Enumeration
+from Library.Database.Enumeration import EnumerationAPI
 from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Provider import ProviderAPI
 from Library.Utility.Typing import MISSING
 
 if TYPE_CHECKING: from Library.Database import DatabaseAPI
 
-class AccountType(Enumeration):
+class AccountType(EnumerationAPI):
     Hedged = 0
     Netted = 1
 
-class MarginMode(Enumeration):
+class MarginMode(EnumerationAPI):
     Sum = 0
     Max = 1
     Net = 2
 
-class Environment(Enumeration):
+class Environment(EnumerationAPI):
     Live = 0
     Demo = 1
 

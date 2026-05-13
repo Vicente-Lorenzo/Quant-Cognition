@@ -6,8 +6,8 @@ from dataclasses import dataclass, field, InitVar
 
 from Library.Database.Dataframe import pl
 from Library.Database.Dataclass import overridefield, coerce
-from Library.Database.Enumeration import Enumeration
-from Library.Database import IdentityKey, PrimaryKey, ForeignKey
+from Library.Database.Enumeration import EnumerationAPI
+from Library.Database import IdentityKey, ForeignKey
 from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Ticker import TickerAPI, ContractType
 from Library.Universe.Provider import ProviderAPI
@@ -16,42 +16,42 @@ from Library.Utility.Typing import MISSING
 
 if TYPE_CHECKING: from Library.Database import DatabaseAPI
 
-class SpreadType(Enumeration):
+class SpreadType(EnumerationAPI):
     Points = 0
     Percentage = 1
     Random = 2
     Approximate = 3
     Accurate = 4
 
-class CommissionType(Enumeration):
+class CommissionType(EnumerationAPI):
     Points = 0
     Percentage = 1
     Amount = 2
     Accurate = 3
 
-class CommissionMode(Enumeration):
+class CommissionMode(EnumerationAPI):
     BaseAssetPerMillionVolume = 0
     BaseAssetPerOneLot = 1
     PercentageOfVolume = 2
     QuoteAssetPerOneLot = 3
 
-class SwapType(Enumeration):
+class SwapType(EnumerationAPI):
     Points = 0
     Percentage = 1
     Amount = 2
     Accurate = 3
 
-class SwapMode(Enumeration):
+class SwapMode(EnumerationAPI):
     Pips = 0
     Percentage = 1
 
-class VariantType(Enumeration):
+class VariantType(EnumerationAPI):
     Call = 0
     Put = 1
     Deliverable = 2
     NDF = 3
 
-class PayoffType(Enumeration):
+class PayoffType(EnumerationAPI):
     Trivial = 0
     Vanilla = 1
     Asian = 2
@@ -59,7 +59,7 @@ class PayoffType(Enumeration):
     KnockOut = 4
     Digital = 5
 
-class ExerciseType(Enumeration):
+class ExerciseType(EnumerationAPI):
     European = 0
     American = 1
     Bermudan = 2

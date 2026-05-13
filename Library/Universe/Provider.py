@@ -7,18 +7,18 @@ from Library.Database.Dataframe import pl
 from Library.Database.Database import PrimaryKey
 from Library.Database.Datapoint import DatapointAPI
 from Library.Universe.Universe import UniverseAPI
-from Library.Database.Enumeration import Enumeration
+from Library.Database.Enumeration import EnumerationAPI
 
 if TYPE_CHECKING: from Library.Database.Database import DatabaseAPI
 
-class Provider(Enumeration):
+class Provider(EnumerationAPI):
     Spotware = 0
     Pepperstone = 1
     ICMarkets = 2
     Bloomberg = 3
     Yahoo = 4
 
-class Platform(Enumeration):
+class Platform(EnumerationAPI):
     cTrader = 0
     MetaTrader4 = 1
     MetaTrader5 = 2

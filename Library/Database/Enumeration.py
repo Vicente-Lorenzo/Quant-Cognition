@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Union, Any
 from difflib import SequenceMatcher
 
-class Enumeration(Enum):
+class EnumerationAPI(Enum):
     
     @classmethod
     def parse(cls, value: Any) -> Any:
@@ -14,7 +14,7 @@ class Enumeration(Enum):
         except (KeyError, ValueError): return value
         
     @classmethod
-    def _missing_(cls, value: object) -> Union[Enumeration, None]:
+    def _missing_(cls, value: object) -> Union[EnumerationAPI, None]:
         if not isinstance(value, str):
             return None
         normalized_value = "".join(c for c in value if c.isalnum()).lower()

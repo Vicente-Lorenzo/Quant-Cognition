@@ -4,17 +4,17 @@ from typing import Union, TYPE_CHECKING
 from dataclasses import dataclass, field
 
 from Library.Database.Dataclass import DataclassAPI
-from Library.Database.Enumeration import Enumeration
+from Library.Database.Enumeration import EnumerationAPI
 
 if TYPE_CHECKING:
     from Library.Universe.Contract import ContractAPI
 
-class Direction(Enumeration):
+class Direction(EnumerationAPI):
     Buy = 1
     Neutral = 0
     Sell = -1
 
-class PriceMode(Enumeration):
+class PriceMode(EnumerationAPI):
     Ask = 0
     Bid = 1
     Mid = 2

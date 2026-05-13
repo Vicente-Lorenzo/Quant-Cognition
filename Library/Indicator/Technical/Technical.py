@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from typing import Union, TYPE_CHECKING, ClassVar
 
-from Library.Database.Enumeration import Enumeration
+from Library.Database.Enumeration import EnumerationAPI
 from Library.Indicator.Indicator import IndicatorMode
 
 if TYPE_CHECKING:
     from Library.Market.Market import MarketAPI
     from Library.Database.Dataframe import pl
 
-class TechnicalType(Enumeration):
+class TechnicalType(EnumerationAPI):
     Baseline = 0
     Overlap = 1
     Momentum = 2

@@ -8,7 +8,7 @@ from Library.Database.Dataframe import pl
 from Library.Database.Database import IdentityKey, ForeignKey, DatabaseAPI
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Dataclass import overridefield, coerce
-from Library.Database.Enumeration import Enumeration
+from Library.Database.Enumeration import EnumerationAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.PnL import PnLAPI
 from Library.Universe.Universe import UniverseAPI
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from Library.Universe.Security import SecurityAPI
     from Library.Portfolio.Order import OrderAPI
 
-class PositionType(Enumeration):
+class PositionType(EnumerationAPI):
     Normal = 0
     Continuation = 1
 

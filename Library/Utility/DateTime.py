@@ -2,9 +2,9 @@ from typing import Union
 from datetime import datetime, date, time
 from dateutil.relativedelta import relativedelta, weekday
 
-from Library.Database.Enumeration import Enumeration
+from Library.Database.Enumeration import EnumerationAPI
 
-class Weekday(Enumeration):
+class Weekday(EnumerationAPI):
     Monday = 0
     Tuesday = 1
     Wednesday = 2
