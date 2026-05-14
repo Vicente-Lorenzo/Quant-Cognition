@@ -3,7 +3,7 @@ import torch.nn as nn
 from pathlib import Path
 from abc import ABC, abstractmethod
 
-from Library.Logging import HandlerAPI
+from Library.Logging import HandlerLoggingAPI
 
 class NetworkAPI(nn.Module, ABC):
 
@@ -14,7 +14,7 @@ class NetworkAPI(nn.Module, ABC):
 
         self._path = path
         self._file = path / model / role
-        self._log: HandlerAPI = HandlerAPI(Class=self.__class__.__name__, Subclass="Network Management")
+        self._log: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="Network Management")
 
         self.init()
         self.device = T.device("cuda:0" if T.cuda.is_available() else "cuda:1")

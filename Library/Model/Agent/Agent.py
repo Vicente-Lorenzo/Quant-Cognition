@@ -3,7 +3,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from Library.Logging import HandlerAPI
+from Library.Logging import HandlerLoggingAPI
 
 class AgentAPI(ABC):
 
@@ -11,7 +11,7 @@ class AgentAPI(ABC):
         super().__init__()
         self._model = model
         self._path = path
-        self._log: HandlerAPI = HandlerAPI(Class=self.__class__.__name__, Subclass="Agent Management")
+        self._log: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="Agent Management")
 
     @abstractmethod
     def save(self) -> None:
