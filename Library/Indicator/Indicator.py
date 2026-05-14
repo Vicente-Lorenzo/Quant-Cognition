@@ -10,7 +10,6 @@ if TYPE_CHECKING:
     from Library.Indicator.Fundamental.Fundamental import FundamentalAPI
     from Library.Indicator.Sentimental.Sentimental import SentimentalAPI
     from Library.Market.Market import MarketAPI
-    from Library.Market.Bar import BarAPI
 
 class IndicatorMode(EnumerationAPI):
     Off = 0
@@ -33,10 +32,10 @@ class IndicatorAPI:
         if self.Fundamental: self.Fundamental.init_data(market)
         if self.Sentimental: self.Sentimental.init_data(market)
 
-    def update_data(self, bar: BarAPI) -> None:
-        if self.Technical: self.Technical.update_data(bar)
-        if self.Fundamental: self.Fundamental.update_data(bar)
-        if self.Sentimental: self.Sentimental.update_data(bar)
+    def update_data(self, market: MarketAPI) -> None:
+        if self.Technical: self.Technical.update_data(market)
+        if self.Fundamental: self.Fundamental.update_data(market)
+        if self.Sentimental: self.Sentimental.update_data(market)
 
 def parse_technical(parameters: Union[dict, None]) -> TechnicalAPI:
     from Library.Indicator.Technical.Technical import TechnicalAPI
