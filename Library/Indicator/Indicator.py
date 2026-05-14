@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Union, TYPE_CHECKING
+from dataclasses import dataclass
 
 from Library.Database.Enumeration import EnumerationAPI
 
@@ -8,14 +9,37 @@ if TYPE_CHECKING:
     from Library.Indicator.Technical.Technical import TechnicalAPI
     from Library.Indicator.Fundamental.Fundamental import FundamentalAPI
     from Library.Indicator.Sentimental.Sentimental import SentimentalAPI
+    from Library.Market.Market import MarketAPI
+    from Library.Market.Bar import BarAPI
 
 class IndicatorMode(EnumerationAPI):
     Off = 0
     Filter = 1
     Signal = 2
 
+@dataclass
+class IndicatorAPI:
+    Technical: TechnicalAPI = None
+    Fundamental: FundamentalAPI = None
+    Sentimental: SentimentalAPI = None
+
+    def __init__(self, parameters: Union[dict, None] = None):
+        self.Technical = parse_technical(parameters.get('Technical') if parameters else None)
+        self.Fundamental = parse_fundamental(parameters.get('Fundamental') if parameters else None)
+        self.Sentimental = parse_sentimental(parameters.get('Sentimental') if parameters else None)
+
+    def init_data(self, market: MarketAPI) -> None:
+        if self.Technical: self.Technical.init_data(market)
+        if self.Fundamental: self.Fundamental.init_data(market)
+        if self.Sentimental: self.Sentimental.init_data(market)
+
+    def update_data(self, bar: BarAPI) -> None:
+        if self.Technical: self.Technical.update_data(bar)
+        if self.Fundamental: self.Fundamental.update_data(bar)
+        if self.Sentimental: self.Sentimental.update_data(bar)
+
 def parse_technical(parameters: Union[dict, None]) -> TechnicalAPI:
-    from Library.Indicator.Technical import TechnicalAPI
+    from Library.Indicator.Technical.Technical import TechnicalAPI
     if not parameters:
         return TechnicalAPI(name="Technical", window=None, mode=IndicatorMode.Off)
     indicators = {}
