@@ -1,62 +1,10 @@
-from Library.Protocol.Action import (
-    ActionID,
-    CompleteAction,
-    OpenBuyAction,
-    OpenSellAction,
-    ModifyBuyVolumeAction,
-    ModifySellVolumeAction,
-    ModifyBuyStopLossAction,
-    ModifySellStopLossAction,
-    ModifyBuyTakeProfitAction,
-    ModifySellTakeProfitAction,
-    CloseBuyAction,
-    CloseSellAction,
-    AskAboveTargetAction,
-    AskBelowTargetAction,
-    BidAboveTargetAction,
-    BidBelowTargetAction,
-    Action
-)
+from Library.Protocol import Action
+from Library.Protocol.Action import *
 
-from Library.Protocol.Update import (
-    UpdateID,
-    CompleteUpdate,
-    AccountUpdate,
-    SecurityUpdate,
-    PositionUpdate,
-    TradeUpdate,
-    PositionTradeUpdate,
-    BarUpdate,
-    TickUpdate,
-    Update
-)
+from Library.Protocol import Update
+from Library.Protocol.Update import *
 
 __all__ = [
-    "ActionID",
-    "CompleteAction",
-    "OpenBuyAction",
-    "OpenSellAction",
-    "ModifyBuyVolumeAction",
-    "ModifySellVolumeAction",
-    "ModifyBuyStopLossAction",
-    "ModifySellStopLossAction",
-    "ModifyBuyTakeProfitAction",
-    "ModifySellTakeProfitAction",
-    "CloseBuyAction",
-    "CloseSellAction",
-    "AskAboveTargetAction",
-    "AskBelowTargetAction",
-    "BidAboveTargetAction",
-    "BidBelowTargetAction",
-    "Action",
-    "UpdateID",
-    "CompleteUpdate",
-    "AccountUpdate",
-    "SecurityUpdate",
-    "PositionUpdate",
-    "TradeUpdate",
-    "PositionTradeUpdate",
-    "BarUpdate",
-    "TickUpdate",
-    "Update"
+    *Action.__all__,
+    *Update.__all__
 ]
