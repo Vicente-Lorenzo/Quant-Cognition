@@ -1,84 +1,42 @@
-from typing import Union
-from Library.Logging import HandlerAPI
+from __future__ import annotations
 
-from Library.Utility import *
-from Library.Engine import StateAPI, TransitionAPI
+from typing import Any, Union
+from dataclasses import dataclass, field
 
-class MachineAPI:
+from Library.Database.Dataclass import DataclassAPI
+from Library.Logging import HandlerLoggingAPI
+from Library.Engine.State import StateAPI
 
-    def __init__(self, name: Union[str, None]):
-        self.at = None
-        self._states: list[StateAPI] = []
-        self._log: HandlerAPI = HandlerAPI(Class=self.__class__.__name__, Subclass=name)
+@dataclass(slots=True)
+class MachineAPI(DataclassAPI):
+    Name: Union[str, None]
+    Events: int
+    At: Union[StateAPI, None] = field(default=None, init=False)
+    _states_: dict[str, StateAPI] = field(default_factory=dict, init=False, repr=False)
+    _log_: Union[HandlerLoggingAPI, None] = field(default=None, init=False, repr=False)
 
-    def create_state(self, name: Union[str, None], end: bool) -> StateAPI:
-        state = StateAPI(name, end)
-        self._states.append(state)
-        self.at = state if not self.at else self.at
-        return state
+    def __post_init__(self) -> None:
+        self._log_ = HandlerLoggingAPI(Class=type(self).__name__, Subclass=self.Name)
 
-    def _process_update(self, transition: TransitionAPI, args) -> list[Action]:
-        if transition is not None:
-            ret = transition.perform_action(args)
-            if transition.reason is not None:
-                self._log.debug(lambda: f"[{self.at.name}] > {transition.reason} > [{transition.to.name}]")
-            self.at = transition.to
-            return ret if ret is not None else []
-        return []
+    def state(self, name: str, end: bool = False) -> StateAPI:
+        existing = self._states_.get(name)
+        if existing is not None: return existing
+        new_state = StateAPI(Name=name, End=end, events=self.Events)
+        self._states_[name] = new_state
+        if self.At is None: self.At = new_state
+        return new_state
 
-    def perform_update_complete(self, args: CompleteUpdate) -> list[Action]:
-        return self._process_update(self.at.complete_transition, args)
+    def perform(self, event: Any, args: Any) -> list:
+        try: index = event.value
+        except AttributeError: index = int(event)
+        transition = self.At._transitions_[index]
+        if transition is None:
+            self._log_.warning(lambda: f"[{self.At.Name}] x {event}")
+            return []
+        ret = transition.perform(args)
+        if transition.Reason is not None:
+            self._log_.debug(lambda: f"[{self.At.Name}] > {transition.Reason} > [{transition.To.Name}]")
+        self.At = transition.To
+        return ret if ret is not None else []
 
-    def perform_update_account(self, args: AccountUpdate) -> list[Action]:
-        return self._process_update(self.at.account_transition, args)
-
-    def perform_update_security(self, args: SecurityUpdate) -> list[Action]:
-        return self._process_update(self.at.security_transition, args)
-
-    def perform_update_opened_buy(self, args: PositionUpdate) -> list[Action]:
-        return self._process_update(self.at.opened_buy_transition, args)
-
-    def perform_update_opened_sell(self, args: PositionUpdate) -> list[Action]:
-        return self._process_update(self.at.opened_sell_transition, args)
-
-    def perform_update_modified_volume_buy(self, args: PositionTradeUpdate) -> list[Action]:
-        return self._process_update(self.at.modified_volume_buy_transition, args)
-
-    def perform_update_modified_stop_loss_buy(self, args: PositionUpdate) -> list[Action]:
-        return self._process_update(self.at.modified_stop_loss_buy_transition, args)
-
-    def perform_update_modified_take_profit_buy(self, args: PositionUpdate) -> list[Action]:
-        return self._process_update(self.at.modified_take_profit_buy_transition, args)
-
-    def perform_update_modified_volume_sell(self, args: PositionTradeUpdate) -> list[Action]:
-        return self._process_update(self.at.modified_volume_sell_transition, args)
-
-    def perform_update_modified_stop_loss_sell(self, args: PositionUpdate) -> list[Action]:
-        return self._process_update(self.at.modified_stop_loss_sell_transition, args)
-
-    def perform_update_modified_take_profit_sell(self, args: PositionUpdate) -> list[Action]:
-        return self._process_update(self.at.modified_take_profit_sell_transition, args)
-
-    def perform_update_closed_buy(self, args: TradeUpdate) -> list[Action]:
-        return self._process_update(self.at.closed_buy_transition, args)
-
-    def perform_update_closed_sell(self, args: TradeUpdate) -> list[Action]:
-        return self._process_update(self.at.closed_sell_transition, args)
-
-    def perform_update_bar_closed(self, args: BarUpdate) -> list[Action]:
-        return self._process_update(self.at.bar_transition, args)
-
-    def perform_update_ask_above_target(self, args: TickUpdate) -> list[Action]:
-        return self._process_update(self.at.ask_above_target_transition, args)
-
-    def perform_update_ask_below_target(self, args: TickUpdate) -> list[Action]:
-        return self._process_update(self.at.ask_below_target_transition, args)
-
-    def perform_update_bid_above_target(self, args: TickUpdate) -> list[Action]:
-        return self._process_update(self.at.bid_above_target_transition, args)
-
-    def perform_update_bid_below_target(self, args: TickUpdate) -> list[Action]:
-        return self._process_update(self.at.bid_below_target_transition, args)
-
-    def perform_update_shutdown(self, args: CompleteUpdate) -> list[Action]:
-        return self._process_update(self.at.shutdown_transition, args)
+__all__ = ["MachineAPI"]
