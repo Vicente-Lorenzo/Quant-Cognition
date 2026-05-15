@@ -14,7 +14,8 @@ class EngineAPI(DataclassAPI):
     def __post_init__(self, machines: list[MachineAPI]) -> None:
         self._machines_ = machines
 
-    def is_terminated(self) -> bool:
+    @property
+    def IsTerminated(self) -> bool:
         return all(m.At.End for m in self._machines_)
 
     def perform(self, event: Any, args: Any) -> list:

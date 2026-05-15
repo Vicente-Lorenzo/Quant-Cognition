@@ -12,6 +12,7 @@ class MachineAPI(DataclassAPI):
     Name: Union[str, None]
     Events: int
     At: Union[StateAPI, None] = field(default=None, init=False)
+
     _states_: dict[str, StateAPI] = field(default_factory=dict, init=False, repr=False)
     _log_: Union[HandlerLoggingAPI, None] = field(default=None, init=False, repr=False)
 
@@ -31,11 +32,10 @@ class MachineAPI(DataclassAPI):
         except AttributeError: index = int(event)
         transition = self.At._transitions_[index]
         if transition is None:
-            self._log_.warning(lambda: f"[{self.At.Name}] x {event}")
             return []
         ret = transition.perform(args)
         if transition.Reason is not None:
-            self._log_.debug(lambda: f"[{self.At.Name}] > {transition.Reason} > [{transition.To.Name}]")
+            self._log_.debug(lambda: f"[{self.At.Name}] -> ({transition.Reason}) -> [{transition.To.Name}]")
         self.At = transition.To
         return ret if ret is not None else []
 

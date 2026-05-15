@@ -11,6 +11,7 @@ from Library.Engine.Transition import TransitionAPI
 class StateAPI(DataclassAPI):
     Name: Union[str, None]
     End: bool
+
     events: InitVar[int]
     _transitions_: list = field(init=False, repr=False)
 
