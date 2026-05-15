@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import dataclasses
 from enum import Enum
 from dataclasses import dataclass, field
@@ -148,3 +149,8 @@ class DataclassAPI:
             include_override_fields=include_override_fields,
             include_properties=include_properties
         )})
+
+    def json(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, **extras) -> str:
+        d = self.dict(include_fields=include_fields, include_initvar_fields=include_initvar_fields, include_hidden_fields=include_hidden_fields, include_override_fields=include_override_fields, include_properties=include_properties)
+        d.update(extras)
+        return json.dumps({k: v for k, v in d.items() if v is not None and v is not MISSING})
