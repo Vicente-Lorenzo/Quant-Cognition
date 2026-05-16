@@ -1,7 +1,8 @@
 import pytest
 from datetime import datetime
 from Library.Portfolio.Account import AccountAPI, AccountType, MarginMode, Environment
-from Library.Portfolio.Position import PositionAPI, PositionType, Direction
+from Library.Market.Price import Direction
+from Library.Portfolio.Position import PositionAPI, PositionType
 from Library.Portfolio.Trade import TradeAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Universe.Category import CategoryAPI
