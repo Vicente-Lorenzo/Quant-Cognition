@@ -1,75 +1,114 @@
 from __future__ import annotations
 
-from typing import Union, TYPE_CHECKING
 from abc import ABC, abstractmethod
+from typing import Any, Union, TYPE_CHECKING
 
-from Library.Logging import HandlerAPI
+from Library.Logging import HandlerLoggingAPI
+from Library.Database.Enumeration import EnumerationAPI
+from Library.Engine import MachineAPI
+from Library.Protocol.Update import (
+    UpdateID,
+    CompleteUpdateAPI,
+    AccountUpdateAPI,
+    SecurityUpdateAPI,
+    BarUpdateAPI,
+    TickUpdateAPI,
+    OpenedBuyPositionUpdateAPI,
+    OpenedSellPositionUpdateAPI,
+    ModifiedBuyPositionVolumeUpdateAPI,
+    ModifiedSellPositionVolumeUpdateAPI,
+    ModifiedBuyPositionStopLossUpdateAPI,
+    ModifiedSellPositionStopLossUpdateAPI,
+    ModifiedBuyPositionTakeProfitUpdateAPI,
+    ModifiedSellPositionTakeProfitUpdateAPI,
+    ClosedBuyPositionUpdateAPI,
+    ClosedSellPositionUpdateAPI,
+    StopLossBuyPositionUpdateAPI,
+    StopLossSellPositionUpdateAPI,
+    TakeProfitBuyPositionUpdateAPI,
+    TakeProfitSellPositionUpdateAPI,
+    MarginCallBuyPositionUpdateAPI,
+    MarginCallSellPositionUpdateAPI,
+    DeniedUpdateAPI,
+    ExceptionUpdateAPI
+)
 
 if TYPE_CHECKING:
     from Library.Parameters import Parameters
-    from Library.Engine import MachineAPI
-    from Library.Utility import (
-        PositionUpdate,
-        PositionTradeUpdate,
-        TradeUpdate,
-        AccountUpdate,
-        SymbolUpdate,
-        BarUpdate
-    )
+
+class StrategyType(EnumerationAPI):
+    Download = 1
+    NNFX = 2
+    DDPG = 3
 
 class StrategyAPI(ABC):
-
-    OPENED_BUY = "Opened Buy ({0} Position)"
-    OPENED_SELL = "Opened Sell ({0} Position)"
-    MODIFIED_VOLUME_BUY = "Modified Buy Volume ({0} Position)"
-    MODIFIED_VOLUME_SELL = "Modified Sell Volume ({0} Position)"
-    MODIFIED_STOPLOSS_BUY = "Modified Buy Stop-Loss ({0} Position)"
-    MODIFIED_STOPLOSS_SELL = "Modified Sell Stop-Loss ({0} Position)"
-    MODIFIED_TAKEPROFIT_BUY = "Modified Buy Take-Profit ({0} Position)"
-    MODIFIED_TAKEPROFIT_SELL = "Modified Sell Take-Profit ({0} Position)"
-    CLOSED_BUY = "Closed Buy ({0} Position)"
-    CLOSED_SELL = "Closed Sell ({0} Position)"
 
     def __init__(self,
                  money_management: Parameters,
                  risk_management: Parameters,
                  signal_management: Parameters) -> None:
-
         self.MoneyManagement: Parameters = money_management
         self.RiskManagement: Parameters = risk_management
         self.SignalManagement: Parameters = signal_management
+        self._log_: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="Strategy Management")
 
-        self._log_: HandlerAPI = HandlerAPI(Class=self.__class__.__name__, Subclass="Strategy Management")
+    @staticmethod
+    def _type_name_(obj: Any) -> str:
+        return obj.Type.name if obj is not None and obj.Type is not None else "Unknown"
 
-    def _log_opened_buy_(self, update: PositionUpdate) -> None:
-        self._log_.alert(lambda: StrategyAPI.OPENED_BUY.format(update.Position.Type.name))
+    def _log_opened_buy_(self, update: OpenedBuyPositionUpdateAPI) -> None:
+        self._log_.alert(lambda: f"Opened Buy ({self._type_name_(update.Position)} Position)")
 
-    def _log_opened_sell_(self, update: PositionUpdate) -> None:
-        self._log_.alert(lambda: StrategyAPI.OPENED_SELL.format(update.Position.Type.name))
+    def _log_opened_sell_(self, update: OpenedSellPositionUpdateAPI) -> None:
+        self._log_.alert(lambda: f"Opened Sell ({self._type_name_(update.Position)} Position)")
 
-    def _log_modified_volume_buy_(self, update: PositionTradeUpdate) -> None:
-        self._log_.alert(lambda: StrategyAPI.MODIFIED_VOLUME_BUY.format(update.Position.Type.name))
+    def _log_modified_volume_buy_(self, update: ModifiedBuyPositionVolumeUpdateAPI) -> None:
+        self._log_.alert(lambda: f"Modified Buy Volume ({self._type_name_(update.Position)} Position)")
 
-    def _log_modified_volume_sell_(self, update: PositionTradeUpdate) -> None:
-        self._log_.alert(lambda: StrategyAPI.MODIFIED_VOLUME_SELL.format(update.Position.Type.name))
+    def _log_modified_volume_sell_(self, update: ModifiedSellPositionVolumeUpdateAPI) -> None:
+        self._log_.alert(lambda: f"Modified Sell Volume ({self._type_name_(update.Position)} Position)")
 
-    def _log_modified_stop_loss_buy_(self, update: PositionUpdate) -> None:
-        self._log_.alert(lambda: StrategyAPI.MODIFIED_STOPLOSS_BUY.format(update.Position.Type.name))
+    def _log_modified_stop_loss_buy_(self, update: ModifiedBuyPositionStopLossUpdateAPI) -> None:
+        self._log_.alert(lambda: f"Modified Buy Stop-Loss ({self._type_name_(update.Position)} Position)")
 
-    def _log_modified_stop_loss_sell_(self, update: PositionUpdate) -> None:
-        self._log_.alert(lambda: StrategyAPI.MODIFIED_STOPLOSS_SELL.format(update.Position.Type.name))
+    def _log_modified_stop_loss_sell_(self, update: ModifiedSellPositionStopLossUpdateAPI) -> None:
+        self._log_.alert(lambda: f"Modified Sell Stop-Loss ({self._type_name_(update.Position)} Position)")
 
-    def _log_modified_take_profit_buy_(self, update: PositionUpdate) -> None:
-        self._log_.alert(lambda: StrategyAPI.MODIFIED_TAKEPROFIT_BUY.format(update.Position.Type.name))
+    def _log_modified_take_profit_buy_(self, update: ModifiedBuyPositionTakeProfitUpdateAPI) -> None:
+        self._log_.alert(lambda: f"Modified Buy Take-Profit ({self._type_name_(update.Position)} Position)")
 
-    def _log_modified_take_profit_sell_(self, update: PositionUpdate) -> None:
-        self._log_.alert(lambda: StrategyAPI.MODIFIED_TAKEPROFIT_SELL.format(update.Position.Type.name))
+    def _log_modified_take_profit_sell_(self, update: ModifiedSellPositionTakeProfitUpdateAPI) -> None:
+        self._log_.alert(lambda: f"Modified Sell Take-Profit ({self._type_name_(update.Position)} Position)")
 
-    def _log_closed_buy_(self, update: TradeUpdate) -> None:
-        self._log_.alert(lambda: StrategyAPI.CLOSED_BUY.format(update.Trade.Type.name))
+    def _log_closed_buy_(self, update: ClosedBuyPositionUpdateAPI) -> None:
+        self._log_.alert(lambda: f"Closed Buy ({self._type_name_(update.Position)} Position)")
 
-    def _log_closed_sell_(self, update: TradeUpdate) -> None:
-        self._log_.alert(lambda: StrategyAPI.CLOSED_SELL.format(update.Trade.Type.name))
+    def _log_closed_sell_(self, update: ClosedSellPositionUpdateAPI) -> None:
+        self._log_.alert(lambda: f"Closed Sell ({self._type_name_(update.Position)} Position)")
+
+    def _log_stop_loss_buy_(self, update: StopLossBuyPositionUpdateAPI) -> None:
+        self._log_.alert(lambda: f"Stop-Loss Hit on Buy ({self._type_name_(update.Position)} Position)")
+
+    def _log_stop_loss_sell_(self, update: StopLossSellPositionUpdateAPI) -> None:
+        self._log_.alert(lambda: f"Stop-Loss Hit on Sell ({self._type_name_(update.Position)} Position)")
+
+    def _log_take_profit_buy_(self, update: TakeProfitBuyPositionUpdateAPI) -> None:
+        self._log_.alert(lambda: f"Take-Profit Hit on Buy ({self._type_name_(update.Position)} Position)")
+
+    def _log_take_profit_sell_(self, update: TakeProfitSellPositionUpdateAPI) -> None:
+        self._log_.alert(lambda: f"Take-Profit Hit on Sell ({self._type_name_(update.Position)} Position)")
+
+    def _log_margin_call_buy_(self, update: MarginCallBuyPositionUpdateAPI) -> None:
+        self._log_.error(lambda: f"Margin Call on Buy ({self._type_name_(update.Position)} Position)")
+
+    def _log_margin_call_sell_(self, update: MarginCallSellPositionUpdateAPI) -> None:
+        self._log_.error(lambda: f"Margin Call on Sell ({self._type_name_(update.Position)} Position)")
+
+    def _log_denied_(self, update: DeniedUpdateAPI) -> None:
+        self._log_.error(lambda: f"Action Denied [{update.ActionID.name}]: {update.Reason}")
+
+    def _log_exception_(self, update: ExceptionUpdateAPI) -> None:
+        self._log_.exception(lambda: f"Exception: {update.Reason}")
 
     @abstractmethod
     def risk_management(self) -> Union[MachineAPI, None]:
@@ -80,98 +119,245 @@ class StrategyAPI(ABC):
         raise NotImplementedError
 
     def strategy_management(self) -> Union[MachineAPI, None]:
-        from Library.Engine import MachineAPI
-        strategy_engine = MachineAPI("Strategy Management")
+        strategy_engine = MachineAPI(Name="Strategy Management", Events=len(UpdateID))
 
-        initialisation = strategy_engine.create_state(name="Initialisation", end=False)
-        execution = strategy_engine.create_state(name="Execution", end=False)
-        termination = strategy_engine.create_state(name="Termination", end=True)
+        initialisation = strategy_engine.state(name="Initialisation")
+        execution = strategy_engine.state(name="Execution")
+        termination = strategy_engine.state(name="Termination", end=True)
 
-        def init_account(update: AccountUpdate):
-            update.Portfolio.update_account(update.Account)
+        def init_account(update: AccountUpdateAPI):
+            update.Portfolio.Account = update.Account
 
-        def init_symbol(update: SymbolUpdate):
-            update.Portfolio._security_ = update.Security
+        def init_security(update: SecurityUpdateAPI):
+            update.Portfolio.Security = update.Security
 
-        def update_bar(update: BarUpdate):
-            update.Portfolio.update_market_data(update.Bar)
+        def init_indicators(update: CompleteUpdateAPI):
+            update.Technical.init_data(update.Market)
+            update.Fundamental.init_data(update.Market)
+            update.Sentimental.init_data(update.Market)
 
-        def update_opened_buy(update: PositionUpdate):
-            update.Portfolio.update_account(update.Account)
-            update.Portfolio.update_market_data(update.Bar)
-            update.Portfolio.fill_position(update.Position.Order.UID if update.Position.Order else 0, update.Position)
+        def update_bar(update: BarUpdateAPI):
+            update.Technical.update_data(update.Market)
+            update.Fundamental.update_data(update.Market)
+            update.Sentimental.update_data(update.Market)
+            update.Portfolio.update_data(update.Bar)
+
+        def update_target(update: TickUpdateAPI):
+            update.Portfolio.update_data(update.Tick)
+
+        def update_opened_buy(update: OpenedBuyPositionUpdateAPI):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.open_position(None, update.Position)
             self._log_opened_buy_(update)
 
-        def update_opened_sell(update: PositionUpdate):
-            update.Portfolio.update_account(update.Account)
-            update.Portfolio.update_market_data(update.Bar)
-            update.Portfolio.fill_position(update.Position.Order.UID if update.Position.Order else 0, update.Position)
+        def update_opened_sell(update: OpenedSellPositionUpdateAPI):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.open_position(None, update.Position)
             self._log_opened_sell_(update)
 
-        def update_modified_buy_volume(update: PositionTradeUpdate):
-            update.Portfolio.update_account(update.Account)
-            update.Portfolio.update_market_data(update.Bar)
-            update.Portfolio.close_trade(update.Position.UID, update.Trade)
+        def update_modified_buy_volume(update: ModifiedBuyPositionVolumeUpdateAPI):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
             self._log_modified_volume_buy_(update)
 
-        def update_modified_buy_stop_loss(update: PositionUpdate):
-            update.Portfolio.update_account(update.Account)
-            update.Portfolio.update_market_data(update.Bar)
+        def update_modified_sell_volume(update: ModifiedSellPositionVolumeUpdateAPI):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
+            self._log_modified_volume_sell_(update)
+
+        def update_modified_buy_stop_loss(update: ModifiedBuyPositionStopLossUpdateAPI):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
             update.Portfolio.modify_position(update.Position)
             self._log_modified_stop_loss_buy_(update)
 
-        def update_modified_buy_take_profit(update: PositionUpdate):
-            update.Portfolio.update_account(update.Account)
-            update.Portfolio.update_market_data(update.Bar)
-            update.Portfolio.modify_position(update.Position)
-            self._log_modified_take_profit_buy_(update)
-
-        def update_modified_sell_volume(update: PositionTradeUpdate):
-            update.Portfolio.update_account(update.Account)
-            update.Portfolio.update_market_data(update.Bar)
-            update.Portfolio.close_trade(update.Position.UID, update.Trade)
-            self._log_modified_volume_sell_(update)
-
-        def update_modified_sell_stop_loss(update: PositionUpdate):
-            update.Portfolio.update_account(update.Account)
-            update.Portfolio.update_market_data(update.Bar)
+        def update_modified_sell_stop_loss(update: ModifiedSellPositionStopLossUpdateAPI):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
             update.Portfolio.modify_position(update.Position)
             self._log_modified_stop_loss_sell_(update)
 
-        def update_modified_sell_take_profit(update: PositionUpdate):
-            update.Portfolio.update_account(update.Account)
-            update.Portfolio.update_market_data(update.Bar)
+        def update_modified_buy_take_profit(update: ModifiedBuyPositionTakeProfitUpdateAPI):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.modify_position(update.Position)
+            self._log_modified_take_profit_buy_(update)
+
+        def update_modified_sell_take_profit(update: ModifiedSellPositionTakeProfitUpdateAPI):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
             update.Portfolio.modify_position(update.Position)
             self._log_modified_take_profit_sell_(update)
 
-        def update_closed_buy(update: TradeUpdate):
-            update.Portfolio.update_account(update.Account)
-            update.Portfolio.update_market_data(update.Bar)
-            update.Portfolio.close_trade(update.Trade.Position.UID if update.Trade.Position else 0, update.Trade)
+        def update_closed_buy(update: ClosedBuyPositionUpdateAPI):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
             self._log_closed_buy_(update)
 
-        def update_closed_sell(update: TradeUpdate):
-            update.Portfolio.update_account(update.Account)
-            update.Portfolio.update_market_data(update.Bar)
-            update.Portfolio.close_trade(update.Trade.Position.UID if update.Trade.Position else 0, update.Trade)
+        def update_closed_sell(update: ClosedSellPositionUpdateAPI):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
             self._log_closed_sell_(update)
 
-        initialisation.on_account(to=initialisation, action=init_account, reason="Account Initialized")
-        initialisation.on_symbol(to=initialisation, action=init_symbol, reason="Symbol Initialized")
-        initialisation.on_complete(to=execution, action=None, reason="Initialized")
-        initialisation.on_shutdown(to=termination, action=None, reason="Abruptly Terminated")
+        def update_stop_loss_buy(update: StopLossBuyPositionUpdateAPI):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
+            self._log_stop_loss_buy_(update)
 
-        execution.on_bar_closed(to=execution, action=update_bar, reason=None)
-        execution.on_opened_buy(to=execution, action=update_opened_buy, reason="Opened Buy Position")
-        execution.on_opened_sell(to=execution, action=update_opened_sell, reason="Opened Sell Position")
-        execution.on_modified_volume_buy(to=execution, action=update_modified_buy_volume, reason="Modified Buy Volume")
-        execution.on_modified_stop_loss_buy(to=execution, action=update_modified_buy_stop_loss, reason="Modified Buy Stop-Loss")
-        execution.on_modified_take_profit_buy(to=execution, action=update_modified_buy_take_profit, reason="Modified Buy Take-Profit")
-        execution.on_modified_volume_sell(to=execution, action=update_modified_sell_volume, reason="Modified Sell Volume")
-        execution.on_modified_stop_loss_sell(to=execution, action=update_modified_sell_stop_loss, reason="Modified Sell Stop-Loss")
-        execution.on_modified_take_profit_sell(to=execution, action=update_modified_sell_take_profit, reason="Modified Sell Take-Profit")
-        execution.on_closed_buy(to=execution, action=update_closed_buy, reason="Closed Buy Position")
-        execution.on_closed_sell(to=execution, action=update_closed_sell, reason="Closed Sell Position")
-        execution.on_shutdown(to=termination, action=None, reason="Safely Terminated")
+        def update_stop_loss_sell(update: StopLossSellPositionUpdateAPI):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
+            self._log_stop_loss_sell_(update)
+
+        def update_take_profit_buy(update: TakeProfitBuyPositionUpdateAPI):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
+            self._log_take_profit_buy_(update)
+
+        def update_take_profit_sell(update: TakeProfitSellPositionUpdateAPI):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
+            self._log_take_profit_sell_(update)
+
+        def update_margin_call_buy(update: MarginCallBuyPositionUpdateAPI):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
+            self._log_margin_call_buy_(update)
+
+        def update_margin_call_sell(update: MarginCallSellPositionUpdateAPI):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
+            self._log_margin_call_sell_(update)
+
+        def update_opened_order(update: Any):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.open_order(update.Order)
+            self._log_.alert(lambda: f"Opened {update.Order.Type.name} {update.Order.Direction.name} Order")
+
+        def update_modified_order(update: Any):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.modify_order(update.Order)
+            self._log_.alert(lambda: f"Modified {update.Order.Type.name} {update.Order.Direction.name} Order")
+
+        def update_closed_order(update: Any):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.close_order(update.Order.UID)
+            self._log_.alert(lambda: f"Closed {update.Order.Type.name} {update.Order.Direction.name} Order")
+
+        def update_filled_order(update: Any):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.open_position(update.Order.UID, update.Position)
+            self._log_.alert(lambda: f"Filled {update.Order.Type.name} {update.Order.Direction.name} Order -> Position {update.Position.UID}")
+
+        def update_expired_order(update: Any):
+            update.Portfolio.update_data(update.Bar)
+            update.Portfolio.Account = update.Account
+            update.Portfolio.close_order(update.Order.UID)
+            self._log_.alert(lambda: f"Expired {update.Order.Type.name} {update.Order.Direction.name} Order")
+
+        initialisation.on(event=UpdateID.Account, to=initialisation, action=init_account, reason="Account Initialized")
+        initialisation.on(event=UpdateID.Security, to=initialisation, action=init_security, reason="Security Initialized")
+        initialisation.on(event=UpdateID.Complete, to=execution, action=init_indicators, reason="Initialized")
+        initialisation.on(event=UpdateID.Denied, to=initialisation, action=self._log_denied_, reason=None)
+        initialisation.on(event=UpdateID.Exception, to=termination, action=self._log_exception_, reason="Exception")
+        initialisation.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Abruptly Terminated")
+
+        execution.on(event=UpdateID.Account, to=execution, action=init_account, reason="Account Updated")
+        execution.on(event=UpdateID.Security, to=execution, action=init_security, reason="Security Updated")
+        execution.on(event=UpdateID.BarClosed, to=execution, action=update_bar, reason=None)
+        execution.on(event=UpdateID.AskAboveTarget, to=execution, action=update_target, reason=None)
+        execution.on(event=UpdateID.AskBelowTarget, to=execution, action=update_target, reason=None)
+        execution.on(event=UpdateID.BidAboveTarget, to=execution, action=update_target, reason=None)
+        execution.on(event=UpdateID.BidBelowTarget, to=execution, action=update_target, reason=None)
+
+        execution.on(event=UpdateID.OpenedBuyPosition, to=execution, action=update_opened_buy, reason="Opened Buy Position")
+        execution.on(event=UpdateID.OpenedSellPosition, to=execution, action=update_opened_sell, reason="Opened Sell Position")
+        execution.on(event=UpdateID.ModifiedBuyPositionVolume, to=execution, action=update_modified_buy_volume, reason="Modified Buy Volume")
+        execution.on(event=UpdateID.ModifiedSellPositionVolume, to=execution, action=update_modified_sell_volume, reason="Modified Sell Volume")
+        execution.on(event=UpdateID.ModifiedBuyPositionStopLoss, to=execution, action=update_modified_buy_stop_loss, reason="Modified Buy Stop-Loss")
+        execution.on(event=UpdateID.ModifiedSellPositionStopLoss, to=execution, action=update_modified_sell_stop_loss, reason="Modified Sell Stop-Loss")
+        execution.on(event=UpdateID.ModifiedBuyPositionTakeProfit, to=execution, action=update_modified_buy_take_profit, reason="Modified Buy Take-Profit")
+        execution.on(event=UpdateID.ModifiedSellPositionTakeProfit, to=execution, action=update_modified_sell_take_profit, reason="Modified Sell Take-Profit")
+        execution.on(event=UpdateID.ClosedBuyPosition, to=execution, action=update_closed_buy, reason="Closed Buy Position")
+        execution.on(event=UpdateID.ClosedSellPosition, to=execution, action=update_closed_sell, reason="Closed Sell Position")
+        execution.on(event=UpdateID.StopLossBuyPosition, to=execution, action=update_stop_loss_buy, reason="Stop-Loss Hit on Buy")
+        execution.on(event=UpdateID.StopLossSellPosition, to=execution, action=update_stop_loss_sell, reason="Stop-Loss Hit on Sell")
+        execution.on(event=UpdateID.TakeProfitBuyPosition, to=execution, action=update_take_profit_buy, reason="Take-Profit Hit on Buy")
+        execution.on(event=UpdateID.TakeProfitSellPosition, to=execution, action=update_take_profit_sell, reason="Take-Profit Hit on Sell")
+        execution.on(event=UpdateID.MarginCallBuyPosition, to=execution, action=update_margin_call_buy, reason="Margin Call on Buy")
+        execution.on(event=UpdateID.MarginCallSellPosition, to=execution, action=update_margin_call_sell, reason="Margin Call on Sell")
+
+        execution.on(event=UpdateID.OpenedBuyStopOrder, to=execution, action=update_opened_order, reason="Opened Buy Stop Order")
+        execution.on(event=UpdateID.OpenedSellStopOrder, to=execution, action=update_opened_order, reason="Opened Sell Stop Order")
+        execution.on(event=UpdateID.ModifiedBuyStopOrderVolume, to=execution, action=update_modified_order, reason="Modified Buy Stop Order Volume")
+        execution.on(event=UpdateID.ModifiedBuyStopOrderStopPrice, to=execution, action=update_modified_order, reason="Modified Buy Stop Order Stop-Price")
+        execution.on(event=UpdateID.ModifiedBuyStopOrderStopLoss, to=execution, action=update_modified_order, reason="Modified Buy Stop Order Stop-Loss")
+        execution.on(event=UpdateID.ModifiedBuyStopOrderTakeProfit, to=execution, action=update_modified_order, reason="Modified Buy Stop Order Take-Profit")
+        execution.on(event=UpdateID.ModifiedSellStopOrderVolume, to=execution, action=update_modified_order, reason="Modified Sell Stop Order Volume")
+        execution.on(event=UpdateID.ModifiedSellStopOrderStopPrice, to=execution, action=update_modified_order, reason="Modified Sell Stop Order Stop-Price")
+        execution.on(event=UpdateID.ModifiedSellStopOrderStopLoss, to=execution, action=update_modified_order, reason="Modified Sell Stop Order Stop-Loss")
+        execution.on(event=UpdateID.ModifiedSellStopOrderTakeProfit, to=execution, action=update_modified_order, reason="Modified Sell Stop Order Take-Profit")
+        execution.on(event=UpdateID.ClosedBuyStopOrder, to=execution, action=update_closed_order, reason="Closed Buy Stop Order")
+        execution.on(event=UpdateID.ClosedSellStopOrder, to=execution, action=update_closed_order, reason="Closed Sell Stop Order")
+        execution.on(event=UpdateID.FilledBuyStopOrder, to=execution, action=update_filled_order, reason="Filled Buy Stop Order")
+        execution.on(event=UpdateID.FilledSellStopOrder, to=execution, action=update_filled_order, reason="Filled Sell Stop Order")
+        execution.on(event=UpdateID.ExpiredBuyStopOrder, to=execution, action=update_expired_order, reason="Expired Buy Stop Order")
+        execution.on(event=UpdateID.ExpiredSellStopOrder, to=execution, action=update_expired_order, reason="Expired Sell Stop Order")
+
+        execution.on(event=UpdateID.OpenedBuyLimitOrder, to=execution, action=update_opened_order, reason="Opened Buy Limit Order")
+        execution.on(event=UpdateID.OpenedSellLimitOrder, to=execution, action=update_opened_order, reason="Opened Sell Limit Order")
+        execution.on(event=UpdateID.ModifiedBuyLimitOrderVolume, to=execution, action=update_modified_order, reason="Modified Buy Limit Order Volume")
+        execution.on(event=UpdateID.ModifiedBuyLimitOrderLimitPrice, to=execution, action=update_modified_order, reason="Modified Buy Limit Order Limit-Price")
+        execution.on(event=UpdateID.ModifiedBuyLimitOrderStopLoss, to=execution, action=update_modified_order, reason="Modified Buy Limit Order Stop-Loss")
+        execution.on(event=UpdateID.ModifiedBuyLimitOrderTakeProfit, to=execution, action=update_modified_order, reason="Modified Buy Limit Order Take-Profit")
+        execution.on(event=UpdateID.ModifiedSellLimitOrderVolume, to=execution, action=update_modified_order, reason="Modified Sell Limit Order Volume")
+        execution.on(event=UpdateID.ModifiedSellLimitOrderLimitPrice, to=execution, action=update_modified_order, reason="Modified Sell Limit Order Limit-Price")
+        execution.on(event=UpdateID.ModifiedSellLimitOrderStopLoss, to=execution, action=update_modified_order, reason="Modified Sell Limit Order Stop-Loss")
+        execution.on(event=UpdateID.ModifiedSellLimitOrderTakeProfit, to=execution, action=update_modified_order, reason="Modified Sell Limit Order Take-Profit")
+        execution.on(event=UpdateID.ClosedBuyLimitOrder, to=execution, action=update_closed_order, reason="Closed Buy Limit Order")
+        execution.on(event=UpdateID.ClosedSellLimitOrder, to=execution, action=update_closed_order, reason="Closed Sell Limit Order")
+        execution.on(event=UpdateID.FilledBuyLimitOrder, to=execution, action=update_filled_order, reason="Filled Buy Limit Order")
+        execution.on(event=UpdateID.FilledSellLimitOrder, to=execution, action=update_filled_order, reason="Filled Sell Limit Order")
+        execution.on(event=UpdateID.ExpiredBuyLimitOrder, to=execution, action=update_expired_order, reason="Expired Buy Limit Order")
+        execution.on(event=UpdateID.ExpiredSellLimitOrder, to=execution, action=update_expired_order, reason="Expired Sell Limit Order")
+
+        execution.on(event=UpdateID.OpenedBuyStopLimitOrder, to=execution, action=update_opened_order, reason="Opened Buy Stop-Limit Order")
+        execution.on(event=UpdateID.OpenedSellStopLimitOrder, to=execution, action=update_opened_order, reason="Opened Sell Stop-Limit Order")
+        execution.on(event=UpdateID.ModifiedBuyStopLimitOrderVolume, to=execution, action=update_modified_order, reason="Modified Buy Stop-Limit Order Volume")
+        execution.on(event=UpdateID.ModifiedBuyStopLimitOrderStopPrice, to=execution, action=update_modified_order, reason="Modified Buy Stop-Limit Order Stop-Price")
+        execution.on(event=UpdateID.ModifiedBuyStopLimitOrderLimitPrice, to=execution, action=update_modified_order, reason="Modified Buy Stop-Limit Order Limit-Price")
+        execution.on(event=UpdateID.ModifiedBuyStopLimitOrderStopLoss, to=execution, action=update_modified_order, reason="Modified Buy Stop-Limit Order Stop-Loss")
+        execution.on(event=UpdateID.ModifiedBuyStopLimitOrderTakeProfit, to=execution, action=update_modified_order, reason="Modified Buy Stop-Limit Order Take-Profit")
+        execution.on(event=UpdateID.ModifiedSellStopLimitOrderVolume, to=execution, action=update_modified_order, reason="Modified Sell Stop-Limit Order Volume")
+        execution.on(event=UpdateID.ModifiedSellStopLimitOrderStopPrice, to=execution, action=update_modified_order, reason="Modified Sell Stop-Limit Order Stop-Price")
+        execution.on(event=UpdateID.ModifiedSellStopLimitOrderLimitPrice, to=execution, action=update_modified_order, reason="Modified Sell Stop-Limit Order Limit-Price")
+        execution.on(event=UpdateID.ModifiedSellStopLimitOrderStopLoss, to=execution, action=update_modified_order, reason="Modified Sell Stop-Limit Order Stop-Loss")
+        execution.on(event=UpdateID.ModifiedSellStopLimitOrderTakeProfit, to=execution, action=update_modified_order, reason="Modified Sell Stop-Limit Order Take-Profit")
+        execution.on(event=UpdateID.ClosedBuyStopLimitOrder, to=execution, action=update_closed_order, reason="Closed Buy Stop-Limit Order")
+        execution.on(event=UpdateID.ClosedSellStopLimitOrder, to=execution, action=update_closed_order, reason="Closed Sell Stop-Limit Order")
+        execution.on(event=UpdateID.FilledBuyStopLimitOrder, to=execution, action=update_filled_order, reason="Filled Buy Stop-Limit Order")
+        execution.on(event=UpdateID.FilledSellStopLimitOrder, to=execution, action=update_filled_order, reason="Filled Sell Stop-Limit Order")
+        execution.on(event=UpdateID.ExpiredBuyStopLimitOrder, to=execution, action=update_expired_order, reason="Expired Buy Stop-Limit Order")
+        execution.on(event=UpdateID.ExpiredSellStopLimitOrder, to=execution, action=update_expired_order, reason="Expired Sell Stop-Limit Order")
+
+        execution.on(event=UpdateID.Denied, to=execution, action=self._log_denied_, reason=None)
+        execution.on(event=UpdateID.Exception, to=termination, action=self._log_exception_, reason="Exception")
+        execution.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Safely Terminated")
 
         return strategy_engine

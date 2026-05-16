@@ -282,8 +282,8 @@ class PortfolioAPI(DatapointAPI):
         if dst.Label is None: dst.Label = src.Label
         if dst.Comment is None: dst.Comment = src.Comment
 
-    def open_position(self, order_uid: int, position: PositionAPI) -> None:
-        if order_uid in self._orders_:
+    def open_position(self, order_uid: Union[int, None], position: PositionAPI) -> None:
+        if order_uid is not None and order_uid in self._orders_:
             del self._orders_[order_uid]
         self._positions_[position.UID] = position
         base = self._account_.Balance if self._account_ else 0.0
@@ -336,6 +336,31 @@ class PortfolioAPI(DatapointAPI):
         from Library.Portfolio.Statistic import generate_net_report
         if not self._account_: return pl.DataFrame()
         return generate_net_report(self.Positions, self.Trades, self._account_, start, stop)
+
+    @property
+    def Account(self) -> Union[AccountAPI, None]:
+        return self._account_
+
+    @Account.setter
+    def Account(self, account: Union[AccountAPI, None]) -> None:
+        self._account_ = account
+
+    @property
+    def Security(self) -> Union[SecurityAPI, None]:
+        return self._security_
+
+    @Security.setter
+    def Security(self, security: Union[SecurityAPI, None]) -> None:
+        self._security_ = security
+
+    def order(self, uid: int) -> Union[OrderAPI, None]:
+        return self._orders_.get(uid)
+
+    def position(self, uid: int) -> Union[PositionAPI, None]:
+        return self._positions_.get(uid)
+
+    def trade(self, uid: int) -> Union[TradeAPI, None]:
+        return next((t for t in self._trades_ if t.UID == uid), None)
 
     @property
     def BuyOrders(self) -> list[OrderAPI]:
