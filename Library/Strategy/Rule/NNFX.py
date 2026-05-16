@@ -4,7 +4,8 @@ from typing import Any, Union, TYPE_CHECKING
 
 from Library.Engine import MachineAPI
 from Library.Indicator.Indicator import IndicatorMode
-from Library.Portfolio import Direction, PositionType
+from Library.Market.Price import Direction
+from Library.Portfolio import PositionType
 from Library.Portfolio.Sizing import calculate_fixed_fractional_volume
 from Library.Protocol.Action import (
     AskBelowTargetActionAPI,
