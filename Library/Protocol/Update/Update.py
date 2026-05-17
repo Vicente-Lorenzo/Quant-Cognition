@@ -99,6 +99,7 @@ class UpdateID(EnumerationAPI):
 @dataclass(slots=True)
 class UpdateAPI(DataclassAPI):
     Account: AccountAPI
+    Security: SecurityAPI
     Market: MarketAPI
     Technical: TechnicalAPI
     Fundamental: FundamentalAPI
@@ -115,7 +116,7 @@ class AccountUpdateAPI(UpdateAPI):
 
 @dataclass(slots=True)
 class SecurityUpdateAPI(UpdateAPI):
-    Security: SecurityAPI
+    pass
 
 @dataclass(slots=True)
 class BarUpdateAPI(UpdateAPI):

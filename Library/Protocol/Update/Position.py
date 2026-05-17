@@ -97,22 +97,6 @@ class MarginCallSellPositionUpdateAPI(UpdateAPI):
     Position: PositionAPI
     Trade: TradeAPI
 
-@dataclass(slots=True)
-class PositionUpdateAPI(UpdateAPI):
-    Bar: BarAPI
-    Position: PositionAPI
-
-@dataclass(slots=True)
-class TradeUpdateAPI(UpdateAPI):
-    Bar: BarAPI
-    Trade: TradeAPI
-
-@dataclass(slots=True)
-class PositionTradeUpdateAPI(UpdateAPI):
-    Bar: BarAPI
-    Position: PositionAPI
-    Trade: TradeAPI
-
 __all__ = [
     "OpenedBuyPositionUpdateAPI",
     "OpenedSellPositionUpdateAPI",
@@ -129,8 +113,5 @@ __all__ = [
     "TakeProfitBuyPositionUpdateAPI",
     "TakeProfitSellPositionUpdateAPI",
     "MarginCallBuyPositionUpdateAPI",
-    "MarginCallSellPositionUpdateAPI",
-    "PositionUpdateAPI",
-    "TradeUpdateAPI",
-    "PositionTradeUpdateAPI"
+    "MarginCallSellPositionUpdateAPI"
 ]
