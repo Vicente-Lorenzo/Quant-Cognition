@@ -428,6 +428,12 @@ class PositionAPI(DatapointAPI):
     @property
     def IsShort(self) -> bool:
         return self._direction_ == Direction.Sell
+    @property
+    def IsBuy(self) -> bool:
+        return self._direction_ == Direction.Buy
+    @property
+    def IsSell(self) -> bool:
+        return self._direction_ == Direction.Sell
 
     @property
     def MarginUtilization(self) -> Union[float, None]:

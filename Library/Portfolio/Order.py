@@ -385,6 +385,12 @@ class OrderAPI(DatapointAPI):
     def IsSell(self) -> bool:
         return self._direction_ == Direction.Sell
     @property
+    def IsLong(self) -> bool:
+        return self._direction_ == Direction.Buy
+    @property
+    def IsShort(self) -> bool:
+        return self._direction_ == Direction.Sell
+    @property
     def IsFilled(self) -> bool:
         return self._order_status_ == OrderStatus.Filled
     @property
