@@ -1,13 +1,10 @@
-from Library.System.System import SystemAPI
-from Library.System.Trading import TradingSystemAPI
-from Library.System.Backtesting import BacktestingSystemAPI
-from Library.System.Optimization import OptimizationSystemAPI
-from Library.System.Learning import LearningSystemAPI
+from Library.System.System import SystemType, SystemAPI
+from Library.System.Lifecycle import LifecycleAPI
+from Library.System.Realtime import RealtimeSystemAPI
 
 __all__ = [
+    "SystemType",
     "SystemAPI",
-    "TradingSystemAPI",
-    "BacktestingSystemAPI",
-    "OptimizationSystemAPI",
-    "LearningSystemAPI"
+    "LifecycleAPI",
+    "RealtimeSystemAPI"
 ]
