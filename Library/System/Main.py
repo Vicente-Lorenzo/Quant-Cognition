@@ -71,7 +71,6 @@ def _strategy_(args: Namespace) -> Union[Type[StrategyAPI], None]:
         case StrategyType.Download: return DownloadStrategyAPI
         case StrategyType.NNFX: return NNFXStrategyAPI
         case StrategyType.DDPG: return DDPGStrategyAPI
-        case _: return None
 
 def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI, timeframe: TimeframeAPI, parameters: Parameters) -> Union[SystemAPI, None]:
     match SystemType(args.system):
@@ -108,7 +107,8 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 buffer_threshold_count=0,
                 buffer_threshold_seconds=0.0
             )
-        # case SystemType.Backtesting:
+        case SystemType.Backtesting:
+            return None
         #     params: Parameters = parameters.Backtesting[args.strategy]
         #     return BacktestingSystemAPI(
         #         strategy=strategy,
@@ -122,7 +122,8 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
         #         commission=(CommissionType(args.commission_type), args.commission_value),
         #         swap=(SwapType(args.swap_type), args.swap_buy, args.swap_sell)
         #     )
-        # case SystemType.Optimization:
+        case SystemType.Optimization:
+            return None
         #     params: Parameters = parameters.Backtesting[args.strategy]
         #     config: Parameters = parameters.Optimization[args.strategy]
         #     return OptimizationSystemAPI(
@@ -143,7 +144,8 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
         #         fitness=args.fitness,
         #         threads=args.threads
         #     )
-        # case SystemType.Learning:
+        case SystemType.Learning:
+            return None
         #     params: Parameters = parameters.Learning[args.strategy]
         #     return LearningSystemAPI(
         #         strategy=strategy,
@@ -159,15 +161,15 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
         #         reward=args.reward,
         #         episodes=args.episodes
         #     )
-        case _: return None
 
 def main() -> None:
     args: Namespace = _parse_()
+    parameterise: ParametersAPI = ParametersAPI()
     execution: str = traceback_current_module().name
+
     log: HandlerLoggingAPI = HandlerLoggingAPI(Class=execution, Subclass="Execution Management")
     log.console.set_verbose_level(VerboseLevel[args.console])
     log.file.set_verbose_level(VerboseLevel[args.file])
-    parameterise: ParametersAPI = ParametersAPI()
 
     @timer
     @log.guard
@@ -181,9 +183,8 @@ def main() -> None:
         parameters: Parameters = parameterise[provider.UID][security.Category.UID][ticker.UID][timeframe.UID]
         strategy = _strategy_(args)
         system = _system_(args, strategy, security, timeframe, parameters)
-        if system is not None:
-            with system:
-                system.run()
+        with system:
+            system.run()
         db.disconnect()
 
     run()
