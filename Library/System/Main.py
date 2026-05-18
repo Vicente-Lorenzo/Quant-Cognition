@@ -75,7 +75,7 @@ def _strategy_(args: Namespace) -> Union[Type[StrategyAPI], None]:
 def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI, timeframe: TimeframeAPI, parameters: Parameters) -> Union[SystemAPI, None]:
     match SystemType(args.system):
         case SystemType.Live:
-            params: Parameters = parameters.Realtime[args.strategy]
+            params: Parameters = parameters.Live[args.strategy]
             return RealtimeSystemAPI(
                 strategy=strategy,
                 security=security,
@@ -86,7 +86,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 buffer_threshold_seconds=60.0
             )
         case SystemType.Simulation:
-            params: Parameters = parameters.Realtime[args.strategy]
+            params: Parameters = parameters.Simulation[args.strategy]
             return RealtimeSystemAPI(
                 strategy=strategy,
                 security=security,
@@ -97,7 +97,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 buffer_threshold_seconds=0.0
             )
         case SystemType.Testing:
-            params: Parameters = parameters.Realtime[args.strategy]
+            params: Parameters = parameters.Testing[args.strategy]
             return RealtimeSystemAPI(
                 strategy=strategy,
                 security=security,
