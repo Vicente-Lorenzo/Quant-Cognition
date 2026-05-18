@@ -1,166 +1,192 @@
 import os
-from typing import Union, Type
-from pathlib import Path
-from argparse import ArgumentParser
+from typing import Type, Union
+from argparse import ArgumentParser, Namespace
 
-from Library.Database.Dataframe import pl
-from Library.Logging import *
-from Library.Classes import VerboseType, AssetType, SpreadType, CommissionType, SwapType, SystemType, StrategyType
-from Library.Parameters import ParametersAPI, Parameters
-from Library.Utils import timer
+from Library.Utility.Statistic import timer
+from Library.System.System import SystemType
+from Library.Strategy.Model import DDPGStrategyAPI
+from Library.Strategy.Strategy import StrategyType
+from Library.System import RealtimeSystemAPI, SystemAPI
+from Library.Parameters import Parameters, ParametersAPI
+from Library.Utility.Path import traceback_current_module
+from Library.Logging import HandlerLoggingAPI, VerboseLevel
+from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
+from Library.Strategy import DownloadStrategyAPI, NNFXStrategyAPI, StrategyAPI
+from Library.Universe import CommissionType, Provider, ProviderAPI, SecurityAPI, SpreadType, SwapType, TickerAPI, TimeframeAPI
 
-from Library.Portfolio import StatisticsAPI
-from Library.Strategy import *
-from Library.System import *
+def _parse_() -> Namespace:
+    base_parser = ArgumentParser(add_help=False)
+    base_parser.add_argument("--console", type=str, required=True, choices=[_.name for _ in VerboseLevel])
+    base_parser.add_argument("--file", type=str, required=True, choices=[_.name for _ in VerboseLevel])
+    base_parser.add_argument("--strategy", type=str, required=True, choices=[_.name for _ in StrategyType])
+    base_parser.add_argument("--provider", type=str, required=True, choices=[_.name for _ in Provider])
+    base_parser.add_argument("--ticker", type=str, required=True)
+    base_parser.add_argument("--timeframe", type=str, required=True)
 
-pl.Config.set_tbl_cols(-1)
-pl.Config.set_tbl_rows(-1)
-pl.Config.set_tbl_width_chars(-1)
-pl.Config.set_fmt_str_lengths(1000)
-pl.Config.set_fmt_table_cell_list_len(-1)
+    period_parser = ArgumentParser(add_help=False)
+    period_parser.add_argument("--start", type=str, required=True)
+    period_parser.add_argument("--stop", type=str, required=True)
 
-execution = Path(__file__).parent.name
+    account_parser = ArgumentParser(add_help=False)
+    account_parser.add_argument("--account-asset", type=str, required=True)
+    account_parser.add_argument("--account-balance", type=float, required=True)
+    account_parser.add_argument("--account-leverage", type=float, required=True)
 
-parameterise: ParametersAPI = ParametersAPI()
+    realtime_parser = ArgumentParser(add_help=False)
+    realtime_parser.add_argument("--iid", type=str, required=True)
 
-base_parser = ArgumentParser(add_help=False)
-base_parser.add_argument("--console", type=str, required=True, choices=[_.name for _ in VerboseType])
-base_parser.add_argument("--telegram", type=str, required=True, choices=[_.name for _ in VerboseType])
-base_parser.add_argument("--file", type=str, required=True, choices=[_.name for _ in VerboseType])
-base_parser.add_argument("--strategy", type=str, required=True, choices=[_.name for _ in StrategyType])
-base_parser.add_argument("--broker", type=str, required=True, choices=parameterise.Watchlist.Brokers)
-base_parser.add_argument("--group", type=str, required=True, choices=parameterise.Watchlist.Symbols.keys())
-base_parser.add_argument("--symbol", type=str, required=True, choices=[s for g in parameterise.Watchlist.Symbols.values() for s in g])
-base_parser.add_argument("--timeframe", type=str, required=True, choices=parameterise.Watchlist.Timeframes)
+    fee_parser = ArgumentParser(add_help=False)
+    fee_parser.add_argument("--spread-type", type=str, required=True, choices=[_.name for _ in SpreadType])
+    fee_parser.add_argument("--spread-value", type=float, required=False, default=None)
+    fee_parser.add_argument("--commission-type", type=str, required=True, choices=[_.name for _ in CommissionType])
+    fee_parser.add_argument("--commission-value", type=float, required=False, default=None)
+    fee_parser.add_argument("--swap-type", type=str, required=True, choices=[_.name for _ in SwapType])
+    fee_parser.add_argument("--swap-buy", type=float, required=False, default=None)
+    fee_parser.add_argument("--swap-sell", type=float, required=False, default=None)
 
-period_parser = ArgumentParser(add_help=False)
-period_parser.add_argument("--start", type=str, required=True)
-period_parser.add_argument("--stop", type=str, required=True)
+    parser = ArgumentParser()
+    system_parser = parser.add_subparsers(dest="system", required=True)
 
-account_parser = ArgumentParser(add_help=False)
-account_parser.add_argument("--account-asset", type=str, required=True, choices=[_.name for _ in AssetType])
-account_parser.add_argument("--account-balance", type=float, required=True)
-account_parser.add_argument("--account-leverage", type=float, required=True)
+    system_parser.add_parser(SystemType.Live.name, parents=[base_parser, realtime_parser])
+    system_parser.add_parser(SystemType.Simulation.name, parents=[base_parser, realtime_parser])
+    system_parser.add_parser(SystemType.Testing.name, parents=[base_parser, realtime_parser])
 
-fee_parser = ArgumentParser(add_help=False)
-fee_parser.add_argument("--spread-type", type=str, required=True, choices=[_.name for _ in SpreadType])
-fee_parser.add_argument("--spread-value", type=float, required=False, default=None)
-fee_parser.add_argument("--commission-type", type=str, required=True, choices=[_.name for _ in CommissionType])
-fee_parser.add_argument("--commission-value", type=float, required=False, default=None)
-fee_parser.add_argument("--swap-type", type=str, required=True, choices=[_.name for _ in SwapType])
-fee_parser.add_argument("--swap-buy", type=float, required=False, default=None)
-fee_parser.add_argument("--swap-sell", type=float, required=False, default=None)
+    system_parser.add_parser(SystemType.Backtesting.name, parents=[base_parser, period_parser, account_parser, fee_parser])
 
-parser = ArgumentParser()
-system_parser = parser.add_subparsers(dest="system", required=True)
+    optimization_parser = system_parser.add_parser(SystemType.Optimization.name, parents=[base_parser, period_parser, account_parser, fee_parser])
+    optimization_parser.add_argument("--training", type=int, required=True)
+    optimization_parser.add_argument("--validation", type=int, required=True)
+    optimization_parser.add_argument("--testing", type=int, required=True)
+    optimization_parser.add_argument("--fitness", type=str, required=True)
+    optimization_parser.add_argument("--threads", type=int, required=False, default=os.cpu_count())
 
-backtesting_parser = system_parser.add_parser(SystemType.Backtesting.name, parents=[base_parser, period_parser, account_parser, fee_parser])
+    learning_parser = system_parser.add_parser(SystemType.Learning.name, parents=[base_parser, period_parser, account_parser, fee_parser])
+    learning_parser.add_argument("--reward", type=str, required=True)
+    learning_parser.add_argument("--episodes", type=int, required=True)
 
-optimization_parser = system_parser.add_parser(SystemType.Optimization.name, parents=[base_parser, period_parser, account_parser, fee_parser])
-optimization_parser.add_argument("--training", type=int, required=True)
-optimization_parser.add_argument("--validation", type=int, required=True)
-optimization_parser.add_argument("--testing", type=int, required=True)
-optimization_parser.add_argument("--fitness", type=str, required=True, choices=StatisticsAPI.Metrics)
-optimization_parser.add_argument("--threads", type=int, required=False, default=os.cpu_count())
+    return parser.parse_args()
 
-learning_parser = system_parser.add_parser(SystemType.Learning.name, parents=[base_parser, period_parser, account_parser, fee_parser])
-learning_parser.add_argument("--reward", type=str, required=True, choices=StatisticsAPI.Metrics)
-learning_parser.add_argument("--episodes", type=int, required=True)
+def _strategy_(args: Namespace) -> Union[Type[StrategyAPI], None]:
+    match StrategyType(args.strategy):
+        case StrategyType.Download: return DownloadStrategyAPI
+        case StrategyType.NNFX: return NNFXStrategyAPI
+        case StrategyType.DDPG: return DDPGStrategyAPI
+        case _: return None
 
-args = parser.parse_args()
-
-LoggingAPI.init(
-    System=args.system,
-    Strategy=args.strategy,
-    Broker=args.broker,
-    Group=args.group,
-    Symbol=args.symbol,
-    Timeframe=args.timeframe
-)
-
-ConsoleAPI.setup(VerboseType(VerboseType[args.console]))
-TelegramAPI.setup(VerboseType(VerboseType[args.telegram]), uid=args.group)
-FileAPI.setup(VerboseType(VerboseType[args.file]), uid=[execution, args.system])
-
-log = HandlerAPI(Class=execution, Subclass="Execution Management")
-
-@timer
-@log.guard
-def main():
-
-    strategy: Union[Type[StrategyAPI], None] = None
-    match args.strategy:
-        case StrategyType.Download.name:
-            strategy = DownloadStrategyAPI
-        case StrategyType.NNFX.name:
-            strategy = NNFXStrategyAPI
-        case StrategyType.DDPG.name:
-            strategy = DDPGStrategyAPI
-
-    parameters: Parameters = parameterise[args.broker][args.group][args.symbol][args.timeframe]
-
-    system: Union[SystemAPI, None] = None
-    match args.system:
-        case SystemType.Backtesting.name:
-            params: Parameters = parameters.Backtesting[args.strategy]
-            system = BacktestingSystemAPI(
-                broker=args.broker,
-                group=args.group,
-                symbol=args.symbol,
-                timeframe=args.timeframe,
+def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI, timeframe: TimeframeAPI, parameters: Parameters) -> Union[SystemAPI, None]:
+    match SystemType(args.system):
+        case SystemType.Live:
+            params: Parameters = parameters.Realtime[args.strategy]
+            return RealtimeSystemAPI(
                 strategy=strategy,
+                security=security,
+                timeframe=timeframe,
                 parameters=params,
-                start=args.start,
-                stop=args.stop,
-                account=(AssetType(AssetType[args.account_asset]), args.account_balance, args.account_leverage),
-                spread=(SpreadType(SpreadType[args.spread_type]), args.spread_value),
-                commission=(CommissionType(CommissionType[args.commission_type]), args.commission_value),
-                swap=(SwapType(SwapType[args.swap_type]), args.swap_buy, args.swap_sell)
+                iid=args.iid,
+                buffer_threshold_count=100,
+                buffer_threshold_seconds=60.0
             )
-        case SystemType.Optimization.name:
-            params: Parameters = parameters.Backtesting[args.strategy]
-            config: Parameters = parameters.Optimization[args.strategy]
-            system = OptimizationSystemAPI(
-                broker=args.broker,
-                group=args.group,
-                symbol=args.symbol,
-                timeframe=args.timeframe,
+        case SystemType.Simulation:
+            params: Parameters = parameters.Realtime[args.strategy]
+            return RealtimeSystemAPI(
                 strategy=strategy,
+                security=security,
+                timeframe=timeframe,
                 parameters=params,
-                configuration=config,
-                start=args.start,
-                stop=args.stop,
-                account=(AssetType(AssetType[args.account_asset]), args.account_balance, args.account_leverage),
-                spread=(SpreadType(SpreadType[args.spread_type]), args.spread_value),
-                commission=(CommissionType(CommissionType[args.commission_type]), args.commission_value),
-                swap=(SwapType(SwapType[args.swap_type]), args.swap_buy, args.swap_sell),
-                training=args.training,
-                validation=args.validation,
-                testing=args.testing,
-                fitness=args.fitness,
-                threads=args.threads
+                iid=args.iid,
+                buffer_threshold_count=5000,
+                buffer_threshold_seconds=0.0
             )
-        case SystemType.Learning.name:
-            params: Parameters = parameters.Learning[args.strategy]
-            system = LearningSystemAPI(
-                broker=args.broker,
-                group=args.group,
-                symbol=args.symbol,
-                timeframe=args.timeframe,
+        case SystemType.Testing:
+            params: Parameters = parameters.Realtime[args.strategy]
+            return RealtimeSystemAPI(
                 strategy=strategy,
+                security=security,
+                timeframe=timeframe,
                 parameters=params,
-                start=args.start,
-                stop=args.stop,
-                balance=args.balance,
-                spread=args.spread,
-                episodes=args.episodes,
-                fitness=args.fitness
+                iid=args.iid,
+                buffer_threshold_count=0,
+                buffer_threshold_seconds=0.0
             )
+        # case SystemType.Backtesting:
+        #     params: Parameters = parameters.Backtesting[args.strategy]
+        #     return BacktestingSystemAPI(
+        #         strategy=strategy,
+        #         security=security,
+        #         timeframe=timeframe,
+        #         parameters=params,
+        #         start=args.start,
+        #         stop=args.stop,
+        #         account=(args.account_asset, args.account_balance, args.account_leverage),
+        #         spread=(SpreadType(args.spread_type), args.spread_value),
+        #         commission=(CommissionType(args.commission_type), args.commission_value),
+        #         swap=(SwapType(args.swap_type), args.swap_buy, args.swap_sell)
+        #     )
+        # case SystemType.Optimization:
+        #     params: Parameters = parameters.Backtesting[args.strategy]
+        #     config: Parameters = parameters.Optimization[args.strategy]
+        #     return OptimizationSystemAPI(
+        #         strategy=strategy,
+        #         security=security,
+        #         timeframe=timeframe,
+        #         parameters=params,
+        #         configuration=config,
+        #         start=args.start,
+        #         stop=args.stop,
+        #         account=(args.account_asset, args.account_balance, args.account_leverage),
+        #         spread=(SpreadType(args.spread_type), args.spread_value),
+        #         commission=(CommissionType(args.commission_type), args.commission_value),
+        #         swap=(SwapType(args.swap_type), args.swap_buy, args.swap_sell),
+        #         training=args.training,
+        #         validation=args.validation,
+        #         testing=args.testing,
+        #         fitness=args.fitness,
+        #         threads=args.threads
+        #     )
+        # case SystemType.Learning:
+        #     params: Parameters = parameters.Learning[args.strategy]
+        #     return LearningSystemAPI(
+        #         strategy=strategy,
+        #         security=security,
+        #         timeframe=timeframe,
+        #         parameters=params,
+        #         start=args.start,
+        #         stop=args.stop,
+        #         account=(args.account_asset, args.account_balance, args.account_leverage),
+        #         spread=(SpreadType(args.spread_type), args.spread_value),
+        #         commission=(CommissionType(args.commission_type), args.commission_value),
+        #         swap=(SwapType(args.swap_type), args.swap_buy, args.swap_sell),
+        #         reward=args.reward,
+        #         episodes=args.episodes
+        #     )
+        case _: return None
 
-    if system is not None:
-        with system:
-            system.start()
-            system.join()
+def main() -> None:
+    args: Namespace = _parse_()
+    execution: str = traceback_current_module().name
+    log: HandlerLoggingAPI = HandlerLoggingAPI(Class=execution, Subclass="Execution Management")
+    log.console.set_verbose_level(VerboseLevel[args.console])
+    log.file.set_verbose_level(VerboseLevel[args.file])
+    parameterise: ParametersAPI = ParametersAPI()
+
+    @timer
+    @log.guard
+    def run() -> None:
+        db = PostgresDatabaseAPI(database="Quant")
+        db.connect()
+        ticker = TickerAPI(UID=TickerAPI.normalize(args.ticker), db=db, autoload=True)
+        provider = ProviderAPI(UID=ProviderAPI.normalize(args.provider), db=db, autoload=True)
+        timeframe = TimeframeAPI(UID=TimeframeAPI.normalize(args.timeframe), db=db, autoload=True)
+        security = SecurityAPI(Provider=provider, Ticker=ticker, db=db, autoload=True)
+        parameters: Parameters = parameterise[provider.UID][security.Category.UID][ticker.UID][timeframe.UID]
+        strategy = _strategy_(args)
+        system = _system_(args, strategy, security, timeframe, parameters)
+        if system is not None:
+            with system:
+                system.run()
+        db.disconnect()
+
+    run()
 
 if __name__ == "__main__":
     main()
