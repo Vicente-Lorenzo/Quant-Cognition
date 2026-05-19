@@ -1,5 +1,5 @@
-from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
+from Library.Database.Postgres.Postgres import PostgresAPI
 
 __all__ = [
-    "PostgresDatabaseAPI"
+    "PostgresAPI"
 ]

@@ -1,5 +1,5 @@
-from Library.Database.Oracle.Oracle import OracleDatabaseAPI
+from Library.Database.Oracle.Oracle import OracleAPI
 
 __all__ = [
-    "OracleDatabaseAPI"
+    "OracleAPI"
 ]

@@ -1,4 +1,4 @@
-import pymssql
+﻿import pymssql
 from typing import Union, Callable, Any
 from collections.abc import Sequence
 
@@ -6,13 +6,14 @@ from Library.Database.Dataframe import pl
 from Library.Database.Query import QueryAPI
 from Library.Database.Database import DatabaseAPI
 
-class MicrosoftDatabaseAPI(DatabaseAPI):
+class MicrosoftAPI(DatabaseAPI):
     """
     Microsoft SQL Server database implementation.
     """
 
     _ADMIN_: str = "master"
     _PARAMETER_TOKEN_: Callable[[int], str] = staticmethod(lambda i: "%s")
+    _PARAMETER_LIMIT_: int = 2000
 
     _CHECK_DATATYPE_MAPPING_: dict = {
         pl.Binary: "varbinary",
@@ -156,19 +157,18 @@ class MicrosoftDatabaseAPI(DatabaseAPI):
         import re
         return re.sub(r"(?i)^SELECT\s+", f"SELECT TOP {limit} ", sql.strip())
 
-    def _upsert_(self, target: str, columns: Sequence[str], keys: Sequence[str], exclude: Sequence[str] = (), returning: Sequence[str] = ()) -> str:
+    def _upsert_(self, target: str, columns: Sequence[str], keys: Sequence[str], exclude: Sequence[str] = (), returning: Sequence[str] = (), rows: int = 1) -> str:
         ql, qr = self._quote_
         n = QueryAPI.Named
         source_cols = self._quoted_(*columns)
-        source_vals = ", ".join(f"{n}{c}{n}" for c in columns)
+        if rows == 1: source_vals = "(" + ", ".join(f"{n}{c}{n}" for c in columns) + ")"
+        else: source_vals = ", ".join("(" + ", ".join(f"{n}{c}_{i}{n}" for c in columns) + ")" for i in range(rows))
         on_cond = " AND ".join(f"target.{ql}{k}{qr} = source.{ql}{k}{qr}" for k in keys)
         updates = ", ".join(f"target.{ql}{c}{qr} = source.{ql}{c}{qr}" for c in columns if c not in keys and c not in exclude)
-        sql = f"MERGE INTO {target} AS target USING (VALUES ({source_vals})) AS source({source_cols}) ON {on_cond}"
-        if updates:
-            sql += f" WHEN MATCHED THEN UPDATE SET {updates}"
+        sql = f"MERGE INTO {target} AS target USING (VALUES {source_vals}) AS source({source_cols}) ON {on_cond}"
+        if updates: sql += f" WHEN MATCHED THEN UPDATE SET {updates}"
         insert_vals = ", ".join(f"source.{ql}{c}{qr}" for c in columns)
         sql += f" WHEN NOT MATCHED THEN INSERT ({source_cols}) VALUES ({insert_vals})"
-        if returning:
-            sql += " OUTPUT " + ", ".join(f"inserted.{ql}{r}{qr}" for r in returning)
+        if returning: sql += " OUTPUT " + ", ".join(f"inserted.{ql}{r}{qr}" for r in returning)
         sql += ";"
         return sql

@@ -49,6 +49,7 @@ class DatabaseAPI(ServiceAPI, ABC):
     _ALL_: str = "*"
     _ADMIN_: Union[str, None] = None
     _PARAMETER_TOKEN_: Callable[[int], str] | None = None
+    _PARAMETER_LIMIT_: int = 1000
 
     _PYTHON_DATATYPE_MAPPING_: dict = {
         bytes: pl.Binary,
@@ -138,7 +139,7 @@ class DatabaseAPI(ServiceAPI, ABC):
     def _limit_(self, sql: str, limit: int) -> str: raise NotImplementedError
 
     @abstractmethod
-    def _upsert_(self, target: str, columns: Sequence[str], keys: Sequence[str], exclude: Sequence[str] = (), returning: Sequence[str] = ()) -> str: raise NotImplementedError
+    def _upsert_(self, target: str, columns: Sequence[str], keys: Sequence[str], exclude: Sequence[str] = (), returning: Sequence[str] = (), rows: int = 1) -> str: raise NotImplementedError
 
     @abstractmethod
     def _driver_(self, admin: bool) -> Any: raise NotImplementedError
@@ -1376,22 +1377,27 @@ class DatabaseAPI(ServiceAPI, ABC):
             for t in table: self.upsert(database=database, schema=schema, table=t, data=data, key=key, exclude=exclude)
             return self
         if not database or not schema or not table: raise ValueError("Database, Schema and Table must be provided to upsert rows")
-        columns, records, multiple = self.parse(data)
+        columns, records, _ = self.parse(data)
         if not records: return self
         if not columns: raise ValueError("Dictionary or DataFrame structure required for upserts to identify columns")
         target = self._target_(schema, table)
         keys = [key] if isinstance(key, str) else list(key)
         returning_cols = [returning] if isinstance(returning, str) else (list(returning) if returning else ())
-        sql = self._upsert_(target, columns, keys, exclude or (), returning_cols)
-        if returning_cols and len(records) == 1:
-            db = self.executeone(QueryAPI(sql), database=database, schema=schema, table=table, admin=False, **records[0])
-        elif returning_cols:
-            raise NotImplementedError("returning with batch upsert (multiple rows) is not yet supported")
-        else:
-            db = self.execute(QueryAPI(sql), records, database=database, schema=schema, table=table, admin=False)
+        if not returning_cols:
+            sql = self._upsert_(target, columns, keys, exclude or (), ())
+            self.execute(QueryAPI(sql), records, database=database, schema=schema, table=table, admin=False)
+            self._log_.alert(lambda: f"Upsert Operation: Processed {len(records)} rows in {table} Table")
+            return self
+        chunk_size = max(1, self._PARAMETER_LIMIT_ // max(1, len(columns)))
+        frames: list = []
+        for start in range(0, len(records), chunk_size):
+            chunk = records[start:start + chunk_size]
+            sql = self._upsert_(target, columns, keys, exclude or (), returning_cols, rows=len(chunk))
+            bindings = chunk[0] if len(chunk) == 1 else {f"{c}_{i}": rec[c] for i, rec in enumerate(chunk) for c in columns}
+            db = self.executeone(QueryAPI(sql), database=database, schema=schema, table=table, admin=False, **bindings)
+            frames.append(db.fetchall(legacy=False))
         self._log_.alert(lambda: f"Upsert Operation: Processed {len(records)} rows in {table} Table")
-        if returning_cols: return db.fetchall()
-        return self
+        return self.frame(self._concat_(frames) if frames else pl.DataFrame(), legacy=self._legacy_)
 
     def remove(self, *,
                database: Union[str, Sequence, None, Missing] = MISSING,

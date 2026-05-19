@@ -1,5 +1,5 @@
-from Library.Database.Microsoft.Microsoft import MicrosoftDatabaseAPI
+from Library.Database.Microsoft.Microsoft import MicrosoftAPI
 
 __all__ = [
-    "MicrosoftDatabaseAPI"
+    "MicrosoftAPI"
 ]

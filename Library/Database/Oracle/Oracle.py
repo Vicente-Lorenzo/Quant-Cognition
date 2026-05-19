@@ -1,4 +1,4 @@
-import oracledb
+﻿import oracledb
 from typing import Union, Callable, Any
 from collections.abc import Sequence
 
@@ -6,13 +6,14 @@ from Library.Database.Dataframe import pl
 from Library.Database.Query import QueryAPI
 from Library.Database.Database import DatabaseAPI, IdentityKey, PrimaryKey, ForeignKey
 
-class OracleDatabaseAPI(DatabaseAPI):
+class OracleAPI(DatabaseAPI):
     """
     Oracle SQL database implementation.
     """
 
     _ADMIN_: str = "ORCL"
     _PARAMETER_TOKEN_: Callable[[int], str] = staticmethod(lambda i: f":{i}")
+    _PARAMETER_LIMIT_: int = 32000
 
     _CHECK_DATATYPE_MAPPING_: dict = {
         pl.Binary: "BLOB",
@@ -168,17 +169,17 @@ class OracleDatabaseAPI(DatabaseAPI):
             values.append(f"SELECT '{name}' AS column_name, '{datatype}' AS data_type, {is_pk} AS is_pk, {is_fk} AS is_fk FROM dual")
         return "\nUNION ALL\n".join(values)
 
-    def _upsert_(self, target: str, columns: Sequence[str], keys: Sequence[str], exclude: Sequence[str] = (), returning: Sequence[str] = ()) -> str:
+    def _upsert_(self, target: str, columns: Sequence[str], keys: Sequence[str], exclude: Sequence[str] = (), returning: Sequence[str] = (), rows: int = 1) -> str:
         if returning: raise NotImplementedError("Oracle MERGE does not support RETURNING via this driver path")
         ql, qr = self._quote_
         n = QueryAPI.Named
-        source_cols = ", ".join(f"{n}{c}{n} AS {ql}{c}{qr}" for c in columns)
+        if rows == 1: source = "SELECT " + ", ".join(f"{n}{c}{n} AS {ql}{c}{qr}" for c in columns) + " FROM dual"
+        else: source = " UNION ALL ".join("SELECT " + ", ".join(f"{n}{c}_{i}{n} AS {ql}{c}{qr}" for c in columns) + " FROM dual" for i in range(rows))
         on_cond = " AND ".join(f"target.{ql}{k}{qr} = source.{ql}{k}{qr}" for k in keys)
         updates = ", ".join(f"target.{ql}{c}{qr} = source.{ql}{c}{qr}" for c in columns if c not in keys and c not in exclude)
         insert_cols = self._quoted_(*columns)
         insert_vals = ", ".join(f"source.{ql}{c}{qr}" for c in columns)
-        sql = f"MERGE INTO {target} target USING (SELECT {source_cols} FROM dual) source ON ({on_cond})"
-        if updates:
-            sql += f" WHEN MATCHED THEN UPDATE SET {updates}"
+        sql = f"MERGE INTO {target} target USING ({source}) source ON ({on_cond})"
+        if updates: sql += f" WHEN MATCHED THEN UPDATE SET {updates}"
         sql += f" WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({insert_vals})"
         return sql
