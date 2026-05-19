@@ -82,8 +82,8 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 timeframe=timeframe,
                 parameters=params,
                 iid=args.iid,
-                batch=100,
-                interval=60.0
+                market=(100, 60.0),
+                portfolio=(100, 60.0)
             )
         case SystemType.Simulation:
             params: Parameters = parameters.Simulation[args.strategy]
@@ -93,8 +93,8 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 timeframe=timeframe,
                 parameters=params,
                 iid=args.iid,
-                batch=5000,
-                interval=0.0
+                market=(5000, 0.0),
+                portfolio=(0, 0.0)
             )
         case SystemType.Testing:
             params: Parameters = parameters.Testing[args.strategy]
@@ -104,8 +104,8 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 timeframe=timeframe,
                 parameters=params,
                 iid=args.iid,
-                batch=0,
-                interval=0.0
+                market=(0, 0.0),
+                portfolio=(0, 0.0)
             )
         case SystemType.Backtesting:
             return None
