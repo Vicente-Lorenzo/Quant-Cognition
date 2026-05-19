@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from Library.Portfolio.Position import PositionAPI
     from Library.Portfolio.Trade import TradeAPI
     from Library.Market.Bar import BarAPI
-    from Library.Parameters import Parameters
+    from Library.Parameter import Parameter
     from Library.Universe.Security import SecurityAPI
 
 @dataclass(kw_only=True)
@@ -30,7 +30,7 @@ class PortfolioAPI(DatapointAPI):
     Schema: ClassVar[str] = "Portfolio"
     Table: ClassVar[str] = "Portfolio"
 
-    Parameters: InitVar[Union[Parameters, None]] = field(default=MISSING)
+    Parameter: InitVar[Union[Parameter, None]] = field(default=MISSING)
 
     _account_: Union[AccountAPI, None] = field(default=None, init=False)
     _security_: Union[SecurityAPI, None] = field(default=None, init=False)
@@ -44,7 +44,7 @@ class PortfolioAPI(DatapointAPI):
                       autosave: bool,
                       autoload: bool,
                       autooverload: bool,
-                      parameters: Union[Parameters, None] = None) -> None:
+                      parameters: Union[Parameter, None] = None) -> None:
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     @staticmethod
