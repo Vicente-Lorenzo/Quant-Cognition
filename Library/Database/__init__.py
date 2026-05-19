@@ -1,4 +1,5 @@
 from Library.Database.Query import QueryAPI
+from Library.Database.Buffer import BufferAPI
 from Library.Database.Database import (
     DatabaseAPI,
     IdentityKey,
@@ -17,6 +18,7 @@ from Library.Database.Microsoft import *
 
 __all__ = [
     "QueryAPI",
+    "BufferAPI",
     "DatabaseAPI",
     "IdentityKey",
     "PrimaryKey",
