@@ -1,6 +1,6 @@
 import pytest
 
-from Library.Parameters import ParametersAPI
+from Library.Parameter import ParameterAPI
 from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Protocol.Update import AccountUpdateAPI, BarUpdateAPI, SecurityUpdateAPI, UpdateID
@@ -14,20 +14,20 @@ def test_strategy_type_enum():
     assert StrategyType.DDPG.value == 3
 
 def test_download_strategy_builds():
-    p = ParametersAPI()
+    p = ParameterAPI()
     strat = DownloadStrategyAPI(p, p, p)
     assert strat.risk_management() is None
     assert strat.signal_management() is None
     assert strat.strategy_management() is not None
 
 def test_download_strategy_machine_initial_state():
-    p = ParametersAPI()
+    p = ParameterAPI()
     strat = DownloadStrategyAPI(p, p, p)
     eng = strat.strategy_management()
     assert eng.At.Name == "Initialisation"
 
 def test_account_update_sets_portfolio_account():
-    p = ParametersAPI()
+    p = ParameterAPI()
     strat = DownloadStrategyAPI(p, p, p)
     eng = strat.strategy_management()
     account = AccountAPI(Balance=10000.0)
@@ -37,7 +37,7 @@ def test_account_update_sets_portfolio_account():
     assert portfolio.Account is account
 
 def test_security_update_sets_portfolio_security_in_initialisation():
-    p = ParametersAPI()
+    p = ParameterAPI()
     strat = DownloadStrategyAPI(p, p, p)
     eng = strat.strategy_management()
     portfolio = PortfolioAPI()
@@ -46,7 +46,7 @@ def test_security_update_sets_portfolio_security_in_initialisation():
     assert portfolio.Security is None
 
 def test_complete_transitions_initialisation_to_execution():
-    p = ParametersAPI()
+    p = ParameterAPI()
     strat = DownloadStrategyAPI(p, p, p)
     eng = strat.strategy_management()
     portfolio = PortfolioAPI()
@@ -61,7 +61,7 @@ def test_complete_transitions_initialisation_to_execution():
     sentimental.init_data.assert_called_once_with(market)
 
 def test_shutdown_transitions_to_termination_from_initialisation():
-    p = ParametersAPI()
+    p = ParameterAPI()
     strat = DownloadStrategyAPI(p, p, p)
     eng = strat.strategy_management()
     portfolio = PortfolioAPI()
@@ -72,7 +72,7 @@ def test_shutdown_transitions_to_termination_from_initialisation():
     assert eng.At.End is True
 
 def test_bar_closed_propagates_to_indicators_and_portfolio():
-    p = ParametersAPI()
+    p = ParameterAPI()
     strat = DownloadStrategyAPI(p, p, p)
     eng = strat.strategy_management()
     portfolio_mock = type("P", (), {"Account": None, "Security": None, "update_data": lambda self, x: None})()
@@ -95,7 +95,7 @@ def test_nnfx_strategy_imports():
 def test_opened_stop_order_propagates_to_portfolio():
     from unittest.mock import MagicMock
     from Library.Protocol.Update import OpenedBuyStopOrderUpdateAPI, CompleteUpdateAPI
-    p = ParametersAPI()
+    p = ParameterAPI()
     strat = DownloadStrategyAPI(p, p, p)
     eng = strat.strategy_management()
     portfolio = MagicMock()
@@ -119,7 +119,7 @@ def test_opened_stop_order_propagates_to_portfolio():
 def test_filled_stop_order_transitions_order_to_position():
     from unittest.mock import MagicMock
     from Library.Protocol.Update import FilledBuyStopOrderUpdateAPI, CompleteUpdateAPI
-    p = ParametersAPI()
+    p = ParameterAPI()
     strat = DownloadStrategyAPI(p, p, p)
     eng = strat.strategy_management()
     portfolio = MagicMock()
@@ -142,7 +142,7 @@ def test_filled_stop_order_transitions_order_to_position():
 def test_expired_limit_order_removes_order():
     from unittest.mock import MagicMock
     from Library.Protocol.Update import ExpiredBuyLimitOrderUpdateAPI, CompleteUpdateAPI
-    p = ParametersAPI()
+    p = ParameterAPI()
     strat = DownloadStrategyAPI(p, p, p)
     eng = strat.strategy_management()
     portfolio = MagicMock()
