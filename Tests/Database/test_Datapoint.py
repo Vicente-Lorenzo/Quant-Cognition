@@ -1,4 +1,4 @@
-from typing import Union
+﻿from typing import Union
 import pytest
 from datetime import datetime
 from dataclasses import dataclass
@@ -44,17 +44,17 @@ def test_datapoint_save_and_load(test_db):
     loaded_obj.load()
     assert loaded_obj.Value == "Test"
     assert loaded_obj.Other == pytest.approx(3.14)
-    assert loaded_obj.CreatedBy == "Tester"
+    assert loaded_obj.UpdatedBy == "Tester"
 def test_datapoint_overload(test_db):
     obj = MockDatapoint(TestID=2, Value="Test2", Other=1.0, db=test_db, migrate=True)
-    obj.save(by="Tester")
+    obj.save()
     overload_obj = MockDatapoint(TestID=2, Value="NewValue", db=test_db)
     overload_obj.overload()
     assert overload_obj.Value == "Test2"
     assert overload_obj.Other == 1.0
 def test_datapoint_autosave(test_db):
     obj = MockDatapoint(TestID=3, Value="Initial", db=test_db, migrate=True, autosave=True)
-    obj.save(by="Tester")
+    obj.save()
     obj.Value = "Autosaved"
     check_obj = MockDatapoint(TestID=3, db=test_db)
     check_obj.load()

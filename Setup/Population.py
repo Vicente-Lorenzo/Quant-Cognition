@@ -1,8 +1,8 @@
-import sys
+﻿import sys
 import argparse
 
 from Setup.Universe import populate
-from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
+from Library.Database.Postgres.Postgres import PostgresAPI
 from Library.Logging import HandlerLoggingAPI
 
 def main():
@@ -19,7 +19,7 @@ def main():
                 logger.info("Population cancelled by user.")
                 sys.exit(0)
         logger.info(f"Connecting to database: {env}")
-        db = PostgresDatabaseAPI(database=env)
+        db = PostgresAPI(database=env)
         db.connect()
         try:
             logger.info("Populating universe...")

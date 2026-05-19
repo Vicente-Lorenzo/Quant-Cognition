@@ -1,7 +1,7 @@
-import pytest
+﻿import pytest
 from datetime import datetime
 from Library.Database.Dataframe import pl
-from Library.Database.Postgres import PostgresDatabaseAPI
+from Library.Database.Postgres import PostgresAPI
 from Library.Database import QueryAPI, PrimaryKey, ForeignKey
 _DATABASES_ = (
     "test_database",
@@ -16,7 +16,7 @@ _DATABASES_ = (
 @pytest.fixture
 def db():
     def _drop_(names):
-        admin = PostgresDatabaseAPI(admin=True)
+        admin = PostgresAPI(admin=True)
         try:
             admin.connect()
             for name in names:
@@ -24,7 +24,7 @@ def db():
                 except Exception: pass
         finally: admin.disconnect()
     def _snapshot_():
-        admin = PostgresDatabaseAPI(admin=True)
+        admin = PostgresAPI(admin=True)
         try:
             admin.connect()
             df = admin.list()
@@ -32,7 +32,7 @@ def db():
         finally: admin.disconnect()
     _drop_(_DATABASES_)
     baseline = _snapshot_()
-    yield PostgresDatabaseAPI
+    yield PostgresAPI
     _drop_(_snapshot_() - baseline)
 def test_exists_only(db):
     api = db(admin=True)
@@ -326,6 +326,72 @@ def test_upsert_operations(db):
     df = api.select(order="id")
     assert len(df) == 4
     assert df["name"].to_list() == ["A", "B", "C", "D"]
+    api.disconnect()
+    admin.disconnect()
+def test_upsert_returning_single_row(db):
+    admin = db(admin=True)
+    admin.create(database="test_database")
+    api = db(database="test_database", schema="test_schema", table="test_table")
+    api.create(structure={"id": pl.Int64, "name": pl.String, "value": pl.Float64})
+    api.executeone(QueryAPI("ALTER TABLE test_schema.test_table ADD PRIMARY KEY (id)"))
+    df = api.upsert(data={"id": 1, "name": "A", "value": 10.0}, key="id", returning=["id", "name"])
+    assert len(df) == 1
+    assert df["id"][0] == 1
+    assert df["name"][0] == "A"
+    api.disconnect()
+    admin.disconnect()
+def test_upsert_returning_batch_all_inserts(db):
+    admin = db(admin=True)
+    admin.create(database="test_database")
+    api = db(database="test_database", schema="test_schema", table="test_table")
+    api.create(structure={"id": pl.Int64, "name": pl.String, "value": pl.Float64})
+    api.executeone(QueryAPI("ALTER TABLE test_schema.test_table ADD PRIMARY KEY (id)"))
+    df = api.upsert(data=[{"id": 1, "name": "A", "value": 10.0}, {"id": 2, "name": "B", "value": 20.0}, {"id": 3, "name": "C", "value": 30.0}], key="id", returning=["id", "name"])
+    assert len(df) == 3
+    assert df["id"].to_list() == [1, 2, 3]
+    assert df["name"].to_list() == ["A", "B", "C"]
+    api.disconnect()
+    admin.disconnect()
+def test_upsert_returning_batch_with_conflicts(db):
+    admin = db(admin=True)
+    admin.create(database="test_database")
+    api = db(database="test_database", schema="test_schema", table="test_table")
+    api.create(structure={"id": pl.Int64, "name": pl.String, "value": pl.Float64})
+    api.executeone(QueryAPI("ALTER TABLE test_schema.test_table ADD PRIMARY KEY (id)"))
+    api.insert(data=[{"id": 1, "name": "A", "value": 10.0}, {"id": 2, "name": "B", "value": 20.0}])
+    df = api.upsert(data=[{"id": 2, "name": "B2", "value": 22.0}, {"id": 3, "name": "C", "value": 30.0}], key="id", returning=["id", "name", "value"])
+    assert len(df) == 2
+    assert df["id"].to_list() == [2, 3]
+    assert df["name"].to_list() == ["B2", "C"]
+    assert df["value"].to_list() == [22.0, 30.0]
+    full = api.select(order="id")
+    assert full["name"].to_list() == ["A", "B2", "C"]
+    api.disconnect()
+    admin.disconnect()
+def test_upsert_returning_identity_uid(db):
+    admin = db(admin=True)
+    admin.create(database="test_database")
+    api = db(database="test_database", schema="test_schema", table="test_table")
+    api.executeone(QueryAPI('CREATE SCHEMA IF NOT EXISTS test_schema'))
+    api.executeone(QueryAPI('CREATE TABLE test_schema.test_table ("UID" BIGSERIAL PRIMARY KEY, "Name" VARCHAR UNIQUE, "Value" DOUBLE PRECISION)'))
+    df = api.upsert(data=[{"Name": "A", "Value": 10.0}, {"Name": "B", "Value": 20.0}, {"Name": "C", "Value": 30.0}], key="Name", returning=["UID", "Name"])
+    assert len(df) == 3
+    assert df["UID"].to_list() == [1, 2, 3]
+    df2 = api.upsert(data=[{"Name": "B", "Value": 25.0}, {"Name": "D", "Value": 40.0}], key="Name", returning=["UID", "Name"])
+    assert len(df2) == 2
+    assert df2["Name"].to_list() == ["B", "D"]
+    assert df2.filter(pl.col("Name") == "B")["UID"][0] == 2
+    assert df2.filter(pl.col("Name") == "D")["UID"][0] > 3
+    api.disconnect()
+    admin.disconnect()
+def test_upsert_returning_empty_batch(db):
+    admin = db(admin=True)
+    admin.create(database="test_database")
+    api = db(database="test_database", schema="test_schema", table="test_table")
+    api.create(structure={"id": pl.Int64, "name": pl.String})
+    api.executeone(QueryAPI("ALTER TABLE test_schema.test_table ADD PRIMARY KEY (id)"))
+    result = api.upsert(data=[], key="id", returning=["id"])
+    assert result is api
     api.disconnect()
     admin.disconnect()
 def test_dataframe_input(db):

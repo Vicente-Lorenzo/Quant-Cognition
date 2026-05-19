@@ -91,13 +91,13 @@ class BufferAPI(threading.Thread):
                 data = [r.dict() for r in records]
                 key = records[0].natural_keys()
                 if identity:
-                    df = db.upsert(schema=t.Schema, table=t.Table, data=data, key=key, exclude=["CreatedAt", "CreatedBy"], returning=identity)
+                    df = db.upsert(schema=t.Schema, table=t.Table, data=data, key=key, returning=identity)
                     for i, r in enumerate(records):
                         if i >= len(df): break
                         for col in identity:
                             setattr(r, col, df[col][i])
                 else:
-                    db.upsert(schema=t.Schema, table=t.Table, data=data, key=key, exclude=["CreatedAt", "CreatedBy"])
+                    db.upsert(schema=t.Schema, table=t.Table, data=data, key=key)
             except Exception as e:
                 self._log_.error(lambda: f"Persist error on {t.Table}: {e}")
 

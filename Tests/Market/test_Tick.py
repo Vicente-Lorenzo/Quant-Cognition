@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 from datetime import datetime
 from Library.Market.Tick import TickAPI
 from Library.Market.Timestamp import TimestampAPI
@@ -26,16 +26,16 @@ def test_tick_db_operations(db):
     from Library.Universe.Provider import ProviderAPI, Platform
     from Library.Universe.Ticker import TickerAPI, ContractType
     from Library.Universe.Contract import ContractAPI
-    CategoryAPI(UID="Forex", db=db, migrate=True).save(by="Tester")
-    ProviderAPI(UID="TestProv", Platform=Platform.cTrader, db=db, migrate=True).save(by="Tester")
-    TickerAPI(UID="EURUSD", Category="Forex", db=db, migrate=True).save(by="Tester")
-    ContractAPI(Ticker="EURUSD", Provider="TestProv", Type=ContractType.Spot, db=db, migrate=True).save(by="Tester")
+    CategoryAPI(UID="Forex", db=db, migrate=True).save()
+    ProviderAPI(UID="TestProv", Platform=Platform.cTrader, db=db, migrate=True).save()
+    TickerAPI(UID="EURUSD", Category="Forex", db=db, migrate=True).save()
+    ContractAPI(Ticker="EURUSD", Provider="TestProv", Type=ContractType.Spot, db=db, migrate=True).save()
     sec = SecurityAPI(Provider="TestProv", Category="Forex", Ticker="EURUSD", Contract=ContractType.Spot, db=db, migrate=True, autoload=True)
-    sec.save(by="Tester")
+    sec.save()
     now = datetime(2023, 1, 1, 12, 0, 0)
     tick_data = (sec.UID, now, 1.1005, 1.10025, 1.1000, 1.0, 1.0, 1.0, 1.0)
     tick = TickAPI(*tick_data, db=db, migrate=True)
-    tick.save(by="Tester")
+    tick.save()
     loaded_tick = TickAPI(sec.UID, now, db=db, autoload=True)
     assert loaded_tick.Ask.Price == pytest.approx(1.1005)
     assert loaded_tick.Bid.Price == pytest.approx(1.1000)

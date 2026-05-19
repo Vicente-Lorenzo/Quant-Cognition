@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from collections.abc import Sequence
@@ -46,7 +46,7 @@ class UniverseAPI(DatapointAPI):
     @staticmethod
     def push_categories(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Universe.Category import CategoryAPI
-        db.upsert(schema=CategoryAPI.Schema, table=CategoryAPI.Table, data=data, key=["UID"], exclude=["CreatedAt", "CreatedBy"])
+        db.upsert(schema=CategoryAPI.Schema, table=CategoryAPI.Table, data=data, key=["UID"])
 
     @staticmethod
     def save_providers(data: Union[ProviderAPI, Sequence[ProviderAPI]], by: str = "Autosave") -> None:
@@ -70,7 +70,7 @@ class UniverseAPI(DatapointAPI):
     @staticmethod
     def push_providers(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Universe.Provider import ProviderAPI
-        db.upsert(schema=ProviderAPI.Schema, table=ProviderAPI.Table, data=data, key=["UID"], exclude=["CreatedAt", "CreatedBy"])
+        db.upsert(schema=ProviderAPI.Schema, table=ProviderAPI.Table, data=data, key=["UID"])
 
     @staticmethod
     def save_tickers(data: Union[TickerAPI, Sequence[TickerAPI]], by: str = "Autosave") -> None:
@@ -94,7 +94,7 @@ class UniverseAPI(DatapointAPI):
     @staticmethod
     def push_tickers(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Universe.Ticker import TickerAPI
-        db.upsert(schema=TickerAPI.Schema, table=TickerAPI.Table, data=data, key=["UID"], exclude=["CreatedAt", "CreatedBy"])
+        db.upsert(schema=TickerAPI.Schema, table=TickerAPI.Table, data=data, key=["UID"])
 
     @staticmethod
     def save_timeframes(data: Union[TimeframeAPI, Sequence[TimeframeAPI]], by: str = "Autosave") -> None:
@@ -118,7 +118,7 @@ class UniverseAPI(DatapointAPI):
     @staticmethod
     def push_timeframes(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Universe.Timeframe import TimeframeAPI
-        db.upsert(schema=TimeframeAPI.Schema, table=TimeframeAPI.Table, data=data, key=["UID"], exclude=["CreatedAt", "CreatedBy"])
+        db.upsert(schema=TimeframeAPI.Schema, table=TimeframeAPI.Table, data=data, key=["UID"])
 
     @staticmethod
     def save_contracts(data: Union[ContractAPI, Sequence[ContractAPI]], by: str = "Autosave") -> None:
@@ -142,7 +142,7 @@ class UniverseAPI(DatapointAPI):
     @staticmethod
     def push_contracts(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Universe.Contract import ContractAPI
-        db.upsert(schema=ContractAPI.Schema, table=ContractAPI.Table, data=data, key=["Ticker", "Provider"], exclude=["CreatedAt", "CreatedBy"])
+        db.upsert(schema=ContractAPI.Schema, table=ContractAPI.Table, data=data, key=["Ticker", "Provider"])
 
     @staticmethod
     def save_securities(data: Union[SecurityAPI, Sequence[SecurityAPI]], by: str = "Autosave") -> None:
@@ -166,4 +166,4 @@ class UniverseAPI(DatapointAPI):
     @staticmethod
     def push_securities(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Universe.Security import SecurityAPI
-        db.upsert(schema=SecurityAPI.Schema, table=SecurityAPI.Table, data=data, key=["Ticker", "Provider", "Category", "Contract"], exclude=["CreatedAt", "CreatedBy"])
+        db.upsert(schema=SecurityAPI.Schema, table=SecurityAPI.Table, data=data, key=["Ticker", "Provider", "Category", "Contract"])

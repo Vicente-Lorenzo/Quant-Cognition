@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 from datetime import datetime
 from Library.Market.Bar import BarAPI
 from Library.Market.Tick import TickAPI
@@ -15,14 +15,14 @@ def test_bar_initialization(db):
     db.migrate(schema=UniverseAPI.Schema, table=TimeframeAPI.Table, structure=TimeframeAPI(db=db).Structure)
     from Library.Universe.Contract import ContractAPI
     db.migrate(schema=UniverseAPI.Schema, table=ContractAPI.Table, structure=ContractAPI(db=db).Structure)
-    CategoryAPI(UID="Forex (Major)", Primary="Forex", Secondary="Major", Alternative="Currency", db=db).save(by="test")
-    ProviderAPI(UID="Pepperstone (cTrader)", Platform=Platform.cTrader, Name="Pepperstone Europe", Abbreviation="Pepperstone", db=db).save(by="test")
-    TickerAPI(UID="EURUSD", Category="Forex (Major)", BaseAsset="EUR", BaseName="Euro", QuoteAsset="USD", QuoteName="US Dollar", Description="Euro vs US Dollar", db=db).save(by="test")
-    ContractAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Type=ContractType.Spot, db=db).save(by="test")
+    CategoryAPI(UID="Forex (Major)", Primary="Forex", Secondary="Major", Alternative="Currency", db=db).save()
+    ProviderAPI(UID="Pepperstone (cTrader)", Platform=Platform.cTrader, Name="Pepperstone Europe", Abbreviation="Pepperstone", db=db).save()
+    TickerAPI(UID="EURUSD", Category="Forex (Major)", BaseAsset="EUR", BaseName="Euro", QuoteAsset="USD", QuoteName="US Dollar", Description="Euro vs US Dollar", db=db).save()
+    ContractAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Type=ContractType.Spot, db=db).save()
     tf = TimeframeAPI(UID="M1", db=db)
-    tf.save(by="test")
+    tf.save()
     sec = SecurityAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Contract=ContractType.Spot, db=db, migrate=True, autoload=True)
-    sec.save(by="test")
+    sec.save()
     dt = datetime(2023, 1, 1, 12, 0, 0)
     db.migrate(schema=TickAPI.Schema, table=TickAPI.Table, structure=TickAPI(db=db).Structure)
     bar_args = (

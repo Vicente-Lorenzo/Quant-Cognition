@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 import Library.Universe
 import Library.Market
 import Library.Portfolio
@@ -9,20 +9,20 @@ def override_databases(cls, db_name):
         override_databases(sub, db_name)
 override_databases(DatapointAPI, "Tests")
 from Library.Database.Query import QueryAPI
-from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
+from Library.Database.Postgres.Postgres import PostgresAPI
 from Library.Universe.Universe import UniverseAPI
 from Library.Market.Market import MarketAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 @pytest.fixture(scope="session")
 def db():
-    admin = PostgresDatabaseAPI(admin=True)
+    admin = PostgresAPI(admin=True)
     try:
         admin.connect()
         if not admin.exists(database=DatapointAPI.Database):
             admin.create(database=DatapointAPI.Database)
     finally:
         admin.disconnect()
-    conn = PostgresDatabaseAPI(database=DatapointAPI.Database)
+    conn = PostgresAPI(database=DatapointAPI.Database)
     try:
         conn.connect()
         conn.executeone(QueryAPI(f'DROP SCHEMA IF EXISTS "{UniverseAPI.Schema}" CASCADE'))
@@ -51,17 +51,17 @@ def universe(db):
     db.migrate(schema=UniverseAPI.Schema, table=SecurityAPI.Table, structure=SecurityAPI(db=None).Structure)
     db.migrate(schema=UniverseAPI.Schema, table=TimeframeAPI.Table, structure=TimeframeAPI(db=None).Structure)
     cat = CategoryAPI(UID="Forex (Major)", Primary="Forex", Secondary="Major", Alternative="Currency", db=db)
-    cat.save(by="fixture")
+    cat.save()
     prov = ProviderAPI(UID="Pepperstone (cTrader)", Platform=Platform.cTrader, Name="Pepperstone Europe", Abbreviation="Pepperstone", db=db)
-    prov.save(by="fixture")
+    prov.save()
     ticker = TickerAPI(UID="EURUSD", Category="Forex (Major)", BaseAsset="EUR", BaseName="Euro", QuoteAsset="USD", QuoteName="US Dollar", Description="Euro vs US Dollar", db=db)
-    ticker.save(by="fixture")
+    ticker.save()
     contract = ContractAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Type=ContractType.Spot, PipSize=0.0001, PointSize=0.00001, Digits=5, LotSize=100000, db=db)
-    contract.save(by="fixture")
+    contract.save()
     sec = SecurityAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Contract=ContractType.Spot, db=db)
-    sec.save(by="fixture")
+    sec.save()
     tf = TimeframeAPI(UID="M1", db=db)
-    tf.save(by="fixture")
+    tf.save()
     return {"category": cat, "provider": prov, "ticker": ticker, "contract": contract, "security": sec, "timeframe": tf}
 @pytest.fixture(scope="session")
 def market(db, universe):

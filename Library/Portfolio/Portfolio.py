@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime
 from collections.abc import Sequence
@@ -64,7 +64,7 @@ class PortfolioAPI(DatapointAPI):
         from Library.Portfolio.Account import AccountAPI
         sql = f'''
         SELECT a.*,
-               p."UID" AS "Provider_UID", p."Platform" AS "Provider_Platform", p."Name" AS "Provider_Name", p."Abbreviation" AS "Provider_Abbreviation", p."CreatedAt" AS "Provider_CreatedAt", p."CreatedBy" AS "Provider_CreatedBy", p."UpdatedAt" AS "Provider_UpdatedAt", p."UpdatedBy" AS "Provider_UpdatedBy"
+               p."UID" AS "Provider_UID", p."Platform" AS "Provider_Platform", p."Name" AS "Provider_Name", p."Abbreviation" AS "Provider_Abbreviation"
         FROM "{AccountAPI.Schema}"."{AccountAPI.Table}" a
         LEFT JOIN "Universe"."Provider" p ON a."Provider" = p."UID"
         '''
@@ -74,7 +74,7 @@ class PortfolioAPI(DatapointAPI):
     @staticmethod
     def push_accounts(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Portfolio.Account import AccountAPI
-        db.upsert(schema=AccountAPI.Schema, table=AccountAPI.Table, data=data, key=["UID"], exclude=["CreatedAt", "CreatedBy"])
+        db.upsert(schema=AccountAPI.Schema, table=AccountAPI.Table, data=data, key=["UID"])
 
     @staticmethod
     def load_orders(data: Union[OrderAPI, Sequence[OrderAPI]]) -> None:
@@ -93,9 +93,9 @@ class PortfolioAPI(DatapointAPI):
         from Library.Portfolio.Order import OrderAPI
         sql = f'''
         SELECT o.*,
-               s."UID" AS "Security_UID", s."Provider" AS "Security_Provider", s."Category" AS "Security_Category", s."Ticker" AS "Security_Ticker", s."Contract" AS "Security_Contract", s."CreatedAt" AS "Security_CreatedAt", s."CreatedBy" AS "Security_CreatedBy", s."UpdatedAt" AS "Security_UpdatedAt", s."UpdatedBy" AS "Security_UpdatedBy",
-               c."UID" AS "Contract_UID", c."Ticker" AS "Contract_Ticker", c."Provider" AS "Contract_Provider", c."Type" AS "Contract_Type", c."Digits" AS "Contract_Digits", c."PointSize" AS "Contract_PointSize", c."PipSize" AS "Contract_PipSize", c."LotSize" AS "Contract_LotSize", c."VolumeMin" AS "Contract_VolumeMin", c."VolumeMax" AS "Contract_VolumeMax", c."VolumeStep" AS "Contract_VolumeStep", c."Commission" AS "Contract_Commission", c."CommissionMode" AS "Contract_CommissionMode", c."SwapLong" AS "Contract_SwapLong", c."SwapShort" AS "Contract_SwapShort", c."SwapMode" AS "Contract_SwapMode", c."SwapExtraDay" AS "Contract_SwapExtraDay", c."SwapSummerTime" AS "Contract_SwapSummerTime", c."SwapWinterTime" AS "Contract_SwapWinterTime", c."SwapPeriod" AS "Contract_SwapPeriod", c."Expiry" AS "Contract_Expiry", c."CreatedAt" AS "Contract_CreatedAt", c."CreatedBy" AS "Contract_CreatedBy", c."UpdatedAt" AS "Contract_UpdatedAt", c."UpdatedBy" AS "Contract_UpdatedBy",
-               p."UID" AS "Position_UID", p."Security" AS "Position_Security", p."PositionType" AS "Position_PositionType", p."Direction" AS "Position_TradeType", p."Volume" AS "Position_Volume", p."Quantity" AS "Position_Quantity", p."EntryTimestamp" AS "Position_EntryTimestamp", p."EntryPrice" AS "Position_EntryPrice", p."StopLossPrice" AS "Position_StopLossPrice", p."TakeProfitPrice" AS "Position_TakeProfitPrice", p."MaxRunUpPrice" AS "Position_MaxRunUpPrice", p."MaxDrawDownPrice" AS "Position_MaxDrawDownPrice", p."ExitPrice" AS "Position_ExitPrice", p."StopLossPnL" AS "Position_StopLossPnL", p."TakeProfitPnL" AS "Position_TakeProfitPnL", p."MaxRunUpPnL" AS "Position_MaxRunUpPnL", p."MaxDrawDownPnL" AS "Position_MaxDrawDownPnL", p."GrossPnL" AS "Position_GrossPnL", p."CommissionPnL" AS "Position_CommissionPnL", p."SwapPnL" AS "Position_SwapPnL", p."NetPnL" AS "Position_NetPnL", p."UsedMargin" AS "Position_UsedMargin", p."EntryBalance" AS "Position_EntryBalance", p."MidBalance" AS "Position_MidBalance", p."CreatedAt" AS "Position_CreatedAt", p."CreatedBy" AS "Position_CreatedBy", p."UpdatedAt" AS "Position_UpdatedAt", p."UpdatedBy" AS "Position_UpdatedBy"
+               s."UID" AS "Security_UID", s."Provider" AS "Security_Provider", s."Category" AS "Security_Category", s."Ticker" AS "Security_Ticker", s."Contract" AS "Security_Contract",
+               c."UID" AS "Contract_UID", c."Ticker" AS "Contract_Ticker", c."Provider" AS "Contract_Provider", c."Type" AS "Contract_Type", c."Digits" AS "Contract_Digits", c."PointSize" AS "Contract_PointSize", c."PipSize" AS "Contract_PipSize", c."LotSize" AS "Contract_LotSize", c."VolumeMin" AS "Contract_VolumeMin", c."VolumeMax" AS "Contract_VolumeMax", c."VolumeStep" AS "Contract_VolumeStep", c."Commission" AS "Contract_Commission", c."CommissionMode" AS "Contract_CommissionMode", c."SwapLong" AS "Contract_SwapLong", c."SwapShort" AS "Contract_SwapShort", c."SwapMode" AS "Contract_SwapMode", c."SwapExtraDay" AS "Contract_SwapExtraDay", c."SwapSummerTime" AS "Contract_SwapSummerTime", c."SwapWinterTime" AS "Contract_SwapWinterTime", c."SwapPeriod" AS "Contract_SwapPeriod", c."Expiry" AS "Contract_Expiry",
+               p."UID" AS "Position_UID", p."Security" AS "Position_Security", p."PositionType" AS "Position_PositionType", p."Direction" AS "Position_TradeType", p."Volume" AS "Position_Volume", p."Quantity" AS "Position_Quantity", p."EntryTimestamp" AS "Position_EntryTimestamp", p."EntryPrice" AS "Position_EntryPrice", p."StopLossPrice" AS "Position_StopLossPrice", p."TakeProfitPrice" AS "Position_TakeProfitPrice", p."MaxRunUpPrice" AS "Position_MaxRunUpPrice", p."MaxDrawDownPrice" AS "Position_MaxDrawDownPrice", p."ExitPrice" AS "Position_ExitPrice", p."StopLossPnL" AS "Position_StopLossPnL", p."TakeProfitPnL" AS "Position_TakeProfitPnL", p."MaxRunUpPnL" AS "Position_MaxRunUpPnL", p."MaxDrawDownPnL" AS "Position_MaxDrawDownPnL", p."GrossPnL" AS "Position_GrossPnL", p."CommissionPnL" AS "Position_CommissionPnL", p."SwapPnL" AS "Position_SwapPnL", p."NetPnL" AS "Position_NetPnL", p."UsedMargin" AS "Position_UsedMargin", p."EntryBalance" AS "Position_EntryBalance", p."MidBalance" AS "Position_MidBalance"
         FROM "{OrderAPI.Schema}"."{OrderAPI.Table}" o
         LEFT JOIN "Universe"."Security" s ON o."Security" = s."UID"
         LEFT JOIN "Universe"."Contract" c ON s."Contract" = c."UID"
@@ -111,7 +111,7 @@ class PortfolioAPI(DatapointAPI):
     @staticmethod
     def push_orders(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Portfolio.Order import OrderAPI
-        db.upsert(schema=OrderAPI.Schema, table=OrderAPI.Table, data=data, key=["UID"], exclude=["CreatedAt", "CreatedBy"])
+        db.upsert(schema=OrderAPI.Schema, table=OrderAPI.Table, data=data, key=["UID"])
 
     @staticmethod
     def load_positions(data: Union[PositionAPI, Sequence[PositionAPI]]) -> None:
@@ -130,8 +130,8 @@ class PortfolioAPI(DatapointAPI):
         from Library.Portfolio.Position import PositionAPI
         sql = f'''
         SELECT pos.*,
-               s."UID" AS "Security_UID", s."Provider" AS "Security_Provider", s."Category" AS "Security_Category", s."Ticker" AS "Security_Ticker", s."Contract" AS "Security_Contract", s."CreatedAt" AS "Security_CreatedAt", s."CreatedBy" AS "Security_CreatedBy", s."UpdatedAt" AS "Security_UpdatedAt", s."UpdatedBy" AS "Security_UpdatedBy",
-               c."UID" AS "Contract_UID", c."Ticker" AS "Contract_Ticker", c."Provider" AS "Contract_Provider", c."Type" AS "Contract_Type", c."Digits" AS "Contract_Digits", c."PointSize" AS "Contract_PointSize", c."PipSize" AS "Contract_PipSize", c."LotSize" AS "Contract_LotSize", c."VolumeMin" AS "Contract_VolumeMin", c."VolumeMax" AS "Contract_VolumeMax", c."VolumeStep" AS "Contract_VolumeStep", c."Commission" AS "Contract_Commission", c."CommissionMode" AS "Contract_CommissionMode", c."SwapLong" AS "Contract_SwapLong", c."SwapShort" AS "Contract_SwapShort", c."SwapMode" AS "Contract_SwapMode", c."SwapExtraDay" AS "Contract_SwapExtraDay", c."SwapSummerTime" AS "Contract_SwapSummerTime", c."SwapWinterTime" AS "Contract_SwapWinterTime", c."SwapPeriod" AS "Contract_SwapPeriod", c."Expiry" AS "Contract_Expiry", c."CreatedAt" AS "Contract_CreatedAt", c."CreatedBy" AS "Contract_CreatedBy", c."UpdatedAt" AS "Contract_UpdatedAt", c."UpdatedBy" AS "Contract_UpdatedBy"
+               s."UID" AS "Security_UID", s."Provider" AS "Security_Provider", s."Category" AS "Security_Category", s."Ticker" AS "Security_Ticker", s."Contract" AS "Security_Contract",
+               c."UID" AS "Contract_UID", c."Ticker" AS "Contract_Ticker", c."Provider" AS "Contract_Provider", c."Type" AS "Contract_Type", c."Digits" AS "Contract_Digits", c."PointSize" AS "Contract_PointSize", c."PipSize" AS "Contract_PipSize", c."LotSize" AS "Contract_LotSize", c."VolumeMin" AS "Contract_VolumeMin", c."VolumeMax" AS "Contract_VolumeMax", c."VolumeStep" AS "Contract_VolumeStep", c."Commission" AS "Contract_Commission", c."CommissionMode" AS "Contract_CommissionMode", c."SwapLong" AS "Contract_SwapLong", c."SwapShort" AS "Contract_SwapShort", c."SwapMode" AS "Contract_SwapMode", c."SwapExtraDay" AS "Contract_SwapExtraDay", c."SwapSummerTime" AS "Contract_SwapSummerTime", c."SwapWinterTime" AS "Contract_SwapWinterTime", c."SwapPeriod" AS "Contract_SwapPeriod", c."Expiry" AS "Contract_Expiry"
         FROM "{PositionAPI.Schema}"."{PositionAPI.Table}" pos
         LEFT JOIN "Universe"."Security" s ON pos."Security" = s."UID"
         LEFT JOIN "Universe"."Contract" c ON s."Contract" = c."UID"
@@ -146,7 +146,7 @@ class PortfolioAPI(DatapointAPI):
     @staticmethod
     def push_positions(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Portfolio.Position import PositionAPI
-        db.upsert(schema=PositionAPI.Schema, table=PositionAPI.Table, data=data, key=["UID"], exclude=["CreatedAt", "CreatedBy"])
+        db.upsert(schema=PositionAPI.Schema, table=PositionAPI.Table, data=data, key=["UID"])
 
     @staticmethod
     def load_trades(data: Union[TradeAPI, Sequence[TradeAPI]]) -> None:
@@ -165,9 +165,9 @@ class PortfolioAPI(DatapointAPI):
         from Library.Portfolio.Trade import TradeAPI
         sql = f'''
         SELECT t.*,
-               p."UID" AS "Position_UID", p."Security" AS "Position_Security", p."PositionType" AS "Position_PositionType", p."Direction" AS "Position_TradeType", p."Volume" AS "Position_Volume", p."Quantity" AS "Position_Quantity", p."EntryTimestamp" AS "Position_EntryTimestamp", p."EntryPrice" AS "Position_EntryPrice", p."StopLossPrice" AS "Position_StopLossPrice", p."TakeProfitPrice" AS "Position_TakeProfitPrice", p."MaxRunUpPrice" AS "Position_MaxRunUpPrice", p."MaxDrawDownPrice" AS "Position_MaxDrawDownPrice", p."ExitPrice" AS "Position_ExitPrice", p."StopLossPnL" AS "Position_StopLossPnL", p."TakeProfitPnL" AS "Position_TakeProfitPnL", p."MaxRunUpPnL" AS "Position_MaxRunUpPnL", p."MaxDrawDownPnL" AS "Position_MaxDrawDownPnL", p."GrossPnL" AS "Position_GrossPnL", p."CommissionPnL" AS "Position_CommissionPnL", p."SwapPnL" AS "Position_SwapPnL", p."NetPnL" AS "Position_NetPnL", p."UsedMargin" AS "Position_UsedMargin", p."EntryBalance" AS "Position_EntryBalance", p."MidBalance" AS "Position_MidBalance", p."CreatedAt" AS "Position_CreatedAt", p."CreatedBy" AS "Position_CreatedBy", p."UpdatedAt" AS "Position_UpdatedAt", p."UpdatedBy" AS "Position_UpdatedBy",
-               s."UID" AS "Security_UID", s."Provider" AS "Security_Provider", s."Category" AS "Security_Category", s."Ticker" AS "Security_Ticker", s."Contract" AS "Security_Contract", s."CreatedAt" AS "Security_CreatedAt", s."CreatedBy" AS "Security_CreatedBy", s."UpdatedAt" AS "Security_UpdatedAt", s."UpdatedBy" AS "Security_UpdatedBy",
-               c."UID" AS "Contract_UID", c."Ticker" AS "Contract_Ticker", c."Provider" AS "Contract_Provider", c."Type" AS "Contract_Type", c."Digits" AS "Contract_Digits", c."PointSize" AS "Contract_PointSize", c."PipSize" AS "Contract_PipSize", c."LotSize" AS "Contract_LotSize", c."VolumeMin" AS "Contract_VolumeMin", c."VolumeMax" AS "Contract_VolumeMax", c."VolumeStep" AS "Contract_VolumeStep", c."Commission" AS "Contract_Commission", c."CommissionMode" AS "Contract_CommissionMode", c."SwapLong" AS "Contract_SwapLong", c."SwapShort" AS "Contract_SwapShort", c."SwapMode" AS "Contract_SwapMode", c."SwapExtraDay" AS "Contract_SwapExtraDay", c."SwapSummerTime" AS "Contract_SwapSummerTime", c."SwapWinterTime" AS "Contract_SwapWinterTime", c."SwapPeriod" AS "Contract_SwapPeriod", c."Expiry" AS "Contract_Expiry", c."CreatedAt" AS "Contract_CreatedAt", c."CreatedBy" AS "Contract_CreatedBy", c."UpdatedAt" AS "Contract_UpdatedAt", c."UpdatedBy" AS "Contract_UpdatedBy"
+               p."UID" AS "Position_UID", p."Security" AS "Position_Security", p."PositionType" AS "Position_PositionType", p."Direction" AS "Position_TradeType", p."Volume" AS "Position_Volume", p."Quantity" AS "Position_Quantity", p."EntryTimestamp" AS "Position_EntryTimestamp", p."EntryPrice" AS "Position_EntryPrice", p."StopLossPrice" AS "Position_StopLossPrice", p."TakeProfitPrice" AS "Position_TakeProfitPrice", p."MaxRunUpPrice" AS "Position_MaxRunUpPrice", p."MaxDrawDownPrice" AS "Position_MaxDrawDownPrice", p."ExitPrice" AS "Position_ExitPrice", p."StopLossPnL" AS "Position_StopLossPnL", p."TakeProfitPnL" AS "Position_TakeProfitPnL", p."MaxRunUpPnL" AS "Position_MaxRunUpPnL", p."MaxDrawDownPnL" AS "Position_MaxDrawDownPnL", p."GrossPnL" AS "Position_GrossPnL", p."CommissionPnL" AS "Position_CommissionPnL", p."SwapPnL" AS "Position_SwapPnL", p."NetPnL" AS "Position_NetPnL", p."UsedMargin" AS "Position_UsedMargin", p."EntryBalance" AS "Position_EntryBalance", p."MidBalance" AS "Position_MidBalance",
+               s."UID" AS "Security_UID", s."Provider" AS "Security_Provider", s."Category" AS "Security_Category", s."Ticker" AS "Security_Ticker", s."Contract" AS "Security_Contract",
+               c."UID" AS "Contract_UID", c."Ticker" AS "Contract_Ticker", c."Provider" AS "Contract_Provider", c."Type" AS "Contract_Type", c."Digits" AS "Contract_Digits", c."PointSize" AS "Contract_PointSize", c."PipSize" AS "Contract_PipSize", c."LotSize" AS "Contract_LotSize", c."VolumeMin" AS "Contract_VolumeMin", c."VolumeMax" AS "Contract_VolumeMax", c."VolumeStep" AS "Contract_VolumeStep", c."Commission" AS "Contract_Commission", c."CommissionMode" AS "Contract_CommissionMode", c."SwapLong" AS "Contract_SwapLong", c."SwapShort" AS "Contract_SwapShort", c."SwapMode" AS "Contract_SwapMode", c."SwapExtraDay" AS "Contract_SwapExtraDay", c."SwapSummerTime" AS "Contract_SwapSummerTime", c."SwapWinterTime" AS "Contract_SwapWinterTime", c."SwapPeriod" AS "Contract_SwapPeriod", c."Expiry" AS "Contract_Expiry"
         FROM "{TradeAPI.Schema}"."{TradeAPI.Table}" t
         LEFT JOIN "Portfolio"."Position" p ON t."Position" = p."UID"
         LEFT JOIN "Universe"."Security" s ON p."Security" = s."UID"
@@ -183,7 +183,7 @@ class PortfolioAPI(DatapointAPI):
     @staticmethod
     def push_trades(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Portfolio.Trade import TradeAPI
-        db.upsert(schema=TradeAPI.Schema, table=TradeAPI.Table, data=data, key=["UID"], exclude=["CreatedAt", "CreatedBy"])
+        db.upsert(schema=TradeAPI.Schema, table=TradeAPI.Table, data=data, key=["UID"])
 
     def init_data(self, account: AccountAPI, orders: list[OrderAPI] = None, positions: list[PositionAPI] = None, trades: list[TradeAPI] = None) -> None:
         self._account_ = account

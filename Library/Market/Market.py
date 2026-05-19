@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -75,7 +75,7 @@ class MarketAPI(DatapointAPI):
     @staticmethod
     def push_ticks(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Market.Tick import TickAPI
-        db.upsert(schema=TickAPI.Schema, table=TickAPI.Table, data=data, key=[str(TickAPI.ID.Timestamp), str(TickAPI.ID.Security)], exclude=["CreatedAt", "CreatedBy"])
+        db.upsert(schema=TickAPI.Schema, table=TickAPI.Table, data=data, key=[str(TickAPI.ID.Timestamp), str(TickAPI.ID.Security)])
 
     @staticmethod
     def load_bars(data: Union[BarAPI, Sequence[BarAPI]]) -> None:
@@ -98,42 +98,32 @@ class MarketAPI(DatapointAPI):
         sql = f'''
         SELECT b."{BarAPI.ID.UID}", b."{BarAPI.ID.Timestamp}", b."{BarAPI.ID.Security}", b."{BarAPI.ID.Timeframe}",
                b."{BarAPI.ID.GapTick}", b."{BarAPI.ID.OpenTick}", b."{BarAPI.ID.HighTick}", b."{BarAPI.ID.LowTick}", b."{BarAPI.ID.CloseTick}",
-               b."{BarAPI.ID.Volume}", b."CreatedAt", b."CreatedBy", b."UpdatedAt", b."UpdatedBy",
+               b."{BarAPI.ID.Volume}",
                g."{TickAPI.ID.UID}" AS "{BarAPI.OID.GapTick.UID}", g."{TickAPI.ID.Timestamp}" AS "{BarAPI.OID.GapTick.Timestamp}", g."{TickAPI.ID.Security}" AS "{BarAPI.OID.GapTick.Security}",
                g."{TickAPI.ID.Ask}" AS "{BarAPI.OID.GapTick.Ask}", g."{TickAPI.ID.Mid}" AS "{BarAPI.OID.GapTick.Mid}", g."{TickAPI.ID.Bid}" AS "{BarAPI.OID.GapTick.Bid}",
                g."{TickAPI.ID.AskBaseConversion}" AS "{BarAPI.OID.GapTick.AskBaseConversion}", g."{TickAPI.ID.BidBaseConversion}" AS "{BarAPI.OID.GapTick.BidBaseConversion}",
                g."{TickAPI.ID.AskQuoteConversion}" AS "{BarAPI.OID.GapTick.AskQuoteConversion}", g."{TickAPI.ID.BidQuoteConversion}" AS "{BarAPI.OID.GapTick.BidQuoteConversion}",
                g."{TickAPI.ID.Volume}" AS "{BarAPI.OID.GapTick.Volume}",
-               g."CreatedAt" AS "{BarAPI.OID.GapTick}.CreatedAt", g."CreatedBy" AS "{BarAPI.OID.GapTick}.CreatedBy",
-               g."UpdatedAt" AS "{BarAPI.OID.GapTick}.UpdatedAt", g."UpdatedBy" AS "{BarAPI.OID.GapTick}.UpdatedBy",
                o."{TickAPI.ID.UID}" AS "{BarAPI.OID.OpenTick.UID}", o."{TickAPI.ID.Timestamp}" AS "{BarAPI.OID.OpenTick.Timestamp}", o."{TickAPI.ID.Security}" AS "{BarAPI.OID.OpenTick.Security}",
                o."{TickAPI.ID.Ask}" AS "{BarAPI.OID.OpenTick.Ask}", o."{TickAPI.ID.Mid}" AS "{BarAPI.OID.OpenTick.Mid}", o."{TickAPI.ID.Bid}" AS "{BarAPI.OID.OpenTick.Bid}",
                o."{TickAPI.ID.AskBaseConversion}" AS "{BarAPI.OID.OpenTick.AskBaseConversion}", o."{TickAPI.ID.BidBaseConversion}" AS "{BarAPI.OID.OpenTick.BidBaseConversion}",
                o."{TickAPI.ID.AskQuoteConversion}" AS "{BarAPI.OID.OpenTick.AskQuoteConversion}", o."{TickAPI.ID.BidQuoteConversion}" AS "{BarAPI.OID.OpenTick.BidQuoteConversion}",
                o."{TickAPI.ID.Volume}" AS "{BarAPI.OID.OpenTick.Volume}",
-               o."CreatedAt" AS "{BarAPI.OID.OpenTick}.CreatedAt", o."CreatedBy" AS "{BarAPI.OID.OpenTick}.CreatedBy",
-               o."UpdatedAt" AS "{BarAPI.OID.OpenTick}.UpdatedAt", o."UpdatedBy" AS "{BarAPI.OID.OpenTick}.UpdatedBy",
                h."{TickAPI.ID.UID}" AS "{BarAPI.OID.HighTick.UID}", h."{TickAPI.ID.Timestamp}" AS "{BarAPI.OID.HighTick.Timestamp}", h."{TickAPI.ID.Security}" AS "{BarAPI.OID.HighTick.Security}",
                h."{TickAPI.ID.Ask}" AS "{BarAPI.OID.HighTick.Ask}", h."{TickAPI.ID.Mid}" AS "{BarAPI.OID.HighTick.Mid}", h."{TickAPI.ID.Bid}" AS "{BarAPI.OID.HighTick.Bid}",
                h."{TickAPI.ID.AskBaseConversion}" AS "{BarAPI.OID.HighTick.AskBaseConversion}", h."{TickAPI.ID.BidBaseConversion}" AS "{BarAPI.OID.HighTick.BidBaseConversion}",
                h."{TickAPI.ID.AskQuoteConversion}" AS "{BarAPI.OID.HighTick.AskQuoteConversion}", h."{TickAPI.ID.BidQuoteConversion}" AS "{BarAPI.OID.HighTick.BidQuoteConversion}",
                h."{TickAPI.ID.Volume}" AS "{BarAPI.OID.HighTick.Volume}",
-               h."CreatedAt" AS "{BarAPI.OID.HighTick}.CreatedAt", h."CreatedBy" AS "{BarAPI.OID.HighTick}.CreatedBy",
-               h."UpdatedAt" AS "{BarAPI.OID.HighTick}.UpdatedAt", h."UpdatedBy" AS "{BarAPI.OID.HighTick}.UpdatedBy",
                l."{TickAPI.ID.UID}" AS "{BarAPI.OID.LowTick.UID}", l."{TickAPI.ID.Timestamp}" AS "{BarAPI.OID.LowTick.Timestamp}", l."{TickAPI.ID.Security}" AS "{BarAPI.OID.LowTick.Security}",
                l."{TickAPI.ID.Ask}" AS "{BarAPI.OID.LowTick.Ask}", l."{TickAPI.ID.Mid}" AS "{BarAPI.OID.LowTick.Mid}", l."{TickAPI.ID.Bid}" AS "{BarAPI.OID.LowTick.Bid}",
                l."{TickAPI.ID.AskBaseConversion}" AS "{BarAPI.OID.LowTick.AskBaseConversion}", l."{TickAPI.ID.BidBaseConversion}" AS "{BarAPI.OID.LowTick.BidBaseConversion}",
                l."{TickAPI.ID.AskQuoteConversion}" AS "{BarAPI.OID.LowTick.AskQuoteConversion}", l."{TickAPI.ID.BidQuoteConversion}" AS "{BarAPI.OID.LowTick.BidQuoteConversion}",
                l."{TickAPI.ID.Volume}" AS "{BarAPI.OID.LowTick.Volume}",
-               l."CreatedAt" AS "{BarAPI.OID.LowTick}.CreatedAt", l."CreatedBy" AS "{BarAPI.OID.LowTick}.CreatedBy",
-               l."UpdatedAt" AS "{BarAPI.OID.LowTick}.UpdatedAt", l."UpdatedBy" AS "{BarAPI.OID.LowTick}.UpdatedBy",
                c."{TickAPI.ID.UID}" AS "{BarAPI.OID.CloseTick.UID}", c."{TickAPI.ID.Timestamp}" AS "{BarAPI.OID.CloseTick.Timestamp}", c."{TickAPI.ID.Security}" AS "{BarAPI.OID.CloseTick.Security}",
                c."{TickAPI.ID.Ask}" AS "{BarAPI.OID.CloseTick.Ask}", c."{TickAPI.ID.Mid}" AS "{BarAPI.OID.CloseTick.Mid}", c."{TickAPI.ID.Bid}" AS "{BarAPI.OID.CloseTick.Bid}",
                c."{TickAPI.ID.AskBaseConversion}" AS "{BarAPI.OID.CloseTick.AskBaseConversion}", c."{TickAPI.ID.BidBaseConversion}" AS "{BarAPI.OID.CloseTick.BidBaseConversion}",
                c."{TickAPI.ID.AskQuoteConversion}" AS "{BarAPI.OID.CloseTick.AskQuoteConversion}", c."{TickAPI.ID.BidQuoteConversion}" AS "{BarAPI.OID.CloseTick.BidQuoteConversion}",
-               c."{TickAPI.ID.Volume}" AS "{BarAPI.OID.CloseTick.Volume}",
-               c."CreatedAt" AS "{BarAPI.OID.CloseTick}.CreatedAt", c."CreatedBy" AS "{BarAPI.OID.CloseTick}.CreatedBy",
-               c."UpdatedAt" AS "{BarAPI.OID.CloseTick}.UpdatedAt", c."UpdatedBy" AS "{BarAPI.OID.CloseTick}.UpdatedBy"
+               c."{TickAPI.ID.Volume}" AS "{BarAPI.OID.CloseTick.Volume}"
         FROM "{BarAPI.Schema}"."{BarAPI.Table}" b
         LEFT JOIN "{TickAPI.Schema}"."{TickAPI.Table}" g ON b."{BarAPI.ID.GapTick}"   = g."{TickAPI.ID.UID}"
         LEFT JOIN "{TickAPI.Schema}"."{TickAPI.Table}" o ON b."{BarAPI.ID.OpenTick}"  = o."{TickAPI.ID.UID}"
@@ -150,7 +140,7 @@ class MarketAPI(DatapointAPI):
     @staticmethod
     def push_bars(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Market.Bar import BarAPI
-        db.upsert(schema=BarAPI.Schema, table=BarAPI.Table, data=data, key=[str(BarAPI.ID.Timestamp), str(BarAPI.ID.Security), str(BarAPI.ID.Timeframe)], exclude=["CreatedAt", "CreatedBy"])
+        db.upsert(schema=BarAPI.Schema, table=BarAPI.Table, data=data, key=[str(BarAPI.ID.Timestamp), str(BarAPI.ID.Security), str(BarAPI.ID.Timeframe)])
 
     def dataframe(self) -> pl.DataFrame:
         if self._data_ is None: return pl.DataFrame()

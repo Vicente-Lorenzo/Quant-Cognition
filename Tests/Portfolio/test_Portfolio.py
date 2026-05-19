@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 from datetime import datetime
 from Library.Portfolio.Account import AccountAPI, AccountType, MarginMode, Environment
 from Library.Market.Price import Direction
@@ -21,11 +21,11 @@ def test_portfolio_initialization(db):
     db.migrate(schema=OrderAPI.Schema, table=OrderAPI.Table, structure=OrderAPI(db=db).Structure)
     db.migrate(schema=PositionAPI.Schema, table=PositionAPI.Table, structure=PositionAPI(db=db).Structure)
     db.migrate(schema=TradeAPI.Schema, table=TradeAPI.Table, structure=TradeAPI(db=db).Structure)
-    CategoryAPI(UID="Forex (Major)", Primary="Forex", Secondary="Major", Alternative="Currency", db=db).save(by="test")
+    CategoryAPI(UID="Forex (Major)", Primary="Forex", Secondary="Major", Alternative="Currency", db=db).save()
     provider = ProviderAPI(UID="Pepperstone (cTrader)", Platform=Platform.cTrader, Name="Pepperstone Europe", Abbreviation="Pepperstone", db=db)
-    provider.save(by="test")
-    TickerAPI(UID="EURUSD", Category="Forex (Major)", BaseAsset="EUR", BaseName="Euro", QuoteAsset="USD", QuoteName="US Dollar", Description="Euro vs US Dollar", db=db).save(by="test")
-    ContractAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Type=ContractType.Spot, db=db).save(by="test")
+    provider.save()
+    TickerAPI(UID="EURUSD", Category="Forex (Major)", BaseAsset="EUR", BaseName="Euro", QuoteAsset="USD", QuoteName="US Dollar", Description="Euro vs US Dollar", db=db).save()
+    ContractAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Type=ContractType.Spot, db=db).save()
     acc = AccountAPI(
         UID="123456",
         Provider=provider.UID,
@@ -48,7 +48,7 @@ def test_portfolio_initialization(db):
     assert acc.Environment == Environment.Live
     assert acc.AccountType == AccountType.Hedged
     sec = SecurityAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Contract=ContractType.Spot, db=db, autoload=True)
-    sec.save(by="test")
+    sec.save()
     dt = datetime(2023, 1, 1, 12, 0, 0)
     pos = PositionAPI(
         UID=1001,

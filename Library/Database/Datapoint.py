@@ -20,8 +20,6 @@ class DatapointAPI(DataclassAPI):
     Schema: ClassVar[str]
     Table: ClassVar[str]
 
-    CreatedAt: Union[datetime, None] = field(default=None, kw_only=True)
-    CreatedBy: Union[str, None] = field(default=None, kw_only=True)
     UpdatedAt: Union[datetime, None] = field(default=None, kw_only=True)
     UpdatedBy: Union[str, None] = field(default=None, kw_only=True)
 
@@ -44,8 +42,6 @@ class DatapointAPI(DataclassAPI):
     @property
     def Columns(self) -> dict:
         return {
-            self.ID.CreatedAt: pl.Datetime(),
-            self.ID.CreatedBy: pl.String(),
             self.ID.UpdatedAt: pl.Datetime(),
             self.ID.UpdatedBy: pl.String()
         }
@@ -99,21 +95,17 @@ class DatapointAPI(DataclassAPI):
 
     def _push_(self, by: str) -> None:
         if self._db_ is None: return
-        now = datetime.now()
         save_state = self._autosave_
         try:
             self._autosave_ = False
-            if not self.CreatedBy: self.CreatedBy, self.CreatedAt = by, now
-            self.UpdatedBy, self.UpdatedAt = by, now
+            self.UpdatedBy, self.UpdatedAt = by, datetime.now()
             natural_key = self.natural_keys()
             identity_cols = self.identity_keys()
             data = {k: v for k, v in self.dict(include_fields=True, include_initvar_fields=False, include_properties=False, include_override_fields=True).items() if v is not None and v is not MISSING and k[0].isupper()}
-            exclude = ["CreatedAt", "CreatedBy"]
             if natural_key and all(data.get(k) is not None for k in natural_key):
                 insert_data = {k: v for k, v in data.items() if k not in identity_cols}
                 result = self._db_.upsert(
                     schema=self.Schema, table=self.Table, data=insert_data, key=natural_key,
-                    exclude=exclude,
                     returning=identity_cols if identity_cols else None
                 )
                 if identity_cols and hasattr(result, "is_empty") and not result.is_empty():
@@ -121,7 +113,7 @@ class DatapointAPI(DataclassAPI):
                     for col in identity_cols:
                         if row.get(col) is not None: setattr(self, col, row[col])
             elif identity_cols and all(data.get(k) is not None for k in identity_cols):
-                update_data = {k: v for k, v in data.items() if k not in identity_cols and k not in exclude}
+                update_data = {k: v for k, v in data.items() if k not in identity_cols}
                 if update_data:
                     sql = f"UPDATE {self._db_._target_(self.Schema, self.Table)} SET "
                     sql += ", ".join([f'"{k}" = :{k}:' for k in update_data.keys()])
@@ -130,7 +122,7 @@ class DatapointAPI(DataclassAPI):
                     self._db_.execute(QueryAPI(sql), [params])
             else:
                 fallback_key = identity_cols or natural_key or list(self.Structure.keys())[:1]
-                self._db_.upsert(schema=self.Schema, table=self.Table, data=data, key=fallback_key, exclude=exclude)
+                self._db_.upsert(schema=self.Schema, table=self.Table, data=data, key=fallback_key)
         finally:
             self._autosave_ = save_state
 

@@ -1,4 +1,4 @@
-# Schedule Project - Implementation Plan
+﻿# Schedule Project - Implementation Plan
 
 This document outlines the architecture for the `Schedule` project, a custom task orchestrator (Prefect-style) integrated into the Quant Trading Framework.
 
@@ -14,8 +14,6 @@ Defines the high-level grouping of automated processes.
 - **Name**: String (Unique)
 - **Owner**: String
 - **Description**: Text
-- **CreatedAt**: Timestamp
-- **CreatedBy**: String
 - **UpdatedAt**: Timestamp
 - **UpdatedBy**: String
 
@@ -27,8 +25,6 @@ Atomic units of work defined by Python scripts.
 - **Description**: Text
 - **Python**: Path (Path to the execution script)
 - **Schedule**: String (Cron expression)
-- **CreatedAt**: Timestamp
-- **CreatedBy**: String
 - **UpdatedAt**: Timestamp
 - **UpdatedBy**: String
 
