@@ -174,18 +174,16 @@ def main() -> None:
     @timer
     @log.guard
     def run() -> None:
-        db = PostgresDatabaseAPI(database="Quant")
-        db.connect()
-        ticker = TickerAPI(UID=TickerAPI.normalize(args.ticker), db=db, autoload=True)
-        provider = ProviderAPI(UID=ProviderAPI.normalize(args.provider), db=db, autoload=True)
-        timeframe = TimeframeAPI(UID=TimeframeAPI.normalize(args.timeframe), db=db, autoload=True)
-        security = SecurityAPI(Provider=provider, Ticker=ticker, db=db, autoload=True)
-        parameters: Parameters = parameterise[provider.UID][security.Category.UID][ticker.UID][timeframe.UID]
-        strategy = _strategy_(args)
-        system = _system_(args, strategy, security, timeframe, parameters)
-        with system:
-            system.run()
-        db.disconnect()
+        with PostgresDatabaseAPI(database="Quant") as db:
+            ticker = TickerAPI(UID=TickerAPI.normalize(args.ticker), db=db, autoload=True)
+            provider = ProviderAPI(UID=ProviderAPI.normalize(args.provider), db=db, autoload=True)
+            timeframe = TimeframeAPI(UID=TimeframeAPI.normalize(args.timeframe), db=db, autoload=True)
+            security = SecurityAPI(Provider=provider, Ticker=ticker, db=db, autoload=True)
+            parameters: Parameters = parameterise[provider.UID][security.Category.UID][ticker.UID][timeframe.UID]
+            strategy = _strategy_(args)
+            system = _system_(args, strategy, security, timeframe, parameters)
+            with system:
+                system.run()
 
     run()
 
