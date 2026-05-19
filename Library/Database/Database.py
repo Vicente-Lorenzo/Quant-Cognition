@@ -54,12 +54,9 @@ class DatabaseAPI(ServiceAPI, ABC):
     _PYTHON_DATATYPE_MAPPING_: dict = {
         bytes: pl.Binary,
         bool: pl.Boolean,
-
         int: pl.Int64,
         float: pl.Float64,
-
         str: pl.String,
-
         datetime.date: pl.Date,
         datetime.datetime: pl.Datetime,
     }
@@ -282,6 +279,39 @@ class DatabaseAPI(ServiceAPI, ABC):
             defs.append(f"PRIMARY KEY ({pk_cols})")
         return ",\n    ".join(defs)
 
+    def _route_(self, method: str, database: Any, schema: Any, table: Any, args: tuple = (), **kwargs) -> Union[tuple[str | None, str | None, str | None], list]:
+        db = database if database is not MISSING else self._database_
+        sc = schema if schema is not MISSING else self._schema_
+        tb = table if table is not MISSING else self._table_
+        def resolve_refactor(items, field_name):
+            names = kwargs.get("name")
+            if not isinstance(names, (list, tuple)) or len(names) != len(items):
+                raise ValueError(f"Name must be a list/tuple of the same length as {field_name}")
+            for item, n in zip(items, names):
+                kw = {"database": db, "schema": sc, "table": tb}
+                kw.update({k: v for k, v in kwargs.items() if k != "name"})
+                kw.update({field_name.lower(): item, "name": n})
+                getattr(self, method)(*args, **kw)
+            return [self]
+        if isinstance(db, (list, tuple)):
+            if method == "refactor" and isinstance(kwargs.get("name"), (list, tuple)): return resolve_refactor(db, "Database")
+            return [getattr(self, method)(*args, database=d, schema=sc, table=tb, **{**kwargs, "legacy": False} if "legacy" in kwargs else kwargs) for d in db]
+        if isinstance(sc, (list, tuple)):
+            if method == "refactor" and isinstance(kwargs.get("name"), (list, tuple)): return resolve_refactor(sc, "Schema")
+            return [getattr(self, method)(*args, database=db, schema=s, table=tb, **{**kwargs, "legacy": False} if "legacy" in kwargs else kwargs) for s in sc]
+        if isinstance(tb, (list, tuple)):
+            if method == "refactor" and isinstance(kwargs.get("name"), (list, tuple)): return resolve_refactor(tb, "Table")
+            return [getattr(self, method)(*args, database=db, schema=sc, table=t, **{**kwargs, "legacy": False} if "legacy" in kwargs else kwargs) for t in tb]
+        return db, sc, tb
+
+    def _clone_(self, method: str, args: tuple, database: Any, schema: Any, table: Any, admin: Any, **kwargs) -> Union[Self, None]:
+        target_admin = admin if admin is not MISSING else self._admin_
+        db = self.clone(database=database, schema=schema, table=table, admin=target_admin)
+        if db is not self:
+            db.connect()
+            return getattr(db, method)(*args, database=database, schema=schema, table=table, admin=admin, **kwargs)
+        return None
+
     @property
     def database(self) -> Union[str, None]:
         """Returns the current database name."""
@@ -439,23 +469,12 @@ class DatabaseAPI(ServiceAPI, ABC):
         :param kwargs: Additional query parameters.
         :return: Self reference.
         """
-        if isinstance(database, (list, tuple)):
-            for d in database: self.executeone(query, *args, database=d, schema=schema, table=table, admin=admin, **kwargs)
-            return self
-        if isinstance(schema, (list, tuple)):
-            for s in schema: self.executeone(query, *args, database=database, schema=s, table=table, admin=admin, **kwargs)
-            return self
-        if isinstance(table, (list, tuple)):
-            for t in table: self.executeone(query, *args, database=database, schema=schema, table=t, admin=admin, **kwargs)
-            return self
-        target_db = database if database is not MISSING else self._database_
-        target_schema = schema if schema is not MISSING else self._schema_
-        target_table = table if table is not MISSING else self._table_
-        target_admin = admin if admin is not MISSING else self._admin_
-        db = self.clone(database=target_db, schema=target_schema, table=target_table, admin=target_admin)
-        if db is not self:
-            db.connect()
-            return db.executeone(query, *args, database=database, schema=schema, table=table, admin=admin, **kwargs)
+        routed = self._route_("executeone", database, schema, table, args=(query, *args), admin=admin, **kwargs)
+        if isinstance(routed, list): return self
+        database, schema, table = routed
+        
+        clone_result = self._clone_("executeone", (query, *args), database, schema, table, admin, **kwargs)
+        if clone_result is not None: return clone_result
         if database is not MISSING: kwargs["database"] = database
         if schema is not MISSING: kwargs["schema"] = schema
         if table is not MISSING: kwargs["table"] = table
@@ -480,23 +499,12 @@ class DatabaseAPI(ServiceAPI, ABC):
         :param kwargs: Additional query parameters.
         :return: Self reference.
         """
-        if isinstance(database, (list, tuple)):
-            for d in database: self.executemany(query, *args, database=d, schema=schema, table=table, admin=admin, **kwargs)
-            return self
-        if isinstance(schema, (list, tuple)):
-            for s in schema: self.executemany(query, *args, database=database, schema=s, table=table, admin=admin, **kwargs)
-            return self
-        if isinstance(table, (list, tuple)):
-            for t in table: self.executemany(query, *args, database=database, schema=schema, table=t, admin=admin, **kwargs)
-            return self
-        target_db = database if database is not MISSING else self._database_
-        target_schema = schema if schema is not MISSING else self._schema_
-        target_table = table if table is not MISSING else self._table_
-        target_admin = admin if admin is not MISSING else self._admin_
-        db = self.clone(database=target_db, schema=target_schema, table=target_table, admin=target_admin)
-        if db is not self:
-            db.connect()
-            return db.executemany(query, *args, database=database, schema=schema, table=table, admin=admin, **kwargs)
+        routed = self._route_("executemany", database, schema, table, args=(query, *args), admin=admin, **kwargs)
+        if isinstance(routed, list): return self
+        database, schema, table = routed
+        
+        clone_result = self._clone_("executemany", (query, *args), database, schema, table, admin, **kwargs)
+        if clone_result is not None: return clone_result
         if database is not MISSING: kwargs["database"] = database
         if schema is not MISSING: kwargs["schema"] = schema
         if table is not MISSING: kwargs["table"] = table
@@ -562,15 +570,9 @@ class DatabaseAPI(ServiceAPI, ABC):
         :param legacy: If True, returns Pandas DataFrames instead of Polars.
         :return: A DataFrame containing the catalog structure.
         """
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
-        if isinstance(database, (list, tuple)):
-            return self.frame(self._concat_([self.list(database=d, schema=schema, table=table, system=system, legacy=False) for d in database]), legacy=legacy)
-        if isinstance(schema, (list, tuple)):
-            return self.frame(self._concat_([self.list(database=database, schema=s, table=table, system=system, legacy=False) for s in schema]), legacy=legacy)
-        if isinstance(table, (list, tuple)):
-            return self.frame(self._concat_([self.list(database=database, schema=schema, table=t, system=system, legacy=False) for t in table]), legacy=legacy)
+        routed = self._route_("list", database, schema, table, system=system, legacy=legacy)
+        if isinstance(routed, list): return self.frame(self._concat_(routed), legacy=legacy)
+        database, schema, table = routed
         database = database or "%"
         schema = schema or "%"
         table = table or "%"
@@ -608,15 +610,9 @@ class DatabaseAPI(ServiceAPI, ABC):
         """
         if column is None and row is None:
             raise ValueError("Column or Row must be provided to search")
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
-        if isinstance(database, (list, tuple)):
-            return self.frame(self._concat_([self.search(database=d, schema=schema, table=table, column=column, row=row, legacy=False) for d in database]), legacy=legacy)
-        if isinstance(schema, (list, tuple)):
-            return self.frame(self._concat_([self.search(database=database, schema=s, table=table, column=column, row=row, legacy=False) for s in schema]), legacy=legacy)
-        if isinstance(table, (list, tuple)):
-            return self.frame(self._concat_([self.search(database=database, schema=schema, table=t, column=column, row=row, legacy=False) for t in table]), legacy=legacy)
+        routed = self._route_("search", database, schema, table, column=column, row=row, legacy=legacy)
+        if isinstance(routed, list): return self.frame(self._concat_(routed), legacy=legacy)
+        database, schema, table = routed
         if isinstance(column, (list, tuple)):
             return self.frame(self._concat_([self.search(database=database, schema=schema, table=table, column=c, row=row, legacy=False) for c in column]), legacy=legacy)
         database = database or "%"
@@ -661,15 +657,9 @@ class DatabaseAPI(ServiceAPI, ABC):
         :param table: Target table.
         :return: True if the structure exists, False otherwise.
         """
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
-        if isinstance(database, (list, tuple)):
-            return all(self.exists(database=d, schema=schema, table=table) for d in database)
-        if isinstance(schema, (list, tuple)):
-            return all(self.exists(database=database, schema=s, table=table) for s in schema)
-        if isinstance(table, (list, tuple)):
-            return all(self.exists(database=database, schema=schema, table=t) for t in table)
+        routed = self._route_("exists", database, schema, table)
+        if isinstance(routed, list): return all(routed)
+        database, schema, table = routed
         if table and (not database or not schema):
             raise ValueError("Schema and Database must be provided to operate on a Table")
         if schema and not database:
@@ -707,9 +697,9 @@ class DatabaseAPI(ServiceAPI, ABC):
         :param structure: The expected table structure.
         :return: True if differences exist, False otherwise.
         """
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
+        routed = self._route_("diff", database, schema, table, structure=structure)
+        if isinstance(routed, list): return any(routed)
+        database, schema, table = routed
         structure = structure if structure is not MISSING else self._STRUCTURE_
         if not structure:
             raise ValueError("Structure must be provided to diff a Table")
@@ -754,15 +744,9 @@ class DatabaseAPI(ServiceAPI, ABC):
         :param legacy: If True, returns Pandas DataFrames instead of Polars.
         :return: A DataFrame containing storage usage details.
         """
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
-        if isinstance(database, (list, tuple)):
-            return self.frame(self._concat_([self.size(database=d, schema=schema, table=table, legacy=False) for d in database]), legacy=legacy)
-        if isinstance(schema, (list, tuple)):
-            return self.frame(self._concat_([self.size(database=database, schema=s, table=table, legacy=False) for s in schema]), legacy=legacy)
-        if isinstance(table, (list, tuple)):
-            return self.frame(self._concat_([self.size(database=database, schema=schema, table=t, legacy=False) for t in table]), legacy=legacy)
+        routed = self._route_("size", database, schema, table, legacy=legacy)
+        if isinstance(routed, list): return self.frame(self._concat_(routed), legacy=legacy)
+        database, schema, table = routed
         database = database or "%"
         schema = schema or "%"
         table = table or "%"
@@ -795,18 +779,9 @@ class DatabaseAPI(ServiceAPI, ABC):
         :param structure: The table structure definition.
         :return: Self reference.
         """
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
-        if isinstance(database, (list, tuple)):
-            for d in database: self.create(database=d, schema=schema, table=table, structure=structure)
-            return self
-        if isinstance(schema, (list, tuple)):
-            for s in schema: self.create(database=database, schema=s, table=table, structure=structure)
-            return self
-        if isinstance(table, (list, tuple)):
-            for t in table: self.create(database=database, schema=schema, table=t, structure=structure)
-            return self
+        routed = self._route_("create", database, schema, table, structure=structure)
+        if isinstance(routed, list): return self
+        database, schema, table = routed
         if table and (not database or not schema):
             raise ValueError("Schema and Database must be provided to operate on a Table")
         if schema and not database:
@@ -858,18 +833,9 @@ class DatabaseAPI(ServiceAPI, ABC):
         :param table: Target table.
         :return: Self reference.
         """
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
-        if isinstance(database, (list, tuple)):
-            for d in database: self.delete(database=d, schema=schema, table=table)
-            return self
-        if isinstance(schema, (list, tuple)):
-            for s in schema: self.delete(database=database, schema=s, table=table)
-            return self
-        if isinstance(table, (list, tuple)):
-            for t in table: self.delete(database=database, schema=schema, table=t)
-            return self
+        routed = self._route_("delete", database, schema, table)
+        if isinstance(routed, list): return self
+        database, schema, table = routed
         if table and (not database or not schema):
             raise ValueError("Schema and Database must be provided to operate on a Table")
         if schema and not database:
@@ -907,50 +873,26 @@ class DatabaseAPI(ServiceAPI, ABC):
         """
         if name is None:
             raise ValueError("Name must be provided to refactor a structure")
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
+        routed = self._route_("refactor", database, schema, table, name=name)
+        if isinstance(routed, list): return self
+        database, schema, table = routed
         if table:
-            if isinstance(database, (list, tuple)):
-                for d in database: self.refactor(database=d, schema=schema, table=table, name=name)
-                return self
-            if isinstance(schema, (list, tuple)):
-                for s in schema: self.refactor(database=database, schema=s, table=table, name=name)
-                return self
             if not database or not schema:
                 raise ValueError("Schema and Database must be provided to operate on a Table")
-            if isinstance(table, (list, tuple)):
-                if not isinstance(name, (list, tuple)) or len(name) != len(table):
-                    raise ValueError("Name must be a list/tuple of the same length as Table")
-                for t, n in zip(table, name): self.refactor(database=database, schema=schema, table=t, name=n)
-                return self
             if not self.exists(database=database, schema=schema, table=table):
                 raise ValueError(f"Table {table} does not exist in {database}.{schema}")
             self.executeone(self._REFACTOR_TABLE_QUERY_, database=database, schema=schema, table=table, name=name, admin=False).commit()
             if self._table_ == table: self._table_ = name
             self._log_.alert(lambda: f"Refactor Operation: Refactored {table} Table to {name}")
         elif schema:
-            if isinstance(database, (list, tuple)):
-                for d in database: self.refactor(database=d, schema=schema, table=table, name=name)
-                return self
             if not database:
                 raise ValueError("Database must be provided to operate on a Schema")
-            if isinstance(schema, (list, tuple)):
-                if not isinstance(name, (list, tuple)) or len(name) != len(schema):
-                    raise ValueError("Name must be a list/tuple of the same length as Schema")
-                for s, n in zip(schema, name): self.refactor(database=database, schema=s, table=table, name=n)
-                return self
             if not self.exists(database=database, schema=schema, table=None):
                 raise ValueError(f"Schema {schema} does not exist in {database}")
             self.executeone(self._REFACTOR_SCHEMA_QUERY_, database=database, schema=schema, name=name, admin=False).commit()
             if self._schema_ == schema: self._schema_ = name
             self._log_.alert(lambda: f"Refactor Operation: Refactored {schema} Schema to {name}")
         elif database:
-            if isinstance(database, (list, tuple)):
-                if not isinstance(name, (list, tuple)) or len(name) != len(database):
-                    raise ValueError("Name must be a list/tuple of the same length as Database")
-                for d, n in zip(database, name): self.refactor(database=d, schema=schema, table=table, name=n)
-                return self
             if not self.exists(database=database, schema=None, table=None):
                 raise ValueError(f"Database {database} does not exist")
             self.disconnect()
@@ -973,18 +915,9 @@ class DatabaseAPI(ServiceAPI, ABC):
         :param structure: The updated table structure definition.
         :return: Self reference.
         """
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
-        if isinstance(database, (list, tuple)):
-            for d in database: self.migrate(database=d, schema=schema, table=table, structure=structure)
-            return self
-        if isinstance(schema, (list, tuple)):
-            for s in schema: self.migrate(database=database, schema=s, table=table, structure=structure)
-            return self
-        if isinstance(table, (list, tuple)):
-            for t in table: self.migrate(database=database, schema=schema, table=t, structure=structure)
-            return self
+        routed = self._route_("migrate", database, schema, table, structure=structure)
+        if isinstance(routed, list): return self
+        database, schema, table = routed
         if table and (not database or not schema):
             raise ValueError("Schema and Database must be provided to operate on a Table")
         if schema and not database:
@@ -1054,18 +987,9 @@ class DatabaseAPI(ServiceAPI, ABC):
         """
         if not structure:
             raise ValueError("Structure must be provided to add a Column")
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
-        if isinstance(database, (list, tuple)):
-            for d in database: self.add(database=d, schema=schema, table=table, structure=structure)
-            return self
-        if isinstance(schema, (list, tuple)):
-            for s in schema: self.add(database=database, schema=s, table=table, structure=structure)
-            return self
-        if isinstance(table, (list, tuple)):
-            for t in table: self.add(database=database, schema=schema, table=t, structure=structure)
-            return self
+        routed = self._route_("add", database, schema, table, structure=structure)
+        if isinstance(routed, list): return self
+        database, schema, table = routed
         if not database or not schema or not table:
             raise ValueError("Database, Schema and Table must be provided to add a Column")
         target = self._target_(schema, table)
@@ -1099,18 +1023,9 @@ class DatabaseAPI(ServiceAPI, ABC):
         """
         if column is None:
             raise ValueError("Column must be provided to drop a Column")
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
-        if isinstance(database, (list, tuple)):
-            for d in database: self.drop(database=d, schema=schema, table=table, column=column)
-            return self
-        if isinstance(schema, (list, tuple)):
-            for s in schema: self.drop(database=database, schema=s, table=table, column=column)
-            return self
-        if isinstance(table, (list, tuple)):
-            for t in table: self.drop(database=database, schema=schema, table=t, column=column)
-            return self
+        routed = self._route_("drop", database, schema, table, column=column)
+        if isinstance(routed, list): return self
+        database, schema, table = routed
         if not database or not schema or not table:
             raise ValueError("Database, Schema and Table must be provided to drop a Column")
         if isinstance(column, (list, tuple)):
@@ -1139,18 +1054,9 @@ class DatabaseAPI(ServiceAPI, ABC):
         """
         if column is None or name is None:
             raise ValueError("Column and Name must be provided to rename a Column")
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
-        if isinstance(database, (list, tuple)):
-            for d in database: self.rename(database=d, schema=schema, table=table, column=column, name=name)
-            return self
-        if isinstance(schema, (list, tuple)):
-            for s in schema: self.rename(database=database, schema=s, table=table, column=column, name=name)
-            return self
-        if isinstance(table, (list, tuple)):
-            for t in table: self.rename(database=database, schema=schema, table=t, column=column, name=name)
-            return self
+        routed = self._route_("rename", database, schema, table, column=column, name=name)
+        if isinstance(routed, list): return self
+        database, schema, table = routed
         if not database or not schema or not table:
             raise ValueError("Database, Schema and Table must be provided to rename a Column")
         if isinstance(column, (list, tuple)):
@@ -1182,18 +1088,9 @@ class DatabaseAPI(ServiceAPI, ABC):
         if not columns:
             raise ValueError("Columns must be provided to reorder a Table")
         if isinstance(columns, str): columns = [columns]
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
-        if isinstance(database, (list, tuple)):
-            for d in database: self.reorder(database=d, schema=schema, table=table, columns=columns, structure=structure)
-            return self
-        if isinstance(schema, (list, tuple)):
-            for s in schema: self.reorder(database=database, schema=s, table=table, columns=columns, structure=structure)
-            return self
-        if isinstance(table, (list, tuple)):
-            for t in table: self.reorder(database=database, schema=schema, table=t, columns=columns, structure=structure)
-            return self
+        routed = self._route_("reorder", database, schema, table, columns=columns, structure=structure)
+        if isinstance(routed, list): return self
+        database, schema, table = routed
         if not database or not schema or not table:
             raise ValueError("Database, Schema and Table must be provided to reorder a Table")
         source = structure or self._STRUCTURE_
@@ -1235,15 +1132,9 @@ class DatabaseAPI(ServiceAPI, ABC):
         :param legacy: If True, returns Pandas DataFrames instead of Polars.
         :return: A DataFrame containing the selected data.
         """
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
-        if isinstance(database, (list, tuple)):
-            return self.frame(self._concat_([self.select(database=d, schema=schema, table=table, columns=columns, condition=condition, order=order, limit=limit, parameters=parameters, legacy=False) for d in database]), legacy=legacy)
-        if isinstance(schema, (list, tuple)):
-            return self.frame(self._concat_([self.select(database=database, schema=s, table=table, columns=columns, condition=condition, order=order, limit=limit, parameters=parameters, legacy=False) for s in schema]), legacy=legacy)
-        if isinstance(table, (list, tuple)):
-            return self.frame(self._concat_([self.select(database=database, schema=schema, table=t, columns=columns, condition=condition, order=order, limit=limit, parameters=parameters, legacy=False) for t in table]), legacy=legacy)
+        routed = self._route_("select", database, schema, table, columns=columns, condition=condition, order=order, limit=limit, parameters=parameters, legacy=legacy)
+        if isinstance(routed, list): return self.frame(self._concat_(routed), legacy=legacy)
+        database, schema, table = routed
         if not database or not schema or not table:
             raise ValueError("Database, Schema and Table must be provided to select rows")
         target = self._target_(schema, table)
@@ -1269,18 +1160,9 @@ class DatabaseAPI(ServiceAPI, ABC):
         :return: Self reference.
         """
         if data is None: raise ValueError("Data must be provided to insert rows")
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
-        if isinstance(database, (list, tuple)):
-            for d in database: self.insert(database=d, schema=schema, table=table, data=data)
-            return self
-        if isinstance(schema, (list, tuple)):
-            for s in schema: self.insert(database=database, schema=s, table=table, data=data)
-            return self
-        if isinstance(table, (list, tuple)):
-            for t in table: self.insert(database=database, schema=schema, table=t, data=data)
-            return self
+        routed = self._route_("insert", database, schema, table, data=data)
+        if isinstance(routed, list): return self
+        database, schema, table = routed
         if not database or not schema or not table: raise ValueError("Database, Schema and Table must be provided to insert rows")
         columns, records, multiple = self.parse(data)
         if not records: return self
@@ -1312,18 +1194,9 @@ class DatabaseAPI(ServiceAPI, ABC):
         :return: Self reference.
         """
         if data is None: raise ValueError("Data must be provided to update rows")
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
-        if isinstance(database, (list, tuple)):
-            for d in database: self.update(database=d, schema=schema, table=table, data=data, condition=condition)
-            return self
-        if isinstance(schema, (list, tuple)):
-            for s in schema: self.update(database=database, schema=s, table=table, data=data, condition=condition)
-            return self
-        if isinstance(table, (list, tuple)):
-            for t in table: self.update(database=database, schema=schema, table=t, data=data, condition=condition)
-            return self
+        routed = self._route_("update", database, schema, table, data=data, condition=condition)
+        if isinstance(routed, list): return self
+        database, schema, table = routed
         if not database or not schema or not table: raise ValueError("Database, Schema and Table must be provided to update rows")
         columns, records, multiple = self.parse(data)
         if not records: return self
@@ -1361,21 +1234,11 @@ class DatabaseAPI(ServiceAPI, ABC):
                 key = [name for name, dtype in self._STRUCTURE_.items() if isinstance(dtype, PrimaryKey) or (isinstance(dtype, (IdentityKey, ForeignKey)) and dtype.primary)]
             if not key:
                 raise ValueError("Key must be provided to upsert rows")
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
-        if isinstance(database, (list, tuple)):
-            if returning: raise ValueError("returning is not supported with multiple databases")
-            for d in database: self.upsert(database=d, schema=schema, table=table, data=data, key=key, exclude=exclude)
+        routed = self._route_("upsert", database, schema, table, data=data, key=key, exclude=exclude, returning=returning)
+        if isinstance(routed, list):
+            if returning: raise ValueError("returning is not supported with multiple targets")
             return self
-        if isinstance(schema, (list, tuple)):
-            if returning: raise ValueError("returning is not supported with multiple schemas")
-            for s in schema: self.upsert(database=database, schema=s, table=table, data=data, key=key, exclude=exclude)
-            return self
-        if isinstance(table, (list, tuple)):
-            if returning: raise ValueError("returning is not supported with multiple tables")
-            for t in table: self.upsert(database=database, schema=schema, table=t, data=data, key=key, exclude=exclude)
-            return self
+        database, schema, table = routed
         if not database or not schema or not table: raise ValueError("Database, Schema and Table must be provided to upsert rows")
         columns, records, _ = self.parse(data)
         if not records: return self
@@ -1414,18 +1277,9 @@ class DatabaseAPI(ServiceAPI, ABC):
         :param parameters: Parameters for the query.
         :return: Self reference.
         """
-        database = database if database is not MISSING else self._database_
-        schema = schema if schema is not MISSING else self._schema_
-        table = table if table is not MISSING else self._table_
-        if isinstance(database, (list, tuple)):
-            for d in database: self.remove(database=d, schema=schema, table=table, condition=condition, parameters=parameters)
-            return self
-        if isinstance(schema, (list, tuple)):
-            for s in schema: self.remove(database=database, schema=s, table=table, condition=condition, parameters=parameters)
-            return self
-        if isinstance(table, (list, tuple)):
-            for t in table: self.remove(database=database, schema=schema, table=t, condition=condition, parameters=parameters)
-            return self
+        routed = self._route_("remove", database, schema, table, condition=condition, parameters=parameters)
+        if isinstance(routed, list): return self
+        database, schema, table = routed
         if not database or not schema or not table:
             raise ValueError("Database, Schema and Table must be provided to remove rows")
         target = self._target_(schema, table)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import functools
 import dataclasses
 from enum import Enum
 from dataclasses import dataclass, field
@@ -22,15 +23,17 @@ class DatametaAPI:
         self._name_ = name
         self._full_ = full
 
-    def __getattr__(self, item: str) -> Any:
-        attrs = {k: v for base in reversed(self._cls_.mro()) if base is not object for k, v in base.__dict__.items()}
+    @staticmethod
+    @functools.cache
+    def _resolve_(cls: Type, name: Union[str, None], full: bool, item: str) -> Any:
+        attrs = {k: v for base in reversed(cls.mro()) if base is not object for k, v in base.__dict__.items()}
         fs = attrs.get("__dataclass_fields__", {})
         is_prop = item in attrs and isinstance(attrs[item], property)
         is_field = item in fs
         is_private_field = f"_{item}_" in fs or f"_{item}" in fs
         if not (is_prop or is_field or is_private_field):
-            raise AttributeError(f"'{self._cls_.__name__}' object has no attribute '{item}'")
-        attr_val = f"{self._name_}.{item}" if self._name_ and self._full_ else self._name_ if self._name_ else item
+            raise AttributeError(f"'{cls.__name__}' object has no attribute '{item}'")
+        attr_val = f"{name}.{item}" if name and full else name if name else item
         t_str = ""
         if is_prop:
             t_str = str(attrs[item].fget.__annotations__.get("return", ""))
@@ -40,20 +43,25 @@ class DatametaAPI:
                 t_str = str(attrs.get("__annotations__", {}).get(item, ""))
         elif is_private_field:
             t_str = str(attrs.get("__annotations__", {}).get(item, ""))
-        def get_all_subclasses(cls):
-            subs = cls.__subclasses__()
+        result = attr_val
+        def get_all_subclasses(c):
+            subs = c.__subclasses__()
             return subs + [s for child in subs for s in get_all_subclasses(child)]
         for child_class in get_all_subclasses(DataclassAPI):
             if child_class.__name__ in t_str:
-                return DatametaAPI(cls=child_class, name=attr_val, full=self._full_)
-        return attr_val
+                result = DatametaAPI(cls=child_class, name=attr_val, full=full)
+                break
+        return result
+
+    def __getattr__(self, item: str) -> Any:
+        return self._resolve_(self._cls_, self._name_, self._full_, item)
 
     def __str__(self) -> str:
         return self._name_ if self._name_ else self._cls_.__name__
 
     def __repr__(self) -> str:
         return repr(self._name_ if self._name_ else self._cls_.__name__)
-        
+
     def __eq__(self, other: Any) -> bool:
         return str(self) == str(other)
 
