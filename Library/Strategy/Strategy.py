@@ -34,7 +34,7 @@ from Library.Protocol.Update import (
 )
 
 if TYPE_CHECKING:
-    from Library.Parameters import Parameters
+    from Library.Parameter import Parameter
 
 class StrategyType(EnumerationAPI):
     Download = 1
@@ -44,12 +44,12 @@ class StrategyType(EnumerationAPI):
 class StrategyAPI(ABC):
 
     def __init__(self,
-                 money_management: Parameters,
-                 risk_management: Parameters,
-                 signal_management: Parameters) -> None:
-        self.MoneyManagement: Parameters = money_management
-        self.RiskManagement: Parameters = risk_management
-        self.SignalManagement: Parameters = signal_management
+                 money_management: Parameter,
+                 risk_management: Parameter,
+                 signal_management: Parameter) -> None:
+        self.MoneyManagement: Parameter = money_management
+        self.RiskManagement: Parameter = risk_management
+        self.SignalManagement: Parameter = signal_management
         self._log_: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="Strategy Management")
 
     @staticmethod
