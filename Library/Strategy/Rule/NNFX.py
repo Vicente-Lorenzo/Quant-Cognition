@@ -33,14 +33,14 @@ from Library.Protocol.Update import (
 from Library.Strategy.Strategy import StrategyAPI
 
 if TYPE_CHECKING:
-    from Library.Parameters import Parameters
+    from Library.Parameter import Parameter
 
 class NNFXStrategyAPI(StrategyAPI):
 
     def __init__(self,
-                 money_management: Parameters,
-                 risk_management: Parameters,
-                 signal_management: Parameters) -> None:
+                 money_management: Parameter,
+                 risk_management: Parameter,
+                 signal_management: Parameter) -> None:
         super().__init__(money_management, risk_management, signal_management)
 
         self._risk_percentage_, = self.MoneyManagement.RiskPercentage
