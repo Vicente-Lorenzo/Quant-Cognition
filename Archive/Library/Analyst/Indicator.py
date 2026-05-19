@@ -9,7 +9,7 @@ class IndicatorAPI:
         self._offset: int = 1
 
         self._indicator: IndicatorConfigurationAPI = getattr(IndicatorsAPI, indicator)
-        self._parameters: dict = dict(zip(self._indicator.Parameters.keys(), parameters))
+        self._parameters: dict = dict(zip(self._indicator.Parameter.keys(), parameters))
         self._sids = [f"{indicator}_{'_'.join(map(str, parameters)) + '_' if parameters else ''}{output}" for output in self._indicator.Output]
 
         self._series: Union[list[SeriesAPI], None] = None

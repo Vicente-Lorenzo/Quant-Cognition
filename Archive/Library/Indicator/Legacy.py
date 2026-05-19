@@ -14,7 +14,7 @@ class LegacyIndicatorAPI(BaseIndicatorAPI):
         super().__init__()
         from Library.Indicator.Indicators import IndicatorsAPI
         self._indicator_: IndicatorConfigurationAPI = getattr(IndicatorsAPI, indicator_name)
-        self._parameters_: dict = dict(zip(self._indicator_.Parameters.keys(), parameters))
+        self._parameters_: dict = dict(zip(self._indicator_.Parameter.keys(), parameters))
         self._sids_ = [f"{indicator_name}_{'_'.join(map(str, parameters)) + '_' if parameters else ''}{output}" for output in self._indicator_.Output]
 
     def calculate(self, market: MarketAPI, window: Union[int, None] = None) -> pl.DataFrame:

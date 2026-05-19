@@ -1,14 +1,14 @@
 from typing import Union
 from math import floor
 
-from Library.Parameters import Parameters
+from Library.Parameter import Parameter
 
 from Library.Classes import *
 from Library.Manager import PositionAPI, StatisticsAPI
 
 class ManagerAPI:
 
-    def __init__(self, manager_management: Parameters):
+    def __init__(self, manager_management: Parameter):
         self.ManagerManagement = manager_management
         self.Account: Union[Account, None] = None
         self.Security: Union[Security, None] = None

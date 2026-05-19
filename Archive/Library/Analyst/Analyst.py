@@ -4,14 +4,14 @@ from typing import Union
 from Library.Database.Dataframe import pl
 from Library.Database import DatabaseAPI
 from Library.Utility import BarAPI
-from Library.Parameters import Parameters
+from Library.Parameter import Parameter
 
 from Library.Analyst import MARGIN, MarketAPI, IndicatorAPI
 
 class AnalystAPI:
 
-    def __init__(self, analyst_management: Parameters):
-        self.AnalystManagement: Parameters = analyst_management
+    def __init__(self, analyst_management: Parameter):
+        self.AnalystManagement: Parameter = analyst_management
         self.Window: int = MARGIN
         self.Market: MarketAPI = MarketAPI()
 
