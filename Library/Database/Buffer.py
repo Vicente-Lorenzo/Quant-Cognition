@@ -8,12 +8,12 @@ from datetime import datetime, timedelta
 from collections.abc import Sequence
 from typing import Callable, Type, Union, TYPE_CHECKING
 
-from Library.Logging import HandlerLoggingAPI
+from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Postgres.Postgres import PostgresAPI
+from Library.Logging import HandlerLoggingAPI
 
 if TYPE_CHECKING:
     from Library.Database.Database import DatabaseAPI
-    from Library.Database.Datapoint import DatapointAPI
 
 class BufferAPI(threading.Thread):
 
@@ -34,7 +34,7 @@ class BufferAPI(threading.Thread):
         self._signal_: queue.Queue = queue.Queue()
         self._last_flush_: datetime = datetime.now()
 
-        self._db_: Callable[[], DatabaseAPI] = db or (lambda: PostgresAPI(database="Quant"))
+        self._db_: Callable[[], DatabaseAPI] = db or (lambda: PostgresAPI(database=DatapointAPI.Database))
 
         self._log_: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="Buffer Management")
 
@@ -88,8 +88,8 @@ class BufferAPI(threading.Thread):
             except queue.Empty: break
             try:
                 identity = records[0].identity_keys()
-                data = [r.dict() for r in records]
                 key = records[0].natural_keys()
+                data = [{k: v for k, v in r.dict().items() if k not in identity} for r in records]
                 if identity:
                     df = db.upsert(schema=t.Schema, table=t.Table, data=data, key=key, returning=identity)
                     for i, r in enumerate(records):
