@@ -1,16 +1,20 @@
-﻿from datetime import datetime, timedelta
-from unittest.mock import MagicMock
+﻿from unittest.mock import MagicMock
 
 import pytest
 
-from Library.Parameters import ParametersAPI
+from Library.Parameter import ParameterAPI
 from Library.Protocol.Action import ActionID
 from Library.Strategy.Rule.Download import DownloadStrategyAPI
-from Library.System.Realtime import RealtimeSystemAPI
+from Library.System.Realtime import RealtimeAPI
+from Library.Market.Tick import TickAPI
+from Library.Market.Bar import BarAPI
+from Library.Portfolio.Order import OrderAPI
+from Library.Portfolio.Position import PositionAPI
+from Library.Portfolio.Trade import TradeAPI
 
-def _make_system_(market: tuple = (100, 60.0), portfolio: tuple = (100, 60.0), port: int = 5556, **kwargs) -> RealtimeSystemAPI:
-    p = ParametersAPI()
-    system = RealtimeSystemAPI(
+def _make_system_(market: tuple = (100, 60.0), portfolio: tuple = (100, 60.0), port: int = 5556, **kwargs) -> RealtimeAPI:
+    p = ParameterAPI()
+    system = RealtimeAPI(
         strategy=DownloadStrategyAPI,
         security=MagicMock(),
         timeframe=MagicMock(),
@@ -52,196 +56,91 @@ def test_direct_attribute_state(realtime_system):
     assert realtime_system.sentimental is None
     assert realtime_system.portfolio is None
 
-def test_buffer_thresholds_stored():
-    system = _make_system_(market=(42, 1.5), portfolio=(7, 0.5))
-    assert system.buffer._market_batch_ == 42
-    assert system.buffer._market_interval_ == 1.5
-    assert system.buffer._portfolio_batch_ == 7
-    assert system.buffer._portfolio_interval_ == 0.5
+def test_buffer_instances_carry_correct_types(realtime_system):
+    assert realtime_system._market_._types_ == (TickAPI, BarAPI)
+    assert realtime_system._portfolio_._types_ == (OrderAPI, PositionAPI, TradeAPI)
 
-def test_live_mode_active_both():
+def test_live_mode_both_buffers_active():
     system = _make_system_(market=(100, 60.0), portfolio=(100, 60.0))
-    assert system.buffer.ActiveMarket is True
-    assert system.buffer.ActivePortfolio is True
-    assert system.buffer.Active is True
+    assert system._market_.Active is True
+    assert system._portfolio_.Active is True
 
-def test_simulation_mode_active_market_only():
+def test_simulation_mode_only_market_active():
     system = _make_system_(market=(5000, 0.0), portfolio=(0, 0.0))
-    assert system.buffer.ActiveMarket is True
-    assert system.buffer.ActivePortfolio is False
-    assert system.buffer.Active is True
+    assert system._market_.Active is True
+    assert system._portfolio_.Active is False
 
-def test_testing_mode_inactive():
+def test_testing_mode_both_inactive():
     system = _make_system_(market=(0, 0.0), portfolio=(0, 0.0))
-    assert system.buffer.ActiveMarket is False
-    assert system.buffer.ActivePortfolio is False
-    assert system.buffer.Active is False
+    assert system._market_.Active is False
+    assert system._portfolio_.Active is False
 
-def test_inactive_methods_are_noops_zero_overhead():
-    system = _make_system_(market=(0, 0.0), portfolio=(0, 0.0))
-    assert system.buffer.tick is system.buffer._noop_
-    assert system.buffer.bar is system.buffer._noop_
-    assert system.buffer.order is system.buffer._noop_
-    assert system.buffer.position is system.buffer._noop_
-    assert system.buffer.trade is system.buffer._noop_
+def test_receive_update_target_routes_to_market_buffer(realtime_system):
+    realtime_system._market_.add = MagicMock()
+    tick = MagicMock()
+    realtime_system.receive_update_target = MagicMock(return_value=tick)
+    realtime_system._receive_update_target_()
+    realtime_system._market_.add.assert_called_once_with(tick)
 
-def test_simulation_market_methods_real_portfolio_noop():
-    system = _make_system_(market=(100, 0.0), portfolio=(0, 0.0))
-    assert system.buffer.tick is not system.buffer._noop_
-    assert system.buffer.bar is not system.buffer._noop_
-    assert system.buffer.order is system.buffer._noop_
-    assert system.buffer.position is system.buffer._noop_
-    assert system.buffer.trade is system.buffer._noop_
+def test_receive_update_bar_routes_bar_and_subticks_to__market_(realtime_system):
+    realtime_system._market_.add = MagicMock()
+    g, o, h, l, c = MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
+    bar = MagicMock()
+    bar.GapTick, bar.OpenTick, bar.HighTick, bar.LowTick, bar.CloseTick = g, o, h, l, c
+    realtime_system.receive_update_bar = MagicMock(return_value=bar)
+    realtime_system._receive_update_bar_()
+    assert [call.args[0] for call in realtime_system._market_.add.call_args_list] == [g, o, h, l, c, bar]
 
-def test_buffer_starts_empty(realtime_system):
-    assert realtime_system.buffer.Empty is True
-    assert realtime_system.buffer._tick_buffer_ == []
-    assert realtime_system.buffer._bar_buffer_ == []
-    assert realtime_system.buffer._order_buffer_ == []
-    assert realtime_system.buffer._position_buffer_ == []
-    assert realtime_system.buffer._trade_buffer_ == []
+def test_receive_update_order_routes_to_portfolio_buffer(realtime_system):
+    realtime_system._portfolio_.add = MagicMock()
+    order = MagicMock()
+    realtime_system.receive_update_order = MagicMock(return_value=order)
+    realtime_system._receive_update_order_()
+    realtime_system._portfolio_.add.assert_called_once_with(order)
 
-def test_empty_false_when_market_batch_reached():
-    system = _make_system_(market=(3, 0.0), portfolio=(0, 0.0))
-    system.buffer.tick(MagicMock())
-    system.buffer.tick(MagicMock())
-    system.buffer.tick(MagicMock())
-    assert system.buffer.EmptyMarket is False
-    assert system.buffer.Empty is False
+def test_receive_update_position_routes_to_portfolio_buffer(realtime_system):
+    realtime_system._portfolio_.add = MagicMock()
+    position = MagicMock()
+    realtime_system.receive_update_position = MagicMock(return_value=position)
+    realtime_system._receive_update_position_()
+    realtime_system._portfolio_.add.assert_called_once_with(position)
 
-def test_empty_false_when_portfolio_batch_reached():
-    system = _make_system_(market=(0, 0.0), portfolio=(3, 0.0))
-    system.buffer.order(MagicMock())
-    system.buffer.position(MagicMock())
-    system.buffer.trade(MagicMock())
-    assert system.buffer.EmptyPortfolio is False
-    assert system.buffer.Empty is False
-
-def test_empty_false_when_market_interval_elapsed():
-    system = _make_system_(market=(100, 0.001), portfolio=(0, 0.0))
-    system.buffer._last_market_flush_ = datetime.now() - timedelta(seconds=1)
-    system.buffer.tick(MagicMock())
-    assert system.buffer.EmptyMarket is False
-
-def test_buffer_methods_noop_when_inactive():
-    system = _make_system_(market=(0, 0.0), portfolio=(0, 0.0))
-    system.buffer.tick(MagicMock())
-    system.buffer.bar(MagicMock())
-    system.buffer.order(MagicMock())
-    system.buffer.position(MagicMock())
-    system.buffer.trade(MagicMock())
-    assert system.buffer._tick_buffer_ == []
-    assert system.buffer._bar_buffer_ == []
-    assert system.buffer._order_buffer_ == []
-    assert system.buffer._position_buffer_ == []
-    assert system.buffer._trade_buffer_ == []
+def test_receive_update_trade_routes_to_portfolio_buffer(realtime_system):
+    realtime_system._portfolio_.add = MagicMock()
+    trade = MagicMock()
+    realtime_system.receive_update_trade = MagicMock(return_value=trade)
+    realtime_system._receive_update_trade_()
+    realtime_system._portfolio_.add.assert_called_once_with(trade)
 
 def test_simulation_mode_drops_portfolio_records():
     system = _make_system_(market=(100, 60.0), portfolio=(0, 0.0))
-    system.buffer.tick(MagicMock())
-    system.buffer.order(MagicMock())
-    system.buffer.position(MagicMock())
-    system.buffer.trade(MagicMock())
-    assert len(system.buffer._tick_buffer_) == 1
-    assert system.buffer._order_buffer_ == []
-    assert system.buffer._position_buffer_ == []
-    assert system.buffer._trade_buffer_ == []
+    assert system._portfolio_.add is system._portfolio_._noop_
 
-def test_receive_update_target_buffers_tick(realtime_system):
-    realtime_system.receive_update_target = MagicMock(return_value="tick")
-    realtime_system._receive_update_target_()
-    assert realtime_system.buffer._tick_buffer_ == ["tick"]
-
-def test_receive_update_bar_buffers_bar_and_five_subticks(realtime_system):
+def test_sync_market_routes_warmup_to_market_buffer(realtime_system):
+    realtime_system._market_.add = MagicMock()
+    g, o, h, l, c = MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
     bar = MagicMock()
-    bar.GapTick = "gap"
-    bar.OpenTick = "open"
-    bar.HighTick = "high"
-    bar.LowTick = "low"
-    bar.CloseTick = "close"
-    realtime_system.receive_update_bar = MagicMock(return_value=bar)
-    realtime_system._receive_update_bar_()
-    assert realtime_system.buffer._tick_buffer_ == ["gap", "open", "high", "low", "close"]
-    assert realtime_system.buffer._bar_buffer_ == [bar]
+    bar.GapTick, bar.OpenTick, bar.HighTick, bar.LowTick, bar.CloseTick = g, o, h, l, c
+    update = MagicMock(); update.Bar = bar
+    engine = realtime_system.system_management()
+    initialisation = engine.state(name="Initialisation")
+    transition = next(t for t in initialisation._transitions_ if t is not None and getattr(t, "Action", None) and t.Action.__name__ == "sync_market")
+    transition.perform(update)
+    assert [call.args[0] for call in realtime_system._market_.add.call_args_list] == [g, o, h, l, c, bar]
+    assert realtime_system._sync_buffer_ == [bar]
 
-def test_receive_update_order_buffers_order(realtime_system):
-    realtime_system.receive_update_order = MagicMock(return_value="order")
-    realtime_system._receive_update_order_()
-    assert realtime_system.buffer._order_buffer_ == ["order"]
-
-def test_receive_update_position_buffers_position(realtime_system):
-    realtime_system.receive_update_position = MagicMock(return_value="pos")
-    realtime_system._receive_update_position_()
-    assert realtime_system.buffer._position_buffer_ == ["pos"]
-
-def test_receive_update_trade_buffers_trade(realtime_system):
-    realtime_system.receive_update_trade = MagicMock(return_value="trade")
-    realtime_system._receive_update_trade_()
-    assert realtime_system.buffer._trade_buffer_ == ["trade"]
-
-def test_flush_enqueues_into_per_kind_queues(realtime_system):
-    realtime_system.buffer.tick("t")
-    realtime_system.buffer.bar("b")
-    realtime_system.buffer.order("o")
-    realtime_system.buffer.position("p")
-    realtime_system.buffer.trade("x")
-    realtime_system.buffer.flush()
-    assert realtime_system.buffer._tick_queue_.get_nowait() == ["t"]
-    assert realtime_system.buffer._bar_queue_.get_nowait() == ["b"]
-    assert realtime_system.buffer._order_queue_.get_nowait() == ["o"]
-    assert realtime_system.buffer._position_queue_.get_nowait() == ["p"]
-    assert realtime_system.buffer._trade_queue_.get_nowait() == ["x"]
-
-def test_flush_clears_buffers(realtime_system):
-    realtime_system.buffer.order(MagicMock())
-    realtime_system.buffer.flush()
-    assert realtime_system.buffer._order_buffer_ == []
-
-def test_flush_signals_worker(realtime_system):
-    realtime_system.buffer.order(MagicMock())
-    realtime_system.buffer.flush()
-    assert realtime_system.buffer._signal_.get_nowait() is True
-
-def test_flush_does_not_signal_when_nothing_pushed(realtime_system):
-    realtime_system.buffer.flush()
-    assert realtime_system.buffer._signal_.empty()
-
-def test_consume_dispatches_to_market_and_portfolio_push():
-    from Library.System import Buffer
-    market_mock = MagicMock()
-    portfolio_mock = MagicMock()
-    saved_market = Buffer.MarketAPI
-    saved_portfolio = Buffer.PortfolioAPI
-    Buffer.MarketAPI = market_mock
-    Buffer.PortfolioAPI = portfolio_mock
-    try:
-        system = _make_system_()
-        db = MagicMock()
-        rec = MagicMock()
-        rec.dict.return_value = {"k": "v"}
-        system.buffer._tick_queue_.put([rec])
-        system.buffer._bar_queue_.put([rec])
-        system.buffer._order_queue_.put([rec])
-        system.buffer._position_queue_.put([rec])
-        system.buffer._trade_queue_.put([rec])
-        system.buffer._consume_(db)
-        market_mock.push_ticks.assert_called_once()
-        market_mock.push_bars.assert_called_once()
-        portfolio_mock.push_orders.assert_called_once()
-        portfolio_mock.push_positions.assert_called_once()
-        portfolio_mock.push_trades.assert_called_once()
-    finally:
-        Buffer.MarketAPI = saved_market
-        Buffer.PortfolioAPI = saved_portfolio
-
-def test_consume_drains_all_queues(realtime_system):
-    realtime_system.buffer._tick_queue_.put([])
-    realtime_system.buffer._bar_queue_.put([])
-    realtime_system.buffer._order_queue_.put([])
-    realtime_system.buffer._consume_(MagicMock())
-    assert realtime_system.buffer._tick_queue_.empty()
-    assert realtime_system.buffer._bar_queue_.empty()
-    assert realtime_system.buffer._order_queue_.empty()
+def test_init_market_clears_sync_buffer(realtime_system):
+    bar = MagicMock()
+    bar.Timestamp.DateTime = "ts"
+    bar.dict.return_value = {}
+    realtime_system._sync_buffer_.append(bar)
+    update = MagicMock()
+    update.Portfolio.Account = MagicMock()
+    engine = realtime_system.system_management()
+    initialisation = engine.state(name="Initialisation")
+    transition = next(t for t in initialisation._transitions_ if t is not None and getattr(t, "Action", None) and t.Action.__name__ == "init_market")
+    transition.perform(update)
+    assert realtime_system._sync_buffer_ == []
 
 def test_send_action_serializes_to_socket(realtime_system):
     from Library.Protocol.Action import CompleteActionAPI
@@ -262,3 +161,16 @@ def test_receive_update_exception_returns_reason(realtime_system):
 
 def test_receive_update_security_returns_init_security(realtime_system):
     assert realtime_system.receive_update_security() is realtime_system._security_
+
+def test_exit_drains_buffers_before_closing_stack():
+    system = _make_system_()
+    calls = []
+    system._market_._active_ = True
+    system._portfolio_._active_ = True
+    system._market_.shutdown = lambda: calls.append("market_shutdown")
+    system._portfolio_.shutdown = lambda: calls.append("portfolio_shutdown")
+    system._stack_ = MagicMock()
+    system._stack_.__exit__ = MagicMock(side_effect=lambda *a, **k: calls.append("stack_exit"))
+    system.__exit__(None, None, None)
+    assert calls.index("market_shutdown") < calls.index("stack_exit")
+    assert calls.index("portfolio_shutdown") < calls.index("stack_exit")

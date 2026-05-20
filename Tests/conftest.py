@@ -58,7 +58,7 @@ def universe(db):
     ticker.save()
     contract = ContractAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Type=ContractType.Spot, PipSize=0.0001, PointSize=0.00001, Digits=5, LotSize=100000, db=db)
     contract.save()
-    sec = SecurityAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Contract=ContractType.Spot, db=db)
+    sec = SecurityAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Contract=ContractType.Spot, Category="Forex (Major)", db=db)
     sec.save()
     tf = TimeframeAPI(UID="M1", db=db)
     tf.save()
