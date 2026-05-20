@@ -4,12 +4,14 @@ from abc import ABC, abstractmethod
 from typing import Type, Union, TYPE_CHECKING
 from typing_extensions import Self
 
+from Library.Database import BufferAPI
 from Library.Database.Enumeration import EnumerationAPI
 from Library.Logging import HandlerLoggingAPI
+from Library.Market.Bar import BarAPI
+from Library.Market.Tick import TickAPI
 from Library.Portfolio.Order import OrderAPI
 from Library.Portfolio.Position import PositionAPI
 from Library.Portfolio.Trade import TradeAPI
-from Library.System.Buffer import BufferAPI
 from Library.Protocol.Action import ActionAPI, ActionID, CompleteActionAPI
 from Library.Protocol.Update import (
     UpdateID,
@@ -95,10 +97,8 @@ if TYPE_CHECKING:
     from Library.Indicator.Indicator import IndicatorAPI
     from Library.Indicator.Sentimental import SentimentalAPI
     from Library.Indicator.Technical import TechnicalAPI
-    from Library.Market.Bar import BarAPI
     from Library.Market.Market import MarketAPI
-    from Library.Market.Tick import TickAPI
-    from Library.Parameters import Parameters
+    from Library.Parameter import Parameter
     from Library.Portfolio.Account import AccountAPI
     from Library.Portfolio.Portfolio import PortfolioAPI
     from Library.Strategy.Strategy import StrategyAPI
@@ -119,13 +119,13 @@ class SystemAPI(ABC):
                  strategy: Type[StrategyAPI],
                  security: SecurityAPI,
                  timeframe: TimeframeAPI,
-                 parameters: Parameters,
+                 parameters: Parameter,
                  market: tuple[int, float],
                  portfolio: tuple[int, float]) -> None:
         self._strategy_: Type[StrategyAPI] = strategy
         self._security_: SecurityAPI = security
         self._timeframe_: TimeframeAPI = timeframe
-        self._parameters_: Parameters = parameters
+        self._parameters_: Parameter = parameters
 
         self.account: Union[AccountAPI, None] = None
         self.security: SecurityAPI = security
@@ -138,7 +138,8 @@ class SystemAPI(ABC):
         self.strategy: Union[StrategyAPI, None] = None
         self.statistics = None
 
-        self.buffer: BufferAPI = BufferAPI(market=market, portfolio=portfolio)
+        self._market_: BufferAPI = BufferAPI(types=[TickAPI, BarAPI], batch=market[0], interval=market[1])
+        self._portfolio_: BufferAPI = BufferAPI(types=[OrderAPI, PositionAPI, TradeAPI], batch=portfolio[0], interval=portfolio[1])
 
         self._log_: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="System Management")
 
@@ -148,7 +149,8 @@ class SystemAPI(ABC):
             self.technical = self.indicator.Technical
             self.fundamental = self.indicator.Fundamental
             self.sentimental = self.indicator.Sentimental
-        if self.buffer.Active: self.buffer.start()
+        if self._market_.Active: self._market_.start()
+        if self._portfolio_.Active: self._portfolio_.start()
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback) -> Self:
@@ -156,7 +158,8 @@ class SystemAPI(ABC):
             self._log_.exception(lambda: f"Exception type: {exc_type}")
             self._log_.exception(lambda: f"Exception value: {exc_value}")
             self._log_.exception(lambda: f"Traceback: {exc_traceback}")
-        if self.buffer.Active: self.buffer.shutdown()
+        if self._market_.Active: self._market_.shutdown()
+        if self._portfolio_.Active: self._portfolio_.shutdown()
         self._log_.debug(lambda: "Terminated")
         return self
 
@@ -182,7 +185,7 @@ class SystemAPI(ABC):
 
     def _receive_update_target_(self) -> TickAPI:
         tick = self.receive_update_target()
-        self.buffer.tick(tick)
+        self._market_.add(tick)
         return tick
 
     @abstractmethod
@@ -191,12 +194,12 @@ class SystemAPI(ABC):
 
     def _receive_update_bar_(self) -> BarAPI:
         bar = self.receive_update_bar()
-        self.buffer.tick(bar.GapTick)
-        self.buffer.tick(bar.OpenTick)
-        self.buffer.tick(bar.HighTick)
-        self.buffer.tick(bar.LowTick)
-        self.buffer.tick(bar.CloseTick)
-        self.buffer.bar(bar)
+        self._market_.add(bar.GapTick)
+        self._market_.add(bar.OpenTick)
+        self._market_.add(bar.HighTick)
+        self._market_.add(bar.LowTick)
+        self._market_.add(bar.CloseTick)
+        self._market_.add(bar)
         return bar
 
     @abstractmethod
@@ -205,7 +208,7 @@ class SystemAPI(ABC):
 
     def _receive_update_order_(self) -> OrderAPI:
         order = self.receive_update_order()
-        self.buffer.order(order)
+        self._portfolio_.add(order)
         return order
 
     @abstractmethod
@@ -214,7 +217,7 @@ class SystemAPI(ABC):
 
     def _receive_update_position_(self) -> PositionAPI:
         position = self.receive_update_position()
-        self.buffer.position(position)
+        self._portfolio_.add(position)
         return position
 
     @abstractmethod
@@ -223,7 +226,7 @@ class SystemAPI(ABC):
 
     def _receive_update_trade_(self) -> TradeAPI:
         trade = self.receive_update_trade()
-        self.buffer.trade(trade)
+        self._portfolio_.add(trade)
         return trade
 
     @abstractmethod
@@ -418,8 +421,8 @@ class SystemAPI(ABC):
         while not engine.IsTerminated:
             actions = self._process_updates_(engine)
             self._process_actions_(actions)
-            if not self.buffer.Empty: self.buffer.flush()
-        self.buffer.flush()
+            if not self._market_.Empty: self._market_.flush()
+            if not self._portfolio_.Empty: self._portfolio_.flush()
 
     @abstractmethod
     def run(self) -> None:
