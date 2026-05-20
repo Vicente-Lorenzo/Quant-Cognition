@@ -22,10 +22,10 @@ class IndicatorAPI:
     Fundamental: FundamentalAPI = None
     Sentimental: SentimentalAPI = None
 
-    def __init__(self, parameters: Union[dict, None] = None):
-        self.Technical = parse_technical(parameters.get('Technical') if parameters else None)
-        self.Fundamental = parse_fundamental(parameters.get('Fundamental') if parameters else None)
-        self.Sentimental = parse_sentimental(parameters.get('Sentimental') if parameters else None)
+    def __init__(self, technical: Union[dict, None] = None, fundamental: Union[dict, None] = None, sentimental: Union[dict, None] = None):
+        self.Technical = parse_technical(technical)
+        self.Fundamental = parse_fundamental(fundamental)
+        self.Sentimental = parse_sentimental(sentimental)
 
     def init_data(self, market: MarketAPI) -> None:
         if self.Technical: self.Technical.init_data(market)
