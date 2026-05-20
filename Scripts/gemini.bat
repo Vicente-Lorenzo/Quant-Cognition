@@ -1,14 +1,14 @@
 @echo off
-title Gemini CLI
+title Antigravity CLI
 echo -----------------------------------------------
-echo Starting Gemini CLI...
+echo Starting Antigravity CLI...
 echo -----------------------------------------------
 
-echo [1/1] Launching Gemini in project directory...
+echo [1/1] Launching Antigravity in project directory...
 cd /d "C:\Users\Admin\OneDrive\Documents\cAlgo"
-gemini
+agy
 
 echo -----------------------------------------------
-echo Gemini CLI Terminated.
+echo Antigravity CLI Terminated.
 echo -----------------------------------------------
 cmd /k
