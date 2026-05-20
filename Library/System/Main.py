@@ -6,7 +6,7 @@ from Library.Utility.Statistic import timer
 from Library.System.System import SystemType
 from Library.Strategy.Model import DDPGStrategyAPI
 from Library.Strategy.Strategy import StrategyType
-from Library.System import RealtimeSystemAPI, SystemAPI
+from Library.System import RealtimeAPI, SystemAPI
 from Library.Parameter import Parameter, ParameterAPI
 from Library.Utility.Path import traceback_current_module
 from Library.Logging import HandlerLoggingAPI, VerboseLevel
@@ -76,7 +76,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
     match SystemType(args.system):
         case SystemType.Live:
             params: Parameter = parameters.Live[args.strategy]
-            return RealtimeSystemAPI(
+            return RealtimeAPI(
                 strategy=strategy,
                 security=security,
                 timeframe=timeframe,
@@ -87,7 +87,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
             )
         case SystemType.Simulation:
             params: Parameter = parameters.Simulation[args.strategy]
-            return RealtimeSystemAPI(
+            return RealtimeAPI(
                 strategy=strategy,
                 security=security,
                 timeframe=timeframe,
@@ -98,7 +98,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
             )
         case SystemType.Testing:
             params: Parameter = parameters.Testing[args.strategy]
-            return RealtimeSystemAPI(
+            return RealtimeAPI(
                 strategy=strategy,
                 security=security,
                 timeframe=timeframe,
@@ -110,7 +110,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
         case SystemType.Backtesting:
             return None
         #     params: Parameter = parameters.Backtesting[args.strategy]
-        #     return BacktestingSystemAPI(
+        #     return BacktestingAPI(
         #         strategy=strategy,
         #         security=security,
         #         timeframe=timeframe,
@@ -126,7 +126,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
             return None
         #     params: Parameter = parameters.Backtesting[args.strategy]
         #     config: Parameter = parameters.Optimization[args.strategy]
-        #     return OptimizationSystemAPI(
+        #     return OptimizationAPI(
         #         strategy=strategy,
         #         security=security,
         #         timeframe=timeframe,
@@ -147,7 +147,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
         case SystemType.Learning:
             return None
         #     params: Parameter = parameters.Learning[args.strategy]
-        #     return LearningSystemAPI(
+        #     return LearningAPI(
         #         strategy=strategy,
         #         security=security,
         #         timeframe=timeframe,

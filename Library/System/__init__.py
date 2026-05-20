@@ -1,10 +1,10 @@
 from Library.System.System import SystemType, SystemAPI
 from Library.System.Lifecycle import LifecycleAPI
-from Library.System.Realtime import RealtimeSystemAPI
+from Library.System.Realtime import RealtimeAPI
 
 __all__ = [
     "SystemType",
     "SystemAPI",
     "LifecycleAPI",
-    "RealtimeSystemAPI"
+    "RealtimeAPI"
 ]
