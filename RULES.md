@@ -64,7 +64,7 @@ If structural changes (new folders or modules) are detected that are not reflect
 - **`Library/Protocol`**: Wire protocol shared with the C# Connector. `Action/` (commands sent to cTrader) and `Update/` (events received from cTrader); `ActionID` / `UpdateID` enumerations.
 - **`Library/Spotware`**: Spotware/cTrader API helpers (`SpotwareAPI`, `MarketAPI`, `PortfolioAPI`, `ExecutionAPI`, `UniverseAPI`, `StreamingAPI`). Largely a research/integration scratchpad.
 - **`Library/Strategy`**: Strategy framework (`StrategyAPI`, `StrategyType`). Strategy implementations split into `Rule/` (e.g., `Download`, `NNFX`), `Model/` (e.g., `DDPG`), and `Hybrid/` subpackages.
-- **`Library/System`**: Python Trading Engine (`SystemAPI`, `SystemType`, `LifecycleAPI`, `RealtimeSystemAPI`, `BufferAPI`, plus legacy `Backtesting`/`Optimization`/`Learning` placeholders pending refactor). `Main.py` is the CLI entry point.
+- **`Library/System`**: Python Trading Engine (`SystemAPI`, `SystemType`, `LifecycleAPI`, `RealtimeAPI`, plus legacy `BacktestingAPI`/`OptimizationAPI`/`LearningAPI` placeholders pending refactor). `Main.py` is the CLI entry point.
 - **`Library/Universe`**: Tradable universe definitions (`UniverseAPI`, `ProviderAPI`, `CategoryAPI`, `TickerAPI`, `ContractAPI`, `SecurityAPI`, `TimeframeAPI`).
 - **`Library/Utility`**: Helper library (`PathAPI`, `DateTimeAPI`, `IOAPI`, `HTMLAPI`, `ImageAPI`, `ChartAPI`, `RuntimeAPI`, `ServiceAPI`, `StatisticAPI` (timer/profiling), `TypingAPI`, `FileAPI`, `MemoryAPI`).
 
