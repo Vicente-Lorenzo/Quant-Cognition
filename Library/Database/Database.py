@@ -472,7 +472,6 @@ class DatabaseAPI(ServiceAPI, ABC):
         routed = self._route_("executeone", database, schema, table, args=(query, *args), admin=admin, **kwargs)
         if isinstance(routed, list): return self
         database, schema, table = routed
-        
         clone_result = self._clone_("executeone", (query, *args), database, schema, table, admin, **kwargs)
         if clone_result is not None: return clone_result
         if database is not MISSING: kwargs["database"] = database
@@ -502,7 +501,6 @@ class DatabaseAPI(ServiceAPI, ABC):
         routed = self._route_("executemany", database, schema, table, args=(query, *args), admin=admin, **kwargs)
         if isinstance(routed, list): return self
         database, schema, table = routed
-        
         clone_result = self._clone_("executemany", (query, *args), database, schema, table, admin, **kwargs)
         if clone_result is not None: return clone_result
         if database is not MISSING: kwargs["database"] = database
