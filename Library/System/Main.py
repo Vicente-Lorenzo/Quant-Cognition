@@ -1,4 +1,4 @@
-import os
+﻿import os
 from typing import Type, Union
 from argparse import ArgumentParser, Namespace
 
@@ -7,10 +7,10 @@ from Library.System.System import SystemType
 from Library.Strategy.Model import DDPGStrategyAPI
 from Library.Strategy.Strategy import StrategyType
 from Library.System import RealtimeSystemAPI, SystemAPI
-from Library.Parameters import Parameters, ParametersAPI
+from Library.Parameter import Parameter, ParameterAPI
 from Library.Utility.Path import traceback_current_module
 from Library.Logging import HandlerLoggingAPI, VerboseLevel
-from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
+from Library.Database.Postgres.Postgres import PostgresAPI
 from Library.Strategy import DownloadStrategyAPI, NNFXStrategyAPI, StrategyAPI
 from Library.Universe import CommissionType, Provider, ProviderAPI, SecurityAPI, SpreadType, SwapType, TickerAPI, TimeframeAPI
 
@@ -72,10 +72,10 @@ def _strategy_(args: Namespace) -> Union[Type[StrategyAPI], None]:
         case StrategyType.NNFX: return NNFXStrategyAPI
         case StrategyType.DDPG: return DDPGStrategyAPI
 
-def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI, timeframe: TimeframeAPI, parameters: Parameters) -> Union[SystemAPI, None]:
+def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI, timeframe: TimeframeAPI, parameters: Parameter) -> Union[SystemAPI, None]:
     match SystemType(args.system):
         case SystemType.Live:
-            params: Parameters = parameters.Live[args.strategy]
+            params: Parameter = parameters.Live[args.strategy]
             return RealtimeSystemAPI(
                 strategy=strategy,
                 security=security,
@@ -86,7 +86,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 portfolio=(100, 60.0)
             )
         case SystemType.Simulation:
-            params: Parameters = parameters.Simulation[args.strategy]
+            params: Parameter = parameters.Simulation[args.strategy]
             return RealtimeSystemAPI(
                 strategy=strategy,
                 security=security,
@@ -97,7 +97,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 portfolio=(0, 0.0)
             )
         case SystemType.Testing:
-            params: Parameters = parameters.Testing[args.strategy]
+            params: Parameter = parameters.Testing[args.strategy]
             return RealtimeSystemAPI(
                 strategy=strategy,
                 security=security,
@@ -109,7 +109,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
             )
         case SystemType.Backtesting:
             return None
-        #     params: Parameters = parameters.Backtesting[args.strategy]
+        #     params: Parameter = parameters.Backtesting[args.strategy]
         #     return BacktestingSystemAPI(
         #         strategy=strategy,
         #         security=security,
@@ -124,8 +124,8 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
         #     )
         case SystemType.Optimization:
             return None
-        #     params: Parameters = parameters.Backtesting[args.strategy]
-        #     config: Parameters = parameters.Optimization[args.strategy]
+        #     params: Parameter = parameters.Backtesting[args.strategy]
+        #     config: Parameter = parameters.Optimization[args.strategy]
         #     return OptimizationSystemAPI(
         #         strategy=strategy,
         #         security=security,
@@ -146,7 +146,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
         #     )
         case SystemType.Learning:
             return None
-        #     params: Parameters = parameters.Learning[args.strategy]
+        #     params: Parameter = parameters.Learning[args.strategy]
         #     return LearningSystemAPI(
         #         strategy=strategy,
         #         security=security,
@@ -164,7 +164,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
 
 def main() -> None:
     args: Namespace = _parse_()
-    parameterise: ParametersAPI = ParametersAPI()
+    parameterise: ParameterAPI = ParameterAPI()
     execution: str = traceback_current_module().name
 
     log: HandlerLoggingAPI = HandlerLoggingAPI(Class=execution, Subclass="Execution Management")
@@ -174,17 +174,16 @@ def main() -> None:
     @timer
     @log.guard
     def run() -> None:
-        with PostgresDatabaseAPI(database="Quant") as db:
+        with PostgresAPI(database="Quant") as db:
             ticker = TickerAPI(UID=TickerAPI.normalize(args.ticker), db=db, autoload=True)
             provider = ProviderAPI(UID=ProviderAPI.normalize(args.provider), db=db, autoload=True)
             timeframe = TimeframeAPI(UID=TimeframeAPI.normalize(args.timeframe), db=db, autoload=True)
             security = SecurityAPI(Provider=provider, Ticker=ticker, db=db, autoload=True)
-            parameters: Parameters = parameterise[provider.UID][security.Category.UID][ticker.UID][timeframe.UID]
+            parameters: Parameter = parameterise[provider.UID][security.Category.UID][ticker.UID][timeframe.UID]
             strategy = _strategy_(args)
             system = _system_(args, strategy, security, timeframe, parameters)
             with system:
                 system.run()
-
     run()
 
 if __name__ == "__main__":
