@@ -34,7 +34,7 @@ NNFX:
       Filter1Mode: [ Filter, Filter, Filter ]
       Filter2Mode: [ Filter, Filter, Filter ]
       VolumeMode: [ Filter, Off, Off ]
-  AnalystManagement:
+  TechnicalManagement:
     1:
       Baseline: [ [ WMA, HMA, DEMA, TEMA, TRIMA, KAMA ] ]
       Volatility: [ ATR, 14 ]
@@ -52,5 +52,7 @@ NNFX:
       Filter2: [ Result=3 ]
       Volume: [ [ Volume ] ]
       Volatility: [ ATR, 14 ]
-  ManagerManagement:
+  FundamentalManagement: null
+  SentimentalManagement: null
+  PortfolioManagement:
     1-4: null

@@ -2,5 +2,7 @@ Download:
   MoneyManagement: null
   RiskManagement: null
   SignalManagement: null
-  AnalystManagement: null
-  ManagerManagement: null
+  TechnicalManagement: null
+  FundamentalManagement: null
+  SentimentalManagement: null
+  PortfolioManagement: null

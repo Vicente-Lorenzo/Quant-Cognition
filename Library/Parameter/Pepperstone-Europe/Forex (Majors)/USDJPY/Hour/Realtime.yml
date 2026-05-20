@@ -2,8 +2,10 @@ Download:
   MoneyManagement: null
   RiskManagement: null
   SignalManagement: null
-  AnalystManagement: null
-  ManagerManagement: null
+  TechnicalManagement: null
+  FundamentalManagement: null
+  SentimentalManagement: null
+  PortfolioManagement: null
 
 NNFX:
   MoneyManagement:
@@ -18,10 +20,12 @@ NNFX:
     Filter1Mode: [ Filter, Filter, Filter ]
     Filter2Mode: [ Filter, Filter, Filter ]
     VolumeMode: [ Filter, Off, Off ]
-  AnalystManagement:
+  TechnicalManagement:
     Baseline: [ FF ]
     Filter1: [ FF ]
     Filter2: [ FF ]
     Volume: [ FF ]
     Volatility: [ ATR, 14 ]
-  ManagerManagement: null
+  FundamentalManagement: null
+  SentimentalManagement: null
+  PortfolioManagement: null
