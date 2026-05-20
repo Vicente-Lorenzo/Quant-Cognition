@@ -89,7 +89,9 @@ class BufferAPI(threading.Thread):
             try:
                 identity = records[0].identity_keys()
                 key = records[0].natural_keys()
-                data = [{k: v for k, v in r.dict().items() if k not in identity} for r in records]
+                structure = getattr(records[0], "Structure", None)
+                columns = {str(c) for c in structure.keys()} if structure else None
+                data = [{k: v for k, v in r.dict().items() if (columns is None or k in columns) and k not in identity} for r in records]
                 if identity:
                     df = db.upsert(schema=t.Schema, table=t.Table, data=data, key=key, returning=identity)
                     for i, r in enumerate(records):
