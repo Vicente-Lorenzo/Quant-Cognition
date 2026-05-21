@@ -57,7 +57,7 @@ class DatapointAPI(DataclassAPI):
     def __setattr__(self, name: str, value: Any) -> None:
         super().__setattr__(name, value)
         if getattr(self, "_autosave_", False) and name and name[0].isupper():
-            try: self.save(by="Autosave")
+            try: self.save()
             except Exception: pass
 
     def primary_keys(self) -> list[str]:
