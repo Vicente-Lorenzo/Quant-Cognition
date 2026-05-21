@@ -39,8 +39,10 @@ class AccountAPI(DatapointAPI):
     Table: ClassVar[str] = "Account"
 
     UID: Union[int, None] = None
-    Number: Union[int, None] = None
     Timestamp: Union[datetime, None] = None
+    Session: InitVar[Union[int, SessionAPI, None]] = field(default=MISSING)
+    Provider: InitVar[Union[str, ProviderAPI, None]] = field(default=MISSING)
+    Number: Union[int, None] = None
     Environment: InitVar[Union[Environment, str, None]] = field(default=MISSING)
     AccountType: InitVar[Union[AccountType, str, None]] = field(default=MISSING)
     MarginMode: InitVar[Union[MarginMode, str, None]] = field(default=MISSING)
@@ -54,14 +56,11 @@ class AccountAPI(DatapointAPI):
     MarginLevel: Union[float, None] = None
     MarginStopLevel: Union[float, None] = None
 
-    Provider: InitVar[Union[str, ProviderAPI, None]] = field(default=MISSING)
-    Session: InitVar[Union[int, SessionAPI, None]] = field(default=MISSING)
-
+    _session_: Union[SessionAPI, None] = field(default=None, init=False, repr=False)
+    _provider_: Union[ProviderAPI, None] = field(default=None, init=False, repr=False)
     _environment_: Union[Environment, None] = field(default=None, init=False, repr=False)
     _account_type_: Union[AccountType, None] = field(default=None, init=False, repr=False)
     _margin_mode_: Union[MarginMode, None] = field(default=None, init=False, repr=False)
-    _provider_: Union[ProviderAPI, None] = field(default=None, init=False, repr=False)
-    _session_: Union[SessionAPI, None] = field(default=None, init=False, repr=False)
 
     @property
     def Structure(self) -> dict:
@@ -70,8 +69,8 @@ class AccountAPI(DatapointAPI):
             self.ID.UID: IdentityKey(pl.Int64),
             self.ID.Timestamp: PrimaryKey(pl.Datetime),
             self.ID.Session: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")', primary=True),
-            self.ID.Number: pl.Int64(),
             self.ID.Provider: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{ProviderAPI.Table}"("{ProviderAPI.ID.UID}")'),
+            self.ID.Number: pl.Int64(),
             self.ID.Environment: pl.String(),
             self.ID.AccountType: pl.String(),
             self.ID.MarginMode: pl.String(),
@@ -93,26 +92,26 @@ class AccountAPI(DatapointAPI):
                       autosave: bool,
                       autoload: bool,
                       autooverload: bool,
+                      session: Union[int, SessionAPI, None],
+                      provider: Union[str, ProviderAPI, None],
                       environment: Union[Environment, str, None],
                       account_type: Union[AccountType, str, None],
-                      margin_mode: Union[MarginMode, str, None],
-                      provider: Union[str, ProviderAPI, None],
-                      session: Union[int, SessionAPI, None]) -> None:
+                      margin_mode: Union[MarginMode, str, None]) -> None:
         from Library.Portfolio.Session import SessionAPI
+        session = coerce(session)
+        provider = coerce(provider)
         environment = coerce(environment)
         account_type = coerce(account_type)
         margin_mode = coerce(margin_mode)
-        provider = coerce(provider)
-        session = coerce(session)
-        self._environment_ = Environment.parse(environment) if environment is not MISSING else None
-        self._account_type_ = AccountType.parse(account_type) if account_type is not MISSING else None
-        self._margin_mode_ = MarginMode.parse(margin_mode) if margin_mode is not MISSING else None
-        if isinstance(provider, ProviderAPI): self._provider_ = provider
-        elif provider is not MISSING and provider is not None:
-            self._provider_ = ProviderAPI(UID=ProviderAPI.normalize(provider), db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
         if isinstance(session, SessionAPI): self._session_ = session
         elif session is not MISSING and session is not None:
             self._session_ = SessionAPI(UID=session, db=db, autoload=True)
+        if isinstance(provider, ProviderAPI): self._provider_ = provider
+        elif provider is not MISSING and provider is not None:
+            self._provider_ = ProviderAPI(UID=ProviderAPI.normalize(provider), db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        self._environment_ = Environment.parse(environment) if environment is not MISSING else None
+        self._account_type_ = AccountType.parse(account_type) if account_type is not MISSING else None
+        self._margin_mode_ = MarginMode.parse(margin_mode) if margin_mode is not MISSING else None
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
@@ -122,6 +121,25 @@ class AccountAPI(DatapointAPI):
             self._account_type_ = AccountType.parse(row.get(self.ID.AccountType))
             self._margin_mode_ = MarginMode.parse(row.get(self.ID.MarginMode))
         return row
+
+    @property
+    @overridefield
+    def Session(self) -> Union[SessionAPI, None]:
+        return self._session_
+    @Session.setter
+    def Session(self, val: Union[int, SessionAPI, None]) -> None:
+        from Library.Portfolio.Session import SessionAPI
+        if isinstance(val, SessionAPI): self._session_ = val
+        elif val is not None: self._session_ = SessionAPI(UID=val, db=self._db_, autoload=True)
+
+    @property
+    @overridefield
+    def Provider(self) -> Union[ProviderAPI, None]:
+        return self._provider_
+    @Provider.setter
+    def Provider(self, val: Union[str, ProviderAPI, None]) -> None:
+        if isinstance(val, ProviderAPI): self._provider_ = val
+        elif val is not None: self._provider_ = ProviderAPI(UID=ProviderAPI.normalize(val), db=self._db_, autoload=True)
 
     @property
     @overridefield
@@ -148,53 +166,42 @@ class AccountAPI(DatapointAPI):
         self._margin_mode_ = MarginMode.parse(val)
 
     @property
-    @overridefield
-    def Provider(self) -> Union[ProviderAPI, None]:
-        return self._provider_
-    @Provider.setter
-    def Provider(self, val: Union[str, ProviderAPI, None]) -> None:
-        if isinstance(val, ProviderAPI): self._provider_ = val
-        elif val is not None: self._provider_ = ProviderAPI(UID=ProviderAPI.normalize(val), db=self._db_, autoload=True)
-
-    @property
-    @overridefield
-    def Session(self) -> Union[SessionAPI, None]:
-        return self._session_
-    @Session.setter
-    def Session(self, val: Union[int, SessionAPI, None]) -> None:
-        from Library.Portfolio.Session import SessionAPI
-        if isinstance(val, SessionAPI): self._session_ = val
-        elif val is not None: self._session_ = SessionAPI(UID=val, db=self._db_, autoload=True)
-
-    @property
     def IsLive(self) -> bool:
         return self._environment_ == Environment.Live
+
     @property
     def IsDemo(self) -> bool:
         return self._environment_ == Environment.Demo
+
     @property
     def IsHedged(self) -> bool:
         return self._account_type_ == AccountType.Hedged
+
     @property
     def IsNetted(self) -> bool:
         return self._account_type_ == AccountType.Netted
+
     @property
     def UnrealizedPnL(self) -> Union[float, None]:
         if self.Equity is None or self.Balance is None: return None
         return self.Equity - self.Balance
+
     @property
     def UnrealizedReturn(self) -> Union[float, None]:
         pnl = self.UnrealizedPnL
         if pnl is None or not self.Balance: return None
         return pnl / self.Balance
+
     @property
     def MarginRatio(self) -> Union[float, None]:
         if not self.Equity or self.MarginUsed is None: return None
         return self.MarginUsed / self.Equity
+
     @property
     def FreeMarginRatio(self) -> Union[float, None]:
         if not self.Equity or self.MarginFree is None: return None
         return self.MarginFree / self.Equity
+
     @property
     def CreditRatio(self) -> Union[float, None]:
         if not self.Balance or self.Credit is None: return None
