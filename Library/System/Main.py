@@ -77,6 +77,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
         case SystemType.Live:
             params: Parameter = parameters.Live[args.strategy]
             return RealtimeAPI(
+                system=SystemType.Live,
                 strategy=strategy,
                 security=security,
                 timeframe=timeframe,
@@ -88,6 +89,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
         case SystemType.Simulation:
             params: Parameter = parameters.Simulation[args.strategy]
             return RealtimeAPI(
+                system=SystemType.Simulation,
                 strategy=strategy,
                 security=security,
                 timeframe=timeframe,
@@ -99,6 +101,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
         case SystemType.Testing:
             params: Parameter = parameters.Testing[args.strategy]
             return RealtimeAPI(
+                system=SystemType.Testing,
                 strategy=strategy,
                 security=security,
                 timeframe=timeframe,
