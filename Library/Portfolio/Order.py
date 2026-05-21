@@ -5,7 +5,7 @@ from typing import Union, ClassVar, TYPE_CHECKING
 from dataclasses import dataclass, field, InitVar
 
 from Library.Database.Dataframe import pl
-from Library.Database.Database import IdentityKey, ForeignKey, DatabaseAPI
+from Library.Database.Database import PrimaryKey, ForeignKey, DatabaseAPI
 from Library.Database.Datapoint import DatapointAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Database.Dataclass import overridefield, coerce
@@ -19,6 +19,8 @@ from Library.Utility.Typing import MISSING
 if TYPE_CHECKING:
     from Library.Universe.Security import SecurityAPI
     from Library.Universe.Contract import ContractAPI
+    from Library.Portfolio.Session import SessionAPI
+    from Library.Portfolio.Account import AccountAPI
 
 class OrderType(EnumerationAPI):
     Market = 1
@@ -69,6 +71,8 @@ class OrderAPI(DatapointAPI):
 
     Security: InitVar[Union[int, SecurityAPI, None]] = field(default=MISSING)
     Position: InitVar[Union[int, PositionAPI, None]] = field(default=MISSING)
+    Session: InitVar[Union[int, SessionAPI, None]] = field(default=MISSING)
+    Account: InitVar[Union[int, AccountAPI, None]] = field(default=MISSING)
 
     ExecutionPrice: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
     LimitPrice: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
@@ -100,14 +104,20 @@ class OrderAPI(DatapointAPI):
     _expiration_timestamp_: Union[TimestampAPI, None] = field(default=None, init=False, repr=False)
     _last_update_timestamp_: Union[TimestampAPI, None] = field(default=None, init=False, repr=False)
     _contract_: Union[ContractAPI, None] = field(default=None, init=False, repr=False)
+    _session_: Union[SessionAPI, None] = field(default=None, init=False, repr=False)
+    _account_: Union[AccountAPI, None] = field(default=None, init=False, repr=False)
 
     @property
     def Structure(self) -> dict:
         from Library.Universe.Security import SecurityAPI
+        from Library.Portfolio.Session import SessionAPI
+        from Library.Portfolio.Account import AccountAPI
         return {
-            self.ID.UID: IdentityKey(pl.Int64),
+            self.ID.UID: PrimaryKey(pl.Int64),
             self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
             self.ID.Position: pl.Int64(),
+            self.ID.Session: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")'),
+            self.ID.Account: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{AccountAPI.Table}"("{AccountAPI.ID.UID}")'),
             self.ID.Direction: pl.String(),
             self.ID.OrderType: pl.String(),
             self.ID.OrderStatus: pl.String(),
@@ -157,9 +167,15 @@ class OrderAPI(DatapointAPI):
                       entry_timestamp: Union[datetime, TimestampAPI, None],
                       expiration_timestamp: Union[datetime, TimestampAPI, None],
                       last_update_timestamp: Union[datetime, TimestampAPI, None],
-                      contract: Union[ContractAPI, None]) -> None:
+                      contract: Union[ContractAPI, None],
+                      session,
+                      account) -> None:
         from Library.Universe.Security import SecurityAPI
+        from Library.Portfolio.Session import SessionAPI
+        from Library.Portfolio.Account import AccountAPI
         direction = coerce(direction)
+        session = coerce(session)
+        account = coerce(account)
         order_type = coerce(order_type)
         order_status = coerce(order_status)
         time_in_force = coerce(time_in_force)
@@ -189,6 +205,12 @@ class OrderAPI(DatapointAPI):
         elif position is not MISSING and position is not None:
             self._position_ = PositionAPI(UID=position, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
         if contract is not MISSING: self._contract_ = contract
+        if isinstance(session, SessionAPI): self._session_ = session
+        elif session is not MISSING and session is not None:
+            self._session_ = SessionAPI(UID=session, db=db, autoload=True)
+        if isinstance(account, AccountAPI): self._account_ = account
+        elif account is not MISSING and account is not None:
+            self._account_ = AccountAPI(UID=account, db=db, autoload=True)
         ep = self._unwrap_price_(execution_price)
         self._execution_price_ = self._make_price_(execution_price, reference=ep)
         self._limit_price_ = self._make_price_(limit_price, reference=ep)
@@ -424,3 +446,23 @@ class OrderAPI(DatapointAPI):
         self._contract_ = val
         for backing in (self._execution_price_, self._limit_price_, self._stop_price_, self._stop_loss_price_, self._take_profit_price_, self._base_slippage_price_):
             if backing: backing.Contract = self._contract_
+
+    @property
+    @overridefield
+    def Session(self) -> Union[SessionAPI, None]:
+        return self._session_
+    @Session.setter
+    def Session(self, val: Union[int, SessionAPI, None]) -> None:
+        from Library.Portfolio.Session import SessionAPI
+        if isinstance(val, SessionAPI): self._session_ = val
+        elif val is not None: self._session_ = SessionAPI(UID=val, db=self._db_, autoload=True)
+
+    @property
+    @overridefield
+    def Account(self) -> Union[AccountAPI, None]:
+        return self._account_
+    @Account.setter
+    def Account(self, val: Union[int, AccountAPI, None]) -> None:
+        from Library.Portfolio.Account import AccountAPI
+        if isinstance(val, AccountAPI): self._account_ = val
+        elif val is not None: self._account_ = AccountAPI(UID=val, db=self._db_, autoload=True)
