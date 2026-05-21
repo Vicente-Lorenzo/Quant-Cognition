@@ -34,63 +34,57 @@ class PositionAPI(DatapointAPI):
     Table: ClassVar[str] = "Position"
 
     UID: Union[int, None] = None
+    Session: InitVar[Union[int, SessionAPI, None]] = field(default=MISSING)
+    Account: InitVar[Union[int, AccountAPI, None]] = field(default=MISSING)
+    Order: InitVar[Union[int, OrderAPI, None]] = field(default=MISSING)
+    Security: InitVar[Union[int, SecurityAPI, None]] = field(default=MISSING)
     Type: InitVar[Union[PositionType, str, None]] = field(default=MISSING)
     Direction: InitVar[Union[Direction, str, None]] = field(default=MISSING)
     Volume: Union[float, None] = None
     Quantity: Union[float, None] = None
+    EntryTimestamp: InitVar[Union[datetime, TimestampAPI, None]] = field(default=MISSING)
+    EntryPrice: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
+    EntryBalance: InitVar[Union[float, None]] = field(default=MISSING)
+    StopLossPrice: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
+    TakeProfitPrice: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
+    StopLossPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
+    TakeProfitPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
+    MaxRunupPrice: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
+    MaxDrawdownPrice: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
+    MaxRunupPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
+    MaxDrawdownPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
+    ExitPrice: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
+    GrossPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
+    CommissionPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
+    SwapPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
+    NetPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
     UsedMargin: Union[float, None] = None
     MidBalance: Union[float, None] = None
     Label: Union[str, None] = None
     Comment: Union[str, None] = None
 
-    Security: InitVar[Union[int, SecurityAPI, None]] = field(default=MISSING)
-
-    EntryTimestamp: InitVar[Union[datetime, TimestampAPI, None]] = field(default=MISSING)
-    EntryPrice: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
-    StopLossPrice: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
-    TakeProfitPrice: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
-    MaxRunupPrice: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
-    MaxDrawdownPrice: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
-    ExitPrice: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
-
-    StopLossPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
-    TakeProfitPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
-    MaxRunupPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
-    MaxDrawdownPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
-    GrossPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
-    CommissionPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
-    SwapPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
-    NetPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
-
-    EntryBalance: InitVar[Union[float, None]] = field(default=MISSING)
-
-    Order: InitVar[Union[int, OrderAPI, None]] = field(default=MISSING)
-    Session: InitVar[Union[int, SessionAPI, None]] = field(default=MISSING)
-    Account: InitVar[Union[int, AccountAPI, None]] = field(default=MISSING)
-
+    _session_: Union[SessionAPI, None] = field(default=None, init=False, repr=False)
+    _account_: Union[AccountAPI, None] = field(default=None, init=False, repr=False)
+    _order_: Union[OrderAPI, None] = field(default=None, init=False, repr=False)
+    _security_: Union[SecurityAPI, None] = field(default=None, init=False, repr=False)
     _type_: Union[PositionType, None] = field(default=None, init=False, repr=False)
     _direction_: Union[Direction, None] = field(default=None, init=False, repr=False)
-
-    _security_: Union[SecurityAPI, None] = field(default=None, init=False, repr=False)
     _entry_timestamp_: Union[TimestampAPI, None] = field(default=None, init=False, repr=False)
     _entry_price_: Union[PriceAPI, None] = field(default=None, init=False, repr=False)
+    _entry_balance_: Union[float, None] = field(default=None, init=False, repr=False)
     _stop_loss_price_: Union[PriceAPI, None] = field(default=None, init=False, repr=False)
     _take_profit_price_: Union[PriceAPI, None] = field(default=None, init=False, repr=False)
-    _max_runup_price_: Union[PriceAPI, None] = field(default=None, init=False, repr=False)
-    _max_drawdown_price_: Union[PriceAPI, None] = field(default=None, init=False, repr=False)
-    _exit_price_: Union[PriceAPI, None] = field(default=None, init=False, repr=False)
     _stop_loss_pnl_: Union[PnLAPI, None] = field(default=None, init=False, repr=False)
     _take_profit_pnl_: Union[PnLAPI, None] = field(default=None, init=False, repr=False)
+    _max_runup_price_: Union[PriceAPI, None] = field(default=None, init=False, repr=False)
+    _max_drawdown_price_: Union[PriceAPI, None] = field(default=None, init=False, repr=False)
     _max_runup_pnl_: Union[PnLAPI, None] = field(default=None, init=False, repr=False)
     _max_drawdown_pnl_: Union[PnLAPI, None] = field(default=None, init=False, repr=False)
+    _exit_price_: Union[PriceAPI, None] = field(default=None, init=False, repr=False)
     _gross_pnl_: Union[PnLAPI, None] = field(default=None, init=False, repr=False)
     _commission_pnl_: Union[PnLAPI, None] = field(default=None, init=False, repr=False)
     _swap_pnl_: Union[PnLAPI, None] = field(default=None, init=False, repr=False)
     _net_pnl_: Union[PnLAPI, None] = field(default=None, init=False, repr=False)
-    _entry_balance_: Union[float, None] = field(default=None, init=False, repr=False)
-    _order_: Union[OrderAPI, None] = field(default=None, init=False, repr=False)
-    _session_: Union[SessionAPI, None] = field(default=None, init=False, repr=False)
-    _account_: Union[AccountAPI, None] = field(default=None, init=False, repr=False)
 
     @property
     def Structure(self) -> dict:
@@ -101,31 +95,31 @@ class PositionAPI(DatapointAPI):
         s = super().Structure
         cols = {
             self.ID.UID: PrimaryKey(pl.Int64),
-            self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
-            self.ID.Order: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{OrderAPI.Table}"("{OrderAPI.ID.UID}")'),
             self.ID.Session: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")'),
             self.ID.Account: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{AccountAPI.Table}"("{AccountAPI.ID.UID}")'),
+            self.ID.Order: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{OrderAPI.Table}"("{OrderAPI.ID.UID}")'),
+            self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
             self.ID.Type: pl.String(),
             self.ID.Direction: pl.String(),
             self.ID.Volume: pl.Float64(),
             self.ID.Quantity: pl.Float64(),
             self.ID.EntryTimestamp: pl.Datetime(),
             self.ID.EntryPrice: pl.Float64(),
+            self.ID.EntryBalance: pl.Float64(),
             self.ID.StopLossPrice: pl.Float64(),
             self.ID.TakeProfitPrice: pl.Float64(),
-            self.ID.MaxRunupPrice: pl.Float64(),
-            self.ID.MaxDrawdownPrice: pl.Float64(),
-            self.ID.ExitPrice: pl.Float64(),
             self.ID.StopLossPnL: pl.Float64(),
             self.ID.TakeProfitPnL: pl.Float64(),
+            self.ID.MaxRunupPrice: pl.Float64(),
+            self.ID.MaxDrawdownPrice: pl.Float64(),
             self.ID.MaxRunupPnL: pl.Float64(),
             self.ID.MaxDrawdownPnL: pl.Float64(),
+            self.ID.ExitPrice: pl.Float64(),
             self.ID.GrossPnL: pl.Float64(),
             self.ID.CommissionPnL: pl.Float64(),
             self.ID.SwapPnL: pl.Float64(),
             self.ID.NetPnL: pl.Float64(),
             self.ID.UsedMargin: pl.Float64(),
-            self.ID.EntryBalance: pl.Float64(),
             self.ID.MidBalance: pl.Float64(),
             self.ID.Label: pl.String(),
             self.ID.Comment: pl.String(),
@@ -141,86 +135,85 @@ class PositionAPI(DatapointAPI):
                       autosave: bool,
                       autoload: bool,
                       autooverload: bool,
+                      session: Union[int, SessionAPI, None],
+                      account: Union[int, AccountAPI, None],
+                      order: Union[int, OrderAPI, None],
+                      security: Union[int, SecurityAPI, None],
                       type: Union[PositionType, str, None],
                       direction: Union[Direction, str, None],
-                      security: Union[int, SecurityAPI, None],
                       entry_timestamp: Union[datetime, TimestampAPI, None],
                       entry_price: Union[float, PriceAPI, None],
+                      entry_balance: Union[float, None],
                       stop_loss_price: Union[float, PriceAPI, None],
                       take_profit_price: Union[float, PriceAPI, None],
-                      max_runup_price: Union[float, PriceAPI, None],
-                      max_drawdown_price: Union[float, PriceAPI, None],
-                      exit_price: Union[float, PriceAPI, None],
                       stop_loss_pnl: Union[float, PnLAPI, None],
                       take_profit_pnl: Union[float, PnLAPI, None],
+                      max_runup_price: Union[float, PriceAPI, None],
+                      max_drawdown_price: Union[float, PriceAPI, None],
                       max_runup_pnl: Union[float, PnLAPI, None],
                       max_drawdown_pnl: Union[float, PnLAPI, None],
+                      exit_price: Union[float, PriceAPI, None],
                       gross_pnl: Union[float, PnLAPI, None],
                       commission_pnl: Union[float, PnLAPI, None],
                       swap_pnl: Union[float, PnLAPI, None],
-                      net_pnl: Union[float, PnLAPI, None],
-                      entry_balance: Union[float, None],
-                      order: Union[int, OrderAPI, None],
-                      session: Union[int, SessionAPI, None],
-                      account: Union[int, AccountAPI, None]) -> None:
+                      net_pnl: Union[float, PnLAPI, None]) -> None:
         from Library.Universe.Security import SecurityAPI
         from Library.Portfolio.Order import OrderAPI
         from Library.Portfolio.Session import SessionAPI
         from Library.Portfolio.Account import AccountAPI
+        session = coerce(session)
+        account = coerce(account)
+        order = coerce(order)
+        security = coerce(security)
         type = coerce(type)
         direction = coerce(direction)
-        security = coerce(security)
         entry_timestamp = coerce(entry_timestamp)
         entry_price = coerce(entry_price)
+        entry_balance = coerce(entry_balance)
         stop_loss_price = coerce(stop_loss_price)
         take_profit_price = coerce(take_profit_price)
-        max_runup_price = coerce(max_runup_price)
-        max_drawdown_price = coerce(max_drawdown_price)
-        exit_price = coerce(exit_price)
         stop_loss_pnl = coerce(stop_loss_pnl)
         take_profit_pnl = coerce(take_profit_pnl)
+        max_runup_price = coerce(max_runup_price)
+        max_drawdown_price = coerce(max_drawdown_price)
         max_runup_pnl = coerce(max_runup_pnl)
         max_drawdown_pnl = coerce(max_drawdown_pnl)
+        exit_price = coerce(exit_price)
         gross_pnl = coerce(gross_pnl)
         commission_pnl = coerce(commission_pnl)
         swap_pnl = coerce(swap_pnl)
         net_pnl = coerce(net_pnl)
-        entry_balance = coerce(entry_balance)
-        order = coerce(order)
-        session = coerce(session)
-        account = coerce(account)
 
-        self._type_ = PositionType.parse(type) if type is not MISSING else None
-        self._direction_ = Direction.parse(direction) if direction is not MISSING else None
-
-        if isinstance(security, SecurityAPI): self._security_ = security
-        elif security is not MISSING and security is not None:
-            self._security_ = SecurityAPI(UID=security, db=db, autoload=True)
-        if isinstance(order, OrderAPI): self._order_ = order
-        elif order is not MISSING and order is not None:
-            self._order_ = OrderAPI(UID=order, db=db, autoload=True)
         if isinstance(session, SessionAPI): self._session_ = session
         elif session is not MISSING and session is not None:
             self._session_ = SessionAPI(UID=session, db=db, autoload=True)
         if isinstance(account, AccountAPI): self._account_ = account
         elif account is not MISSING and account is not None:
             self._account_ = AccountAPI(UID=account, db=db, autoload=True)
-        self._entry_balance_ = entry_balance if entry_balance is not MISSING else None
+        if isinstance(order, OrderAPI): self._order_ = order
+        elif order is not MISSING and order is not None:
+            self._order_ = OrderAPI(UID=order, db=db, autoload=True)
+        if isinstance(security, SecurityAPI): self._security_ = security
+        elif security is not MISSING and security is not None:
+            self._security_ = SecurityAPI(UID=security, db=db, autoload=True)
+        self._type_ = PositionType.parse(type) if type is not MISSING else None
+        self._direction_ = Direction.parse(direction) if direction is not MISSING else None
         if isinstance(entry_timestamp, TimestampAPI): self._entry_timestamp_ = entry_timestamp
         elif entry_timestamp is not MISSING and entry_timestamp is not None:
             self._entry_timestamp_ = TimestampAPI(DateTime=entry_timestamp)
         ep = self._unwrap_price_(entry_price)
         self._entry_price_ = self._make_price_(entry_price, reference=ep)
+        self._entry_balance_ = entry_balance if entry_balance is not MISSING else None
         self._stop_loss_price_ = self._make_price_(stop_loss_price, reference=ep)
         self._take_profit_price_ = self._make_price_(take_profit_price, reference=ep)
-        self._max_runup_price_ = self._make_price_(max_runup_price, reference=ep)
-        self._max_drawdown_price_ = self._make_price_(max_drawdown_price, reference=ep)
-        self._exit_price_ = self._make_price_(exit_price, reference=ep)
         eb = self._entry_balance_
         self._stop_loss_pnl_ = self._make_pnl_(stop_loss_pnl, reference=eb)
         self._take_profit_pnl_ = self._make_pnl_(take_profit_pnl, reference=eb)
+        self._max_runup_price_ = self._make_price_(max_runup_price, reference=ep)
+        self._max_drawdown_price_ = self._make_price_(max_drawdown_price, reference=ep)
         self._max_runup_pnl_ = self._make_pnl_(max_runup_pnl, reference=eb)
         self._max_drawdown_pnl_ = self._make_pnl_(max_drawdown_pnl, reference=eb)
+        self._exit_price_ = self._make_price_(exit_price, reference=ep)
         self._gross_pnl_ = self._make_pnl_(gross_pnl, reference=eb)
         self._commission_pnl_ = self._make_pnl_(commission_pnl, reference=eb)
         self._swap_pnl_ = self._make_pnl_(swap_pnl, reference=eb)
@@ -234,31 +227,45 @@ class PositionAPI(DatapointAPI):
             self._direction_ = Direction.parse(row.get(self.ID.Direction))
         return row
 
-    @staticmethod
-    def _unwrap_price_(val: Union[float, PriceAPI, None]) -> Union[float, None]:
-        if isinstance(val, PriceAPI): return val.Price
-        return val if val is not MISSING else None
+    @property
+    @overridefield
+    def Session(self) -> Union[SessionAPI, None]:
+        return self._session_
+    @Session.setter
+    def Session(self, val: Union[int, SessionAPI, None]) -> None:
+        from Library.Portfolio.Session import SessionAPI
+        if isinstance(val, SessionAPI): self._session_ = val
+        elif val is not None: self._session_ = SessionAPI(UID=val, db=self._db_, autoload=True)
 
-    @staticmethod
-    def _unwrap_pnl_(val: Union[float, PnLAPI, None]) -> Union[float, None]:
-        if isinstance(val, PnLAPI): return val.PnL
-        return val if val is not MISSING else None
+    @property
+    @overridefield
+    def Account(self) -> Union[AccountAPI, None]:
+        return self._account_
+    @Account.setter
+    def Account(self, val: Union[int, AccountAPI, None]) -> None:
+        from Library.Portfolio.Account import AccountAPI
+        if isinstance(val, AccountAPI): self._account_ = val
+        elif val is not None: self._account_ = AccountAPI(UID=val, db=self._db_, autoload=True)
 
-    def _make_price_(self, val: Union[float, PriceAPI, None], reference: Union[float, None]) -> Union[PriceAPI, None]:
-        if isinstance(val, PriceAPI):
-            if val.Contract is None: val.Contract = self._security_.Contract if self._security_ else None
-            if val.Reference is None: val.Reference = reference
-            return val
-        if val is MISSING or val is None: return None
-        return PriceAPI(Price=val, Reference=reference, Contract=self._security_.Contract if self._security_ else None)
+    @property
+    @overridefield
+    def Order(self) -> Union[OrderAPI, None]:
+        return self._order_
+    @Order.setter
+    def Order(self, val: Union[int, OrderAPI, None]) -> None:
+        from Library.Portfolio.Order import OrderAPI
+        if isinstance(val, OrderAPI): self._order_ = val
+        elif val is not None: self._order_ = OrderAPI(UID=val, db=self._db_, autoload=True)
 
-    @staticmethod
-    def _make_pnl_(val: Union[float, PnLAPI, None], reference: Union[float, None]) -> Union[PnLAPI, None]:
-        if isinstance(val, PnLAPI):
-            if val.Reference is None: val.Reference = reference
-            return val
-        if val is MISSING or val is None: return None
-        return PnLAPI(PnL=val, Reference=reference)
+    @property
+    @overridefield
+    def Security(self) -> Union[SecurityAPI, None]:
+        return self._security_
+    @Security.setter
+    def Security(self, val: Union[int, SecurityAPI, None]) -> None:
+        from Library.Universe.Security import SecurityAPI
+        if isinstance(val, SecurityAPI): self._security_ = val
+        elif val is not None: self._security_ = SecurityAPI(UID=val, db=self._db_, autoload=True)
 
     @property
     @overridefield
@@ -275,16 +282,6 @@ class PositionAPI(DatapointAPI):
     @Direction.setter
     def Direction(self, val: Union[Direction, str, None]) -> None:
         self._direction_ = Direction.parse(val)
-
-    @property
-    @overridefield
-    def Security(self) -> Union[SecurityAPI, None]:
-        return self._security_
-    @Security.setter
-    def Security(self, val: Union[int, SecurityAPI, None]) -> None:
-        from Library.Universe.Security import SecurityAPI
-        if isinstance(val, SecurityAPI): self._security_ = val
-        elif val is not None: self._security_ = SecurityAPI(UID=val, db=self._db_, autoload=True)
 
     @property
     @overridefield
@@ -315,6 +312,16 @@ class PositionAPI(DatapointAPI):
 
     @property
     @overridefield
+    def EntryBalance(self) -> Union[float, None]:
+        return self._entry_balance_
+    @EntryBalance.setter
+    def EntryBalance(self, val: Union[float, None]) -> None:
+        self._entry_balance_ = val
+        for backing in (self._stop_loss_pnl_, self._take_profit_pnl_, self._max_runup_pnl_, self._max_drawdown_pnl_, self._gross_pnl_, self._commission_pnl_, self._swap_pnl_, self._net_pnl_):
+            if backing: backing.Reference = val
+
+    @property
+    @overridefield
     def StopLossPrice(self) -> Union[PriceAPI, None]:
         return self._stop_loss_price_
     @StopLossPrice.setter
@@ -328,39 +335,6 @@ class PositionAPI(DatapointAPI):
     @TakeProfitPrice.setter
     def TakeProfitPrice(self, val: Union[float, PriceAPI, None]) -> None:
         self._take_profit_price_ = self._assign_price_(self._take_profit_price_, val)
-
-    @property
-    @overridefield
-    def MaxRunupPrice(self) -> Union[PriceAPI, None]:
-        return self._max_runup_price_
-    @MaxRunupPrice.setter
-    def MaxRunupPrice(self, val: Union[float, PriceAPI, None]) -> None:
-        self._max_runup_price_ = self._assign_price_(self._max_runup_price_, val)
-
-    @property
-    @overridefield
-    def MaxDrawdownPrice(self) -> Union[PriceAPI, None]:
-        return self._max_drawdown_price_
-    @MaxDrawdownPrice.setter
-    def MaxDrawdownPrice(self, val: Union[float, PriceAPI, None]) -> None:
-        self._max_drawdown_price_ = self._assign_price_(self._max_drawdown_price_, val)
-
-    @property
-    @overridefield
-    def ExitPrice(self) -> Union[PriceAPI, None]:
-        return self._exit_price_
-    @ExitPrice.setter
-    def ExitPrice(self, val: Union[float, PriceAPI, None]) -> None:
-        self._exit_price_ = self._assign_price_(self._exit_price_, val)
-
-    def _assign_price_(self, backing: Union[PriceAPI, None], val: Union[float, PriceAPI, None]) -> Union[PriceAPI, None]:
-        if isinstance(val, PriceAPI): return val
-        if val is None: return backing
-        if backing:
-            backing.Price = val
-            return backing
-        ref = self._entry_price_.Price if self._entry_price_ else val
-        return PriceAPI(Price=val, Reference=ref, Contract=self._security_.Contract if self._security_ else None)
 
     @property
     @overridefield
@@ -380,6 +354,22 @@ class PositionAPI(DatapointAPI):
 
     @property
     @overridefield
+    def MaxRunupPrice(self) -> Union[PriceAPI, None]:
+        return self._max_runup_price_
+    @MaxRunupPrice.setter
+    def MaxRunupPrice(self, val: Union[float, PriceAPI, None]) -> None:
+        self._max_runup_price_ = self._assign_price_(self._max_runup_price_, val)
+
+    @property
+    @overridefield
+    def MaxDrawdownPrice(self) -> Union[PriceAPI, None]:
+        return self._max_drawdown_price_
+    @MaxDrawdownPrice.setter
+    def MaxDrawdownPrice(self, val: Union[float, PriceAPI, None]) -> None:
+        self._max_drawdown_price_ = self._assign_price_(self._max_drawdown_price_, val)
+
+    @property
+    @overridefield
     def MaxRunupPnL(self) -> Union[PnLAPI, None]:
         return self._max_runup_pnl_
     @MaxRunupPnL.setter
@@ -393,6 +383,14 @@ class PositionAPI(DatapointAPI):
     @MaxDrawdownPnL.setter
     def MaxDrawdownPnL(self, val: Union[float, PnLAPI, None]) -> None:
         self._max_drawdown_pnl_ = self._assign_pnl_(self._max_drawdown_pnl_, val)
+
+    @property
+    @overridefield
+    def ExitPrice(self) -> Union[PriceAPI, None]:
+        return self._exit_price_
+    @ExitPrice.setter
+    def ExitPrice(self, val: Union[float, PriceAPI, None]) -> None:
+        self._exit_price_ = self._assign_price_(self._exit_price_, val)
 
     @property
     @overridefield
@@ -426,33 +424,18 @@ class PositionAPI(DatapointAPI):
     def NetPnL(self, val: Union[float, PnLAPI, None]) -> None:
         self._net_pnl_ = self._assign_pnl_(self._net_pnl_, val)
 
-    def _assign_pnl_(self, backing: Union[PnLAPI, None], val: Union[float, PnLAPI, None]) -> Union[PnLAPI, None]:
-        if isinstance(val, PnLAPI): return val
-        if val is None: return backing
-        if backing:
-            backing.PnL = val
-            return backing
-        return PnLAPI(PnL=val, Reference=self._entry_balance_)
-
-    @property
-    @overridefield
-    def EntryBalance(self) -> Union[float, None]:
-        return self._entry_balance_
-    @EntryBalance.setter
-    def EntryBalance(self, val: Union[float, None]) -> None:
-        self._entry_balance_ = val
-        for backing in (self._stop_loss_pnl_, self._take_profit_pnl_, self._max_runup_pnl_, self._max_drawdown_pnl_, self._gross_pnl_, self._commission_pnl_, self._swap_pnl_, self._net_pnl_):
-            if backing: backing.Reference = val
-
     @property
     def IsLong(self) -> bool:
         return self._direction_ == Direction.Buy
+
     @property
     def IsShort(self) -> bool:
         return self._direction_ == Direction.Sell
+
     @property
     def IsBuy(self) -> bool:
         return self._direction_ == Direction.Buy
+
     @property
     def IsSell(self) -> bool:
         return self._direction_ == Direction.Sell
@@ -461,6 +444,12 @@ class PositionAPI(DatapointAPI):
     def MarginUtilization(self) -> Union[float, None]:
         if not self.UsedMargin or not self._entry_balance_: return None
         return self.UsedMargin / self._entry_balance_
+
+    @property
+    @overridefield
+    def Leverage(self) -> Union[float, None]:
+        if not self.UsedMargin or self.Volume is None: return None
+        return self.Volume / self.UsedMargin
 
     @property
     @overridefield
@@ -626,38 +615,45 @@ class PositionAPI(DatapointAPI):
         ret, dd = self.LogPercentage, self.MaxDrawdownLogPercentage
         return ret / abs(dd) if ret is not None and dd and dd != 0 else 0.0
 
-    @property
-    @overridefield
-    def Leverage(self) -> Union[float, None]:
-        if not self.UsedMargin or self.Volume is None: return None
-        return self.Volume / self.UsedMargin
+    @staticmethod
+    def _unwrap_price_(val: Union[float, PriceAPI, None]) -> Union[float, None]:
+        if isinstance(val, PriceAPI): return val.Price
+        return val if val is not MISSING else None
 
-    @property
-    @overridefield
-    def Order(self) -> Union[OrderAPI, None]:
-        return self._order_
-    @Order.setter
-    def Order(self, val: Union[int, OrderAPI, None]) -> None:
-        from Library.Portfolio.Order import OrderAPI
-        if isinstance(val, OrderAPI): self._order_ = val
-        elif val is not None: self._order_ = OrderAPI(UID=val, db=self._db_, autoload=True)
+    @staticmethod
+    def _unwrap_pnl_(val: Union[float, PnLAPI, None]) -> Union[float, None]:
+        if isinstance(val, PnLAPI): return val.PnL
+        return val if val is not MISSING else None
 
-    @property
-    @overridefield
-    def Session(self) -> Union[SessionAPI, None]:
-        return self._session_
-    @Session.setter
-    def Session(self, val: Union[int, SessionAPI, None]) -> None:
-        from Library.Portfolio.Session import SessionAPI
-        if isinstance(val, SessionAPI): self._session_ = val
-        elif val is not None: self._session_ = SessionAPI(UID=val, db=self._db_, autoload=True)
+    def _make_price_(self, val: Union[float, PriceAPI, None], reference: Union[float, None]) -> Union[PriceAPI, None]:
+        if isinstance(val, PriceAPI):
+            if val.Contract is None: val.Contract = self._security_.Contract if self._security_ else None
+            if val.Reference is None: val.Reference = reference
+            return val
+        if val is MISSING or val is None: return None
+        return PriceAPI(Price=val, Reference=reference, Contract=self._security_.Contract if self._security_ else None)
 
-    @property
-    @overridefield
-    def Account(self) -> Union[AccountAPI, None]:
-        return self._account_
-    @Account.setter
-    def Account(self, val: Union[int, AccountAPI, None]) -> None:
-        from Library.Portfolio.Account import AccountAPI
-        if isinstance(val, AccountAPI): self._account_ = val
-        elif val is not None: self._account_ = AccountAPI(UID=val, db=self._db_, autoload=True)
+    @staticmethod
+    def _make_pnl_(val: Union[float, PnLAPI, None], reference: Union[float, None]) -> Union[PnLAPI, None]:
+        if isinstance(val, PnLAPI):
+            if val.Reference is None: val.Reference = reference
+            return val
+        if val is MISSING or val is None: return None
+        return PnLAPI(PnL=val, Reference=reference)
+
+    def _assign_price_(self, backing: Union[PriceAPI, None], val: Union[float, PriceAPI, None]) -> Union[PriceAPI, None]:
+        if isinstance(val, PriceAPI): return val
+        if val is None: return backing
+        if backing:
+            backing.Price = val
+            return backing
+        ref = self._entry_price_.Price if self._entry_price_ else val
+        return PriceAPI(Price=val, Reference=ref, Contract=self._security_.Contract if self._security_ else None)
+
+    def _assign_pnl_(self, backing: Union[PnLAPI, None], val: Union[float, PnLAPI, None]) -> Union[PnLAPI, None]:
+        if isinstance(val, PnLAPI): return val
+        if val is None: return backing
+        if backing:
+            backing.PnL = val
+            return backing
+        return PnLAPI(PnL=val, Reference=self._entry_balance_)
