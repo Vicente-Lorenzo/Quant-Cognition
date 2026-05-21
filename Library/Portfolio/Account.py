@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Union, ClassVar, TYPE_CHECKING
 from dataclasses import dataclass, field, InitVar
 
 from Library.Database.Dataframe import pl
-from Library.Database.Database import PrimaryKey, ForeignKey
+from Library.Database.Database import IdentityKey, PrimaryKey, ForeignKey
 from Library.Database.Datapoint import DatapointAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Database.Dataclass import overridefield, coerce
@@ -13,7 +14,9 @@ from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Provider import ProviderAPI
 from Library.Utility.Typing import MISSING
 
-if TYPE_CHECKING: from Library.Database import DatabaseAPI
+if TYPE_CHECKING:
+    from Library.Database import DatabaseAPI
+    from Library.Portfolio.Session import SessionAPI
 
 class AccountType(EnumerationAPI):
     Hedged = 0
@@ -35,7 +38,9 @@ class AccountAPI(DatapointAPI):
     Schema: ClassVar[str] = PortfolioAPI.Schema
     Table: ClassVar[str] = "Account"
 
-    UID: Union[str, None] = None
+    UID: Union[int, None] = None
+    Number: Union[int, None] = None
+    Timestamp: Union[datetime, None] = None
     Environment: InitVar[Union[Environment, str, None]] = field(default=MISSING)
     AccountType: InitVar[Union[AccountType, str, None]] = field(default=MISSING)
     MarginMode: InitVar[Union[MarginMode, str, None]] = field(default=MISSING)
@@ -50,21 +55,22 @@ class AccountAPI(DatapointAPI):
     MarginStopLevel: Union[float, None] = None
 
     Provider: InitVar[Union[str, ProviderAPI, None]] = field(default=MISSING)
+    Session: InitVar[Union[int, SessionAPI, None]] = field(default=MISSING)
 
     _environment_: Union[Environment, None] = field(default=None, init=False, repr=False)
     _account_type_: Union[AccountType, None] = field(default=None, init=False, repr=False)
     _margin_mode_: Union[MarginMode, None] = field(default=None, init=False, repr=False)
     _provider_: Union[ProviderAPI, None] = field(default=None, init=False, repr=False)
+    _session_: Union[SessionAPI, None] = field(default=None, init=False, repr=False)
 
     @property
-    def Key(self) -> dict:
+    def Structure(self) -> dict:
+        from Library.Portfolio.Session import SessionAPI
         return {
-            self.ID.UID: PrimaryKey(pl.String)
-        }
-
-    @property
-    def Columns(self) -> dict:
-        return {
+            self.ID.UID: IdentityKey(pl.Int64),
+            self.ID.Timestamp: PrimaryKey(pl.Datetime),
+            self.ID.Session: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")', primary=True),
+            self.ID.Number: pl.Int64(),
             self.ID.Provider: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{ProviderAPI.Table}"("{ProviderAPI.ID.UID}")'),
             self.ID.Environment: pl.String(),
             self.ID.AccountType: pl.String(),
@@ -78,7 +84,7 @@ class AccountAPI(DatapointAPI):
             self.ID.MarginFree: pl.Float64(),
             self.ID.MarginLevel: pl.Float64(),
             self.ID.MarginStopLevel: pl.Float64(),
-            **super().Columns
+            **super().Structure
         }
 
     def __post_init__(self,
@@ -90,17 +96,23 @@ class AccountAPI(DatapointAPI):
                       environment: Union[Environment, str, None],
                       account_type: Union[AccountType, str, None],
                       margin_mode: Union[MarginMode, str, None],
-                      provider: Union[str, ProviderAPI, None]) -> None:
+                      provider: Union[str, ProviderAPI, None],
+                      session: Union[int, SessionAPI, None]) -> None:
+        from Library.Portfolio.Session import SessionAPI
         environment = coerce(environment)
         account_type = coerce(account_type)
         margin_mode = coerce(margin_mode)
         provider = coerce(provider)
+        session = coerce(session)
         self._environment_ = Environment.parse(environment) if environment is not MISSING else None
         self._account_type_ = AccountType.parse(account_type) if account_type is not MISSING else None
         self._margin_mode_ = MarginMode.parse(margin_mode) if margin_mode is not MISSING else None
         if isinstance(provider, ProviderAPI): self._provider_ = provider
         elif provider is not MISSING and provider is not None:
             self._provider_ = ProviderAPI(UID=ProviderAPI.normalize(provider), db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        if isinstance(session, SessionAPI): self._session_ = session
+        elif session is not MISSING and session is not None:
+            self._session_ = SessionAPI(UID=session, db=db, autoload=True)
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
@@ -144,8 +156,15 @@ class AccountAPI(DatapointAPI):
         if isinstance(val, ProviderAPI): self._provider_ = val
         elif val is not None: self._provider_ = ProviderAPI(UID=ProviderAPI.normalize(val), db=self._db_, autoload=True)
 
-    def __str__(self) -> str:
-        return self.UID or ""
+    @property
+    @overridefield
+    def Session(self) -> Union[SessionAPI, None]:
+        return self._session_
+    @Session.setter
+    def Session(self, val: Union[int, SessionAPI, None]) -> None:
+        from Library.Portfolio.Session import SessionAPI
+        if isinstance(val, SessionAPI): self._session_ = val
+        elif val is not None: self._session_ = SessionAPI(UID=val, db=self._db_, autoload=True)
 
     @property
     def IsLive(self) -> bool:
