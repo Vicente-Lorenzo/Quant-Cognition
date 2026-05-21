@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, InitVar
 from Library.Database.Dataframe import pl
 from Library.Database.Dataclass import overridefield, coerce
 from Library.Database.Enumeration import EnumerationAPI
-from Library.Database import IdentityKey, ForeignKey
+from Library.Database import IdentityKey, PrimaryKey, ForeignKey
 from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Ticker import TickerAPI, ContractType
 from Library.Universe.Provider import ProviderAPI
@@ -106,7 +106,7 @@ class ContractAPI(UniverseAPI):
             self.ID.UID: IdentityKey(pl.Int64),
             self.ID.Ticker: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{TickerAPI.Table}"("{TickerAPI.ID.UID}") ON DELETE CASCADE', primary=True),
             self.ID.Provider: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{ProviderAPI.Table}"("{ProviderAPI.ID.UID}") ON DELETE CASCADE', primary=True),
-            self.ID.Type: pl.String(),
+            self.ID.Type: PrimaryKey(pl.String),
             self.ID.Digits: pl.Int32(),
             self.ID.PointSize: pl.Float64(),
             self.ID.PipSize: pl.Float64(),
