@@ -6,7 +6,7 @@ echo -----------------------------------------------
 
 echo [1/1] Launching Antigravity in project directory...
 cd /d "C:\Users\Admin\OneDrive\Documents\cAlgo"
-agy
+gemini
 
 echo -----------------------------------------------
 echo Antigravity CLI Terminated.
