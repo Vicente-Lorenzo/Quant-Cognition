@@ -168,8 +168,8 @@ class OrderAPI(DatapointAPI):
                       expiration_timestamp: Union[datetime, TimestampAPI, None],
                       last_update_timestamp: Union[datetime, TimestampAPI, None],
                       contract: Union[ContractAPI, None],
-                      session,
-                      account) -> None:
+                      session: Union[int, SessionAPI, None],
+                      account: Union[int, AccountAPI, None]) -> None:
         from Library.Universe.Security import SecurityAPI
         from Library.Portfolio.Session import SessionAPI
         from Library.Portfolio.Account import AccountAPI
