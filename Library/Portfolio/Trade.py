@@ -29,7 +29,6 @@ class TradeAPI(PositionAPI):
     Table: ClassVar[str] = "Trade"
 
     UID: Union[int, None] = None
-
     Position: InitVar[Union[int, PositionAPI, None]] = field(default=MISSING)
     ExitTimestamp: InitVar[Union[datetime, TimestampAPI, None]] = field(default=MISSING)
     ExitBalance: InitVar[Union[float, None]] = field(default=MISSING)
@@ -42,37 +41,41 @@ class TradeAPI(PositionAPI):
     def Structure(self) -> dict:
         from Library.Universe.Security import SecurityAPI
         from Library.Portfolio.Order import OrderAPI
+        from Library.Portfolio.Session import SessionAPI
+        from Library.Portfolio.Account import AccountAPI
         from Library.Universe.Universe import UniverseAPI
         s = super().Structure
         cols = {
             self.ID.UID: PrimaryKey(pl.Int64),
-            self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
-            self.ID.Position: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{PositionAPI.Table}"("{PositionAPI.ID.UID}")'),
+            self.ID.Session: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")'),
+            self.ID.Account: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{AccountAPI.Table}"("{AccountAPI.ID.UID}")'),
             self.ID.Order: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{OrderAPI.Table}"("{OrderAPI.ID.UID}")'),
+            self.ID.Position: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{PositionAPI.Table}"("{PositionAPI.ID.UID}")'),
+            self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
             self.ID.Type: pl.String(),
             self.ID.Direction: pl.String(),
             self.ID.Volume: pl.Float64(),
             self.ID.Quantity: pl.Float64(),
             self.ID.EntryTimestamp: pl.Datetime(),
-            self.ID.ExitTimestamp: pl.Datetime(),
             self.ID.EntryPrice: pl.Float64(),
+            self.ID.EntryBalance: pl.Float64(),
             self.ID.StopLossPrice: pl.Float64(),
             self.ID.TakeProfitPrice: pl.Float64(),
-            self.ID.MaxRunupPrice: pl.Float64(),
-            self.ID.MaxDrawdownPrice: pl.Float64(),
-            self.ID.ExitPrice: pl.Float64(),
             self.ID.StopLossPnL: pl.Float64(),
             self.ID.TakeProfitPnL: pl.Float64(),
+            self.ID.MaxRunupPrice: pl.Float64(),
+            self.ID.MaxDrawdownPrice: pl.Float64(),
             self.ID.MaxRunupPnL: pl.Float64(),
             self.ID.MaxDrawdownPnL: pl.Float64(),
+            self.ID.ExitTimestamp: pl.Datetime(),
+            self.ID.ExitPrice: pl.Float64(),
+            self.ID.ExitBalance: pl.Float64(),
             self.ID.GrossPnL: pl.Float64(),
             self.ID.CommissionPnL: pl.Float64(),
             self.ID.SwapPnL: pl.Float64(),
             self.ID.NetPnL: pl.Float64(),
             self.ID.UsedMargin: pl.Float64(),
-            self.ID.EntryBalance: pl.Float64(),
             self.ID.MidBalance: pl.Float64(),
-            self.ID.ExitBalance: pl.Float64(),
             self.ID.Label: pl.String(),
             self.ID.Comment: pl.String(),
         }
@@ -87,28 +90,28 @@ class TradeAPI(PositionAPI):
                       autosave: bool,
                       autoload: bool,
                       autooverload: bool,
+                      session: Union[int, SessionAPI, None],
+                      account: Union[int, AccountAPI, None],
+                      order: Union[int, OrderAPI, None],
+                      security: Union[int, SecurityAPI, None],
                       type: Union[PositionType, str, None],
                       direction: Union[Direction, str, None],
-                      security: Union[int, SecurityAPI, None],
                       entry_timestamp: Union[datetime, TimestampAPI, None],
                       entry_price: Union[float, PriceAPI, None],
+                      entry_balance: Union[float, None],
                       stop_loss_price: Union[float, PriceAPI, None],
                       take_profit_price: Union[float, PriceAPI, None],
-                      max_runup_price: Union[float, PriceAPI, None],
-                      max_drawdown_price: Union[float, PriceAPI, None],
-                      exit_price: Union[float, PriceAPI, None],
                       stop_loss_pnl: Union[float, PnLAPI, None],
                       take_profit_pnl: Union[float, PnLAPI, None],
+                      max_runup_price: Union[float, PriceAPI, None],
+                      max_drawdown_price: Union[float, PriceAPI, None],
                       max_runup_pnl: Union[float, PnLAPI, None],
                       max_drawdown_pnl: Union[float, PnLAPI, None],
+                      exit_price: Union[float, PriceAPI, None],
                       gross_pnl: Union[float, PnLAPI, None],
                       commission_pnl: Union[float, PnLAPI, None],
                       swap_pnl: Union[float, PnLAPI, None],
                       net_pnl: Union[float, PnLAPI, None],
-                      entry_balance: Union[float, None],
-                      order: Union[int, OrderAPI, None],
-                      session: Union[int, SessionAPI, None],
-                      account: Union[int, AccountAPI, None],
                       position: Union[int, PositionAPI, None],
                       exit_timestamp: Union[datetime, TimestampAPI, None],
                       exit_balance: Union[float, None]) -> None:
@@ -118,37 +121,37 @@ class TradeAPI(PositionAPI):
         if isinstance(position, PositionAPI): self._position_ = position
         elif position is not MISSING and position is not None:
             self._position_ = PositionAPI(UID=position, db=db, autoload=True)
-        self._exit_balance_ = exit_balance if exit_balance is not MISSING else None
         if isinstance(exit_timestamp, TimestampAPI): self._exit_timestamp_ = exit_timestamp
         elif exit_timestamp is not MISSING and exit_timestamp is not None:
             self._exit_timestamp_ = TimestampAPI(DateTime=exit_timestamp)
-        super().__post_init__(db=db, 
-                              migrate=migrate, 
-                              autosave=autosave, 
-                              autoload=autoload, 
+        self._exit_balance_ = exit_balance if exit_balance is not MISSING else None
+        super().__post_init__(db=db,
+                              migrate=migrate,
+                              autosave=autosave,
+                              autoload=autoload,
                               autooverload=autooverload,
+                              session=session,
+                              account=account,
+                              order=order,
+                              security=security,
                               type=type,
                               direction=direction,
-                              security=security,
-                              entry_timestamp=entry_timestamp, 
+                              entry_timestamp=entry_timestamp,
                               entry_price=entry_price,
-                              stop_loss_price=stop_loss_price, 
-                              take_profit_price=take_profit_price,
-                              max_runup_price=max_runup_price, 
-                              max_drawdown_price=max_drawdown_price,
-                              exit_price=exit_price,
-                              stop_loss_pnl=stop_loss_pnl, 
-                              take_profit_pnl=take_profit_pnl,
-                              max_runup_pnl=max_runup_pnl, 
-                              max_drawdown_pnl=max_drawdown_pnl,
-                              gross_pnl=gross_pnl, 
-                              commission_pnl=commission_pnl,
-                              swap_pnl=swap_pnl, 
-                              net_pnl=net_pnl,
                               entry_balance=entry_balance,
-                              order=order,
-                              session=session,
-                              account=account)
+                              stop_loss_price=stop_loss_price,
+                              take_profit_price=take_profit_price,
+                              stop_loss_pnl=stop_loss_pnl,
+                              take_profit_pnl=take_profit_pnl,
+                              max_runup_price=max_runup_price,
+                              max_drawdown_price=max_drawdown_price,
+                              max_runup_pnl=max_runup_pnl,
+                              max_drawdown_pnl=max_drawdown_pnl,
+                              exit_price=exit_price,
+                              gross_pnl=gross_pnl,
+                              commission_pnl=commission_pnl,
+                              swap_pnl=swap_pnl,
+                              net_pnl=net_pnl)
 
     @property
     @overridefield
