@@ -5,7 +5,7 @@ from typing import Union, ClassVar, TYPE_CHECKING
 from dataclasses import dataclass, field, InitVar
 
 from Library.Database.Dataframe import pl
-from Library.Database.Database import IdentityKey, ForeignKey, DatabaseAPI
+from Library.Database.Database import PrimaryKey, ForeignKey, DatabaseAPI
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Dataclass import overridefield, coerce
 from Library.Portfolio.Portfolio import PortfolioAPI
@@ -18,6 +18,8 @@ from Library.Utility.Typing import MISSING
 if TYPE_CHECKING:
     from Library.Universe.Security import SecurityAPI
     from Library.Portfolio.Order import OrderAPI
+    from Library.Portfolio.Session import SessionAPI
+    from Library.Portfolio.Account import AccountAPI
 
 @dataclass
 class TradeAPI(PositionAPI):
@@ -43,7 +45,7 @@ class TradeAPI(PositionAPI):
         from Library.Universe.Universe import UniverseAPI
         s = super().Structure
         cols = {
-            self.ID.UID: IdentityKey(pl.Int64),
+            self.ID.UID: PrimaryKey(pl.Int64),
             self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
             self.ID.Position: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{PositionAPI.Table}"("{PositionAPI.ID.UID}")'),
             self.ID.Order: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{OrderAPI.Table}"("{OrderAPI.ID.UID}")'),
@@ -105,6 +107,8 @@ class TradeAPI(PositionAPI):
                       net_pnl: Union[float, PnLAPI, None],
                       entry_balance: Union[float, None],
                       order: Union[int, OrderAPI, None],
+                      session: Union[int, SessionAPI, None],
+                      account: Union[int, AccountAPI, None],
                       position: Union[int, PositionAPI, None],
                       exit_timestamp: Union[datetime, TimestampAPI, None],
                       exit_balance: Union[float, None]) -> None:
@@ -141,8 +145,10 @@ class TradeAPI(PositionAPI):
                               commission_pnl=commission_pnl,
                               swap_pnl=swap_pnl, 
                               net_pnl=net_pnl,
-                              entry_balance=entry_balance, 
-                              order=order)
+                              entry_balance=entry_balance,
+                              order=order,
+                              session=session,
+                              account=account)
 
     @property
     @overridefield
