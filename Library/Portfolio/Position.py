@@ -11,16 +11,16 @@ from Library.Database.Dataclass import overridefield, coerce
 from Library.Database.Enumeration import EnumerationAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.PnL import PnLAPI
+from Library.Portfolio.Session import SessionAPI
+from Library.Portfolio.Account import AccountAPI
 from Library.Universe.Universe import UniverseAPI
+from Library.Universe.Security import SecurityAPI
 from Library.Market.Timestamp import TimestampAPI
 from Library.Market.Price import PriceAPI, Direction
 from Library.Utility.Typing import MISSING
 
 if TYPE_CHECKING:
-    from Library.Universe.Security import SecurityAPI
     from Library.Portfolio.Order import OrderAPI
-    from Library.Portfolio.Session import SessionAPI
-    from Library.Portfolio.Account import AccountAPI
 
 class PositionType(EnumerationAPI):
     Normal = 0
@@ -88,10 +88,7 @@ class PositionAPI(DatapointAPI):
 
     @property
     def Structure(self) -> dict:
-        from Library.Universe.Security import SecurityAPI
         from Library.Portfolio.Order import OrderAPI
-        from Library.Portfolio.Session import SessionAPI
-        from Library.Portfolio.Account import AccountAPI
         s = super().Structure
         cols = {
             self.ID.UID: PrimaryKey(pl.Int64),
@@ -157,10 +154,7 @@ class PositionAPI(DatapointAPI):
                       commission_pnl: Union[float, PnLAPI, None],
                       swap_pnl: Union[float, PnLAPI, None],
                       net_pnl: Union[float, PnLAPI, None]) -> None:
-        from Library.Universe.Security import SecurityAPI
         from Library.Portfolio.Order import OrderAPI
-        from Library.Portfolio.Session import SessionAPI
-        from Library.Portfolio.Account import AccountAPI
         session = coerce(session)
         account = coerce(account)
         order = coerce(order)
@@ -233,7 +227,6 @@ class PositionAPI(DatapointAPI):
         return self._session_
     @Session.setter
     def Session(self, val: Union[int, SessionAPI, None]) -> None:
-        from Library.Portfolio.Session import SessionAPI
         if isinstance(val, SessionAPI): self._session_ = val
         elif val is not None: self._session_ = SessionAPI(UID=val, db=self._db_, autoload=True)
 
@@ -243,7 +236,6 @@ class PositionAPI(DatapointAPI):
         return self._account_
     @Account.setter
     def Account(self, val: Union[int, AccountAPI, None]) -> None:
-        from Library.Portfolio.Account import AccountAPI
         if isinstance(val, AccountAPI): self._account_ = val
         elif val is not None: self._account_ = AccountAPI(UID=val, db=self._db_, autoload=True)
 
@@ -263,9 +255,11 @@ class PositionAPI(DatapointAPI):
         return self._security_
     @Security.setter
     def Security(self, val: Union[int, SecurityAPI, None]) -> None:
-        from Library.Universe.Security import SecurityAPI
         if isinstance(val, SecurityAPI): self._security_ = val
         elif val is not None: self._security_ = SecurityAPI(UID=val, db=self._db_, autoload=True)
+        contract = self._security_.Contract if self._security_ else None
+        for backing in (self._entry_price_, self._stop_loss_price_, self._take_profit_price_, self._max_runup_price_, self._max_drawdown_price_, self._exit_price_):
+            if backing: backing.Contract = contract
 
     @property
     @overridefield
