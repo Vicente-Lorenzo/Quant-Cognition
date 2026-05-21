@@ -30,14 +30,8 @@ def setup_market_test(db):
     sec = SecurityAPI(Ticker="EURUSD", Provider="TestProv", Category="Forex", db=db)
     sec.save()
     yield sec.UID
-    db.executeone(QueryAPI(f'TRUNCATE TABLE "{MarketAPI.Schema}"."{BarAPI.Table}" CASCADE')).commit()
-    db.executeone(QueryAPI(f'TRUNCATE TABLE "{MarketAPI.Schema}"."{TickAPI.Table}" CASCADE')).commit()
-    db.executeone(QueryAPI(f'TRUNCATE TABLE "{SecurityAPI.Schema}"."{SecurityAPI.Table}" CASCADE')).commit()
-    db.executeone(QueryAPI(f'TRUNCATE TABLE "{ContractAPI.Schema}"."{ContractAPI.Table}" CASCADE')).commit()
-    db.executeone(QueryAPI(f'TRUNCATE TABLE "{TickerAPI.Schema}"."{TickerAPI.Table}" CASCADE')).commit()
-    db.executeone(QueryAPI(f'TRUNCATE TABLE "{ProviderAPI.Schema}"."{ProviderAPI.Table}" CASCADE')).commit()
-    db.executeone(QueryAPI(f'TRUNCATE TABLE "{CategoryAPI.Schema}"."{CategoryAPI.Table}" CASCADE')).commit()
-    db.executeone(QueryAPI(f'TRUNCATE TABLE "{TimeframeAPI.Schema}"."{TimeframeAPI.Table}" CASCADE')).commit()
+    db.executeone(QueryAPI(f'DELETE FROM "{MarketAPI.Schema}"."{BarAPI.Table}"')).commit()
+    db.executeone(QueryAPI(f'DELETE FROM "{MarketAPI.Schema}"."{TickAPI.Table}"')).commit()
 
 def test_market_bulk_ticks(db, setup_market_test):
     sec_uid = setup_market_test

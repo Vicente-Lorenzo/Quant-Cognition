@@ -3,18 +3,21 @@
 import pytest
 
 from Library.Parameter import ParameterAPI
-from Library.Protocol.Action import ActionID
-from Library.Strategy.Rule.Download import DownloadStrategyAPI
-from Library.System.Realtime import RealtimeAPI
-from Library.Market.Tick import TickAPI
-from Library.Market.Bar import BarAPI
+from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.Order import OrderAPI
 from Library.Portfolio.Position import PositionAPI
 from Library.Portfolio.Trade import TradeAPI
+from Library.Protocol.Action import ActionID
+from Library.Strategy.Rule.Download import DownloadStrategyAPI
+from Library.System.Realtime import RealtimeAPI
+from Library.System.System import SystemType
+from Library.Market.Tick import TickAPI
+from Library.Market.Bar import BarAPI
 
-def _make_system_(market: tuple = (100, 60.0), portfolio: tuple = (100, 60.0), port: int = 5556, **kwargs) -> RealtimeAPI:
+def _make_system_(market: tuple = (100, 60.0), portfolio: tuple = (100, 60.0), port: int = 5556, system: SystemType = SystemType.Live, **kwargs) -> RealtimeAPI:
     p = ParameterAPI()
     system = RealtimeAPI(
+        system=system,
         strategy=DownloadStrategyAPI,
         security=MagicMock(),
         timeframe=MagicMock(),
@@ -58,7 +61,7 @@ def test_direct_attribute_state(realtime_system):
 
 def test_buffer_instances_carry_correct_types(realtime_system):
     assert realtime_system._market_._types_ == (TickAPI, BarAPI)
-    assert realtime_system._portfolio_._types_ == (OrderAPI, PositionAPI, TradeAPI)
+    assert realtime_system._portfolio_._types_ == (AccountAPI, OrderAPI, PositionAPI, TradeAPI)
 
 def test_live_mode_both_buffers_active():
     system = _make_system_(market=(100, 60.0), portfolio=(100, 60.0))

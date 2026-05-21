@@ -14,14 +14,12 @@ class MockDatapoint(DatapointAPI):
     Value: Union[str, None] = None
     Other: Union[float, None] = None
     @property
-    def Key(self) -> dict:
-        return {self.ID.TestID: PrimaryKey(pl.Int64)}
-    @property
-    def Columns(self) -> dict:
+    def Structure(self) -> dict:
         return {
+            self.ID.TestID: PrimaryKey(pl.Int64),
             self.ID.Value: pl.String(),
             self.ID.Other: pl.Float64(),
-            **super().Columns
+            **super().Structure
         }
     def __post_init__(self, db, migrate, autosave, autoload, autooverload):
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)

@@ -1,6 +1,8 @@
 ﻿import pytest
 from datetime import datetime
 from Library.Portfolio.Account import AccountAPI, AccountType, MarginMode, Environment
+from Library.Portfolio.Session import SessionAPI
+from Library.System.System import SystemType
 from Library.Market.Price import Direction
 from Library.Portfolio.Position import PositionAPI, PositionType
 from Library.Portfolio.Trade import TradeAPI
@@ -16,6 +18,7 @@ def test_portfolio_initialization(db):
     from Library.Universe.Contract import ContractAPI
     db.migrate(schema=UniverseAPI.Schema, table=ContractAPI.Table, structure=ContractAPI(db=db).Structure)
     db.migrate(schema=SecurityAPI.Schema, table=SecurityAPI.Table, structure=SecurityAPI(db=db).Structure)
+    db.migrate(schema=SessionAPI.Schema, table=SessionAPI.Table, structure=SessionAPI(db=db).Structure)
     db.migrate(schema=AccountAPI.Schema, table=AccountAPI.Table, structure=AccountAPI(db=db).Structure)
     from Library.Portfolio.Order import OrderAPI
     db.migrate(schema=OrderAPI.Schema, table=OrderAPI.Table, structure=OrderAPI(db=db).Structure)
@@ -26,8 +29,15 @@ def test_portfolio_initialization(db):
     provider.save()
     TickerAPI(UID="EURUSD", Category="Forex (Major)", BaseAsset="EUR", BaseName="Euro", QuoteAsset="USD", QuoteName="US Dollar", Description="Euro vs US Dollar", db=db).save()
     ContractAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Type=ContractType.Spot, db=db).save()
+    sec = SecurityAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Contract=ContractType.Spot, db=db, autoload=True)
+    sec.save()
+    session = SessionAPI(IID="TEST-PORTFOLIO", Type=SystemType.Testing, Strategy="Download", Security=sec, StartTimestamp=datetime(2023, 1, 1, 12, 0, 0), db=db)
+    session.save()
+    assert session.UID is not None
+    assert session.IID == "TEST-PORTFOLIO"
     acc = AccountAPI(
-        UID="123456",
+        Timestamp=datetime(2023, 1, 1, 12, 0, 0),
+        Session=session,
         Provider=provider.UID,
         Environment=Environment.Live,
         AccountType=AccountType.Hedged,
@@ -43,12 +53,12 @@ def test_portfolio_initialization(db):
         MarginStopLevel=50.0,
         db=db
     )
-    assert acc.UID == "123456"
+    acc.save()
+    assert acc.UID is not None
     assert acc.Provider.UID == "Pepperstone (cTrader)"
     assert acc.Environment == Environment.Live
     assert acc.AccountType == AccountType.Hedged
-    sec = SecurityAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Contract=ContractType.Spot, db=db, autoload=True)
-    sec.save()
+    assert acc.Session.UID == session.UID
     dt = datetime(2023, 1, 1, 12, 0, 0)
     pos = PositionAPI(
         UID=1001,
@@ -95,3 +105,4 @@ def test_portfolio_initialization(db):
     db.executeone(QueryAPI(f'DELETE FROM "{TradeAPI.Schema}"."{TradeAPI.Table}"')).commit()
     db.executeone(QueryAPI(f'DELETE FROM "{PositionAPI.Schema}"."{PositionAPI.Table}"')).commit()
     db.executeone(QueryAPI(f'DELETE FROM "{AccountAPI.Schema}"."{AccountAPI.Table}"')).commit()
+    db.executeone(QueryAPI(f'DELETE FROM "{SessionAPI.Schema}"."{SessionAPI.Table}"')).commit()
