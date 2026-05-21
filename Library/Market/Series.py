@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Union, TYPE_CHECKING
+
 from Library.Database.Dataframe import pl
 from Library.Market.Price import PriceMode
 
