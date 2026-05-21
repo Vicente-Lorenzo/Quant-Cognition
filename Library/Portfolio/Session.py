@@ -30,10 +30,9 @@ class SessionAPI(DatapointAPI):
     IID: Union[str, None] = None
     Type: InitVar[Union[SystemType, str, None]] = field(default=MISSING)
     Strategy: Union[str, None] = None
+    Security: InitVar[Union[int, SecurityAPI, None]] = field(default=MISSING)
     StartTimestamp: Union[datetime, None] = None
     StopTimestamp: Union[datetime, None] = None
-
-    Security: InitVar[Union[int, SecurityAPI, None]] = field(default=MISSING)
     InitialAccount: InitVar[Union[int, AccountAPI, None]] = field(default=MISSING)
     FinalAccount: InitVar[Union[int, AccountAPI, None]] = field(default=MISSING)
 
@@ -64,10 +63,10 @@ class SessionAPI(DatapointAPI):
                       autosave: bool,
                       autoload: bool,
                       autooverload: bool,
-                      type,
-                      security,
-                      initial_account,
-                      final_account) -> None:
+                      type: Union[SystemType, str, None],
+                      security: Union[int, SecurityAPI, None],
+                      initial_account: Union[int, AccountAPI, None],
+                      final_account: Union[int, AccountAPI, None]) -> None:
         from Library.Portfolio.Account import AccountAPI
         from Library.System.System import SystemType
         from Library.Universe.Security import SecurityAPI
@@ -91,11 +90,6 @@ class SessionAPI(DatapointAPI):
             self.StartTimestamp = datetime.now()
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
-    @staticmethod
-    def _generate_iid_(type) -> str:
-        prefix = type.name if type is not None else "Session"
-        return f"{prefix}-{uuid.uuid4().hex[:12]}"
-
     def _pull_(self, overload: bool) -> Union[dict, None]:
         from Library.System.System import SystemType
         row = super()._pull_(overload=overload)
@@ -105,10 +99,10 @@ class SessionAPI(DatapointAPI):
 
     @property
     @overridefield
-    def Type(self):
+    def Type(self) -> Union[SystemType, None]:
         return self._type_
     @Type.setter
-    def Type(self, val) -> None:
+    def Type(self, val: Union[SystemType, str, None]) -> None:
         from Library.System.System import SystemType
         self._type_ = SystemType.parse(val)
 
@@ -146,3 +140,8 @@ class SessionAPI(DatapointAPI):
     def Duration(self) -> Union[float, None]:
         if self.StartTimestamp is None or self.StopTimestamp is None: return None
         return (self.StopTimestamp - self.StartTimestamp).total_seconds()
+
+    @staticmethod
+    def _generate_iid_(type: Union[SystemType, None]) -> str:
+        prefix = type.name if type is not None else "Session"
+        return f"{prefix}-{uuid.uuid4().hex[:12]}"
