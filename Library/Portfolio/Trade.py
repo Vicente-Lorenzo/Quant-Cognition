@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Union, ClassVar, TYPE_CHECKING
+from typing import Union, ClassVar
 from dataclasses import dataclass, field, InitVar
 
 from Library.Database.Dataframe import pl
@@ -10,16 +10,15 @@ from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Dataclass import overridefield, coerce
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.Position import PositionAPI, PositionType
+from Library.Portfolio.Order import OrderAPI
+from Library.Portfolio.Session import SessionAPI
+from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.PnL import PnLAPI
+from Library.Universe.Universe import UniverseAPI
+from Library.Universe.Security import SecurityAPI
 from Library.Market.Timestamp import TimestampAPI
 from Library.Market.Price import PriceAPI, Direction
 from Library.Utility.Typing import MISSING
-
-if TYPE_CHECKING:
-    from Library.Universe.Security import SecurityAPI
-    from Library.Portfolio.Order import OrderAPI
-    from Library.Portfolio.Session import SessionAPI
-    from Library.Portfolio.Account import AccountAPI
 
 @dataclass
 class TradeAPI(PositionAPI):
@@ -39,11 +38,6 @@ class TradeAPI(PositionAPI):
 
     @property
     def Structure(self) -> dict:
-        from Library.Universe.Security import SecurityAPI
-        from Library.Portfolio.Order import OrderAPI
-        from Library.Portfolio.Session import SessionAPI
-        from Library.Portfolio.Account import AccountAPI
-        from Library.Universe.Universe import UniverseAPI
         s = super().Structure
         cols = {
             self.ID.UID: PrimaryKey(pl.Int64),
