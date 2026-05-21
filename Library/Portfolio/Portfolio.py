@@ -479,6 +479,3 @@ class PortfolioAPI(DatapointAPI):
     def Orders(self) -> pl.DataFrame:
         if not self._orders_: return pl.DataFrame()
         return pl.DataFrame([o.dict() for o in self._orders_.values()], strict=False)
-
-    def __repr__(self) -> str:
-        return repr(self.Positions)
