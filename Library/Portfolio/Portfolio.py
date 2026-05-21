@@ -260,21 +260,23 @@ class PortfolioAPI(DatapointAPI):
 
     @staticmethod
     def _inherit_position_state_(src: PositionAPI, dst: PositionAPI) -> None:
-        if dst._type_ is None: dst._type_ = src._type_
-        if dst._direction_ is None: dst._direction_ = src._direction_
-        if dst._security_ is None: dst._security_ = src._security_
-        if dst._order_ is None: dst._order_ = src._order_
-        if dst._entry_timestamp_ is None: dst._entry_timestamp_ = src._entry_timestamp_
-        if dst._entry_price_ is None: dst._entry_price_ = src._entry_price_
-        if dst._stop_loss_price_ is None: dst._stop_loss_price_ = src._stop_loss_price_
-        if dst._take_profit_price_ is None: dst._take_profit_price_ = src._take_profit_price_
-        if dst._stop_loss_pnl_ is None: dst._stop_loss_pnl_ = src._stop_loss_pnl_
-        if dst._take_profit_pnl_ is None: dst._take_profit_pnl_ = src._take_profit_pnl_
-        if dst._max_runup_price_ is None: dst._max_runup_price_ = src._max_runup_price_
-        if dst._max_drawdown_price_ is None: dst._max_drawdown_price_ = src._max_drawdown_price_
-        if dst._max_runup_pnl_ is None: dst._max_runup_pnl_ = src._max_runup_pnl_
-        if dst._max_drawdown_pnl_ is None: dst._max_drawdown_pnl_ = src._max_drawdown_pnl_
-        if dst._entry_balance_ is None: dst._entry_balance_ = src._entry_balance_
+        from Library.Portfolio.Trade import TradeAPI
+        if dst._type_ is None: setattr(dst, 'Type', src.Type)
+        if dst._direction_ is None: setattr(dst, 'Direction', src.Direction)
+        if dst._security_ is None: setattr(dst, 'Security', src.Security)
+        if dst._order_ is None: setattr(dst, 'Order', src.Order)
+        if dst._entry_timestamp_ is None: setattr(dst, 'EntryTimestamp', src.EntryTimestamp)
+        if dst._entry_price_ is None: setattr(dst, 'EntryPrice', src.EntryPrice)
+        if isinstance(dst, TradeAPI):
+            if dst._stop_loss_price_ is None: setattr(dst, 'StopLossPrice', src.StopLossPrice)
+            if dst._take_profit_price_ is None: setattr(dst, 'TakeProfitPrice', src.TakeProfitPrice)
+            if dst._stop_loss_pnl_ is None: setattr(dst, 'StopLossPnL', src.StopLossPnL)
+            if dst._take_profit_pnl_ is None: setattr(dst, 'TakeProfitPnL', src.TakeProfitPnL)
+        if dst._max_runup_price_ is None: setattr(dst, 'MaxRunupPrice', src.MaxRunupPrice)
+        if dst._max_drawdown_price_ is None: setattr(dst, 'MaxDrawdownPrice', src.MaxDrawdownPrice)
+        if dst._max_runup_pnl_ is None: setattr(dst, 'MaxRunupPnL', src.MaxRunupPnL)
+        if dst._max_drawdown_pnl_ is None: setattr(dst, 'MaxDrawdownPnL', src.MaxDrawdownPnL)
+        if dst._entry_balance_ is None: setattr(dst, 'EntryBalance', src.EntryBalance)
         if dst.Volume is None: dst.Volume = src.Volume
         if dst.Quantity is None: dst.Quantity = src.Quantity
         if dst.UsedMargin is None: dst.UsedMargin = src.UsedMargin
@@ -282,26 +284,52 @@ class PortfolioAPI(DatapointAPI):
         if dst.Label is None: dst.Label = src.Label
         if dst.Comment is None: dst.Comment = src.Comment
 
+    @staticmethod
+    def _compute_target_pnl_(pos: PositionAPI, target_price: Union[float, None]) -> Union[float, None]:
+        from Library.Portfolio.Statistic import calculate_pnl_difference, calculate_gross_pnl, calculate_net_pnl
+        entry = pos.EntryPrice.Price if pos.EntryPrice else None
+        if target_price is None or entry is None or pos.Volume is None: return None
+        comm = pos.CommissionPnL.PnL if pos.CommissionPnL else 0.0
+        swap = pos.SwapPnL.PnL if pos.SwapPnL else 0.0
+        diff = calculate_pnl_difference(target_price, entry, pos.IsLong)
+        return calculate_net_pnl(calculate_gross_pnl(diff, pos.Volume), comm, swap)
+
+    def _refresh_target_pnls_(self, pos: PositionAPI) -> None:
+        sl_price = pos.StopLossPrice.Price if pos.StopLossPrice else None
+        tp_price = pos.TakeProfitPrice.Price if pos.TakeProfitPrice else None
+        sl_pnl = self._compute_target_pnl_(pos, sl_price)
+        tp_pnl = self._compute_target_pnl_(pos, tp_price)
+        if sl_pnl is not None:
+            setattr(pos, 'StopLossPnL', sl_pnl)
+        else:
+            pos._stop_loss_pnl_ = None
+        if tp_pnl is not None:
+            setattr(pos, 'TakeProfitPnL', tp_pnl)
+        else:
+            pos._take_profit_pnl_ = None
+
     def open_position(self, order_uid: Union[int, None], position: PositionAPI) -> None:
         if order_uid is not None and order_uid in self._orders_:
             del self._orders_[order_uid]
         self._positions_[position.UID] = position
         base = self._account_.Balance if self._account_ else 0.0
-        position._entry_balance_ = base
+        setattr(position, 'EntryBalance', base)
         position.MidBalance = base
+        self._refresh_target_pnls_(position)
 
     def modify_position(self, position: PositionAPI) -> None:
         if position.UID in self._positions_:
             old_pos = self._positions_[position.UID]
             self._inherit_position_state_(old_pos, position)
             self._positions_[position.UID] = position
+            self._refresh_target_pnls_(position)
 
     def close_position(self, position_uid: int, position: Union[PositionAPI, None], trade: TradeAPI) -> None:
         if position_uid in self._positions_:
             old_pos = self._positions_[position_uid]
             self._inherit_position_state_(old_pos, trade)
             if trade._position_ is None: trade._position_ = old_pos
-            trade._entry_balance_ = old_pos._entry_balance_
+            setattr(trade, 'EntryBalance', old_pos.EntryBalance)
             if trade.ExitPrice and trade.ExitPrice.Price is not None:
                 exit_price = trade.ExitPrice.Price
                 if trade._max_runup_price_ and ((trade.IsLong and exit_price > trade._max_runup_price_.Price) or (trade.IsShort and exit_price < trade._max_runup_price_.Price)):
@@ -318,11 +346,11 @@ class PortfolioAPI(DatapointAPI):
                     trade._max_drawdown_pnl_.PnL = net
                     trade._max_drawdown_pnl_.Reference = trade.NetPnL.Reference
                     trade._max_drawdown_pnl_.Duration = trade.NetPnL.Duration
-            base = old_pos.MidBalance if old_pos.MidBalance is not None else (old_pos._entry_balance_ or 0.0)
+            base = old_pos.MidBalance if old_pos.MidBalance is not None else (old_pos.EntryBalance or 0.0)
             new_mid = base + net
             old_pos.MidBalance = new_mid
             trade.MidBalance = new_mid
-            trade._exit_balance_ = new_mid
+            setattr(trade, 'ExitBalance', new_mid)
             if self._account_: self._account_.Balance += net
             if position is not None:
                 self._inherit_position_state_(old_pos, position)
