@@ -12,12 +12,12 @@ from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Dataclass import overridefield, coerce
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Universe.Universe import UniverseAPI
+from Library.Universe.Security import SecurityAPI
 from Library.Utility.Typing import MISSING
 
 if TYPE_CHECKING:
     from Library.Portfolio.Account import AccountAPI
     from Library.System.System import SystemType
-    from Library.Universe.Security import SecurityAPI
 
 @dataclass
 class SessionAPI(DatapointAPI):
@@ -43,7 +43,6 @@ class SessionAPI(DatapointAPI):
 
     @property
     def Structure(self) -> dict:
-        from Library.Universe.Security import SecurityAPI
         return {
             self.ID.UID: IdentityKey(pl.Int64),
             self.ID.IID: PrimaryKey(pl.String),
@@ -69,7 +68,6 @@ class SessionAPI(DatapointAPI):
                       final_account: Union[int, AccountAPI, None]) -> None:
         from Library.Portfolio.Account import AccountAPI
         from Library.System.System import SystemType
-        from Library.Universe.Security import SecurityAPI
         type = coerce(type)
         security = coerce(security)
         initial_account = coerce(initial_account)
@@ -112,7 +110,6 @@ class SessionAPI(DatapointAPI):
         return self._security_
     @Security.setter
     def Security(self, val: Union[int, SecurityAPI, None]) -> None:
-        from Library.Universe.Security import SecurityAPI
         if isinstance(val, SecurityAPI): self._security_ = val
         elif val is not None: self._security_ = SecurityAPI(UID=val, db=self._db_, autoload=True)
 
