@@ -9,8 +9,10 @@ from Library.Database.Enumeration import EnumerationAPI
 from Library.Logging import HandlerLoggingAPI
 from Library.Market.Bar import BarAPI
 from Library.Market.Tick import TickAPI
+from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.Order import OrderAPI
 from Library.Portfolio.Position import PositionAPI
+from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Trade import TradeAPI
 from Library.Protocol.Action import ActionAPI, ActionID, CompleteActionAPI
 from Library.Protocol.Update import (
@@ -99,7 +101,6 @@ if TYPE_CHECKING:
     from Library.Indicator.Technical import TechnicalAPI
     from Library.Market.Market import MarketAPI
     from Library.Parameter import Parameter
-    from Library.Portfolio.Account import AccountAPI
     from Library.Portfolio.Portfolio import PortfolioAPI
     from Library.Strategy.Strategy import StrategyAPI
     from Library.Universe.Security import SecurityAPI
@@ -139,9 +140,17 @@ class SystemAPI(ABC):
         self.statistics = None
 
         self._market_: BufferAPI = BufferAPI(types=[TickAPI, BarAPI], batch=market[0], interval=market[1])
-        self._portfolio_: BufferAPI = BufferAPI(types=[OrderAPI, PositionAPI, TradeAPI], batch=portfolio[0], interval=portfolio[1])
+        self._portfolio_: BufferAPI = BufferAPI(types=[AccountAPI, OrderAPI, PositionAPI, TradeAPI], batch=portfolio[0], interval=portfolio[1])
+
+        self._session_: Union[SessionAPI, None] = None
 
         self._log_: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="System Management")
+
+    def _attach_session_(self, record) -> None:
+        if not self._portfolio_.Active or self._session_ is None: return
+        record.Session = self._session_
+        if not isinstance(record, AccountAPI):
+            record.Account = self.account
 
     def __enter__(self) -> Self:
         self._log_.debug(lambda: "Initiated")
@@ -174,6 +183,17 @@ class SystemAPI(ABC):
     @abstractmethod
     def receive_update_account(self) -> AccountAPI:
         raise NotImplementedError
+
+    def _receive_update_account_(self) -> AccountAPI:
+        account = self.receive_update_account()
+        self._attach_session_(account)
+        if self._portfolio_.Active and self._session_ is not None and self._session_.InitialAccount is None:
+            account.save()
+            self._session_.InitialAccount = account
+            self._session_.save()
+        else:
+            self._portfolio_.add(account)
+        return account
 
     @abstractmethod
     def receive_update_security(self) -> SecurityAPI:
@@ -208,6 +228,7 @@ class SystemAPI(ABC):
 
     def _receive_update_order_(self) -> OrderAPI:
         order = self.receive_update_order()
+        self._attach_session_(order)
         self._portfolio_.add(order)
         return order
 
@@ -217,6 +238,7 @@ class SystemAPI(ABC):
 
     def _receive_update_position_(self) -> PositionAPI:
         position = self.receive_update_position()
+        self._attach_session_(position)
         self._portfolio_.add(position)
         return position
 
@@ -226,6 +248,7 @@ class SystemAPI(ABC):
 
     def _receive_update_trade_(self) -> TradeAPI:
         trade = self.receive_update_trade()
+        self._attach_session_(trade)
         self._portfolio_.add(trade)
         return trade
 
@@ -253,7 +276,7 @@ class SystemAPI(ABC):
                     actions += engine.perform(update_id, CompleteUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio))
                     return actions
                 case UpdateID.Account:
-                    self.account = self.receive_update_account()
+                    self.account = self._receive_update_account_()
                     actions += engine.perform(update_id, AccountUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio))
                 case UpdateID.Security:
                     self.security = self.receive_update_security()
