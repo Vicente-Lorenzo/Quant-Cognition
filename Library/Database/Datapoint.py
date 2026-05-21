@@ -36,21 +36,10 @@ class DatapointAPI(DataclassAPI):
     _autooverload_: bool = field(default=False, init=False, repr=False)
 
     @property
-    def Key(self) -> dict:
-        return {}
-
-    @property
-    def Columns(self) -> dict:
+    def Structure(self) -> dict:
         return {
             self.ID.UpdatedAt: pl.Datetime(),
             self.ID.UpdatedBy: pl.String()
-        }
-
-    @property
-    def Structure(self) -> dict:
-        return {
-            **self.Key,
-            **self.Columns
         }
 
     def __post_init__(self,
