@@ -5,7 +5,7 @@ from typing import Union, ClassVar, TYPE_CHECKING
 from dataclasses import dataclass, field, InitVar
 
 from Library.Database.Dataframe import pl
-from Library.Database.Database import IdentityKey, ForeignKey, DatabaseAPI
+from Library.Database.Database import PrimaryKey, ForeignKey, DatabaseAPI
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Dataclass import overridefield, coerce
 from Library.Database.Enumeration import EnumerationAPI
@@ -19,6 +19,8 @@ from Library.Utility.Typing import MISSING
 if TYPE_CHECKING:
     from Library.Universe.Security import SecurityAPI
     from Library.Portfolio.Order import OrderAPI
+    from Library.Portfolio.Session import SessionAPI
+    from Library.Portfolio.Account import AccountAPI
 
 class PositionType(EnumerationAPI):
     Normal = 0
@@ -63,6 +65,8 @@ class PositionAPI(DatapointAPI):
     EntryBalance: InitVar[Union[float, None]] = field(default=MISSING)
 
     Order: InitVar[Union[int, OrderAPI, None]] = field(default=MISSING)
+    Session: InitVar[Union[int, SessionAPI, None]] = field(default=MISSING)
+    Account: InitVar[Union[int, AccountAPI, None]] = field(default=MISSING)
 
     _type_: Union[PositionType, None] = field(default=None, init=False, repr=False)
     _direction_: Union[Direction, None] = field(default=None, init=False, repr=False)
@@ -85,16 +89,22 @@ class PositionAPI(DatapointAPI):
     _net_pnl_: Union[PnLAPI, None] = field(default=None, init=False, repr=False)
     _entry_balance_: Union[float, None] = field(default=None, init=False, repr=False)
     _order_: Union[OrderAPI, None] = field(default=None, init=False, repr=False)
+    _session_: Union[SessionAPI, None] = field(default=None, init=False, repr=False)
+    _account_: Union[AccountAPI, None] = field(default=None, init=False, repr=False)
 
     @property
     def Structure(self) -> dict:
         from Library.Universe.Security import SecurityAPI
         from Library.Portfolio.Order import OrderAPI
+        from Library.Portfolio.Session import SessionAPI
+        from Library.Portfolio.Account import AccountAPI
         s = super().Structure
         cols = {
-            self.ID.UID: IdentityKey(pl.Int64),
+            self.ID.UID: PrimaryKey(pl.Int64),
             self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
             self.ID.Order: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{OrderAPI.Table}"("{OrderAPI.ID.UID}")'),
+            self.ID.Session: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")'),
+            self.ID.Account: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{AccountAPI.Table}"("{AccountAPI.ID.UID}")'),
             self.ID.Type: pl.String(),
             self.ID.Direction: pl.String(),
             self.ID.Volume: pl.Float64(),
@@ -150,9 +160,13 @@ class PositionAPI(DatapointAPI):
                       swap_pnl: Union[float, PnLAPI, None],
                       net_pnl: Union[float, PnLAPI, None],
                       entry_balance: Union[float, None],
-                      order: Union[int, OrderAPI, None]) -> None:
+                      order: Union[int, OrderAPI, None],
+                      session: Union[int, SessionAPI, None],
+                      account: Union[int, AccountAPI, None]) -> None:
         from Library.Universe.Security import SecurityAPI
         from Library.Portfolio.Order import OrderAPI
+        from Library.Portfolio.Session import SessionAPI
+        from Library.Portfolio.Account import AccountAPI
         type = coerce(type)
         direction = coerce(direction)
         security = coerce(security)
@@ -173,6 +187,8 @@ class PositionAPI(DatapointAPI):
         net_pnl = coerce(net_pnl)
         entry_balance = coerce(entry_balance)
         order = coerce(order)
+        session = coerce(session)
+        account = coerce(account)
 
         self._type_ = PositionType.parse(type) if type is not MISSING else None
         self._direction_ = Direction.parse(direction) if direction is not MISSING else None
@@ -183,6 +199,12 @@ class PositionAPI(DatapointAPI):
         if isinstance(order, OrderAPI): self._order_ = order
         elif order is not MISSING and order is not None:
             self._order_ = OrderAPI(UID=order, db=db, autoload=True)
+        if isinstance(session, SessionAPI): self._session_ = session
+        elif session is not MISSING and session is not None:
+            self._session_ = SessionAPI(UID=session, db=db, autoload=True)
+        if isinstance(account, AccountAPI): self._account_ = account
+        elif account is not MISSING and account is not None:
+            self._account_ = AccountAPI(UID=account, db=db, autoload=True)
         self._entry_balance_ = entry_balance if entry_balance is not MISSING else None
         if isinstance(entry_timestamp, TimestampAPI): self._entry_timestamp_ = entry_timestamp
         elif entry_timestamp is not MISSING and entry_timestamp is not None:
@@ -619,3 +641,23 @@ class PositionAPI(DatapointAPI):
         from Library.Portfolio.Order import OrderAPI
         if isinstance(val, OrderAPI): self._order_ = val
         elif val is not None: self._order_ = OrderAPI(UID=val, db=self._db_, autoload=True)
+
+    @property
+    @overridefield
+    def Session(self) -> Union[SessionAPI, None]:
+        return self._session_
+    @Session.setter
+    def Session(self, val: Union[int, SessionAPI, None]) -> None:
+        from Library.Portfolio.Session import SessionAPI
+        if isinstance(val, SessionAPI): self._session_ = val
+        elif val is not None: self._session_ = SessionAPI(UID=val, db=self._db_, autoload=True)
+
+    @property
+    @overridefield
+    def Account(self) -> Union[AccountAPI, None]:
+        return self._account_
+    @Account.setter
+    def Account(self, val: Union[int, AccountAPI, None]) -> None:
+        from Library.Portfolio.Account import AccountAPI
+        if isinstance(val, AccountAPI): self._account_ = val
+        elif val is not None: self._account_ = AccountAPI(UID=val, db=self._db_, autoload=True)
