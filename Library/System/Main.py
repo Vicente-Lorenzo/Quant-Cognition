@@ -1,6 +1,10 @@
 ﻿import os
+import sys
+from pathlib import Path
 from typing import Type, Union
 from argparse import ArgumentParser, Namespace
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from Library.Utility.Statistic import timer
 from Library.System.System import SystemType
