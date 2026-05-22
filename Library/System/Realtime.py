@@ -70,7 +70,7 @@ class RealtimeAPI(SystemAPI):
         self.market = MarketAPI()
         self.indicator = IndicatorAPI(technical=self._parameters_.TechnicalManagement, fundamental=self._parameters_.FundamentalManagement, sentimental=self._parameters_.SentimentalManagement)
         self.portfolio = PortfolioAPI(Parameter=self._parameters_.PortfolioManagement)
-        stack = contextlib.ExitStack()  # type: ignore[abstract]
+        stack = contextlib.ExitStack()
         stack.__enter__()
         self._stack_ = stack
         try:
@@ -94,7 +94,7 @@ class RealtimeAPI(SystemAPI):
             if not self._portfolio_.Empty: self._portfolio_.flush()
             if self.account is not None and self.account.UID is not None:
                 self._session_.FinalAccount = self.account
-            self._session_.save(by="Shutdown")
+            self._session_.save()
         result = super().__exit__(exc_type, exc_value, exc_traceback)
         if self._stack_: self._stack_.__exit__(exc_type, exc_value, exc_traceback)
         self._log_.info(lambda: f"Disconnect Operation: Closed {self._host_}:{self._port_}")
@@ -136,8 +136,6 @@ class RealtimeAPI(SystemAPI):
 
     def receive_update_order(self) -> OrderAPI:
         content = self._last_update_msg_
-        sl_price = content.get("StopLoss")
-        tp_price = content.get("TakeProfit")
         return OrderAPI(
             UID=content.get("OrderID"),
             Position=content.get("PositionID"),
@@ -148,16 +146,14 @@ class RealtimeAPI(SystemAPI):
             Volume=content.get("Volume"),
             StopPrice=content.get("StopPrice"),
             LimitPrice=content.get("LimitPrice"),
-            StopLossPrice=sl_price,
-            TakeProfitPrice=tp_price,
+            StopLossPrice=content.get("StopLoss"),
+            TakeProfitPrice=content.get("TakeProfit"),
             db=self._db_
         )
 
     def receive_update_position(self) -> PositionAPI:
         content = self._last_update_msg_
         timestamp = timestamp_to_datetime(content.get("EntryTimestamp"), milliseconds=True)
-        sl_price = content.get("StopLoss")
-        tp_price = content.get("TakeProfit")
         return PositionAPI(
             UID=content.get("PositionID"),
             Type=PositionType[content.get("PositionType")] if content.get("PositionType") in PositionType.__members__ else PositionType.Normal,
@@ -171,8 +167,8 @@ class RealtimeAPI(SystemAPI):
             SwapPnL=content.get("SwapPnL"),
             NetPnL=content.get("NetPnL"),
             UsedMargin=content.get("UsedMargin"),
-            StopLossPrice=sl_price,
-            TakeProfitPrice=tp_price,
+            StopLossPrice=content.get("StopLoss"),
+            TakeProfitPrice=content.get("TakeProfit"),
             db=self._db_
         )
 
@@ -201,11 +197,11 @@ class RealtimeAPI(SystemAPI):
     def receive_update_bar(self) -> BarAPI:
         content = self._last_update_msg_
         timestamp = timestamp_to_datetime(content.get("Timestamp"), milliseconds=True)
-        gap_tick = TickAPI(Timestamp=timestamp, Bid=content.get("GapPrice"), Ask=content.get("GapPrice"), db=self._db_)
-        open_tick = TickAPI(Timestamp=timestamp, Bid=content.get("OpenPrice"), Ask=content.get("OpenPrice"), db=self._db_)
-        high_tick = TickAPI(Timestamp=timestamp, Bid=content.get("HighPrice"), Ask=content.get("HighPrice"), db=self._db_)
-        low_tick = TickAPI(Timestamp=timestamp, Bid=content.get("LowPrice"), Ask=content.get("LowPrice"), db=self._db_)
-        close_tick = TickAPI(Timestamp=timestamp, Bid=content.get("ClosePrice"), Ask=content.get("ClosePrice"), Volume=content.get("TickVolume"), db=self._db_)
+        gap_tick = TickAPI(Timestamp=timestamp_to_datetime(content.get("GapTimestamp"), milliseconds=True), Ask=content.get("GapAsk"), Bid=content.get("GapBid"), AskBaseConversion=content.get("GapAskBaseConversion"), BidBaseConversion=content.get("GapBidBaseConversion"), AskQuoteConversion=content.get("GapAskQuoteConversion"), BidQuoteConversion=content.get("GapBidQuoteConversion"), Volume=content.get("GapVolume"), db=self._db_)
+        open_tick = TickAPI(Timestamp=timestamp_to_datetime(content.get("OpenTimestamp"), milliseconds=True), Ask=content.get("OpenAsk"), Bid=content.get("OpenBid"), AskBaseConversion=content.get("OpenAskBaseConversion"), BidBaseConversion=content.get("OpenBidBaseConversion"), AskQuoteConversion=content.get("OpenAskQuoteConversion"), BidQuoteConversion=content.get("OpenBidQuoteConversion"), Volume=content.get("OpenVolume"), db=self._db_)
+        high_tick = TickAPI(Timestamp=timestamp_to_datetime(content.get("HighTimestamp"), milliseconds=True), Ask=content.get("HighAsk"), Bid=content.get("HighBid"), AskBaseConversion=content.get("HighAskBaseConversion"), BidBaseConversion=content.get("HighBidBaseConversion"), AskQuoteConversion=content.get("HighAskQuoteConversion"), BidQuoteConversion=content.get("HighBidQuoteConversion"), Volume=content.get("HighVolume"), db=self._db_)
+        low_tick = TickAPI(Timestamp=timestamp_to_datetime(content.get("LowTimestamp"), milliseconds=True), Ask=content.get("LowAsk"), Bid=content.get("LowBid"), AskBaseConversion=content.get("LowAskBaseConversion"), BidBaseConversion=content.get("LowBidBaseConversion"), AskQuoteConversion=content.get("LowAskQuoteConversion"), BidQuoteConversion=content.get("LowBidQuoteConversion"), Volume=content.get("LowVolume"), db=self._db_)
+        close_tick = TickAPI(Timestamp=timestamp_to_datetime(content.get("CloseTimestamp"), milliseconds=True), Ask=content.get("CloseAsk"), Bid=content.get("CloseBid"), AskBaseConversion=content.get("CloseAskBaseConversion"), BidBaseConversion=content.get("CloseBidBaseConversion"), AskQuoteConversion=content.get("CloseAskQuoteConversion"), BidQuoteConversion=content.get("CloseBidQuoteConversion"), Volume=content.get("CloseVolume"), db=self._db_)
         return BarAPI(
             Timestamp=timestamp,
             GapTick=gap_tick,
