@@ -5,24 +5,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from Library.Logging import HandlerLoggingAPI
 from Library.Strategy.Strategy import StrategyType
+from Setup.Enum import enum_block, write_enum_file
 
-def generate_csharp_enum():
-    content = """namespace cAlgo.Robots
-{
-    public enum StrategyType
-    {
-"""
-    for strategy in StrategyType:
-        content += f"        {strategy.name} = {strategy.value},\n"
-    content += """    }
-}
-"""
-    output_path = Path(__file__).parent.parent / "Sources" / "Robots" / "Connector" / "Connector" / "StrategyEnum.cs"
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(content)
-    return output_path
+def strategy_block() -> str:
+    return enum_block("StrategyType", [(s.name, s.value) for s in StrategyType])
 
 if __name__ == "__main__":
     with HandlerLoggingAPI() as logger:
-        path = generate_csharp_enum()
+        path = write_enum_file([strategy_block()])
         logger.info(f"Generated {path}")

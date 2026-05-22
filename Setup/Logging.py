@@ -5,24 +5,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from Library.Logging import HandlerLoggingAPI
 from Library.Logging.Logging import VerboseLevel
+from Setup.Enum import enum_block, write_enum_file
 
-def generate_csharp_enum():
-    content = """namespace cAlgo.Robots
-{
-    public enum VerboseLevel
-    {
-"""
-    for level in VerboseLevel:
-        content += f"        {level.name} = {level.value},\n"
-    content += """    }
-}
-"""
-    output_path = Path(__file__).parent.parent / "Sources" / "Robots" / "Connector" / "Connector" / "LoggingEnum.cs"
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(content)
-    return output_path
+def logging_block() -> str:
+    return enum_block("VerboseLevel", [(v.name, v.value) for v in VerboseLevel])
 
 if __name__ == "__main__":
     with HandlerLoggingAPI() as logger:
-        path = generate_csharp_enum()
+        path = write_enum_file([logging_block()])
         logger.info(f"Generated {path}")
