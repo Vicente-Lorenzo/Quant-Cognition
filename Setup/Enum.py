@@ -11,3 +11,10 @@ def write_enum_file(blocks: list[str]) -> Path:
     content = f"namespace cAlgo.Robots\n{{\n{body}\n}}"
     OUTPUT_PATH.write_text(content, encoding="utf-8", newline="\n")
     return OUTPUT_PATH
+
+def write_all() -> Path:
+    from Setup.Strategy import strategy_block
+    from Setup.Logging import logging_block
+    from Setup.Update import update_block
+    from Setup.Action import action_block
+    return write_enum_file([strategy_block(), logging_block(), update_block(), action_block()])
