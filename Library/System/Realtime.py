@@ -74,7 +74,7 @@ class RealtimeAPI(SystemAPI):
         stack.__enter__()
         self._stack_ = stack
         try:
-            self._db_ = self._stack_.enter_context(PostgresAPI(database="Quant"))
+            self._db_ = self._stack_.enter_context(PostgresAPI(database="Quant" if self._system_ == SystemType.Live else "Tests"))
             self._context_ = self._stack_.enter_context(zmq.Context())
             self._socket_ = self._stack_.enter_context(self._context_.socket(zmq.REP))
             self._socket_.bind(f"tcp://{self._host_}:{self._port_}")
@@ -220,6 +220,11 @@ class RealtimeAPI(SystemAPI):
             Timestamp=timestamp,
             Ask=content.get("Ask"),
             Bid=content.get("Bid"),
+            AskBaseConversion=content.get("AskBaseConversion"),
+            BidBaseConversion=content.get("BidBaseConversion"),
+            AskQuoteConversion=content.get("AskQuoteConversion"),
+            BidQuoteConversion=content.get("BidQuoteConversion"),
+            Volume=content.get("Volume"),
             db=self._db_
         )
 
