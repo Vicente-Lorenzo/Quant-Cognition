@@ -1,9 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
+    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="cTrader.Automate" Version="*" />
+    <PackageReference Include="NetMQ" Version="*" />
+    <PackageReference Include="Newtonsoft.Json" Version="*" />
   </ItemGroup>
 </Project>
