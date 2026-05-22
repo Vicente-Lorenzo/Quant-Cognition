@@ -5,9 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from Setup.Universe import populate
-from Setup.Strategy import strategy_block
-from Setup.Logging import logging_block
-from Setup.Enum import write_enum_file
+from Setup.Enum import write_all
 from Library.Database.Postgres.Postgres import PostgresAPI
 from Library.Logging import HandlerLoggingAPI
 
@@ -22,7 +20,7 @@ def main():
         args = parser.parse_args()
         if args.enums or args.all:
             logger.info("Generating C# Enums...")
-            path = write_enum_file([strategy_block(), logging_block()])
+            path = write_all()
             logger.info(f"Generated: {path}")
         if args.universe or args.all:
             env = args.env
