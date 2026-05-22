@@ -3,7 +3,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import Library.Database
 from Library.Logging import HandlerLoggingAPI
 from Library.Logging.Logging import VerboseLevel
 from Setup.Enum import enum_block, write_enum_file

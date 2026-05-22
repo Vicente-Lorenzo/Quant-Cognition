@@ -8,11 +8,10 @@ from datetime import datetime
 from time import perf_counter
 from dataclasses import dataclass, field
 
-from Library.Database.Dataclass import DataclassAPI
 from Library.Utility.DateTime import datetime_to_string, seconds_to_string
 
 @dataclass(kw_only=True)
-class Timer(DataclassAPI):
+class Timer:
     _start_: float = field(default=None, init=True, repr=False)
     _stop_: float = field(default=None, init=True, repr=False)
 
