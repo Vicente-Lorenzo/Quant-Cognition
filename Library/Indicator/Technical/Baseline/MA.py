@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
 from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
-from Library.Database.Enumeration import EnumerationAPI
+from Library.Utility.Enumeration import EnumerationAPI
 from Library.Indicator.Indicator import IndicatorMode
 
 if TYPE_CHECKING:

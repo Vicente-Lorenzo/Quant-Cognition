@@ -5,14 +5,14 @@ from typing import Union, Any
 from difflib import SequenceMatcher
 
 class EnumerationAPI(Enum):
-    
+
     @classmethod
     def parse(cls, value: Any) -> Any:
         if value is None: return None
         if isinstance(value, cls): return value
         try: return cls.__members__[value] if isinstance(value, str) else cls(value)
         except (KeyError, ValueError): return value
-        
+
     @classmethod
     def _missing_(cls, value: object) -> Union[EnumerationAPI, None]:
         if not isinstance(value, str):

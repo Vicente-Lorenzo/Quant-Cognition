@@ -4,7 +4,7 @@ from typing import Union, TYPE_CHECKING
 from dataclasses import dataclass, field
 
 from Library.Database.Dataclass import DataclassAPI
-from Library.Database.Enumeration import EnumerationAPI
+from Library.Utility.Enumeration import EnumerationAPI
 
 if TYPE_CHECKING:
     from Library.Universe.Contract import ContractAPI

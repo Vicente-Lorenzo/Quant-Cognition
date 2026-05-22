@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime
 from typing import Union, ClassVar, TYPE_CHECKING
@@ -6,7 +6,7 @@ from dataclasses import dataclass, field, InitVar
 
 from Library.Database.Dataframe import pl
 from Library.Database.Dataclass import overridefield, coerce
-from Library.Database.Enumeration import EnumerationAPI
+from Library.Utility.Enumeration import EnumerationAPI
 from Library.Database import IdentityKey, PrimaryKey, ForeignKey
 from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Ticker import TickerAPI, ContractType

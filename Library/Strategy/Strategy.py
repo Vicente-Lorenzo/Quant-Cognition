@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Union, TYPE_CHECKING
 
 from Library.Logging import HandlerLoggingAPI
-from Library.Database.Enumeration import EnumerationAPI
+from Library.Utility.Enumeration import EnumerationAPI
 from Library.Engine import MachineAPI
 from Library.Protocol.Update import (
     UpdateID,

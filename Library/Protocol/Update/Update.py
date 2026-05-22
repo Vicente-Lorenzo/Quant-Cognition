@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from dataclasses import dataclass
 
 from Library.Database.Dataclass import DataclassAPI
-from Library.Database.Enumeration import EnumerationAPI
+from Library.Utility.Enumeration import EnumerationAPI
 from Library.Portfolio.Account import AccountAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Market.Bar import BarAPI

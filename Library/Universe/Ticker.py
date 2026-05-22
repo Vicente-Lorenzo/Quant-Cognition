@@ -5,7 +5,7 @@ from typing import Union, ClassVar, TYPE_CHECKING
 from dataclasses import dataclass, field, InitVar
 
 from Library.Database.Dataframe import pl
-from Library.Database.Enumeration import EnumerationAPI
+from Library.Utility.Enumeration import EnumerationAPI
 from Library.Database.Dataclass import overridefield, coerce
 from Library.Database.Database import PrimaryKey, ForeignKey
 from Library.Universe.Category import CategoryAPI

@@ -9,7 +9,7 @@ from Library.Database.Database import IdentityKey, PrimaryKey, ForeignKey
 from Library.Database.Datapoint import DatapointAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Database.Dataclass import overridefield, coerce
-from Library.Database.Enumeration import EnumerationAPI
+from Library.Utility.Enumeration import EnumerationAPI
 from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Provider import ProviderAPI
 from Library.Utility.Typing import MISSING

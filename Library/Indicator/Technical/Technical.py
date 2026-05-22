@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Union, TYPE_CHECKING, ClassVar
 
-from Library.Database.Enumeration import EnumerationAPI
+from Library.Utility.Enumeration import EnumerationAPI
 from Library.Indicator.Indicator import IndicatorMode
 
 if TYPE_CHECKING:

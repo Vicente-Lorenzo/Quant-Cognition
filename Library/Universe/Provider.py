@@ -7,7 +7,7 @@ from Library.Database.Dataframe import pl
 from Library.Database.Database import PrimaryKey
 from Library.Database.Datapoint import DatapointAPI
 from Library.Universe.Universe import UniverseAPI
-from Library.Database.Enumeration import EnumerationAPI
+from Library.Utility.Enumeration import EnumerationAPI
 
 if TYPE_CHECKING: from Library.Database.Database import DatabaseAPI
 

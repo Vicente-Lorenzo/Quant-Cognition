@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Union, TYPE_CHECKING
 from dataclasses import dataclass
 
-from Library.Database.Enumeration import EnumerationAPI
+from Library.Utility.Enumeration import EnumerationAPI
 
 if TYPE_CHECKING:
     from Library.Indicator.Technical.Technical import TechnicalAPI

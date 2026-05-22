@@ -4,7 +4,7 @@ from typing import Union, ClassVar
 from dataclasses import dataclass
 
 from Library.Database.Dataclass import DataclassAPI
-from Library.Database.Enumeration import EnumerationAPI
+from Library.Utility.Enumeration import EnumerationAPI
 from Library.Utility.Typing import cast
 
 class ActionID(EnumerationAPI):

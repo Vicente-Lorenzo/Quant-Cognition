@@ -5,7 +5,7 @@ from typing import Type, Union, TYPE_CHECKING
 from typing_extensions import Self
 
 from Library.Database import BufferAPI
-from Library.Database.Enumeration import EnumerationAPI
+from Library.Utility.Enumeration import EnumerationAPI
 from Library.Logging import HandlerLoggingAPI
 from Library.Market.Bar import BarAPI
 from Library.Market.Tick import TickAPI

@@ -9,7 +9,7 @@ from Library.Database.Database import PrimaryKey, ForeignKey, DatabaseAPI
 from Library.Database.Datapoint import DatapointAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Database.Dataclass import overridefield, coerce
-from Library.Database.Enumeration import EnumerationAPI
+from Library.Utility.Enumeration import EnumerationAPI
 from Library.Portfolio.Position import PositionAPI
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Account import AccountAPI
