@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Type, Union, TYPE_CHECKING
@@ -200,15 +200,6 @@ class SystemAPI(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def receive_update_target(self) -> TickAPI:
-        raise NotImplementedError
-
-    def _receive_update_target_(self) -> TickAPI:
-        tick = self.receive_update_target()
-        self._market_.add(tick)
-        return tick
-
-    @abstractmethod
     def receive_update_bar(self) -> BarAPI:
         raise NotImplementedError
 
@@ -221,6 +212,15 @@ class SystemAPI(ABC):
         self._market_.add(bar.CloseTick)
         self._market_.add(bar)
         return bar
+
+    @abstractmethod
+    def receive_update_target(self) -> TickAPI:
+        raise NotImplementedError
+
+    def _receive_update_target_(self) -> TickAPI:
+        tick = self.receive_update_target()
+        self._market_.add(tick)
+        return tick
 
     @abstractmethod
     def receive_update_order(self) -> OrderAPI:
