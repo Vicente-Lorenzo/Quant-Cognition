@@ -9,17 +9,20 @@ namespace cAlgo.Robots;
 [Robot(AccessRights = AccessRights.None, AddIndicators = true)]
 public class Connector : Robot
 {
-    [Parameter("Strategy Name", DefaultValue = StrategyType.Download)]
-    public StrategyType StrategyName { get; set; }
+    [Parameter("Strategy", Group = "Strategy Management", DefaultValue = StrategyType.Download)]
+    public StrategyType Strategy { get; set; }
 
-    [Parameter("Console Logging", DefaultValue = VerboseLevel.Debug)]
-    public VerboseLevel ConsoleLogging { get; set; }
+    [Parameter("Console", Group = "Logging Management", DefaultValue = VerboseLevel.Debug)]
+    public VerboseLevel Console { get; set; }
+
+    [Parameter("File", Group = "Logging Management", DefaultValue = VerboseLevel.Debug)]
+    public VerboseLevel File { get; set; }
 
     private RobotAPI _robot_api_;
 
     protected override void OnStart()
     {
-        _robot_api_ = new RobotAPI(this, ConsoleLogging, StrategyName);
+        _robot_api_ = new RobotAPI(this, Console, File, Strategy);
     }
 
     protected override void OnStop()

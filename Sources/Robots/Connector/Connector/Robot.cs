@@ -59,7 +59,7 @@ public class RobotAPI : IDisposable
 
     private readonly xBar _bar_;
 
-    public RobotAPI(Robot algo, VerboseLevel console, StrategyType strategy_type, string host = "localhost", int port = 5555)
+    public RobotAPI(Robot algo, VerboseLevel console, VerboseLevel file, StrategyType strategy_type, string host = "localhost", int port = 5555)
     {
         _robot_ = algo;
         _log_ = new Logging(_robot_, "Strategy", console);
@@ -89,7 +89,7 @@ public class RobotAPI : IDisposable
         _robot_.Symbol.Tick += OnTick;
         _system_ = new SystemAPI(_robot_, console, host, port);
         var base_directory = new DirectoryInfo(Environment.CurrentDirectory).Parent?.Parent?.Parent?.FullName;
-        var script_args = $"--console \"{console}\" --system \"Realtime\" --strategy \"{strategy_type}\" --broker \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"";
+        var script_args = $"--console \"{console}\" --file \"{file}\" --system \"Realtime\" --strategy \"{strategy_type}\" --broker \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"";
         var process_info = new ProcessStartInfo
         {
             FileName = "cmd.exe",
