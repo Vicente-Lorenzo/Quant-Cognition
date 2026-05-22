@@ -209,7 +209,7 @@ class RealtimeAPI(SystemAPI):
             HighTick=high_tick,
             LowTick=low_tick,
             CloseTick=close_tick,
-            Volume=content.get("TickVolume"),
+            Volume=content.get("Volume"),
             db=self._db_
         )
 
