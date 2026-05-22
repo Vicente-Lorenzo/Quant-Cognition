@@ -9,24 +9,33 @@ namespace cAlgo.Robots;
 [Robot(AccessRights = AccessRights.None, AddIndicators = true)]
 public class Connector : Robot
 {
-    [Parameter(DefaultValue = "Hello world!")]
-    public string Message { get; set; }
+    [Parameter("Strategy Name", DefaultValue = StrategyType.Download)]
+    public StrategyType StrategyName { get; set; }
+
+    [Parameter("Console Logging", DefaultValue = VerboseLevel.Debug)]
+    public VerboseLevel ConsoleLogging { get; set; }
+
+    private RobotAPI _robot_api_;
 
     protected override void OnStart()
     {
-        // To learn more about cTrader Algo visit our Help Center:
-        // https://help.ctrader.com/ctrader-algo/
-
-        Print(Message);
-    }
-
-    protected override void OnTick()
-    {
-        // Handle price updates here
+        _robot_api_ = new RobotAPI(this, ConsoleLogging, StrategyName);
     }
 
     protected override void OnStop()
     {
-        // Handle cBot stop here
+        _robot_api_?.OnShutdown();
+        _robot_api_?.Dispose();
+    }
+    
+    protected override void OnException(Exception exception)
+    {
+        _robot_api_?.OnException(exception);
+        base.OnException(exception);
+    }
+    
+    protected override void OnError(Error error)
+    {
+        _robot_api_?.OnError(error);
     }
 }
