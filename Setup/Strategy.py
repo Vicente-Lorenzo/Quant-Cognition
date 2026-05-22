@@ -5,13 +5,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from Library.Logging import HandlerLoggingAPI
 from Library.Strategy.Strategy import StrategyType
-from Setup.Enum import enum_block, write_enum_file
+from Setup.Enum import enum_block, write_all
 
 def strategy_block() -> str:
     return enum_block("StrategyType", [(s.name, s.value) for s in StrategyType])
 
 if __name__ == "__main__":
-    from Setup.Logging import logging_block
     with HandlerLoggingAPI() as logger:
-        path = write_enum_file([strategy_block(), logging_block()])
+        path = write_all()
         logger.info(f"Generated {path}")
