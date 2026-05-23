@@ -39,10 +39,10 @@ def _parse_() -> Namespace:
     realtime_parser = ArgumentParser(add_help=False)
     realtime_parser.add_argument("--iid", type=str, required=True)
     realtime_parser.add_argument("--database", type=str, required=False, default=None, choices=["Quant", "Tests"])
-    realtime_parser.add_argument("--market-batch", type=int, required=True)
-    realtime_parser.add_argument("--market-interval", type=float, required=True)
-    realtime_parser.add_argument("--portfolio-batch", type=int, required=True)
-    realtime_parser.add_argument("--portfolio-interval", type=float, required=True)
+    realtime_parser.add_argument("--market-batch", type=int, required=False, default=None)
+    realtime_parser.add_argument("--market-interval", type=float, required=False, default=None)
+    realtime_parser.add_argument("--portfolio-batch", type=int, required=False, default=None)
+    realtime_parser.add_argument("--portfolio-interval", type=float, required=False, default=None)
 
     fee_parser = ArgumentParser(add_help=False)
     fee_parser.add_argument("--spread-type", type=str, required=True, choices=[_.name for _ in SpreadType])
@@ -75,6 +75,23 @@ def _parse_() -> Namespace:
 
     return parser.parse_args()
 
+def _market_(system: SystemType, batch: Union[int, None], interval: Union[float, None]) -> tuple[int, float]:
+    match system:
+        case SystemType.Live: auto_batch, auto_interval = 100, 60.0
+        case SystemType.Simulation: auto_batch, auto_interval = 5000, 0.0
+        case _: auto_batch, auto_interval = 0, 0.0
+    batch = batch if batch is not None else auto_batch
+    interval = interval if interval is not None else auto_interval
+    return batch, interval
+
+def _portfolio_(system: SystemType, batch: Union[int, None], interval: Union[float, None]) -> tuple[int, float]:
+    match system:
+        case SystemType.Live: auto_batch, auto_interval = 100, 60.0
+        case _: auto_batch, auto_interval = 0, 0.0
+    batch = batch if batch is not None else auto_batch
+    interval = interval if interval is not None else auto_interval
+    return batch, interval
+
 def _strategy_(args: Namespace) -> Union[Type[StrategyAPI], None]:
     match StrategyType(args.strategy):
         case StrategyType.Download: return DownloadStrategyAPI
@@ -93,8 +110,8 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 parameters=params,
                 iid=args.iid,
                 database=args.database,
-                market=(args.market_batch, args.market_interval),
-                portfolio=(args.portfolio_batch, args.portfolio_interval)
+                market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
+                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval)
             )
         case SystemType.Simulation:
             params: Parameter = parameters.Simulation[args.strategy]
@@ -106,8 +123,8 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 parameters=params,
                 iid=args.iid,
                 database=args.database,
-                market=(args.market_batch, args.market_interval),
-                portfolio=(args.portfolio_batch, args.portfolio_interval)
+                market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
+                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval)
             )
         case SystemType.Testing:
             params: Parameter = parameters.Testing[args.strategy]
@@ -119,8 +136,8 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 parameters=params,
                 iid=args.iid,
                 database=args.database,
-                market=(args.market_batch, args.market_interval),
-                portfolio=(args.portfolio_batch, args.portfolio_interval)
+                market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
+                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval)
             )
         case SystemType.Backtesting:
             return None
