@@ -27,17 +27,17 @@ public class Connector : Robot
     [Parameter("Tick Stream", Group = "System Management", DefaultValue = TickStreamMode.Auto)]
     public TickStreamMode TickStream { get; set; }
 
-    [Parameter("Bar Stream", Group = "System Management", DefaultValue = StreamMode.Auto)]
-    public StreamMode BarStream { get; set; }
+    [Parameter("Bar Stream", Group = "System Management", DefaultValue = BarStreamMode.Auto)]
+    public BarStreamMode BarStream { get; set; }
 
-    [Parameter("Order Stream", Group = "System Management", DefaultValue = StreamMode.Auto)]
-    public StreamMode OrderStream { get; set; }
+    [Parameter("Order Stream", Group = "System Management", DefaultValue = OrderStreamMode.Auto)]
+    public OrderStreamMode OrderStream { get; set; }
 
-    [Parameter("Position Stream", Group = "System Management", DefaultValue = StreamMode.Auto)]
-    public StreamMode PositionStream { get; set; }
+    [Parameter("Position Stream", Group = "System Management", DefaultValue = PositionStreamMode.Auto)]
+    public PositionStreamMode PositionStream { get; set; }
 
-    [Parameter("Trade Stream", Group = "System Management", DefaultValue = StreamMode.Auto)]
-    public StreamMode TradeStream { get; set; }
+    [Parameter("Trade Stream", Group = "System Management", DefaultValue = TradeStreamMode.Auto)]
+    public TradeStreamMode TradeStream { get; set; }
 
     [Parameter("Market Batch", Group = "Buffering Management", DefaultValue = -1, MinValue = -1)]
     public int MarketBatch { get; set; }

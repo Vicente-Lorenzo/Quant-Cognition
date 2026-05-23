@@ -1,5 +1,12 @@
 namespace cAlgo.Robots;
 
+public enum SystemMode
+{
+    Live = 0,
+    Simulation = 1,
+    Testing = 2,
+}
+
 public enum DatabaseType
 {
     Auto = 0,
@@ -16,7 +23,28 @@ public enum TickStreamMode
     Off = 3,
 }
 
-public enum StreamMode
+public enum BarStreamMode
+{
+    Auto = 0,
+    All = 1,
+    Off = 2,
+}
+
+public enum OrderStreamMode
+{
+    Auto = 0,
+    All = 1,
+    Off = 2,
+}
+
+public enum PositionStreamMode
+{
+    Auto = 0,
+    All = 1,
+    Off = 2,
+}
+
+public enum TradeStreamMode
 {
     Auto = 0,
     All = 1,
