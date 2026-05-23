@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 from pathlib import Path
 from typing import Type, Union
@@ -16,14 +16,14 @@ from Library.Utility.Path import traceback_current_module
 from Library.Logging import HandlerLoggingAPI, VerboseLevel
 from Library.Database.Postgres.Postgres import PostgresAPI
 from Library.Strategy import DownloadStrategyAPI, NNFXStrategyAPI, StrategyAPI
-from Library.Universe import CommissionType, Provider, ProviderAPI, SecurityAPI, SpreadType, SwapType, TickerAPI, TimeframeAPI
+from Library.Universe import CommissionType, ProviderAPI, SecurityAPI, SpreadType, SwapType, TickerAPI, TimeframeAPI
 
 def _parse_() -> Namespace:
     base_parser = ArgumentParser(add_help=False)
     base_parser.add_argument("--console", type=str, required=True, choices=[_.name for _ in VerboseLevel])
     base_parser.add_argument("--file", type=str, required=True, choices=[_.name for _ in VerboseLevel])
     base_parser.add_argument("--strategy", type=str, required=True, choices=[_.name for _ in StrategyType])
-    base_parser.add_argument("--provider", type=str, required=True, choices=[_.name for _ in Provider])
+    base_parser.add_argument("--provider", type=str, required=True)
     base_parser.add_argument("--ticker", type=str, required=True)
     base_parser.add_argument("--timeframe", type=str, required=True)
 
@@ -38,6 +38,11 @@ def _parse_() -> Namespace:
 
     realtime_parser = ArgumentParser(add_help=False)
     realtime_parser.add_argument("--iid", type=str, required=True)
+    realtime_parser.add_argument("--database", type=str, required=False, default=None, choices=["Quant", "Tests"])
+    realtime_parser.add_argument("--market-batch", type=int, required=True)
+    realtime_parser.add_argument("--market-interval", type=float, required=True)
+    realtime_parser.add_argument("--portfolio-batch", type=int, required=True)
+    realtime_parser.add_argument("--portfolio-interval", type=float, required=True)
 
     fee_parser = ArgumentParser(add_help=False)
     fee_parser.add_argument("--spread-type", type=str, required=True, choices=[_.name for _ in SpreadType])
@@ -87,8 +92,9 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 timeframe=timeframe,
                 parameters=params,
                 iid=args.iid,
-                market=(100, 60.0),
-                portfolio=(100, 60.0)
+                database=args.database,
+                market=(args.market_batch, args.market_interval),
+                portfolio=(args.portfolio_batch, args.portfolio_interval)
             )
         case SystemType.Simulation:
             params: Parameter = parameters.Simulation[args.strategy]
@@ -99,8 +105,9 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 timeframe=timeframe,
                 parameters=params,
                 iid=args.iid,
-                market=(5000, 0.0),
-                portfolio=(0, 0.0)
+                database=args.database,
+                market=(args.market_batch, args.market_interval),
+                portfolio=(args.portfolio_batch, args.portfolio_interval)
             )
         case SystemType.Testing:
             params: Parameter = parameters.Testing[args.strategy]
@@ -111,8 +118,9 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 timeframe=timeframe,
                 parameters=params,
                 iid=args.iid,
-                market=(0, 0.0),
-                portfolio=(0, 0.0)
+                database=args.database,
+                market=(args.market_batch, args.market_interval),
+                portfolio=(args.portfolio_batch, args.portfolio_interval)
             )
         case SystemType.Backtesting:
             return None
