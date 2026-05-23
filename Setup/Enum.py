@@ -15,6 +15,7 @@ def write_enum_file(blocks: list[str]) -> Path:
 def write_all() -> Path:
     from Setup.Strategy import strategy_block
     from Setup.Logging import logging_block
+    from Setup.System import system_block
     from Setup.Update import update_block
     from Setup.Action import action_block
-    return write_enum_file([strategy_block(), logging_block(), update_block(), action_block()])
+    return write_enum_file([strategy_block(), logging_block(), system_block(), update_block(), action_block()])
