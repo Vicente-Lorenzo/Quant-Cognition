@@ -1,12 +1,5 @@
 namespace cAlgo.Robots;
 
-public enum SystemMode
-{
-    Live = 0,
-    Simulation = 1,
-    Testing = 2,
-}
-
 public enum DatabaseType
 {
     Auto = 0,
