@@ -8,6 +8,12 @@ public enum DatabaseType
     Off = 3,
 }
 
+public enum BufferingMode
+{
+    Auto = 0,
+    Manual = 1,
+}
+
 public enum TickStreamMode
 {
     Auto = 0,

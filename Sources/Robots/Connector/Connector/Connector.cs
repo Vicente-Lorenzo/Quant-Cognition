@@ -39,23 +39,29 @@ public class Connector : Robot
     [Parameter("Trade Stream", Group = "System Management", DefaultValue = TradeStreamMode.Auto)]
     public TradeStreamMode TradeStream { get; set; }
 
-    [Parameter("Market Batch", Group = "Buffering Management", DefaultValue = -1, MinValue = -1)]
+    [Parameter("Market Buffering", Group = "Buffering Management", DefaultValue = BufferingMode.Auto)]
+    public BufferingMode MarketBuffering { get; set; }
+
+    [Parameter("Market Batch", Group = "Buffering Management", DefaultValue = 100, MinValue = 0)]
     public int MarketBatch { get; set; }
 
-    [Parameter("Market Interval", Group = "Buffering Management", DefaultValue = -1.0, MinValue = -1.0)]
+    [Parameter("Market Interval", Group = "Buffering Management", DefaultValue = 60.0, MinValue = 0.0)]
     public double MarketInterval { get; set; }
 
-    [Parameter("Portfolio Batch", Group = "Buffering Management", DefaultValue = -1, MinValue = -1)]
+    [Parameter("Portfolio Buffering", Group = "Buffering Management", DefaultValue = BufferingMode.Auto)]
+    public BufferingMode PortfolioBuffering { get; set; }
+
+    [Parameter("Portfolio Batch", Group = "Buffering Management", DefaultValue = 100, MinValue = 0)]
     public int PortfolioBatch { get; set; }
 
-    [Parameter("Portfolio Interval", Group = "Buffering Management", DefaultValue = -1.0, MinValue = -1.0)]
+    [Parameter("Portfolio Interval", Group = "Buffering Management", DefaultValue = 60.0, MinValue = 0.0)]
     public double PortfolioInterval { get; set; }
 
     private RobotAPI _robot_api_;
 
     protected override void OnStart()
     {
-        _robot_api_ = new RobotAPI(this, Console, File, Strategy, Database, Verification, TickStream, BarStream, OrderStream, PositionStream, TradeStream, MarketBatch, MarketInterval, PortfolioBatch, PortfolioInterval);
+        _robot_api_ = new RobotAPI(this, Console, File, Strategy, Database, Verification, TickStream, BarStream, OrderStream, PositionStream, TradeStream, MarketBuffering, MarketBatch, MarketInterval, PortfolioBuffering, PortfolioBatch, PortfolioInterval);
     }
 
     protected override void OnStop()
