@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Linq;
 using cAlgo.API;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace cAlgo.Robots;
@@ -45,12 +44,29 @@ public class RobotAPI : IDisposable
     private readonly Logging _log_;
     private readonly SystemAPI _system_;
 
+    private readonly VerboseLevel _console_;
+    private readonly VerboseLevel _file_;
+    private readonly StrategyType _strategy_;
+
+    private readonly DatabaseType _database_;
+    private readonly int _verification_;
+    private readonly TickStreamMode _tick_stream_;
+    private readonly BarStreamMode _bar_stream_;
+    private readonly OrderStreamMode _order_stream_;
+    private readonly PositionStreamMode _position_stream_;
+    private readonly TradeStreamMode _trade_stream_;
+    private readonly int _market_batch_;
+    private readonly double _market_interval_;
+    private readonly int _portfolio_batch_;
+    private readonly double _portfolio_interval_;
+    private readonly SystemMode _system_mode_;
+
     private readonly Dictionary<int, LastPositionData> _positions_;
 
-    private double? _ask_above_target_ = null;
-    private double? _ask_below_target_ = null;
-    private double? _bid_above_target_ = null;
-    private double? _bid_below_target_ = null;
+    private double? _ask_above_target_;
+    private double? _ask_below_target_;
+    private double? _bid_above_target_;
+    private double? _bid_below_target_;
 
     private readonly Func<double> _ask_base_conversion_;
     private readonly Func<double> _bid_base_conversion_;
@@ -59,10 +75,41 @@ public class RobotAPI : IDisposable
 
     private readonly xBar _bar_;
 
-    public RobotAPI(Robot algo, VerboseLevel console, VerboseLevel file, StrategyType strategy_type, string host = "localhost", int port = 5555)
+    private readonly List<xBar> _verification_buffer_;
+    private int _observed_bars_;
+    private int _degraded_bars_;
+    private bool _verified_;
+
+    public RobotAPI(Robot algo, VerboseLevel console, VerboseLevel file, StrategyType strategy,
+                    DatabaseType database, int verification,
+                    TickStreamMode tick_stream, BarStreamMode bar_stream, OrderStreamMode order_stream,
+                    PositionStreamMode position_stream, TradeStreamMode trade_stream,
+                    int market_batch, double market_interval, int portfolio_batch, double portfolio_interval,
+                    string host = "localhost", int port = 5555)
     {
         _robot_ = algo;
+        _console_ = console;
+        _file_ = file;
+        _strategy_ = strategy;
+        _verification_ = verification;
+
         _log_ = new Logging(_robot_, "Strategy", console);
+
+        _system_mode_ = ResolveSystemMode(_robot_.RunningMode);
+        _database_ = ResolveDatabase(_system_mode_, strategy, database);
+        _tick_stream_ = tick_stream == TickStreamMode.Auto ? TickStreamMode.Target : tick_stream;
+        _bar_stream_ = bar_stream == BarStreamMode.Auto ? BarStreamMode.All : bar_stream;
+        _order_stream_ = order_stream == OrderStreamMode.Auto ? OrderStreamMode.All : order_stream;
+        _position_stream_ = position_stream == PositionStreamMode.Auto ? PositionStreamMode.All : position_stream;
+        _trade_stream_ = trade_stream == TradeStreamMode.Auto ? TradeStreamMode.All : trade_stream;
+        _market_batch_ = market_batch;
+        _market_interval_ = market_interval;
+        _portfolio_batch_ = portfolio_batch;
+        _portfolio_interval_ = portfolio_interval;
+
+        if (_tick_stream_ == TickStreamMode.All) _log_.Warning("Tick Stream=All not implemented, using Target");
+        _log_.Debug($"Streams: tick={_tick_stream_}, bar={_bar_stream_}, order={_order_stream_}, position={_position_stream_}, trade={_trade_stream_}");
+
         var base_conversions = FindConversions(_robot_.Symbol.BaseAsset, _robot_.Account.Asset);
         _ask_base_conversion_ = base_conversions.Ask;
         _bid_base_conversion_ = base_conversions.Bid;
@@ -81,15 +128,62 @@ public class RobotAPI : IDisposable
             Volume = 0.0
         };
         _positions_ = new Dictionary<int, LastPositionData>();
+        _verification_buffer_ = new List<xBar>();
+
         _robot_.Positions.Opened += OnPositionOpened;
         _robot_.Positions.Modified += OnPositionModified;
         _robot_.Positions.Closed += OnPositionClosed;
         _robot_.Bars.BarClosed += OnBarClosed;
         _robot_.Bars.BarOpened += OnBarOpened;
         _robot_.Symbol.Tick += OnTick;
+
         _system_ = new SystemAPI(_robot_, console, host, port);
+
+        if (_system_mode_ == SystemMode.Live)
+        {
+            _verified_ = true;
+            Activate();
+        }
+        else
+        {
+            _log_.Info($"Verifying data accuracy ({_verification_} bars)");
+        }
+    }
+
+    public void Dispose()
+    {
+        _system_?.Dispose();
+    }
+
+    private static SystemMode ResolveSystemMode(RunningMode mode)
+    {
+        switch (mode)
+        {
+            case RunningMode.RealTime: return SystemMode.Live;
+            case RunningMode.VisualBacktesting: return SystemMode.Simulation;
+            case RunningMode.SilentBacktesting: return SystemMode.Simulation;
+            case RunningMode.Optimization: return SystemMode.Testing;
+            default: throw new ArgumentOutOfRangeException($"Unsupported RunningMode: {mode}");
+        }
+    }
+
+    private static DatabaseType ResolveDatabase(SystemMode system, StrategyType strat, DatabaseType chosen)
+    {
+        if (chosen != DatabaseType.Auto) return chosen;
+        if (system == SystemMode.Live) return DatabaseType.Quant;
+        if (strat == StrategyType.Download) return DatabaseType.Quant;
+        return DatabaseType.Tests;
+    }
+
+    private void Activate()
+    {
         var base_directory = new DirectoryInfo(Environment.CurrentDirectory).Parent?.Parent?.Parent?.FullName;
-        var script_args = $"--console \"{console}\" --file \"{file}\" --system \"Realtime\" --strategy \"{strategy_type}\" --broker \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"";
+        var database_arg = _database_ == DatabaseType.Off ? "" : $" --database \"{_database_}\"";
+        var market_batch_arg = _market_batch_ < 0 ? "" : $" --market-batch {_market_batch_}";
+        var market_interval_arg = _market_interval_ < 0 ? "" : $" --market-interval {_market_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        var portfolio_batch_arg = _portfolio_batch_ < 0 ? "" : $" --portfolio-batch {_portfolio_batch_}";
+        var portfolio_interval_arg = _portfolio_interval_ < 0 ? "" : $" --portfolio-interval {_portfolio_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{market_batch_arg}{market_interval_arg}{portfolio_batch_arg}{portfolio_interval_arg}";
         var process_info = new ProcessStartInfo
         {
             FileName = "cmd.exe",
@@ -103,11 +197,6 @@ public class RobotAPI : IDisposable
         _system_.SendUpdateSymbol(_robot_.Symbol);
         _system_.SendUpdateComplete();
         ReceiveAndProcessActions();
-    }
-
-    public void Dispose()
-    {
-        _system_?.Dispose();
     }
 
     private (Func<double> Ask, Func<double> Bid) FindConversions(Asset from_asset, Asset to_asset)
@@ -244,9 +333,55 @@ public class RobotAPI : IDisposable
     {
         var last_bar = _robot_.Bars.LastBar;
         _bar_.Volume = last_bar.TickVolume;
-        _system_.SendUpdateBarClosed(_bar_);
-        _system_.SendUpdateComplete();
-        ReceiveAndProcessActions();
+
+        if (!_verified_)
+        {
+            _observed_bars_++;
+            var ts_set = new HashSet<DateTime> {
+                _bar_.GapTick.Timestamp, _bar_.OpenTick.Timestamp,
+                _bar_.HighTick.Timestamp, _bar_.LowTick.Timestamp, _bar_.CloseTick.Timestamp
+            };
+            if (ts_set.Count <= 2) _degraded_bars_++;
+            _verification_buffer_.Add(new xBar
+            {
+                Timestamp = _bar_.Timestamp,
+                GapTick = _bar_.GapTick,
+                OpenTick = _bar_.OpenTick,
+                HighTick = _bar_.HighTick,
+                LowTick = _bar_.LowTick,
+                CloseTick = _bar_.CloseTick,
+                Volume = _bar_.Volume
+            });
+            if (_observed_bars_ >= _verification_)
+            {
+                if (_degraded_bars_ >= _verification_)
+                {
+                    _log_.Exception("Accuracy check failed: set Data='Tick data from Server', tick 'Download historical data' and 'Apply commission automatically', restart");
+                    _robot_.Stop();
+                    return;
+                }
+                _verified_ = true;
+                _log_.Info($"Accuracy verified ({_verification_ - _degraded_bars_}/{_verification_}), activating");
+                Activate();
+                if (_bar_stream_ != BarStreamMode.Off)
+                {
+                    foreach (var buffered in _verification_buffer_)
+                    {
+                        _system_.SendUpdateBarClosed(buffered);
+                        _system_.SendUpdateComplete();
+                        ReceiveAndProcessActions();
+                    }
+                }
+                _verification_buffer_.Clear();
+            }
+        }
+        else if (_bar_stream_ != BarStreamMode.Off)
+        {
+            _system_.SendUpdateBarClosed(_bar_);
+            _system_.SendUpdateComplete();
+            ReceiveAndProcessActions();
+        }
+
         _bar_.Timestamp = last_bar.OpenTime;
         _bar_.GapTick = _bar_.CloseTick;
     }
@@ -362,20 +497,20 @@ public class RobotAPI : IDisposable
         {
             var json = _system_.ReceiveAction();
             var action = JObject.Parse(json);
-            action_id = (ActionID)action["ActionID"].Value<int>();
+            action_id = (ActionID)action["ActionID"]!.Value<int>();
             switch (action_id)
             {
                 case ActionID.Complete: break;
-                case ActionID.OpenBuyPosition: if (!ProcessActionOpenPosition(TradeType.Buy, action["PositionType"].Value<string>(), action["Volume"].Value<double>(), action["StopLoss"]?.Value<double?>(), action["TakeProfit"]?.Value<double?>())) _robot_.Stop(); break;
-                case ActionID.OpenSellPosition: if (!ProcessActionOpenPosition(TradeType.Sell, action["PositionType"].Value<string>(), action["Volume"].Value<double>(), action["StopLoss"]?.Value<double?>(), action["TakeProfit"]?.Value<double?>())) _robot_.Stop(); break;
+                case ActionID.OpenBuyPosition: if (!ProcessActionOpenPosition(TradeType.Buy, action["PositionType"]!.Value<string>()!, action["Volume"]!.Value<double>(), action["StopLoss"]?.Value<double?>(), action["TakeProfit"]?.Value<double?>())) _robot_.Stop(); break;
+                case ActionID.OpenSellPosition: if (!ProcessActionOpenPosition(TradeType.Sell, action["PositionType"]!.Value<string>()!, action["Volume"]!.Value<double>(), action["StopLoss"]?.Value<double?>(), action["TakeProfit"]?.Value<double?>())) _robot_.Stop(); break;
                 case ActionID.ModifyBuyPositionVolume:
-                case ActionID.ModifySellPositionVolume: if (!ProcessActionModifyVolume(action["PositionID"].Value<int>(), action["Volume"].Value<double>())) _robot_.Stop(); break;
+                case ActionID.ModifySellPositionVolume: if (!ProcessActionModifyVolume(action["PositionID"]!.Value<int>(), action["Volume"]!.Value<double>())) _robot_.Stop(); break;
                 case ActionID.ModifyBuyPositionStopLoss:
-                case ActionID.ModifySellPositionStopLoss: if (!ProcessActionModifyStopLoss(action["PositionID"].Value<int>(), action["StopLoss"]?.Value<double?>())) _robot_.Stop(); break;
+                case ActionID.ModifySellPositionStopLoss: if (!ProcessActionModifyStopLoss(action["PositionID"]!.Value<int>(), action["StopLoss"]?.Value<double?>())) _robot_.Stop(); break;
                 case ActionID.ModifyBuyPositionTakeProfit:
-                case ActionID.ModifySellPositionTakeProfit: if (!ProcessActionModifyTakeProfit(action["PositionID"].Value<int>(), action["TakeProfit"]?.Value<double?>())) _robot_.Stop(); break;
+                case ActionID.ModifySellPositionTakeProfit: if (!ProcessActionModifyTakeProfit(action["PositionID"]!.Value<int>(), action["TakeProfit"]?.Value<double?>())) _robot_.Stop(); break;
                 case ActionID.CloseBuyPosition:
-                case ActionID.CloseSellPosition: if (!ProcessActionClosePosition(action["PositionID"].Value<int>())) _robot_.Stop(); break;
+                case ActionID.CloseSellPosition: if (!ProcessActionClosePosition(action["PositionID"]!.Value<int>())) _robot_.Stop(); break;
                 case ActionID.AskAboveTarget: _ask_above_target_ = action["Ask"]?.Value<double?>(); break;
                 case ActionID.AskBelowTarget: _ask_below_target_ = action["Ask"]?.Value<double?>(); break;
                 case ActionID.BidAboveTarget: _bid_above_target_ = action["Bid"]?.Value<double?>(); break;
