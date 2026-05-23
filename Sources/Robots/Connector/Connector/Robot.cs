@@ -82,6 +82,12 @@ public class RobotAPI : IDisposable
     private int _degraded_bars_;
     private bool _verified_;
 
+    private long _bars_sent_;
+    private long _targets_sent_;
+    private long _positions_sent_;
+    private long _trades_sent_;
+    private long _actions_received_;
+
     public RobotAPI(Robot algo, VerboseLevel console, VerboseLevel file, StrategyType strategy,
                     DatabaseType database, int verification,
                     TickStreamMode tick_stream, BarStreamMode bar_stream, OrderStreamMode order_stream,
@@ -190,19 +196,35 @@ public class RobotAPI : IDisposable
         var portfolio_batch_arg = _portfolio_buffering_ == BufferingMode.Auto ? "" : $" --portfolio-batch {_portfolio_batch_}";
         var portfolio_interval_arg = _portfolio_buffering_ == BufferingMode.Auto ? "" : $" --portfolio-interval {_portfolio_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{market_batch_arg}{market_interval_arg}{portfolio_batch_arg}{portfolio_interval_arg}";
-        var process_info = new ProcessStartInfo
-        {
-            FileName = "cmd.exe",
-            Arguments = $"/c \"cd {base_directory} && conda run --no-capture-output -n Quant python -m Library.System.Main {script_args}\"",
-            UseShellExecute = true
-        };
+        var inner_cmd = $"cd /d \"{base_directory}\" && conda run --no-capture-output -n Quant python -m Library.System.Main {script_args}";
         _log_.Debug($"Activating: {script_args}");
-        Process.Start(process_info);
+        try
+        {
+            var wt_info = new ProcessStartInfo
+            {
+                FileName = "wt.exe",
+                Arguments = $"-w cAlgo new-tab --title \"{_robot_.InstanceId}\" cmd.exe /k \"{inner_cmd}\"",
+                UseShellExecute = true
+            };
+            Process.Start(wt_info);
+        }
+        catch (Exception)
+        {
+            var cmd_info = new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/k \"{inner_cmd}\"",
+                UseShellExecute = true
+            };
+            Process.Start(cmd_info);
+        }
         _system_.Connect();
         _system_.SendUpdateAccount(_robot_.Account);
         _system_.SendUpdateSymbol(_robot_.Symbol);
         _system_.SendUpdateComplete();
+        _log_.Debug("Handshake sent (Account + Symbol + Complete), awaiting Python actions");
         ReceiveAndProcessActions();
+        _log_.Info("Activated, Python instance is ready");
     }
 
     private (Func<double> Ask, Func<double> Bid) FindConversions(Asset from_asset, Asset to_asset)
@@ -281,6 +303,8 @@ public class RobotAPI : IDisposable
         UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.OpenedBuyPosition : UpdateID.OpenedSellPosition;
         _system_.SendUpdatePosition(update_id, args.Position);
         _system_.SendUpdateComplete();
+        _positions_sent_++;
+        _log_.Debug($"Position opened sent (ID={args.Position.Id}, total positions sent={_positions_sent_})");
         ReceiveAndProcessActions();
     }
 
@@ -297,6 +321,8 @@ public class RobotAPI : IDisposable
             UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.ModifiedBuyPositionVolume : UpdateID.ModifiedSellPositionVolume;
             _system_.SendUpdateTrade(update_id, trade);
             _system_.SendUpdateComplete();
+            _trades_sent_++;
+            _log_.Debug($"Trade modified-volume sent (PositionID={args.Position.Id}, total trades sent={_trades_sent_})");
             ReceiveAndProcessActions();
             return;
         }
@@ -309,6 +335,8 @@ public class RobotAPI : IDisposable
             UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.ModifiedBuyPositionStopLoss : UpdateID.ModifiedSellPositionStopLoss;
             _system_.SendUpdatePosition(update_id, args.Position);
             _system_.SendUpdateComplete();
+            _positions_sent_++;
+            _log_.Debug($"Position modified-SL sent (ID={args.Position.Id}, total positions sent={_positions_sent_})");
             ReceiveAndProcessActions();
             return;
         }
@@ -321,6 +349,8 @@ public class RobotAPI : IDisposable
             UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.ModifiedBuyPositionTakeProfit : UpdateID.ModifiedSellPositionTakeProfit;
             _system_.SendUpdatePosition(update_id, args.Position);
             _system_.SendUpdateComplete();
+            _positions_sent_++;
+            _log_.Debug($"Position modified-TP sent (ID={args.Position.Id}, total positions sent={_positions_sent_})");
             ReceiveAndProcessActions();
         }
     }
@@ -335,6 +365,8 @@ public class RobotAPI : IDisposable
         UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.ClosedBuyPosition : UpdateID.ClosedSellPosition;
         _system_.SendUpdateTrade(update_id, trade);
         _system_.SendUpdateComplete();
+        _trades_sent_++;
+        _log_.Debug($"Trade closed sent (PositionID={args.Position.Id}, total trades sent={_trades_sent_})");
         ReceiveAndProcessActions();
     }
 
@@ -378,8 +410,10 @@ public class RobotAPI : IDisposable
                     {
                         _system_.SendUpdateBarClosed(buffered);
                         _system_.SendUpdateComplete();
+                        _bars_sent_++;
                         ReceiveAndProcessActions();
                     }
+                    _log_.Debug($"Replayed verification buffer ({_verification_buffer_.Count} bars), total bars sent={_bars_sent_}");
                 }
                 _verification_buffer_.Clear();
             }
@@ -388,6 +422,8 @@ public class RobotAPI : IDisposable
         {
             _system_.SendUpdateBarClosed(_bar_);
             _system_.SendUpdateComplete();
+            _bars_sent_++;
+            if (_bars_sent_ % 100 == 0) _log_.Debug($"Progress: bars={_bars_sent_}, targets={_targets_sent_}, positions={_positions_sent_}, trades={_trades_sent_}, actions={_actions_received_}");
             ReceiveAndProcessActions();
         }
 
@@ -416,24 +452,28 @@ public class RobotAPI : IDisposable
         {
             _system_.SendUpdateTarget(UpdateID.AskAboveTarget, tick);
             _system_.SendUpdateComplete();
+            _targets_sent_++;
             ReceiveAndProcessActions();
         }
         if (_ask_below_target_ != null && tick.Ask <= _ask_below_target_)
         {
             _system_.SendUpdateTarget(UpdateID.AskBelowTarget, tick);
             _system_.SendUpdateComplete();
+            _targets_sent_++;
             ReceiveAndProcessActions();
         }
         if (_bid_above_target_ != null && tick.Bid >= _bid_above_target_)
         {
             _system_.SendUpdateTarget(UpdateID.BidAboveTarget, tick);
             _system_.SendUpdateComplete();
+            _targets_sent_++;
             ReceiveAndProcessActions();
         }
         if (_bid_below_target_ != null && tick.Bid <= _bid_below_target_)
         {
             _system_.SendUpdateTarget(UpdateID.BidBelowTarget, tick);
             _system_.SendUpdateComplete();
+            _targets_sent_++;
             ReceiveAndProcessActions();
         }
     }
@@ -453,6 +493,7 @@ public class RobotAPI : IDisposable
     public void OnShutdown()
     {
         _log_.Warning("Shutdown strategy and safely terminate operations");
+        _log_.Info($"Summary: bars={_bars_sent_}, targets={_targets_sent_}, positions={_positions_sent_}, trades={_trades_sent_}, actions received={_actions_received_}");
         if (!_verified_) { _system_.Disconnect(); return; }
         _system_.SendUpdateShutdown();
         ReceiveAndProcessActions();
@@ -507,6 +548,7 @@ public class RobotAPI : IDisposable
             var json = _system_.ReceiveAction();
             var action = JObject.Parse(json);
             action_id = (ActionID)action["ActionID"]!.Value<int>();
+            if (action_id != ActionID.Complete) _actions_received_++;
             switch (action_id)
             {
                 case ActionID.Complete: break;
