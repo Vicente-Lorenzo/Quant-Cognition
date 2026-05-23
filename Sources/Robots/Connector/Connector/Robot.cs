@@ -171,15 +171,17 @@ public class RobotAPI : IDisposable
     private void OnPositionOpened(PositionOpenedEventArgs args)
     {
         if (!IsPositionFromRobot(args.Position)) return;
+        if (!_verified_) return;
         var position_data = new LastPositionData
         {
             LastVolume = args.Position.VolumeInUnits,
             LastStopLoss = args.Position.StopLoss,
             LastTakeProfit = args.Position.TakeProfit
         };
+        _positions_.Add(args.Position.Id, position_data);
+        if (_position_stream_ == PositionStreamMode.Off) return;
         UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.OpenedBuyPosition : UpdateID.OpenedSellPosition;
         _system_.SendUpdatePosition(update_id, args.Position);
-        _positions_.Add(args.Position.Id, position_data);
         _system_.SendUpdateComplete();
         ReceiveAndProcessActions();
     }
@@ -187,13 +189,15 @@ public class RobotAPI : IDisposable
     private void OnPositionModified(PositionModifiedEventArgs args)
     {
         if (!IsPositionFromRobot(args.Position)) return;
+        if (!_verified_) return;
         var position_data = _positions_[args.Position.Id];
         if (Math.Abs(args.Position.VolumeInUnits - position_data.LastVolume) > double.Epsilon)
         {
+            position_data.LastVolume = args.Position.VolumeInUnits;
+            if (_trade_stream_ == TradeStreamMode.Off) return;
             var trade = FindTrade(args.Position.Id);
             UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.ModifiedBuyPositionVolume : UpdateID.ModifiedSellPositionVolume;
             _system_.SendUpdateTrade(update_id, trade);
-            position_data.LastVolume = args.Position.VolumeInUnits;
             _system_.SendUpdateComplete();
             ReceiveAndProcessActions();
             return;
@@ -202,9 +206,10 @@ public class RobotAPI : IDisposable
             (position_data.LastStopLoss != null && args.Position.StopLoss == null) ||
             (position_data.LastStopLoss != null && args.Position.StopLoss != null && Math.Abs((double)args.Position.StopLoss - (double)position_data.LastStopLoss) > double.Epsilon))
         {
+            position_data.LastStopLoss = args.Position.StopLoss;
+            if (_position_stream_ == PositionStreamMode.Off) return;
             UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.ModifiedBuyPositionStopLoss : UpdateID.ModifiedSellPositionStopLoss;
             _system_.SendUpdatePosition(update_id, args.Position);
-            position_data.LastStopLoss = args.Position.StopLoss;
             _system_.SendUpdateComplete();
             ReceiveAndProcessActions();
             return;
@@ -213,9 +218,10 @@ public class RobotAPI : IDisposable
             (position_data.LastTakeProfit != null && args.Position.TakeProfit == null) ||
             (position_data.LastTakeProfit != null && args.Position.TakeProfit != null && Math.Abs((double)args.Position.TakeProfit - (double)position_data.LastTakeProfit) > double.Epsilon))
         {
+            position_data.LastTakeProfit = args.Position.TakeProfit;
+            if (_position_stream_ == PositionStreamMode.Off) return;
             UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.ModifiedBuyPositionTakeProfit : UpdateID.ModifiedSellPositionTakeProfit;
             _system_.SendUpdatePosition(update_id, args.Position);
-            position_data.LastTakeProfit = args.Position.TakeProfit;
             _system_.SendUpdateComplete();
             ReceiveAndProcessActions();
         }
@@ -224,10 +230,12 @@ public class RobotAPI : IDisposable
     private void OnPositionClosed(PositionClosedEventArgs args)
     {
         if (!IsPositionFromRobot(args.Position)) return;
+        if (!_verified_) return;
+        _positions_.Remove(args.Position.Id);
+        if (_trade_stream_ == TradeStreamMode.Off) return;
         var trade = FindTrade(args.Position.Id);
         UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.ClosedBuyPosition : UpdateID.ClosedSellPosition;
         _system_.SendUpdateTrade(update_id, trade);
-        _positions_.Remove(args.Position.Id);
         _system_.SendUpdateComplete();
         ReceiveAndProcessActions();
     }
@@ -258,6 +266,8 @@ public class RobotAPI : IDisposable
         if (tick.Bid > _bar_.HighTick.Bid) _bar_.HighTick = tick;
         if (tick.Bid < _bar_.LowTick.Bid) _bar_.LowTick = tick;
         _bar_.CloseTick = tick;
+        if (!_verified_) return;
+        if (_tick_stream_ == TickStreamMode.Off) return;
         if (_ask_above_target_ != null && tick.Ask >= _ask_above_target_)
         {
             _system_.SendUpdateTarget(UpdateID.AskAboveTarget, tick);
@@ -299,6 +309,7 @@ public class RobotAPI : IDisposable
     public void OnShutdown()
     {
         _log_.Warning("Shutdown strategy and safely terminate operations");
+        if (!_verified_) { _system_.Disconnect(); return; }
         _system_.SendUpdateShutdown();
         ReceiveAndProcessActions();
         _system_.Disconnect();
