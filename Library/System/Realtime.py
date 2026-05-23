@@ -81,7 +81,7 @@ class RealtimeAPI(SystemAPI):
         try:
             self._db_ = None if self._database_ is None else self._stack_.enter_context(PostgresAPI(database=self._database_))
             self._context_ = self._stack_.enter_context(zmq.Context())
-            self._socket_ = self._stack_.enter_context(self._context_.socket(zmq.REP))
+            self._socket_ = self._stack_.enter_context(self._context_.socket(zmq.PAIR))
             self._socket_.bind(f"tcp://{self._host_}:{self._port_}")
             self._log_.info(lambda: f"Connect Operation: Bound to {self._host_}:{self._port_}")
         except Exception as e:

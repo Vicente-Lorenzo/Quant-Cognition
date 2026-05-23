@@ -12,15 +12,15 @@ namespace cAlgo.Robots;
 
 public class SystemAPI : IDisposable
 {
-    private readonly RequestSocket _socket_;
+    private readonly PairSocket _socket_;
     private readonly Logging _console_;
 
     public SystemAPI(Robot robot, VerboseLevel console, string host = "localhost", int port = 5555)
     {
         _console_ = new Logging(robot, "API", console);
-        _socket_ = new RequestSocket();
+        _socket_ = new PairSocket();
         _socket_.Connect($"tcp://{host}:{port}");
-        _console_.Info($"ZMQ REQ Socket connected to tcp://{host}:{port}");
+        _console_.Info($"ZMQ PAIR Socket connected to tcp://{host}:{port}");
     }
 
     public void Connect()

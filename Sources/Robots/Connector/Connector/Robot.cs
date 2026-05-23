@@ -193,11 +193,10 @@ public class RobotAPI : IDisposable
         var process_info = new ProcessStartInfo
         {
             FileName = "cmd.exe",
-            Arguments = $"/c \"cd {base_directory} && conda run -n Quant python -m Library.System.Main {script_args}\"",
-            WindowStyle = ProcessWindowStyle.Minimized,
+            Arguments = $"/c \"cd {base_directory} && conda run --no-capture-output -n Quant python -m Library.System.Main {script_args}\"",
             UseShellExecute = true
         };
-        _log_.Info($"Activating: {script_args}");
+        _log_.Debug($"Activating: {script_args}");
         Process.Start(process_info);
         _system_.Connect();
         _system_.SendUpdateAccount(_robot_.Account);
