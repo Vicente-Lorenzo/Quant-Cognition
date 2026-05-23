@@ -18,6 +18,16 @@ namespace cAlgo.Robots
         Debug = 6,
     }
 
+    public enum SystemMode
+    {
+        Live = 1,
+        Simulation = 2,
+        Testing = 3,
+        Backtesting = 4,
+        Optimization = 5,
+        Learning = 6,
+    }
+
     public enum UpdateID
     {
         Complete = 0,
