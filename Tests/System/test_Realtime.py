@@ -14,7 +14,7 @@ from Library.System.System import SystemType
 from Library.Market.Tick import TickAPI
 from Library.Market.Bar import BarAPI
 
-def _make_system_(market: tuple = (100, 60.0), portfolio: tuple = (100, 60.0), port: int = 5556, system: SystemType = SystemType.Live, **kwargs) -> RealtimeAPI:
+def _make_system_(market: tuple = (100, 60.0), portfolio: tuple = (100, 60.0), port: int = 5556, system: SystemType = SystemType.Live, database: str = "Quant", **kwargs) -> RealtimeAPI:
     p = ParameterAPI()
     system = RealtimeAPI(
         system=system,
@@ -23,6 +23,7 @@ def _make_system_(market: tuple = (100, 60.0), portfolio: tuple = (100, 60.0), p
         timeframe=MagicMock(),
         parameters=p,
         iid="12345",
+        database=database,
         market=market,
         portfolio=portfolio,
         port=port,
