@@ -55,8 +55,10 @@ public class RobotAPI : IDisposable
     private readonly OrderStreamMode _order_stream_;
     private readonly PositionStreamMode _position_stream_;
     private readonly TradeStreamMode _trade_stream_;
+    private readonly BufferingMode _market_buffering_;
     private readonly int _market_batch_;
     private readonly double _market_interval_;
+    private readonly BufferingMode _portfolio_buffering_;
     private readonly int _portfolio_batch_;
     private readonly double _portfolio_interval_;
     private readonly SystemMode _system_mode_;
@@ -84,7 +86,8 @@ public class RobotAPI : IDisposable
                     DatabaseType database, int verification,
                     TickStreamMode tick_stream, BarStreamMode bar_stream, OrderStreamMode order_stream,
                     PositionStreamMode position_stream, TradeStreamMode trade_stream,
-                    int market_batch, double market_interval, int portfolio_batch, double portfolio_interval,
+                    BufferingMode market_buffering, int market_batch, double market_interval,
+                    BufferingMode portfolio_buffering, int portfolio_batch, double portfolio_interval,
                     string host = "localhost", int port = 5555)
     {
         _robot_ = algo;
@@ -94,6 +97,7 @@ public class RobotAPI : IDisposable
         _verification_ = verification;
 
         _log_ = new Logging(_robot_, "Strategy", console);
+        _log_.Info("Starting");
 
         _system_mode_ = ResolveSystemMode(_robot_.RunningMode);
         _database_ = ResolveDatabase(_system_mode_, strategy, database);
@@ -102,8 +106,10 @@ public class RobotAPI : IDisposable
         _order_stream_ = order_stream == OrderStreamMode.Auto ? OrderStreamMode.All : order_stream;
         _position_stream_ = position_stream == PositionStreamMode.Auto ? PositionStreamMode.All : position_stream;
         _trade_stream_ = trade_stream == TradeStreamMode.Auto ? TradeStreamMode.All : trade_stream;
+        _market_buffering_ = market_buffering;
         _market_batch_ = market_batch;
         _market_interval_ = market_interval;
+        _portfolio_buffering_ = portfolio_buffering;
         _portfolio_batch_ = portfolio_batch;
         _portfolio_interval_ = portfolio_interval;
 
@@ -179,10 +185,10 @@ public class RobotAPI : IDisposable
     {
         var base_directory = new DirectoryInfo(Environment.CurrentDirectory).Parent?.Parent?.Parent?.FullName;
         var database_arg = _database_ == DatabaseType.Off ? "" : $" --database \"{_database_}\"";
-        var market_batch_arg = _market_batch_ < 0 ? "" : $" --market-batch {_market_batch_}";
-        var market_interval_arg = _market_interval_ < 0 ? "" : $" --market-interval {_market_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
-        var portfolio_batch_arg = _portfolio_batch_ < 0 ? "" : $" --portfolio-batch {_portfolio_batch_}";
-        var portfolio_interval_arg = _portfolio_interval_ < 0 ? "" : $" --portfolio-interval {_portfolio_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        var market_batch_arg = _market_buffering_ == BufferingMode.Auto ? "" : $" --market-batch {_market_batch_}";
+        var market_interval_arg = _market_buffering_ == BufferingMode.Auto ? "" : $" --market-interval {_market_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        var portfolio_batch_arg = _portfolio_buffering_ == BufferingMode.Auto ? "" : $" --portfolio-batch {_portfolio_batch_}";
+        var portfolio_interval_arg = _portfolio_buffering_ == BufferingMode.Auto ? "" : $" --portfolio-interval {_portfolio_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{market_batch_arg}{market_interval_arg}{portfolio_batch_arg}{portfolio_interval_arg}";
         var process_info = new ProcessStartInfo
         {
@@ -191,6 +197,7 @@ public class RobotAPI : IDisposable
             WindowStyle = ProcessWindowStyle.Minimized,
             UseShellExecute = true
         };
+        _log_.Info($"Activating: {script_args}");
         Process.Start(process_info);
         _system_.Connect();
         _system_.SendUpdateAccount(_robot_.Account);
@@ -202,6 +209,9 @@ public class RobotAPI : IDisposable
     private (Func<double> Ask, Func<double> Bid) FindConversions(Asset from_asset, Asset to_asset)
     {
         if (from_asset == to_asset) return (Ask: () => 1.0, Bid: () => 1.0);
+        var primary = _robot_.Symbol;
+        if (primary.BaseAsset == from_asset && primary.QuoteAsset == to_asset) return (Ask: () => primary.Ask, Bid: () => primary.Bid);
+        if (primary.QuoteAsset == from_asset && primary.BaseAsset == to_asset) return (Ask: () => 1.0 / primary.Bid, Bid: () => 1.0 / primary.Ask);
         foreach (var symbol_name in _robot_.Symbols)
         {
             try
