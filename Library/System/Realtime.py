@@ -43,14 +43,19 @@ class RealtimeAPI(SystemAPI):
                  timeframe: TimeframeAPI,
                  parameters: Parameter,
                  iid: str,
+                 database: Union[str, None],
                  market: tuple[int, float],
                  portfolio: tuple[int, float],
                  host: str = "localhost",
                  port: int = 5555) -> None:
+        if database is None:
+            market = (0, 0.0)
+            portfolio = (0, 0.0)
         super().__init__(strategy=strategy, security=security, timeframe=timeframe, parameters=parameters, market=market, portfolio=portfolio)
 
         self._system_: SystemType = system
         self._iid_: str = iid
+        self._database_: Union[str, None] = database
         self._host_: str = host
         self._port_: int = port
 
@@ -74,7 +79,7 @@ class RealtimeAPI(SystemAPI):
         stack.__enter__()
         self._stack_ = stack
         try:
-            self._db_ = self._stack_.enter_context(PostgresAPI(database="Quant" if self._system_ == SystemType.Live else "Tests"))
+            self._db_ = None if self._database_ is None else self._stack_.enter_context(PostgresAPI(database=self._database_))
             self._context_ = self._stack_.enter_context(zmq.Context())
             self._socket_ = self._stack_.enter_context(self._context_.socket(zmq.REP))
             self._socket_.bind(f"tcp://{self._host_}:{self._port_}")
