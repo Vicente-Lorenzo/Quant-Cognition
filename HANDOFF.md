@@ -20,7 +20,7 @@ Self-contained brief covering active state of the `cAlgo` repo. Read this first,
 
 ## 2. Where we are right now
 
-Persistence and Realtime trading engine refactor complete. Phase D (Connector cBot rewrite) finished and verified. Setup module reorganized; C# enums codegen'd from Python source of truth. Ready for live smoke test against a cTrader demo account.
+Persistence and Realtime trading engine refactor complete. Phase D (Connector cBot rewrite) and Phase D2 (cBot parameter sheet + auto-resolution + verification) finished. Setup module reorganized; C# enums codegen'd from Python source of truth. cBot now has full parameter sheet with Auto-resolution, RunningMode-based SystemType detection, data-accuracy verification heuristic, stream-level gating, and explicit Database control (`Auto`/`Quant`/`Tests`/`Off`). Ready for backtest and live smoke tests against a cTrader demo account.
 
 **Tests passing:** 265 / 265.
 **C# Build:** 0 Warnings, 0 Errors.
@@ -28,6 +28,54 @@ Persistence and Realtime trading engine refactor complete. Phase D (Connector cB
 ---
 
 ## 3. What was done in the recent sessions
+
+### Phase D2 — cBot parameter sheet + auto-resolution + verification [DONE]
+
+#### cBot parameter sheet (`Connector.cs`)
+- **AccessRights = FullAccess.** Required for `Process.Start("cmd.exe", ...)`. Previous `AccessRights.None` silently denied subprocess spawn and the cBot hung on the first `ReceiveFrameString()`.
+- **Groups (in display order):** Logging Management → Strategy Management → System Management → Buffering Management.
+- **Logging:** `Console`, `File` (VerboseLevel).
+- **Strategy:** `Strategy` (StrategyType).
+- **System:** `Database` (DatabaseType: Auto/Quant/Tests/Off), `Verification` (int, default 3, min 1), `Tick Stream` (TickStreamMode: Auto/All/Target/Off), `Bar Stream`/`Order Stream`/`Position Stream`/`Trade Stream` (StreamMode: Auto/All/Off).
+- **Buffering:** `Market Batch`/`Portfolio Batch` (int, -1=Auto), `Market Interval`/`Portfolio Interval` (double, -1=Auto).
+- New file `Sources/Robots/Connector/Connector/Parameter.cs` holds the C#-only param enums (`DatabaseType`, `TickStreamMode`, `StreamMode`); the generated `Enum.cs` still holds the protocol-level enums (`StrategyType`, `VerboseLevel`, `UpdateID`, `ActionID`).
+
+#### Auto resolution (`Robot.cs::RobotAPI` ctor)
+The cBot resolves all `Auto` values from `(RunningMode × Strategy)` and forwards concrete values to Python via CLI:
+| Context | Database | Tick | Bar/Order/Pos/Trade | Market | Portfolio |
+|---|---|---|---|---|---|
+| RealTime | Quant | Target | All | (100, 60.0) | (100, 60.0) |
+| Visual/SilentBacktesting + Download | Quant | Target | All | (5000, 0.0) | (0, 0.0) |
+| Visual/SilentBacktesting + other | Tests | Target | All | (5000, 0.0) | (0, 0.0) |
+| Optimization | Tests | Target | All | (0, 0.0) | (0, 0.0) |
+
+`Tick Stream = All` is accepted in the UI but not yet wire-implemented; it logs a warning at startup and falls back to `Target`. Adding a generic `UpdateID.Tick` to the protocol is the follow-up to enable it (see §6 Phase D3).
+
+#### SystemType detection
+`RunningMode` maps to the Python positional subcommand: `RealTime → Live`, `Visual/SilentBacktesting → Simulation`, `Optimization → Testing`. The previous `--system` flag is gone; Main.py uses argparse subparsers and the cBot emits the subcommand as the first positional arg.
+
+#### Data accuracy verification heuristic (`Robot.cs::OnBarClosed`)
+- In `RealTime`, verification is auto-passed; Python is spawned immediately.
+- In Backtesting/Optimization, the cBot buffers the first `Verification` bars in memory (no ZMQ traffic, no Python spawn). For each closed bar it counts distinct timestamps among the five intra-bar ticks (`GapTick`/`OpenTick`/`HighTick`/`LowTick`/`CloseTick`). A bar is **degraded** if there are ≤ 2 distinct timestamps.
+- After `Verification` bars: if **all V are degraded**, the data is non-Accurate → `_log_.Exception(...)` with explicit remediation message and `Stop()`. Else verification passes, Python is spawned (`Activate()`), Account/Symbol/Complete handshake fires, then the buffered V bars are replayed in order. From then on `_verified_ = true` and normal emission resumes.
+- Why timestamp distinctness (not `LastBar.TickVolume`): `TickVolume` can be the broker's historical aggregate even in M1 mode, which would false-positive Accurate. Timestamp distinctness observes what the cBot itself received via `OnTick`, which collapses in non-Accurate mode.
+
+#### Stream gating
+Every `SendUpdate*` call site in `Robot.cs` is gated by its corresponding stream parameter. `*Stream = Off` → the cBot never emits that UpdateID family. No coupling to Python — if the strategy depends on a missing stream, it just sees no events. Startup warning is intentional only for `Tick Stream = All`.
+
+#### Database = Off semantics (`Library/System/Realtime.py`)
+When the cBot resolves `Database = Off`, Python:
+- Forces `market = (0, 0.0)` and `portfolio = (0, 0.0)` so `BufferAPI.Active = False` and `add`/`flush` become no-ops.
+- Sets `self._db_ = None`. Every `Datapoint._push_` early-returns via existing `if self._db_ is None: return` guard. No PostgresAPI context is opened. No `SessionAPI` row is created.
+- Updates and Actions still flow through ZMQ; the strategy runs in-memory only. Loads/pulls are also no-ops, but Realtime doesn't read any trading-data records at runtime (Universe lookups use a separate `Quant` connection in `Main.py`).
+
+#### CLI args (`Library/System/Main.py`)
+- `--system` flag removed; positional subcommand instead (e.g. `python -m Library.System.Main Live --console Debug ...`).
+- `--provider` → `--broker`. The cBot passes `_robot_.Account.BrokerName` raw; Python maps it to a `Provider` enum member via `_provider_from_broker_` (substring containment of normalized member names, e.g. `"Spotware-Demo" → Provider.Spotware`).
+- New flags in `realtime_parser` (shared by Live/Simulation/Testing): `--database`, `--market-batch`, `--market-interval`, `--portfolio-batch`, `--portfolio-interval` — all required, all resolved upstream by the cBot. The previous hardcoded SystemType-keyed buffer tuples in `_system_` are gone.
+
+#### Idempotency verified
+The Postgres upsert SQL (`Library/Database/Postgres/Postgres.py::_upsert_`) emits `INSERT ... ON CONFLICT (<keys>) DO UPDATE SET col = EXCLUDED.col, ...`. `TickAPI` natural key is `(Timestamp, Security)`; `_push_` excludes the `UID` identity column from the payload. Running the same Backtesting + Download cBot 10 times with identical params yields 1 row per `(Timestamp, Security)`, overwritten 9 times with the latest values. Timestamp determinism in backtests is by-architecture (replay from fixed historical store); not contractually guaranteed by Spotware but holds in practice within a session.
 
 ### Phase D — Connector cBot refinements [DONE]
 
@@ -74,24 +122,39 @@ Persistence and Realtime trading engine refactor complete. Phase D (Connector cB
 
 ---
 
-## 5. Realtime System Live Smoke Checklist
+## 5. Smoke Checklist
 
-Run against a cTrader **demo** account before declaring a Realtime release safe.
+### Backtest smoke (Download strategy, populate Quant)
+- [ ] Open cTrader → Backtesting tab → Non-Visual.
+- [ ] **Data** dropdown = "Tick data from Server".
+- [ ] **Download historical data for additional symbols** ticked.
+- [ ] **Apply commission automatically** ticked.
+- [ ] Strategy = Download (Auto resolves: Database=Quant, Market=(5000,0.0), Portfolio=(0,0.0)).
+- [ ] Run 1 month range. cBot waits `Verification` bars before spawning Python, then replays them.
+- [ ] If accuracy check fails: cBot logs Exception with remediation steps and Stops. Fix the dropdown/ticks, restart.
+- [ ] After completion: `Tick` and `Bar` rows under `Market` schema in `Quant` DB.
+- [ ] Re-run with identical params: row counts unchanged (idempotent upsert).
 
+### Live smoke (any strategy, demo account)
 - [ ] `Quant` Postgres reachable.
-- [ ] `Tests` Postgres reachable (mirrors `Quant` schema; used by non-Live runs).
-- [ ] Connector cBot deployed on cTrader (host=`localhost`, port=`5555`).
-- [ ] `python -m Setup.Main --enums` regenerates `Sources/.../Enum.cs` cleanly.
-- [ ] `dotnet build Sources/Robots/Connector/Connector.sln` → 0 warnings, 0 errors.
-- [ ] cBot start triggers Python `Library/System/Main.py --system=Live --strategy=Download ...` via `cmd.exe /c conda run -n Quant python -m Library.System.Main ...`.
-- [ ] `Account` and `Security` rows appear in `Quant` DB (Live) or `Tests` DB (Simulation/Testing).
-- [ ] Warm-up bars stream as `BarClosed` (5 Tick + 1 Bar per insert).
-- [ ] Live execution (Buy/Sell/Modify/Close) reflected in `Portfolio.*` tables under the correct DB.
+- [ ] Connector cBot deployed (host=`localhost`, port=`5555`).
+- [ ] `dotnet build Sources/Robots/Connector/Connector.sln` → 0/0.
+- [ ] cBot start triggers Python via `cmd.exe /c conda run -n Quant python -m Library.System.Main Live --console ... --file ... --strategy ... --broker "<BrokerName>" --ticker ... --timeframe ... --iid ... --database Quant --market-batch 100 --market-interval 60 --portfolio-batch 100 --portfolio-interval 60`.
+- [ ] `Account` and `Security` rows appear in `Quant` DB.
+- [ ] Live execution (Buy/Sell/Modify/Close) reflected in `Portfolio.*` tables.
 - [ ] Shutdown emits `UpdateID.Shutdown`, statistics report logged.
 
 ---
 
 ## 6. System Module Backlog
+
+### Phase D3 — Tick Stream = All wire path
+- Add `UpdateID.Tick` to `Library/Protocol/Update/Update.py` and regenerate `Enum.cs`.
+- Add `SendUpdateTick(xTick)` in `System.cs` (C#).
+- In `Robot.cs::OnTick`, when `_tick_stream_ == All`, emit every tick (not just target hits).
+- In `Realtime.py`, add `receive_update_tick` (likely reuse `receive_update_target` payload shape).
+- In `System.py::_process_updates_`, add `case UpdateID.Tick`.
+- Remove the startup warning in `Robot.cs` once wired.
 
 ### Phase E — Backtesting
 #### B-E-1 — Internal UID counters must not collide with cTrader UIDs
