@@ -50,7 +50,11 @@ class ProviderAPI(DatapointAPI):
 
     @staticmethod
     def normalize(uid: str) -> str:
-        return uid.replace("-", " ")
+        uid = uid.replace("-", " ")
+        for suffix in (" Demo", " Live"):
+            if uid.endswith(suffix):
+                uid = uid[:-len(suffix)]
+        return uid.replace(" ", "")
 
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],
@@ -62,7 +66,7 @@ class ProviderAPI(DatapointAPI):
         if self.UID:
             self.UID = self.normalize(self.UID)
         elif self.Abbreviation and self.Platform:
-            self.UID = f"{self.Abbreviation} ({self.Platform.name})"
+            self.UID = f"{self.Abbreviation}({self.Platform.name})"
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
