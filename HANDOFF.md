@@ -20,7 +20,13 @@ Self-contained brief covering active state of the `cAlgo` repo. Read this first,
 
 ## 2. Where we are right now
 
-Persistence and Realtime trading engine refactor complete. Phase D (Connector cBot rewrite) and Phase D2 (cBot parameter sheet + auto-resolution + verification) finished. Setup module reorganized; C# enums codegen'd from Python source of truth (now includes `SystemMode`). cBot is thin: it only resolves `SystemMode` (from `Robot.RunningMode`) and `DatabaseType` (Auto → concrete or Off); all other Auto resolution lives in Python. Buffer defaults are computed in `Main.py::_market_`/`_portfolio_` based on the positional system subcommand. Stream-level gating is per-type (`BarStreamMode`/`OrderStreamMode`/`PositionStreamMode`/`TradeStreamMode`/`TickStreamMode`). Database = Off is wire-represented by omitting `--database` (Python None = Off). Ready for backtest and live smoke tests against a cTrader demo account.
+Persistence and Realtime trading engine refactor complete. Phase D (Connector cBot rewrite) and Phase D2 (cBot parameter sheet + auto-resolution + verification) finished. Recent session shipped:
+1. **Audit-column persistence fix** — `UpdatedBy/UpdatedAt` were silently NULL for buffer-drained tables (`Market.Tick`, `Market.Bar`, and any future `Portfolio.*` written through the buffer). Root cause: `BufferAPI._drain_` bypassed `Datapoint._push_`. Lifted the stamp logic into a `DatapointAPI._stamp_(by, at=None)` method; both `_push_` and `Buffer._drain_` now call it. `DatabaseAPI` stays generic — no audit-column awareness at the data-mover layer (explicit segregation decision: Database.py callers must supply correct data).
+2. **Buffer dedupe + fan-out fix** — `_drain_` was crashing on warmup-replay duplicates (`ON CONFLICT DO UPDATE command cannot affect row a second time`) because identical `(Timestamp, Security)` keys arrived twice when the verification buffer replayed bars. Now collapses by natural-key tuple (stringified to handle unhashable values like `SessionAPI`); the post-upsert UID write-back fans the same DB UID back to every collapsed input record via a `key → [records]` mapping.
+3. **`Market.pull_bars` SQL** — explicit column list was missing `b."UpdatedBy"`, `b."UpdatedAt"`; added. All other `pull_*`/`load_*` paths in `Library/Universe`, `Library/Market`, `Library/Portfolio` audited as ✅ (either `SELECT *` or `<alias>.*`).
+4. **Observability** — Python `RealtimeAPI` gained phase Timers (Warmup → Execution → Shutdown) and a `_metrics_` dict (`Ticks/Bars/Accounts/Orders/Positions/Trades/Actions`). Phase boundaries hooked into the state-machine actions (`init_market`, `report_statistics`). `BufferAPI._drain_` logs per-pass `Drain <Table>: N records, M unique rows (Xms)`. cBot mirrors the counters (single `_ticks_sent_` = bar sub-ticks + targets, `_bars_sent_`, etc.) and emits `Summary:` and 100-bar `Progress:` lines with Ticks-first ordering. `--profile` CLI flag in `Library/System/Main.py` opt-in wraps `run()` with `@profiler` (dumps a `profile-*.pstat` snapshot).
+
+Smoke test on 1 month EURUSD Daily passes end-to-end: Python + cTrader terminate gracefully, `Market.Tick`/`Bar` populated with correct `UpdatedBy="Autosave"` + `UpdatedAt`. **Currently running 10-year (Jan 2015 → now) Daily smoke** to measure throughput — investigation is now on bottlenecks (cTrader tick-download phase is slow before the strategy even starts).
 
 **Tests passing:** 265 / 265.
 **C# Build:** 0 Warnings, 0 Errors.
@@ -28,6 +34,57 @@ Persistence and Realtime trading engine refactor complete. Phase D (Connector cB
 ---
 
 ## 3. What was done in the recent sessions
+
+### Latest session — Persistence audit-column fix + Observability [DONE]
+
+#### `DatapointAPI._stamp_`
+- New method `_stamp_(by: str, at: datetime | None = None)` on `DatapointAPI` (single source of truth for audit-column write).
+- `_push_` calls `self._stamp_(by)` instead of inline `self.UpdatedBy, self.UpdatedAt = ...`.
+- `BufferAPI._drain_` calls `r._stamp_(self._by_, stamp)` (single `stamp = datetime.now()` shared per drain pass for batch consistency).
+- `BufferAPI.__init__` gained `by: str = "Autosave"` so callers can override the audit label per buffer.
+- **Design decision recorded**: `DatabaseAPI` (insert/update/upsert) stays generic — no `by=`, no stamping, no audit-column awareness. Callers must supply correct data. Audit logic lives in `DatapointAPI` only.
+- Buffer's typing contract is now strict: `Sequence[Type[DatapointAPI]]`. Test mocks (`_RecA_/_RecB_/_RecC_` in `Tests/Database/test_Buffer.py`) gained a no-op `_stamp_` to honor it.
+
+#### `BufferAPI._drain_` dedupe + fan-out
+```python
+unique, mapping = {}, {}
+for r in records:
+    r._stamp_(self._by_, stamp)
+    row = {k: v for k, v in r.dict().items() if (columns is None or k in columns) and k not in identity}
+    k = tuple(str(row.get(c)) for c in key)   # str() handles unhashable values (SessionAPI etc.)
+    unique[k] = row                            # last-wins (matches single-save semantics)
+    mapping.setdefault(k, []).append(r)
+data = list(unique.values())
+if identity:
+    df = db.upsert(..., data=data, key=key, returning=identity)
+    for i, k in enumerate(unique.keys()):
+        if i >= len(df): break
+        for col in identity:
+            val = df[col][i]
+            for r in mapping[k]: setattr(r, col, val)  # fan returned UID to all collapsed dupes
+```
+Fixes both the warmup-replay crash and a latent UID-misassignment bug where `enumerate(records)` no longer matched `df` rows after dedupe.
+
+#### Observability layer
+- **`RealtimeAPI._metrics_`** (`Library/System/Realtime.py`): `{"Ticks": 0, "Bars": 0, "Accounts": 0, "Orders": 0, "Positions": 0, "Trades": 0, "Actions": 0}`. Incremented inside the `receive_update_*` methods (`receive_update_bar` does `Bars+=1, Ticks+=5` since each bar carries 5 sub-ticks: Gap/Open/High/Low/Close; `receive_update_target` does `Ticks+=1`; `send_action` does `Actions+=1`).
+- **Phase Timers** — three `Timer` instances on `RealtimeAPI`:
+    - `_warmup_timer_.start()` at the tail of `__enter__`, `_warmup_timer_.stop()` inside `init_market` (transition from Initialisation → Execution state).
+    - `_execution_timer_.start()` inside `init_market`, `_execution_timer_.stop()` inside `report_statistics` (Shutdown transition).
+    - `_shutdown_timer_.start()/stop()` bracketing `__exit__` body.
+    - Both `init_market` and `report_statistics` hooks are guarded against the test path that calls them without going through `__enter__` (defensive `if timer._start_ is not None` checks).
+- **`_log_metrics_()`** called at end of `__exit__`:
+    ```
+    Phase Warmup: 1s 234ms
+    Phase Execution: 45s 678ms (277.1 Ticks/s, 55.4 Bars/s)
+    Phase Shutdown: 123ms
+    Summary: Ticks=12600, Bars=2520, Accounts=1, Orders=0, Positions=0, Trades=0, Actions=0
+    ```
+- **`BufferAPI._drain_`** wraps each drain pass with a `Timer`, emits `debug` log: `Drain Tick: 5000 records, 4521 unique rows (156ms)`. Read this to spot DB-side bottlenecks (high `records:unique` ratio = lots of dedupe; high ms = slow upsert).
+- **cBot Robot.cs** mirrors counters: single `_ticks_sent_` (incremented by 5 per bar send + 1 per target). `Summary:` and per-100-bar `Progress:` lines emit `Ticks=, Bars=, Positions=, Trades=, Actions=` (Ticks-first).
+- **`--profile` CLI flag** in `Library/System/Main.py`: when set, `Main.py` does `profiler(run)()` instead of `run()`. `@profiler` decorator already existed in `Library/Utility/Statistic.py` — wraps `cProfile`, dumps `profile-YYYYMMDD-HHMMSS.pstat` in CWD. Not auto-wired to the cBot UI; user invokes via Python CLI (or wires a Parameter later).
+
+#### `Market.pull_bars` audit-column hydration
+- `Library/Market/Market.py` `pull_bars` SQL — explicit `b.<col>` list now includes `b."{BarAPI.ID.UpdatedBy}", b."{BarAPI.ID.UpdatedAt}"`. All other `pull_*` use `SELECT *` or `<alias>.*` which already cover the audit columns.
 
 ### Phase D2 — cBot parameter sheet + auto-resolution + verification [DONE]
 
@@ -85,63 +142,55 @@ Every `SendUpdate*` call site in `Robot.cs` is gated by its corresponding stream
 #### Idempotency verified
 The Postgres upsert SQL (`Library/Database/Postgres/Postgres.py::_upsert_`) emits `INSERT ... ON CONFLICT (<keys>) DO UPDATE SET col = EXCLUDED.col, ...`. `TickAPI` natural key is `(Timestamp, Security)`; `_push_` excludes the `UID` identity column from the payload. Running the same Backtesting + Download cBot 10 times with identical params yields 1 row per `(Timestamp, Security)`, overwritten 9 times with the latest values. Timestamp determinism in backtests is by-architecture (replay from fixed historical store); not contractually guaranteed by Spotware but holds in practice within a session.
 
-### Phase D — Connector cBot refinements [DONE]
+### Phase D3 & D4 — Streaming Implementations [DONE]
 
-#### Library/System
-- **System.py / Realtime.py cleanup.** Removed Gemini's hallucinated `update_data` / `Update(...)` dead block at the bottom of `_process_updates_`. Reverted the `_receive_update_security_` wrapper that incorrectly called `_attach_session_` on `SecurityAPI` (universe data, no Session/Account fields). Restored project style (blank lines between methods, etc.).
-- **Critical Realtime fix.** `RealtimeAPI.__enter__` was referencing `self._strategy_cls_`, but the base stores it as `self._strategy_` — would have raised `AttributeError` on first instantiation. Fixed.
-- **DB isolation by SystemType.** `RealtimeAPI` now opens `PostgresAPI(database="Quant" if Live else "Tests")`. Every record built in `receive_update_*` is constructed with `db=self._db_`, so Simulation/Testing runs cannot pollute the production DB. Universe lookup in `Library/System/Main.py` keeps using `Quant` (separate, intentional — Security/Ticker/Provider/Timeframe live there).
-- **Target tick `Volume`** is now read from the wire (`content.get("Volume")`), matching the OHLC ticks. Both ends emit/consume symmetrically.
+#### Phase D3 — Tick Stream = All
+- `UpdateID.Tick` added to `Library/Protocol/Update/Update.py` and `Enum.cs` regenerated.
+- Re-used `receive_update_target`'s payload shape by renaming it to `receive_update_tick`.
+- cBot now emits `UpdateID.Tick` in `OnTick` when `_tick_stream_ == TickStreamMode.All`.
+- Removed startup warning regarding unimplemented stream.
+- Added `case UpdateID.Tick:` handler to `_process_updates_` in Python engine.
 
-#### C# Connector (`Sources/Robots/Connector/Connector/`)
-- **Files renamed**: `RobotAPI.cs` → `Robot.cs`, `SystemAPI.cs` → `System.cs`. Classes kept as `RobotAPI` / `SystemAPI` to avoid shadowing `cAlgo.API.Robot` (the cTrader base class) and the .NET `System` namespace.
-- **Old enum files deleted**: `StrategyEnum.cs` and `LoggingEnum.cs` replaced by a single generated `Enum.cs`.
-- **`host` parameter** added to both `RobotAPI` and `SystemAPI` ctors (default `"localhost"`, mirrors `RealtimeAPI.__init__`). Hardcoded `127.0.0.1` is gone.
-- **No more magic ints.** All `UpdateID` and `ActionID` references in `Robot.cs` / `System.cs` use the generated C# enums:
-    - `SendUpdate*` methods take `UpdateID update_id` (cast to `int` only at JSON emission).
-    - `OnPositionOpened/Modified/Closed`, `OnBarClosed`, `OnTick`, `OnShutdown` reference `UpdateID.OpenedBuyPosition`, `UpdateID.ModifiedSellPositionStopLoss`, etc.
-    - `ReceiveAndProcessActions` switches on `ActionID` (`case ActionID.OpenBuyPosition: ...`).
-- **`xBar.TickVolume` → `xBar.Volume`** for consistency with `xTick.Volume`. Wire-level JSON key is now `Volume` (Python `Realtime.receive_update_bar` updated accordingly).
+#### Phase D4 — Order Streaming
+- `LastOrderData` structure added to `Robot.cs` to track mutations (Volume, TargetPrice, StopLoss, TakeProfit).
+- cBot subscribed to `Robot.PendingOrders` events (`Created`, `Modified`, `Cancelled`, `Filled`). `Expired` is not supported by the current cTrader API and was skipped.
+- Gated all order updates by `_order_stream_`.
+- Implemented `SendUpdateOrder(UpdateID, PendingOrder)` mapping to Python's `OrderAPI` parsing schema.
+- Integrated `receive_update_order` directly into Python engine updates processing (`case UpdateID.ExpiredBuyStopLimitOrder | ...`).
 
-#### Setup module (`Setup/`)
-- **`Setup/Main.py`** orchestrates universe population and enum codegen. `python -m Setup.Main --enums | --universe | --all`.
-- **`Setup/Enum.py`** owns the writer (`write_enum_file`) and the `write_all()` helper that pulls every block in one place — single source of truth, no N×N cross-imports.
-- **`Setup/Strategy.py`, `Setup/Logging.py`, `Setup/System.py`, `Setup/Update.py`, `Setup/Action.py`** each export an `*_block()` function that returns one C# `public enum` block. Standalone `__main__`s call `write_all()` and log via `HandlerLoggingAPI`.
-- **Generated `Enum.cs`** contains five enums: `StrategyType`, `VerboseLevel`, `SystemMode` (mirrors Python `SystemType`, 6 members), `UpdateID` (76 members), `ActionID` (~70 members). All sourced from the Python enums — drift is structurally impossible.
-
-#### Architectural fixes in `Library/`
-- **`EnumerationAPI` moved** from `Library/Database/Enumeration.py` → `Library/Utility/Enumeration.py` (where it semantically belongs — it's stdlib `enum` + fuzzy lookup with zero DB code). All 15 importers updated; the old path is deleted.
-- **`Timer` no longer inherits from `DataclassAPI`.** It's a profiling utility (`start`/`stop`/`delta`/`result`) and used none of `DataclassAPI`'s serialization features; the inheritance only created a back-edge from `Library.Utility` to `Library.Database`.
-- **`Library/System/Main.py`** now does `sys.path.insert(...)` at the top so both `python -m Library.System.Main ...` and `python Library/System/Main.py ...` work.
-
-### C.4 — Session / Account refactor (carried over)
-- `SessionAPI` is the persistence anchor.
-- `AccountAPI` is a snapshot model: `natural_key = (Timestamp, Session)`.
-- Order/Position/Trade UIDs use cTrader IDs directly.
+### Optional Cleanup — Circular imports resolution [DONE]
+- Broke `Library.Utility.Path` -> `Library.Database.Dataclass` inheritance.
+- Broke `Library.Database.Query` -> `Library.Utility.File` inheritance by duplicating the file path resolution explicitly.
 
 ---
 
 ## 4. Likely next steps
 
-1. **End-to-End Smoke Test** (B-D-3) per the checklist below — this is the immediate next action.
-2. **Phase E — Backtesting rewrite.** Re-enable `BacktestingAPI` in `Library/System/Main.py`; address B-E-1 UID collision.
-3. **Phase G — Strategy state checkpointing** to `SessionAPI`.
-4. **Optional cleanup** — finish breaking the remaining `Library.Utility` ↔ `Library.Database` back-edges (see §7).
+1. **Performance investigation (10-year run)** — current focus. Use the Phase Timer output to identify which phase dominates wall time. Suspected bottlenecks in priority order:
+    a. **cTrader historical tick-download** (pre-strategy phase, before Python even spawns) — appears slow for 10-year ranges. Outside framework scope unless we can configure or work around.
+    b. **ZMQ round-trip latency per bar** — cBot does `SendUpdate*` → `SendUpdateComplete` → `ReceiveAndProcessActions` synchronously per bar. For 2520 bars that's 2520 round-trips; at ~1ms each that's only ~2.5s of latency, so likely not dominant.
+    c. **Buffer drain DB upsert** — read `Drain Tick: N records, M unique (Xms)` lines. If `X` scales superlinearly with `N`, parameter-limit chunking might be hitting the 1000-binding cap (`_PARAMETER_LIMIT_` in `DatabaseAPI`).
+    d. Use `--profile` to drill into whichever phase the Timers point at.
+    e. *Note: `r.dict()` allocation in `_drain_` was successfully optimized out by surgically accessing `r._parse_(c)` directly.*
+2. **End-to-End Smoke Test extension — add NNFX strategy** (B-D-3 follow-up) — exercises Position/Order/Trade streaming + PnL accounting, final statistics report coherence.
+3. **Phase E — Backtesting rewrite.** Re-enable `BacktestingAPI` in `Library/System/Main.py`; address B-E-1 UID collision.
+4. **Phase G — Strategy state checkpointing** to `SessionAPI`.
 
 ---
 
 ## 5. Smoke Checklist
 
-### Backtest smoke (Download strategy, populate Quant)
-- [ ] Open cTrader → Backtesting tab → Non-Visual.
-- [ ] **Data** dropdown = "Tick data from Server".
-- [ ] **Download historical data for additional symbols** ticked.
-- [ ] **Apply commission automatically** ticked.
-- [ ] Strategy = Download (Auto resolves: Database=Quant, Market=(5000,0.0), Portfolio=(0,0.0)).
-- [ ] Run 1 month range. cBot waits `Verification` bars before spawning Python, then replays them.
-- [ ] If accuracy check fails: cBot logs Exception with remediation steps and Stops. Fix the dropdown/ticks, restart.
-- [ ] After completion: `Tick` and `Bar` rows under `Market` schema in `Quant` DB.
-- [ ] Re-run with identical params: row counts unchanged (idempotent upsert).
+### Backtest smoke (Download strategy, populate Quant) — 1-month: PASSED, 10-year: in progress
+- [x] Open cTrader → Backtesting tab → Non-Visual.
+- [x] **Data** dropdown = "Tick data from Server".
+- [x] **Download historical data for additional symbols** ticked.
+- [x] **Apply commission automatically** ticked.
+- [x] Strategy = Download (Auto resolves: Database=Quant, Market=(5000,0.0), Portfolio=(0,0.0)).
+- [x] Run 1 month range. cBot waits `Verification` bars before spawning Python, then replays them.
+- [x] If accuracy check fails: cBot logs Exception with remediation steps and Stops. Fix the dropdown/ticks, restart.
+- [x] After completion: `Tick` and `Bar` rows under `Market` schema in `Quant` DB, with `UpdatedBy="Autosave"` + `UpdatedAt` populated.
+- [x] Re-run with identical params: row counts unchanged (idempotent upsert).
+- [ ] **10-year range (2015–now), Daily, target ticks only** — measures throughput. Read `Phase Execution: <time> (X Ticks/s, Y Bars/s)` and per-drain `Drain Tick: ... ms` lines to identify bottleneck. cTrader's pre-spawn tick-download phase is noticeably slow for long ranges.
 
 ### Live smoke (any strategy, demo account)
 - [ ] `Quant` Postgres reachable.
@@ -156,22 +205,6 @@ The Postgres upsert SQL (`Library/Database/Postgres/Postgres.py::_upsert_`) emit
 
 ## 6. System Module Backlog
 
-### Phase D3 — Tick Stream = All wire path
-- Add `UpdateID.Tick` to `Library/Protocol/Update/Update.py` and regenerate `Enum.cs`.
-- Add `SendUpdateTick(xTick)` in `System.cs` (C#).
-- In `Robot.cs::OnTick`, when `_tick_stream_ == All`, emit every tick (not just target hits).
-- In `Realtime.py`, add `receive_update_tick` (likely reuse `receive_update_target` payload shape).
-- In `System.py::_process_updates_`, add `case UpdateID.Tick`.
-- Remove the startup warning in `Robot.cs` once wired.
-
-### Phase D4 — Order streaming on cBot
-The cBot currently has no order-event handling. `OrderStreamMode` exists in `Parameter.cs` and `_order_stream_` is wired into the Debug startup log, but no `SendUpdateOrder` call site exists yet. To enable:
-- Subscribe to `Robot.PendingOrders.Created/Modified/Cancelled/Filled/Expired` in `Robot.cs` ctor (next to the existing `Robot.Positions.*` subscriptions).
-- Implement `SendUpdateOrder(UpdateID, PendingOrder)` in `System.cs` analogous to `SendUpdatePosition`.
-- Gate each emission on `_order_stream_ != OrderStreamMode.Off`.
-- Map to existing `UpdateID.OpenedBuyStopOrder` / `OpenedBuyLimitOrder` / `OpenedBuyStopLimitOrder` / `Modified*Order*` / `Closed*Order` / `Filled*Order` / `Expired*Order` families (already in Python `UpdateID` and codegen'd to C#).
-- Verify Python `Realtime.receive_update_order` payload shape matches what `SendUpdateOrder` emits (Position, OrderID, OrderType, TradeType, OrderStatus, TimeInForce, Volume, StopPrice, LimitPrice, StopLoss, TakeProfit).
-
 ### Phase E — Backtesting
 #### B-E-1 — Internal UID counters must not collide with cTrader UIDs
 - Define a disjoint UID range (negative-space or high-offset).
@@ -185,11 +218,15 @@ The cBot currently has no order-event handling. `OrderStreamMode` exists in `Par
 
 ## 7. Known issues (non-blocking)
 
-- **Residual circular imports in `Library/`.** Two `Library.Utility` ↔ `Library.Database` back-edges remain after this session's fixes:
-    - `Library.Utility.Path` → `Library.Database.Dataclass`
-    - `Library.Database.Query` → `Library.Utility.File`
-  `-m` invocation (the standard path) works fine. Path-style invocation of leaf scripts (`python Library/.../X.py`) may hit the cycle. Proper fix is the same playbook used for `Timer` and `EnumerationAPI`: move misfiled types to their semantic home, or break unnecessary inheritance.
-
 - **`AccountNumber` not emitted by C#.** `Connector/System.cs::SendUpdateAccount` does not send `AccountNumber`. Python `Realtime.receive_update_account` reads `content.get("AccountNumber")` → `None`. If `AccountAPI.Number` should hold the broker account number, add `AccountNumber = account.Number` (or equivalent) to the C# payload.
 
 - **`ProviderAPI.normalize` may not match suffixed broker names.** Current implementation is `uid.replace("-", " ")`. Broker names like `"Spotware-Demo"` normalize to `"Spotware Demo"`, which won't match `Provider.Spotware` via `EnumerationAPI._missing_` fuzzy lookup (SequenceMatcher ≥ 0.9). Consider enhancing `ProviderAPI.normalize` (or adding a broker → provider mapper) to strip common suffixes (`-Demo`, `-Live`, ` Demo`, etc.) or do substring-containment matching against `Provider` member names.
+
+- **`OpenCL/vendors/temp.txt` warning at Python startup.** First three lines of every run are: `Access is denied. / The system cannot find the file specified. / Could Not Find C:\ProgramData\miniforge3\envs\Quant\Library\etc\OpenCL\vendors\temp.txt`. Harmless — one of the conda libs probes for an OpenCL vendor file. Suppressible by creating an empty `temp.txt` there or by silencing OpenCL probe via env var. Not blocking.
+
+- **`--profile` not wired to cBot UI.** The flag exists in `Library/System/Main.py` but the cBot's `Activate` script-args builder doesn't emit it. To profile, run Python directly with the same arg string the cBot prints in `Debug` mode + add `--profile`. Or add a `Profile` Parameter to `Connector.cs` and append `--profile` conditionally in `Activate()`.
+
+- **Wishlist for observability** (open for the next session, not yet started):
+    - Symmetric Python-side debug logs for Validation window usage, Warmup window send-count vs receive-count parity, per-stream update receipt confirmation.
+    - Graceful-vs-crash shutdown log differentiation (currently both paths go through `__exit__`).
+    - NNFX added to the smoke test so Position/Order/Trade flows exercise end-to-end + final report coherence.
