@@ -66,20 +66,21 @@ class ProviderAPI(DatapointAPI):
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
-        condition, parameters = None, None
-        if not self.UID and (self.Name or self.Abbreviation):
-            clauses, params = [], {}
-            if self.Name:
-                clauses.append('"Name" = :name:')
-                params["name"] = self.Name
-            if self.Abbreviation:
-                clauses.append('"Abbreviation" = :abbr:')
-                params["abbr"] = self.Abbreviation
-            condition, parameters = " OR ".join(clauses), params
-        row = super()._pull_(overload=overload) if condition is None else self._fetch_(condition=condition, parameters=parameters, overload=overload)
+        clauses, params = [], {}
+        if self.UID:
+            clauses.append('"UID" = :uid: OR "Abbreviation" = :uid: OR "Name" = :uid:')
+            params["uid"] = self.UID
+        if self.Name:
+            clauses.append('"Name" = :name:')
+            params["name"] = self.Name
+        if self.Abbreviation:
+            clauses.append('"Abbreviation" = :abbr:')
+            params["abbr"] = self.Abbreviation
+        if not clauses: return None
+        row = self._fetch_(condition=" OR ".join(clauses), parameters=params, overload=overload)
         if row:
+            self.UID = row.get("UID", self.UID)
             self.Platform = Platform.parse(self.Platform)
-        elif not row and not condition:
-            if self.Platform is None or self.Abbreviation is None:
-                raise ValueError(f"Provider '{self.UID or self.Name or self.Abbreviation}' not found in database and lacks required fields for creation.")
+        elif self.Platform is None or self.Abbreviation is None:
+            raise ValueError(f"Provider '{self.UID or self.Name or self.Abbreviation}' not found in database and lacks required fields for creation.")
         return row
