@@ -22,6 +22,7 @@ def _make_system_(market: tuple = (100, 60.0), portfolio: tuple = (100, 60.0), p
         security=MagicMock(),
         timeframe=MagicMock(),
         parameters=p,
+        pid=0,
         iid="12345",
         database=database,
         market=market,

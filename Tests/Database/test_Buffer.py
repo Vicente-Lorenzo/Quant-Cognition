@@ -10,6 +10,7 @@ class _RecA_:
     def dict(self): return {"v": self.v}
     def identity_keys(self): return ["UID"]
     def natural_keys(self): return ["v"]
+    def _stamp_(self, by, at=None): pass
 class _RecB_:
     Schema = "Test"
     Table = "B"
@@ -17,6 +18,7 @@ class _RecB_:
     def dict(self): return {"v": self.v}
     def identity_keys(self): return ["UID"]
     def natural_keys(self): return ["v"]
+    def _stamp_(self, by, at=None): pass
 class _RecC_:
     Schema = "Test"
     Table = "C"
@@ -24,6 +26,7 @@ class _RecC_:
     def dict(self): return {"v": self.v}
     def identity_keys(self): return []
     def natural_keys(self): return ["v"]
+    def _stamp_(self, by, at=None): pass
 def _make_buffer_(batch=10, interval=0.0, types=(_RecA_, _RecB_)):
     db_factory = MagicMock()
     return BufferAPI(types=types, batch=batch, interval=interval, db=db_factory), db_factory
