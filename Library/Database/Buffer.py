@@ -97,9 +97,15 @@ class BufferAPI(threading.Thread):
                 structure = getattr(records[0], "Structure", None)
                 columns = {str(c) for c in structure.keys()} if structure else None
                 unique, mapping = {}, {}
+                valid_cols = None
+                if columns is not None:
+                    valid_cols = [c for c in columns if c not in identity and hasattr(records[0], c)]
                 for r in records:
                     r._stamp_(self._by_, stamp)
-                    row = {k: v for k, v in r.dict().items() if (columns is None or k in columns) and k not in identity}
+                    if valid_cols is not None:
+                        row = {c: r._parse_(c) for c in valid_cols}
+                    else:
+                        row = {k: v for k, v in r.dict().items() if k not in identity}
                     k = tuple(str(row.get(c)) for c in key)
                     unique[k] = row
                     mapping.setdefault(k, []).append(r)
