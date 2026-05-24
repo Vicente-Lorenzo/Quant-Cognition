@@ -280,7 +280,7 @@ class StrategyAPI(ABC):
 
         execution.on(event=UpdateID.Account, to=execution, action=init_account, reason="Account Updated")
         execution.on(event=UpdateID.Security, to=execution, action=init_security, reason="Security Updated")
-        execution.on(event=UpdateID.Bar, to=execution, action=update_bar, reason=None)
+        execution.on(event=UpdateID.BarClosed, to=execution, action=update_bar, reason=None)
         execution.on(event=UpdateID.AskAboveTarget, to=execution, action=update_target, reason=None)
         execution.on(event=UpdateID.AskBelowTarget, to=execution, action=update_target, reason=None)
         execution.on(event=UpdateID.BidAboveTarget, to=execution, action=update_target, reason=None)
