@@ -1,26 +1,48 @@
-using System;
-using System.IO;
-using System.Diagnostics;
-using cAlgo.API;
 using NetMQ;
+using System;
+using cAlgo.API;
+using System.Diagnostics;
 using NetMQ.Sockets;
 using Newtonsoft.Json;
 using cAlgo.API.Internals;
-using System.Linq;
 
 namespace cAlgo.Robots;
 
 public class SystemAPI : IDisposable
 {
-    private readonly PairSocket _socket_;
     private readonly Logging _console_;
+    private readonly PairSocket _socket_;
+    private bool _disposed_;
+    private Process _peer_;
+    private volatile bool _peer_dead_;
+    private static readonly TimeSpan _poll_interval_ = TimeSpan.FromMilliseconds(100);
 
     public SystemAPI(Robot robot, VerboseLevel console, string host = "localhost", int port = 5555)
     {
         _console_ = new Logging(robot, "API", console);
         _socket_ = new PairSocket();
+        _socket_.Options.SendHighWatermark = 0;
+        _socket_.Options.Linger = TimeSpan.Zero;
         _socket_.Connect($"tcp://{host}:{port}");
         _console_.Info($"ZMQ PAIR Socket connected to tcp://{host}:{port}");
+    }
+
+    public void SetPeer(Process peer)
+    {
+        _peer_ = peer;
+        if (peer == null) return;
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            try { peer.WaitForExit(); }
+            catch (Exception e) { _console_.Warning($"Peer watch failed: {e.Message}"); }
+            OnPeerExited();
+        });
+    }
+
+    private void OnPeerExited()
+    {
+        _peer_dead_ = true;
+        _console_.Warning($"Python process exited (code {_peer_?.ExitCode}); receive/send loops will unblock");
     }
 
     public void Connect()
@@ -30,21 +52,28 @@ public class SystemAPI : IDisposable
 
     public void Disconnect()
     {
-        _socket_.Close();
+        if (_disposed_) return;
+        try { _socket_.Close(); } catch (Exception e) { _console_.Warning($"Socket close: {e.Message}"); }
         _console_.Info("Disconnected");
     }
 
     public void Dispose()
     {
-        _socket_.Dispose();
+        if (_disposed_) return;
+        _disposed_ = true;
+        try { _socket_.Dispose(); } catch (Exception e) { _console_.Warning($"Socket dispose: {e.Message}"); }
     }
 
     private void SendUpdate(object payload)
     {
+        if (_peer_dead_) throw new InvalidOperationException("Python process exited; cannot send");
         var json = JsonConvert.SerializeObject(payload);
-        _socket_.SendFrame(json);
+        while (!_socket_.TrySendFrame(_poll_interval_, json))
+        {
+            if (_peer_dead_) throw new InvalidOperationException("Python process exited during send");
+        }
     }
-    
+
     public void SendUpdateComplete()
     {
         SendUpdate(new { UpdateID = (int)UpdateID.Complete });
@@ -194,6 +223,10 @@ public class SystemAPI : IDisposable
 
     public string ReceiveAction()
     {
-        return _socket_.ReceiveFrameString();
+        while (true)
+        {
+            if (_peer_dead_) throw new InvalidOperationException("Python process exited; cannot receive");
+            if (_socket_.TryReceiveFrameString(_poll_interval_, out var json)) return json;
+        }
     }
 }
