@@ -21,8 +21,8 @@ from Library.Protocol.Action import (
 )
 from Library.Protocol.Update import (
     UpdateID,
-    BarUpdateAPI,
     TickUpdateAPI,
+    BarUpdateAPI,
     OpenedBuyPositionUpdateAPI,
     OpenedSellPositionUpdateAPI,
     ModifiedBuyPositionVolumeUpdateAPI,
@@ -254,7 +254,7 @@ class NNFXStrategyAPI(StrategyAPI):
         initialisation.on(event=UpdateID.Complete, to=waiting_signal, action=None, reason="Initialized")
         initialisation.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Abruptly Terminated")
 
-        waiting_signal.on(event=UpdateID.BarClosed, to=waiting_signal, action=self.update_position, reason=None)
+        waiting_signal.on(event=UpdateID.Bar, to=waiting_signal, action=self.update_position, reason=None)
         waiting_signal.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Safely Terminated")
 
         return signal_engine
