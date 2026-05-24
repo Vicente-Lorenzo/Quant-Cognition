@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import polars as pl
 from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Ticker import TickerAPI, ContractType
@@ -6,8 +8,22 @@ from Library.Universe.Security import SecurityAPI
 from Library.Universe.Category import CategoryAPI
 from Library.Universe.Timeframe import TimeframeAPI
 from Library.Universe.Provider import Provider, Platform, ProviderAPI
-def populate(db):
-    by = "Population"
+
+BY = "Population"
+
+def _migrate_(db):
+    CategoryAPI(db=db, migrate=True, autosave=False, autoload=False)
+    ProviderAPI(db=db, migrate=True, autosave=False, autoload=False)
+    TickerAPI(db=db, migrate=True, autosave=False, autoload=False)
+    ContractAPI(db=db, migrate=True, autosave=False, autoload=False)
+    SecurityAPI(db=db, migrate=True, autosave=False, autoload=False)
+    TimeframeAPI(db=db, migrate=True, autosave=False, autoload=False)
+
+def _stamp_(df: pl.DataFrame) -> pl.DataFrame:
+    return df.with_columns(pl.lit(BY).alias("UpdatedBy"), pl.lit(datetime.now()).alias("UpdatedAt"))
+
+def populate_universe(db):
+    _migrate_(db)
     categories_data = [
         {CategoryAPI.ID.UID: "Forex (Major)", CategoryAPI.ID.Primary: "Forex", CategoryAPI.ID.Secondary: "Major", CategoryAPI.ID.Alternative: "Currency"},
         {CategoryAPI.ID.UID: "Forex (Minor)", CategoryAPI.ID.Primary: "Forex", CategoryAPI.ID.Secondary: "Minor", CategoryAPI.ID.Alternative: "Currency"},
@@ -51,7 +67,7 @@ def populate(db):
         {CategoryAPI.ID.UID: "Stock (IN)", CategoryAPI.ID.Primary: "Stock", CategoryAPI.ID.Secondary: "India", CategoryAPI.ID.Alternative: "Equity"},
         {CategoryAPI.ID.UID: "Stock (SG)", CategoryAPI.ID.Primary: "Stock", CategoryAPI.ID.Secondary: "Singapore", CategoryAPI.ID.Alternative: "Equity"}
     ]
-    UniverseAPI.push_categories(db, pl.DataFrame(categories_data))
+    UniverseAPI.push_categories(db, _stamp_(pl.DataFrame(categories_data)))
     provider_map = {
         Provider.Spotware: ("Spotware Systems", Platform.cTrader),
         Provider.Pepperstone: ("Pepperstone Europe", Platform.cTrader),
@@ -68,7 +84,7 @@ def populate(db):
             ProviderAPI.ID.Name: name,
             ProviderAPI.ID.Abbreviation: p.name
         })
-    UniverseAPI.push_providers(db, pl.DataFrame(providers_data))
+    UniverseAPI.push_providers(db, _stamp_(pl.DataFrame(providers_data)))
     forex_data = [
         ("EURUSD", "Forex (Major)", "EUR", "Euro", "USD", "US Dollar", "Euro vs US Dollar"),
         ("USDJPY", "Forex (Major)", "USD", "US Dollar", "JPY", "Japanese Yen", "US Dollar vs Japanese Yen"),
@@ -283,10 +299,10 @@ def populate(db):
     all_ticker_rows = []
     for uid, cat, base_asset, base_name, quote_asset, quote_name, desc in forex_data + index_data + crypto_data + metal_data + energy_data + stock_all_data:
         all_ticker_rows.append({
-            TickerAPI.ID.UID: uid, TickerAPI.ID.Category: cat, TickerAPI.ID.BaseAsset: base_asset, TickerAPI.ID.BaseName: base_name,
-            TickerAPI.ID.QuoteAsset: quote_asset, TickerAPI.ID.QuoteName: quote_name, TickerAPI.ID.Description: desc
+            str(TickerAPI.ID.UID): uid, str(TickerAPI.ID.Category): cat, str(TickerAPI.ID.BaseAsset): base_asset, str(TickerAPI.ID.BaseName): base_name,
+            str(TickerAPI.ID.QuoteAsset): quote_asset, str(TickerAPI.ID.QuoteName): quote_name, str(TickerAPI.ID.Description): desc
         })
-    UniverseAPI.push_tickers(db, pl.DataFrame(all_ticker_rows))
+    UniverseAPI.push_tickers(db, _stamp_(pl.DataFrame(all_ticker_rows)))
     providers = [f"{p.name} ({provider_map[p][1].name})" for p in Provider]
     contract_rows = []
     security_rows = []
@@ -296,22 +312,22 @@ def populate(db):
             inst = ContractType.CFD
         inst_name = inst.name
         for provider_uid in providers:
-            contract_rows.append({ContractAPI.ID.Ticker: uid, ContractAPI.ID.Provider: provider_uid, ContractAPI.ID.Type: inst_name, ContractAPI.ID.Payoff: PayoffType.Trivial.name})
-            security_rows.append({SecurityAPI.ID.Provider: provider_uid, SecurityAPI.ID.Category: cat, SecurityAPI.ID.Ticker: uid, SecurityAPI.ID.Contract: inst_name})
-    UniverseAPI.push_contracts(db, pl.DataFrame(contract_rows))
+            contract_rows.append({str(ContractAPI.ID.Ticker): uid, str(ContractAPI.ID.Provider): provider_uid, str(ContractAPI.ID.Type): inst_name, str(ContractAPI.ID.Payoff): PayoffType.Trivial.name})
+            security_rows.append({str(SecurityAPI.ID.Provider): provider_uid, str(SecurityAPI.ID.Category): cat, str(SecurityAPI.ID.Ticker): uid, str(SecurityAPI.ID.Contract): inst_name})
+    UniverseAPI.push_contracts(db, _stamp_(pl.DataFrame(contract_rows)))
     contracts_df = UniverseAPI.pull_contracts(db)
     contract_map = {}
     for row in contracts_df.iter_rows(named=True):
-        contract_map[(row[ContractAPI.ID.Ticker], row[ContractAPI.ID.Provider])] = row[ContractAPI.ID.UID]
+        contract_map[(row[str(ContractAPI.ID.Ticker)], row[str(ContractAPI.ID.Provider)])] = row[str(ContractAPI.ID.UID)]
     for idx, row in enumerate(security_rows):
-        key = (row[SecurityAPI.ID.Ticker], row[SecurityAPI.ID.Provider])
+        key = (row[str(SecurityAPI.ID.Ticker)], row[str(SecurityAPI.ID.Provider)])
         if key in contract_map:
-            security_rows[idx][SecurityAPI.ID.Contract] = contract_map[key]
-    UniverseAPI.push_securities(db, pl.DataFrame(security_rows))
+            security_rows[idx][str(SecurityAPI.ID.Contract)] = contract_map[key]
+    UniverseAPI.push_securities(db, _stamp_(pl.DataFrame(security_rows)))
     timeframes = [
         "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M10", "M15", "M20", "M30", "M45",
         "H1", "H2", "H3", "H4", "H6", "H8", "H12",
         "D1", "D2", "D3",
         "W1", "MN1"
     ]
-    UniverseAPI.push_timeframes(db, pl.DataFrame([{TimeframeAPI.ID.UID: tf} for tf in timeframes]))
+    UniverseAPI.push_timeframes(db, _stamp_(pl.DataFrame([{str(TimeframeAPI.ID.UID): tf} for tf in timeframes])))

@@ -4,7 +4,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from Setup.Universe import populate
+from Setup.Universe import populate_universe
+from Setup.Market import populate_market
+from Setup.Portfolio import populate_portfolio
 from Setup.Enum import write_all
 from Library.Database.Postgres.Postgres import PostgresAPI
 from Library.Logging import HandlerLoggingAPI
@@ -35,7 +37,11 @@ def main():
             db.connect()
             try:
                 logger.info("Populating universe...")
-                populate(db)
+                populate_universe(db)
+                logger.info("Populating market...")
+                populate_market(db)
+                logger.info("Populating portfolio...")
+                populate_portfolio(db)
                 logger.info("Population completed successfully.")
             except Exception as e:
                 logger.exception(f"An error occurred during population: {e}")
