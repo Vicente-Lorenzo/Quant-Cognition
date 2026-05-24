@@ -98,7 +98,7 @@ class MarketAPI(DatapointAPI):
         sql = f'''
         SELECT b."{BarAPI.ID.UID}", b."{BarAPI.ID.Timestamp}", b."{BarAPI.ID.Security}", b."{BarAPI.ID.Timeframe}",
                b."{BarAPI.ID.GapTick}", b."{BarAPI.ID.OpenTick}", b."{BarAPI.ID.HighTick}", b."{BarAPI.ID.LowTick}", b."{BarAPI.ID.CloseTick}",
-               b."{BarAPI.ID.Volume}",
+               b."{BarAPI.ID.Volume}", b."{BarAPI.ID.UpdatedBy}", b."{BarAPI.ID.UpdatedAt}",
                g."{TickAPI.ID.UID}" AS "{BarAPI.OID.GapTick.UID}", g."{TickAPI.ID.Timestamp}" AS "{BarAPI.OID.GapTick.Timestamp}", g."{TickAPI.ID.Security}" AS "{BarAPI.OID.GapTick.Security}",
                g."{TickAPI.ID.Ask}" AS "{BarAPI.OID.GapTick.Ask}", g."{TickAPI.ID.Mid}" AS "{BarAPI.OID.GapTick.Mid}", g."{TickAPI.ID.Bid}" AS "{BarAPI.OID.GapTick.Bid}",
                g."{TickAPI.ID.AskBaseConversion}" AS "{BarAPI.OID.GapTick.AskBaseConversion}", g."{TickAPI.ID.BidBaseConversion}" AS "{BarAPI.OID.GapTick.BidBaseConversion}",
@@ -171,7 +171,10 @@ class MarketAPI(DatapointAPI):
     def update_data(self, data: Union[TickAPI, BarAPI]) -> None:
         from Library.Market.Bar import BarAPI
         df = pl.DataFrame([data.dict()], strict=False)
-        self._data_.extend(df)
+        if self._data_ is None or self._data_.width == 0:
+            self._data_ = df.rechunk()
+        else:
+            self._data_.extend(df)
         if isinstance(data, BarAPI):
             self.GapTicks.init_data(self._data_)
             self.OpenTicks.init_data(self._data_)

@@ -82,12 +82,16 @@ class DatapointAPI(DataclassAPI):
             return {k: data_dict[k] for k in nat_keys}
         return {}
 
+    def _stamp_(self, by: str, at: Union[datetime, None] = None) -> None:
+        self.UpdatedBy = by
+        self.UpdatedAt = at or datetime.now()
+
     def _push_(self, by: str) -> None:
         if self._db_ is None: return
         save_state = self._autosave_
         try:
             self._autosave_ = False
-            self.UpdatedBy, self.UpdatedAt = by, datetime.now()
+            self._stamp_(by)
             natural_key = self.natural_keys()
             identity_cols = self.identity_keys()
             data = {k: v for k, v in self.dict(include_fields=True, include_initvar_fields=False, include_properties=False, include_override_fields=True).items() if v is not None and v is not MISSING and k[0].isupper()}

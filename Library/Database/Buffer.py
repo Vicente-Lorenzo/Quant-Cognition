@@ -11,6 +11,7 @@ from typing import Callable, Type, Union, TYPE_CHECKING
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Postgres.Postgres import PostgresAPI
 from Library.Logging import HandlerLoggingAPI
+from Library.Utility.Statistic import Timer
 
 if TYPE_CHECKING:
     from Library.Database.Database import DatabaseAPI
@@ -21,12 +22,14 @@ class BufferAPI(threading.Thread):
                  types: Sequence[Type[DatapointAPI]],
                  batch: int = 0,
                  interval: float = 0.0,
+                 by: str = "Autosave",
                  db: Union[Callable[[], DatabaseAPI], None] = None) -> None:
         super().__init__(daemon=True, name=f"{type(self).__name__}-Worker")
 
         self._types_: tuple = tuple(types)
         self._batch_: int = batch
         self._interval_: float = interval
+        self._by_: str = by
         self._active_: bool = batch > 0 or interval > 0
 
         self._buffer_: dict = {t: [] for t in self._types_}
@@ -83,23 +86,35 @@ class BufferAPI(threading.Thread):
 
     def _drain_(self, db: DatabaseAPI, t: Type[DatapointAPI]) -> None:
         q = self._queue_[t]
+        stamp = datetime.now()
         while not q.empty():
             try: records = q.get_nowait()
             except queue.Empty: break
             try:
+                timer = Timer(); timer.start()
                 identity = records[0].identity_keys()
                 key = records[0].natural_keys()
                 structure = getattr(records[0], "Structure", None)
                 columns = {str(c) for c in structure.keys()} if structure else None
-                data = [{k: v for k, v in r.dict().items() if (columns is None or k in columns) and k not in identity} for r in records]
+                unique, mapping = {}, {}
+                for r in records:
+                    r._stamp_(self._by_, stamp)
+                    row = {k: v for k, v in r.dict().items() if (columns is None or k in columns) and k not in identity}
+                    k = tuple(str(row.get(c)) for c in key)
+                    unique[k] = row
+                    mapping.setdefault(k, []).append(r)
+                data = list(unique.values())
                 if identity:
                     df = db.upsert(schema=t.Schema, table=t.Table, data=data, key=key, returning=identity)
-                    for i, r in enumerate(records):
+                    for i, k in enumerate(unique.keys()):
                         if i >= len(df): break
                         for col in identity:
-                            setattr(r, col, df[col][i])
+                            val = df[col][i]
+                            for r in mapping[k]: setattr(r, col, val)
                 else:
                     db.upsert(schema=t.Schema, table=t.Table, data=data, key=key)
+                timer.stop()
+                self._log_.debug(lambda: f"Drain {t.Table}: {len(records)} records, {len(data)} unique rows ({timer.result()})")
             except Exception as e:
                 self._log_.error(lambda: f"Persist error on {t.Table}: {e}")
 
