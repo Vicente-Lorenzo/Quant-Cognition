@@ -6,7 +6,7 @@ from argparse import ArgumentParser, Namespace
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from Library.Utility.Statistic import timer
+from Library.Utility.Statistic import profiler, timer
 from Library.System.System import SystemType
 from Library.Strategy.Model import DDPGStrategyAPI
 from Library.Strategy.Strategy import StrategyType
@@ -26,6 +26,7 @@ def _parse_() -> Namespace:
     base_parser.add_argument("--provider", type=str, required=True)
     base_parser.add_argument("--ticker", type=str, required=True)
     base_parser.add_argument("--timeframe", type=str, required=True)
+    base_parser.add_argument("--profile", action="store_true", default=False)
 
     period_parser = ArgumentParser(add_help=False)
     period_parser.add_argument("--start", type=str, required=True)
@@ -37,6 +38,7 @@ def _parse_() -> Namespace:
     account_parser.add_argument("--account-leverage", type=float, required=True)
 
     realtime_parser = ArgumentParser(add_help=False)
+    realtime_parser.add_argument("--pid", type=int, required=True)
     realtime_parser.add_argument("--iid", type=str, required=True)
     realtime_parser.add_argument("--database", type=str, required=False, default=None, choices=["Quant", "Tests"])
     realtime_parser.add_argument("--market-batch", type=int, required=False, default=None)
@@ -101,39 +103,42 @@ def _strategy_(args: Namespace) -> Union[Type[StrategyAPI], None]:
 def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI, timeframe: TimeframeAPI, parameters: Parameter) -> Union[SystemAPI, None]:
     match SystemType(args.system):
         case SystemType.Live:
-            params: Parameter = parameters.Live[args.strategy]
+            params: Parameter = parameters.Realtime[args.strategy]
             return RealtimeAPI(
                 system=SystemType.Live,
                 strategy=strategy,
                 security=security,
                 timeframe=timeframe,
                 parameters=params,
+                pid=args.pid,
                 iid=args.iid,
                 database=args.database,
                 market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
                 portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval)
             )
         case SystemType.Simulation:
-            params: Parameter = parameters.Simulation[args.strategy]
+            params: Parameter = parameters.Realtime[args.strategy]
             return RealtimeAPI(
                 system=SystemType.Simulation,
                 strategy=strategy,
                 security=security,
                 timeframe=timeframe,
                 parameters=params,
+                pid=args.pid,
                 iid=args.iid,
                 database=args.database,
                 market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
                 portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval)
             )
         case SystemType.Testing:
-            params: Parameter = parameters.Testing[args.strategy]
+            params: Parameter = parameters.Realtime[args.strategy]
             return RealtimeAPI(
                 system=SystemType.Testing,
                 strategy=strategy,
                 security=security,
                 timeframe=timeframe,
                 parameters=params,
+                pid=args.pid,
                 iid=args.iid,
                 database=args.database,
                 market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
@@ -211,12 +216,13 @@ def main() -> None:
             provider = ProviderAPI(UID=ProviderAPI.normalize(args.provider), db=db, autoload=True)
             timeframe = TimeframeAPI(UID=TimeframeAPI.normalize(args.timeframe), db=db, autoload=True)
             security = SecurityAPI(Provider=provider, Ticker=ticker, db=db, autoload=True)
-            parameters: Parameter = parameterise[provider.UID][security.Category.UID][ticker.UID][timeframe.UID]
+            parameters: Parameter = parameterise[provider.UID][security.Category.UID][ticker.UID][args.timeframe]
             strategy = _strategy_(args)
             system = _system_(args, strategy, security, timeframe, parameters)
             with system:
                 system.run()
-    run()
+    if args.profile: profiler(run)()
+    else: run()
 
 if __name__ == "__main__":
     main()
