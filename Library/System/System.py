@@ -200,6 +200,15 @@ class SystemAPI(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def receive_update_tick(self) -> TickAPI:
+        raise NotImplementedError
+
+    def _receive_update_tick_(self) -> TickAPI:
+        tick = self.receive_update_tick()
+        self._market_.add(tick)
+        return tick
+
+    @abstractmethod
     def receive_update_bar(self) -> BarAPI:
         raise NotImplementedError
 
@@ -212,15 +221,6 @@ class SystemAPI(ABC):
         self._market_.add(bar.CloseTick)
         self._market_.add(bar)
         return bar
-
-    @abstractmethod
-    def receive_update_target(self) -> TickAPI:
-        raise NotImplementedError
-
-    def _receive_update_target_(self) -> TickAPI:
-        tick = self.receive_update_target()
-        self._market_.add(tick)
-        return tick
 
     @abstractmethod
     def receive_update_order(self) -> OrderAPI:
@@ -281,16 +281,20 @@ class SystemAPI(ABC):
                 case UpdateID.Security:
                     self.security = self.receive_update_security()
                     actions += engine.perform(update_id, SecurityUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio))
+                case UpdateID.Tick:
+                    actions += engine.perform(update_id, TickUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Tick=self._receive_update_tick_()))
+                case UpdateID.BarOpened:
+                    actions += engine.perform(update_id, BarUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_()))
                 case UpdateID.BarClosed:
                     actions += engine.perform(update_id, BarUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_()))
                 case UpdateID.AskAboveTarget:
-                    actions += engine.perform(update_id, TickUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Tick=self._receive_update_target_()))
+                    actions += engine.perform(update_id, TickUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Tick=self._receive_update_tick_()))
                 case UpdateID.AskBelowTarget:
-                    actions += engine.perform(update_id, TickUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Tick=self._receive_update_target_()))
+                    actions += engine.perform(update_id, TickUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Tick=self._receive_update_tick_()))
                 case UpdateID.BidAboveTarget:
-                    actions += engine.perform(update_id, TickUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Tick=self._receive_update_target_()))
+                    actions += engine.perform(update_id, TickUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Tick=self._receive_update_tick_()))
                 case UpdateID.BidBelowTarget:
-                    actions += engine.perform(update_id, TickUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Tick=self._receive_update_target_()))
+                    actions += engine.perform(update_id, TickUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Tick=self._receive_update_tick_()))
                 case UpdateID.OpenedBuyPosition:
                     actions += engine.perform(update_id, OpenedBuyPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Position=self._receive_update_position_()))
                 case UpdateID.OpenedSellPosition:
