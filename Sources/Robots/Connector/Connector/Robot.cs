@@ -82,8 +82,8 @@ public class RobotAPI : IDisposable
     private int _degraded_bars_;
     private bool _verified_;
 
+    private long _ticks_sent_;
     private long _bars_sent_;
-    private long _targets_sent_;
     private long _positions_sent_;
     private long _trades_sent_;
     private long _actions_received_;
@@ -195,9 +195,34 @@ public class RobotAPI : IDisposable
         var market_interval_arg = _market_buffering_ == BufferingMode.Auto ? "" : $" --market-interval {_market_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         var portfolio_batch_arg = _portfolio_buffering_ == BufferingMode.Auto ? "" : $" --portfolio-batch {_portfolio_batch_}";
         var portfolio_interval_arg = _portfolio_buffering_ == BufferingMode.Auto ? "" : $" --portfolio-interval {_portfolio_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
-        var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{market_batch_arg}{market_interval_arg}{portfolio_batch_arg}{portfolio_interval_arg}";
+        var ctrader_pid = Process.GetCurrentProcess().Id;
+        var pid_file = Path.Combine(Path.GetTempPath(), $"cAlgo_{_robot_.InstanceId}.pid");
+        if (System.IO.File.Exists(pid_file)) System.IO.File.Delete(pid_file);
+        var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --pid {ctrader_pid} --iid \"{_robot_.InstanceId}\"{database_arg}{market_batch_arg}{market_interval_arg}{portfolio_batch_arg}{portfolio_interval_arg}";
         var inner_cmd = $"cd /d \"{base_directory}\" && conda run --no-capture-output -n Quant python -m Library.System.Main {script_args}";
         _log_.Debug($"Activating: {script_args}");
+        SpawnTerminal(inner_cmd);
+        var python_process = WaitForPythonPid(pid_file);
+        _system_.SetPeer(python_process);
+        _system_.Connect();
+        try
+        {
+            _system_.SendUpdateAccount(_robot_.Account);
+            _system_.SendUpdateSymbol(_robot_.Symbol);
+            _system_.SendUpdateComplete();
+            _log_.Debug($"Handshake sent, awaiting Python actions (peer PID={python_process?.Id.ToString() ?? "unknown"})");
+            ReceiveAndProcessActions();
+            _log_.Info("Activated, Python instance is ready");
+        }
+        catch (Exception e)
+        {
+            _log_.Exception($"Activation failed (likely Python crashed): {e.Message}. Stopping cBot.");
+            _robot_.Stop();
+        }
+    }
+
+    private void SpawnTerminal(string inner_cmd)
+    {
         try
         {
             var wt_info = new ProcessStartInfo
@@ -218,13 +243,28 @@ public class RobotAPI : IDisposable
             };
             Process.Start(cmd_info);
         }
-        _system_.Connect();
-        _system_.SendUpdateAccount(_robot_.Account);
-        _system_.SendUpdateSymbol(_robot_.Symbol);
-        _system_.SendUpdateComplete();
-        _log_.Debug("Handshake sent (Account + Symbol + Complete), awaiting Python actions");
-        ReceiveAndProcessActions();
-        _log_.Info("Activated, Python instance is ready");
+    }
+
+    private Process WaitForPythonPid(string pid_file)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(60);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (System.IO.File.Exists(pid_file))
+            {
+                try
+                {
+                    var pid = int.Parse(System.IO.File.ReadAllText(pid_file).Trim());
+                    var p = Process.GetProcessById(pid);
+                    _log_.Debug($"Located Python process via PID file: {pid}");
+                    return p;
+                }
+                catch (Exception e) { _log_.Warning($"Reading PID file failed: {e.Message}"); }
+            }
+            System.Threading.Thread.Sleep(250);
+        }
+        _log_.Warning("PID file never appeared; peer-death detection disabled");
+        return null;
     }
 
     private (Func<double> Ask, Func<double> Bid) FindConversions(Asset from_asset, Asset to_asset)
@@ -410,10 +450,11 @@ public class RobotAPI : IDisposable
                     {
                         _system_.SendUpdateBarClosed(buffered);
                         _system_.SendUpdateComplete();
+                        _ticks_sent_ += 5;
                         _bars_sent_++;
                         ReceiveAndProcessActions();
                     }
-                    _log_.Debug($"Replayed verification buffer ({_verification_buffer_.Count} bars), total bars sent={_bars_sent_}");
+                    _log_.Debug($"Replayed verification buffer ({_verification_buffer_.Count} Bars), total Bars sent={_bars_sent_}");
                 }
                 _verification_buffer_.Clear();
             }
@@ -422,8 +463,9 @@ public class RobotAPI : IDisposable
         {
             _system_.SendUpdateBarClosed(_bar_);
             _system_.SendUpdateComplete();
+            _ticks_sent_ += 5;
             _bars_sent_++;
-            if (_bars_sent_ % 100 == 0) _log_.Debug($"Progress: bars={_bars_sent_}, targets={_targets_sent_}, positions={_positions_sent_}, trades={_trades_sent_}, actions={_actions_received_}");
+            if (_bars_sent_ % 100 == 0) _log_.Debug($"Progress: Ticks={_ticks_sent_}, Bars={_bars_sent_}, Positions={_positions_sent_}, Trades={_trades_sent_}, Actions={_actions_received_}");
             ReceiveAndProcessActions();
         }
 
@@ -452,28 +494,28 @@ public class RobotAPI : IDisposable
         {
             _system_.SendUpdateTarget(UpdateID.AskAboveTarget, tick);
             _system_.SendUpdateComplete();
-            _targets_sent_++;
+            _ticks_sent_++;
             ReceiveAndProcessActions();
         }
         if (_ask_below_target_ != null && tick.Ask <= _ask_below_target_)
         {
             _system_.SendUpdateTarget(UpdateID.AskBelowTarget, tick);
             _system_.SendUpdateComplete();
-            _targets_sent_++;
+            _ticks_sent_++;
             ReceiveAndProcessActions();
         }
         if (_bid_above_target_ != null && tick.Bid >= _bid_above_target_)
         {
             _system_.SendUpdateTarget(UpdateID.BidAboveTarget, tick);
             _system_.SendUpdateComplete();
-            _targets_sent_++;
+            _ticks_sent_++;
             ReceiveAndProcessActions();
         }
         if (_bid_below_target_ != null && tick.Bid <= _bid_below_target_)
         {
             _system_.SendUpdateTarget(UpdateID.BidBelowTarget, tick);
             _system_.SendUpdateComplete();
-            _targets_sent_++;
+            _ticks_sent_++;
             ReceiveAndProcessActions();
         }
     }
@@ -488,16 +530,27 @@ public class RobotAPI : IDisposable
     {
         _log_.Error("An unexpected exception occurred in the robot execution");
         _log_.Error(exception.ToString());
+        try { _system_?.Disconnect(); } catch (Exception e) { _log_.Warning($"Disconnect after exception failed: {e.Message}"); }
+        _robot_.Stop();
     }
 
     public void OnShutdown()
     {
         _log_.Warning("Shutdown strategy and safely terminate operations");
-        _log_.Info($"Summary: bars={_bars_sent_}, targets={_targets_sent_}, positions={_positions_sent_}, trades={_trades_sent_}, actions received={_actions_received_}");
-        if (!_verified_) { _system_.Disconnect(); return; }
-        _system_.SendUpdateShutdown();
-        ReceiveAndProcessActions();
-        _system_.Disconnect();
+        _log_.Info($"Summary: Ticks={_ticks_sent_}, Bars={_bars_sent_}, Positions={_positions_sent_}, Trades={_trades_sent_}, Actions={_actions_received_}");
+        try
+        {
+            if (_verified_)
+            {
+                _system_.SendUpdateShutdown();
+                ReceiveAndProcessActions();
+            }
+        }
+        catch (Exception e) { _log_.Warning($"Shutdown send failed (Python likely gone): {e.Message}"); }
+        finally
+        {
+            try { _system_.Disconnect(); } catch (Exception e) { _log_.Warning($"Disconnect failed: {e.Message}"); }
+        }
     }
 
     private bool ProcessActionOpenPosition(TradeType trade_type, string pos_type, double volume, double? sl_pips, double? tp_pips)
@@ -545,7 +598,20 @@ public class RobotAPI : IDisposable
         ActionID action_id;
         do
         {
-            var json = _system_.ReceiveAction();
+            string json;
+            try { json = _system_.ReceiveAction(); }
+            catch (TimeoutException e)
+            {
+                _log_.Exception($"Python instance unresponsive: {e.Message}. Stopping cBot.");
+                _robot_.Stop();
+                return;
+            }
+            catch (Exception e)
+            {
+                _log_.Exception($"Failed to receive action from Python: {e.Message}. Stopping cBot.");
+                _robot_.Stop();
+                return;
+            }
             var action = JObject.Parse(json);
             action_id = (ActionID)action["ActionID"]!.Value<int>();
             if (action_id != ActionID.Complete) _actions_received_++;
