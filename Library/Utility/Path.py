@@ -7,7 +7,6 @@ from re import Pattern, compile, search
 from dataclasses import dataclass, field, InitVar
 
 from Library.Utility.Typing import contains
-from Library.Database.Dataclass import DataclassAPI
 from Library.Utility.Runtime import is_notebook, find_notebook
 
 def inspect_separator(*, builder: type[PurePath] = Path) -> str:
@@ -197,7 +196,7 @@ def traceback_package_module_path(package: str, *, header: bool = None, footer: 
     return inspect_module_path(file=traceback, header=header, footer=footer, resolve=resolve, builder=builder)
 
 @dataclass(kw_only=True)
-class PathAPI(DataclassAPI):
+class PathAPI:
 
     path: InitVar[Union[str, Path]] = field(init=True, repr=True)
     module: InitVar[Union[str, Path]] = field(default=None, init=True, repr=True)
