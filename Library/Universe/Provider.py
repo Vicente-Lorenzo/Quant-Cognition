@@ -49,12 +49,12 @@ class ProviderAPI(DatapointAPI):
         }
 
     @staticmethod
-    def normalize(uid: str) -> str:
-        uid = uid.replace("-", " ")
+    def normalize(name: str) -> str:
+        name = name.replace("-", " ")
         for suffix in (" Demo", " Live"):
-            if uid.endswith(suffix):
-                uid = uid[:-len(suffix)]
-        return uid.replace(" ", "")
+            if name.endswith(suffix):
+                name = name[:-len(suffix)]
+        return name.replace(" ", "")
 
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],
@@ -63,16 +63,14 @@ class ProviderAPI(DatapointAPI):
                       autoload: bool,
                       autooverload: bool) -> None:
         self.Platform = Platform.parse(self.Platform)
-        if self.UID:
-            self.UID = self.normalize(self.UID)
-        elif self.Abbreviation and self.Platform:
+        if self.Abbreviation and self.Platform and not self.UID:
             self.UID = f"{self.Abbreviation}({self.Platform.name})"
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
         clauses, params = [], {}
         if self.UID:
-            clauses.append('"UID" = :uid: OR "Abbreviation" = :uid: OR "Name" = :uid:')
+            clauses.append('"UID" = :uid: OR "Abbreviation" = :uid: OR "Name" = :uid: OR POSITION("Abbreviation" IN :uid:) = 1')
             params["uid"] = self.UID
         if self.Name:
             clauses.append('"Name" = :name:')
