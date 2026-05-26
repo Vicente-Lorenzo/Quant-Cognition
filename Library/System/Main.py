@@ -38,7 +38,6 @@ def _parse_() -> Namespace:
     account_parser.add_argument("--account-leverage", type=float, required=True)
 
     realtime_parser = ArgumentParser(add_help=False)
-    realtime_parser.add_argument("--pid", type=int, required=True)
     realtime_parser.add_argument("--iid", type=str, required=True)
     realtime_parser.add_argument("--database", type=str, required=False, default=None, choices=["Quant", "Tests"])
     realtime_parser.add_argument("--market-batch", type=int, required=False, default=None)
@@ -110,7 +109,6 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 security=security,
                 timeframe=timeframe,
                 parameters=params,
-                pid=args.pid,
                 iid=args.iid,
                 database=args.database,
                 market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
@@ -124,7 +122,6 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 security=security,
                 timeframe=timeframe,
                 parameters=params,
-                pid=args.pid,
                 iid=args.iid,
                 database=args.database,
                 market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
@@ -138,7 +135,6 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 security=security,
                 timeframe=timeframe,
                 parameters=params,
-                pid=args.pid,
                 iid=args.iid,
                 database=args.database,
                 market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
