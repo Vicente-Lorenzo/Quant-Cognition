@@ -6,7 +6,5 @@
 
   <ItemGroup>
     <PackageReference Include="cTrader.Automate" Version="*" />
-    <PackageReference Include="NetMQ" Version="*" />
-    <PackageReference Include="Newtonsoft.Json" Version="*" />
   </ItemGroup>
 </Project>

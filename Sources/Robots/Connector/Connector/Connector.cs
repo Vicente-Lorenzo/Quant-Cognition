@@ -61,7 +61,10 @@ public class Connector : Robot
 
     protected override void OnStart()
     {
-        _robot_api_ = new RobotAPI(this, Console, File, Strategy, Database, Verification, TickStream, BarStream, OrderStream, PositionStream, TradeStream, MarketBuffering, MarketBatch, MarketInterval, PortfolioBuffering, PortfolioBatch, PortfolioInterval);
+        _robot_api_ = new RobotAPI(this, Console, File, Strategy, Database, Verification,
+            TickStream, BarStream, OrderStream, PositionStream, TradeStream,
+            MarketBuffering, MarketBatch, MarketInterval,
+            PortfolioBuffering, PortfolioBatch, PortfolioInterval);
     }
 
     protected override void OnStop()
