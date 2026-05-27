@@ -21,12 +21,10 @@ from Library.Market.Price import PriceAPI, Direction
 from Library.Utility.Typing import MISSING
 
 class OrderType(EnumerationAPI):
-    Market = 1
-    Limit = 2
-    Stop = 3
-    StopLossTakeProfit = 4
-    MarketRange = 5
-    StopLimit = 6
+    Market = 0
+    Limit = 1
+    Stop = 2
+    StopLimit = 3
 
 class OrderStatus(EnumerationAPI):
     Accepted = 1
