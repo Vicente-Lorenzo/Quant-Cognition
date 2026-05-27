@@ -1,0 +1,110 @@
+#pragma warning disable CA1416
+
+using System;
+using System.IO.MemoryMappedFiles;
+using System.Threading;
+using cAlgo.API;
+
+namespace Connector;
+
+public class TransportAPI : IDisposable
+{
+    private readonly Logging _console_;
+    private bool _disposed_;
+    private volatile bool _peer_dead_;
+
+    private readonly MemoryMappedFile _update_mmf_;
+    private readonly MemoryMappedFile _action_mmf_;
+    private readonly MemoryMappedViewAccessor _update_view_;
+    private readonly MemoryMappedViewAccessor _action_view_;
+    private readonly EventWaitHandle _ur_;
+    private readonly EventWaitHandle _uc_;
+    private readonly EventWaitHandle _ar_;
+    private readonly EventWaitHandle _ac_;
+
+    private const int BUF_SIZE = 4096;
+    private const int POLL_MS = 500;
+
+    public TransportAPI(Robot robot, VerboseLevel console, string iid)
+    {
+        _console_ = new Logging(robot, "Transport", console);
+        var prefix = $"cAlgo_{iid}";
+        _update_mmf_ = MemoryMappedFile.CreateOrOpen($"{prefix}_update", BUF_SIZE);
+        _action_mmf_ = MemoryMappedFile.CreateOrOpen($"{prefix}_action", BUF_SIZE);
+        _update_view_ = _update_mmf_.CreateViewAccessor();
+        _action_view_ = _action_mmf_.CreateViewAccessor();
+        _ur_ = new EventWaitHandle(false, EventResetMode.AutoReset, $"{prefix}_ur");
+        _uc_ = new EventWaitHandle(false, EventResetMode.AutoReset, $"{prefix}_uc");
+        _ar_ = new EventWaitHandle(false, EventResetMode.AutoReset, $"{prefix}_ar");
+        _ac_ = new EventWaitHandle(false, EventResetMode.AutoReset, $"{prefix}_ac");
+        _console_.Info($"Shared Memory transport created (iid={iid})");
+    }
+
+    public bool PeerDead => _peer_dead_;
+
+    public void Watchdog(System.Diagnostics.Process peer)
+    {
+        if (peer == null) return;
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            try { peer.WaitForExit(); }
+            catch (Exception e) { _console_.Warning($"Watchdog failed: {e.Message}"); }
+            _peer_dead_ = true;
+            _console_.Warning($"Python process exited (code {peer.ExitCode}); transport will unblock");
+        });
+    }
+
+    private void WriteBuffer(byte[] data)
+    {
+        _update_view_.Write(0, (uint)data.Length);
+        _update_view_.WriteArray(4, data, 0, data.Length);
+    }
+
+    private byte[] ReadBuffer()
+    {
+        uint size = _action_view_.ReadUInt32(0);
+        byte[] data = new byte[size];
+        _action_view_.ReadArray(4, data, 0, (int)size);
+        return data;
+    }
+
+    private void WaitFor(EventWaitHandle handle)
+    {
+        while (true)
+        {
+            if (_peer_dead_) throw new InvalidOperationException("Python process exited");
+            if (handle.WaitOne(POLL_MS)) return;
+        }
+    }
+
+    public void Send(byte[] data)
+    {
+        if (_peer_dead_) throw new InvalidOperationException("Python process exited; cannot send");
+        WriteBuffer(data);
+        _ur_.Set();
+        WaitFor(_uc_);
+    }
+
+    public byte[] Receive()
+    {
+        WaitFor(_ar_);
+        byte[] data = ReadBuffer();
+        _ac_.Set();
+        return data;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed_) return;
+        _disposed_ = true;
+        _update_view_?.Dispose();
+        _action_view_?.Dispose();
+        _update_mmf_?.Dispose();
+        _action_mmf_?.Dispose();
+        _ur_?.Dispose();
+        _uc_?.Dispose();
+        _ar_?.Dispose();
+        _ac_?.Dispose();
+        _console_.Info("Transport disposed");
+    }
+}
