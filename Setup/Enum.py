@@ -8,7 +8,7 @@ def enum_block(name: str, members) -> str:
 
 def write_enum_file(blocks: list[str]) -> Path:
     body = "\n\n".join(blocks)
-    content = f"namespace cAlgo.Robots\n{{\n{body}\n}}"
+    content = f"namespace Connector\n{{\n{body}\n}}"
     OUTPUT_PATH.write_text(content, encoding="utf-8", newline="\n")
     return OUTPUT_PATH
 
