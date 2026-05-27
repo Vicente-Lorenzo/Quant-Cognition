@@ -1,4 +1,4 @@
-﻿from unittest.mock import MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -8,13 +8,14 @@ from Library.Portfolio.Order import OrderAPI
 from Library.Portfolio.Position import PositionAPI
 from Library.Portfolio.Trade import TradeAPI
 from Library.Protocol.Action import ActionID
+from Library.Protocol.Binary import BinaryAPI
 from Library.Strategy.Rule.Download import DownloadStrategyAPI
 from Library.System.Realtime import RealtimeAPI
 from Library.System.System import SystemType
 from Library.Market.Tick import TickAPI
 from Library.Market.Bar import BarAPI
 
-def _make_system_(market: tuple = (100, 60.0), portfolio: tuple = (100, 60.0), port: int = 5556, system: SystemType = SystemType.Live, database: str = "Quant", **kwargs) -> RealtimeAPI:
+def _make_system_(market: tuple = (100, 60.0), portfolio: tuple = (100, 60.0), system: SystemType = SystemType.Live, database: str = "Quant", **kwargs) -> RealtimeAPI:
     p = ParameterAPI()
     system = RealtimeAPI(
         system=system,
@@ -22,16 +23,13 @@ def _make_system_(market: tuple = (100, 60.0), portfolio: tuple = (100, 60.0), p
         security=MagicMock(),
         timeframe=MagicMock(),
         parameters=p,
-        pid=0,
         iid="12345",
         database=database,
         market=market,
         portfolio=portfolio,
-        port=port,
         **kwargs
     )
-    system._context_ = MagicMock()
-    system._socket_ = MagicMock()
+    system._transport_ = MagicMock()
     system._db_ = MagicMock()
     return system
 
@@ -41,7 +39,6 @@ def realtime_system():
 
 def test_realtime_system_initialization(realtime_system):
     assert realtime_system._iid_ == "12345"
-    assert realtime_system._port_ == 5556
 
 def test_realtime_system_management_initial_state(realtime_system):
     engine = realtime_system.system_management()
@@ -80,11 +77,11 @@ def test_testing_mode_both_inactive():
     assert system._market_.Active is False
     assert system._portfolio_.Active is False
 
-def test_receive_update_target_routes_to_market_buffer(realtime_system):
+def test_receive_update_tick_routes_to_market_buffer(realtime_system):
     realtime_system._market_.add = MagicMock()
     tick = MagicMock()
-    realtime_system.receive_update_target = MagicMock(return_value=tick)
-    realtime_system._receive_update_target_()
+    realtime_system.receive_update_tick = MagicMock(return_value=tick)
+    realtime_system._receive_update_tick_()
     realtime_system._market_.add.assert_called_once_with(tick)
 
 def test_receive_update_bar_routes_bar_and_subticks_to__market_(realtime_system):
@@ -147,25 +144,48 @@ def test_init_market_clears_sync_buffer(realtime_system):
     transition.perform(update)
     assert realtime_system._sync_buffer_ == []
 
-def test_send_action_serializes_to_socket(realtime_system):
+def test_send_serializes_to_transport(realtime_system):
     from Library.Protocol.Action import CompleteActionAPI
     realtime_system.send_action(CompleteActionAPI())
-    realtime_system._socket_.send_string.assert_called_once()
-    sent_payload = realtime_system._socket_.send_string.call_args[0][0]
-    assert '"ActionID": 0' in sent_payload
+    realtime_system._transport_.send.assert_called_once()
+    sent_payload = realtime_system._transport_.send.call_args[0][0]
+    assert isinstance(sent_payload, bytes)
+    assert sent_payload[0] == ActionID.Complete.value
 
 def test_receive_update_denied_returns_action_id_and_reason(realtime_system):
-    realtime_system._last_update_msg_ = {"ActionID": ActionID.OpenBuyPosition.value, "Reason": "no margin"}
+    denied_codec = BinaryAPI('B', 'B', 's')
+    realtime_system._last_update_data_ = denied_codec.pack(77, ActionID.OpenBuyPosition.value, "no margin")
     action_id, reason = realtime_system.receive_update_denied()
     assert action_id == ActionID.OpenBuyPosition
     assert reason == "no margin"
 
 def test_receive_update_exception_returns_reason(realtime_system):
-    realtime_system._last_update_msg_ = {"Reason": "disconnect"}
+    exception_codec = BinaryAPI('B', 's')
+    realtime_system._last_update_data_ = exception_codec.pack(78, "disconnect")
     assert realtime_system.receive_update_exception() == "disconnect"
 
-def test_receive_update_security_returns_init_security(realtime_system):
-    assert realtime_system.receive_update_security() is realtime_system._security_
+def test_receive_update_security_updates_and_returns_security(realtime_system):
+    security_codec = realtime_system._binary_security_
+    # UpdateID (1 byte) is stripped by _binary_security_.unpack when offset=1
+    realtime_system._last_update_data_ = b'\x00' + security_codec.pack(
+        "EUR", "USD", 5, 0.00001, 0.0001, 100000.0,
+        1000.0, 10000000.0, 1000.0, 30.0, 1,
+        -1.5, -1.2, 0, 3
+    )
+    from Library.Universe.Contract import CommissionMode, SwapMode
+    from Library.Utility.DateTime import Weekday
+    from Library.Universe.Ticker import TickerAPI
+    from Library.Universe.Contract import ContractAPI
+    realtime_system._security_._ticker_ = TickerAPI(UID="EURUSD")
+    realtime_system._security_._contract_ = ContractAPI(UID=1)
+    
+    sec = realtime_system.receive_update_security()
+    assert sec is realtime_system._security_
+    assert sec.Ticker.BaseAsset == "EUR"
+    assert sec.Ticker.QuoteAsset == "USD"
+    assert sec.Contract.Digits == 5
+    assert sec.Contract.CommissionMode == CommissionMode.BaseAssetPerOneLot
+    assert sec.Contract.SwapExtraDay == Weekday.Wednesday
 
 def test_exit_drains_buffers_before_closing_stack():
     system = _make_system_()

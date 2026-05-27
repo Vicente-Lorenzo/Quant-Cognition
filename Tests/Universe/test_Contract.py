@@ -11,7 +11,7 @@ def test_contract_initialization(db):
     try:
         contract = ContractAPI(Ticker="oanda:eurusd.m", Provider="Pepperstone-Europe", Type=ContractType.Spot, db=db)
         assert contract.Ticker.UID == "EURUSD"
-        assert contract.Provider.UID == "Pepperstone Europe"
+        assert contract.Provider.UID == "PepperstoneEurope"
         assert contract.Type == ContractType.Spot
     except ValueError:
         pass

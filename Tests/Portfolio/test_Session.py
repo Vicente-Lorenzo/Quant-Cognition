@@ -31,11 +31,11 @@ def _setup_(db):
     db.executeone(QueryAPI(f'DELETE FROM "{OrderAPI.Schema}"."{OrderAPI.Table}"')).commit()
     db.executeone(QueryAPI(f'DELETE FROM "{AccountAPI.Schema}"."{AccountAPI.Table}"')).commit()
     db.executeone(QueryAPI(f'DELETE FROM "{SessionAPI.Schema}"."{SessionAPI.Table}"')).commit()
-    CategoryAPI(UID="Forex (Major)", Primary="Forex", Secondary="Major", Alternative="Currency", db=db).save()
-    ProviderAPI(UID="Pepperstone (cTrader)", Platform=Platform.cTrader, Name="Pepperstone Europe", Abbreviation="Pepperstone", db=db).save()
-    TickerAPI(UID="EURUSD", Category="Forex (Major)", BaseAsset="EUR", BaseName="Euro", QuoteAsset="USD", QuoteName="US Dollar", Description="Euro vs US Dollar", db=db).save()
-    ContractAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Type=ContractType.Spot, PipSize=0.0001, PointSize=0.00001, Digits=5, LotSize=100000, db=db).save()
-    sec = SecurityAPI(Ticker="EURUSD", Provider="Pepperstone (cTrader)", Contract=ContractType.Spot, Category="Forex (Major)", db=db)
+    CategoryAPI(UID="Forex(Major)", Primary="Forex", Secondary="Major", Alternative="Currency", db=db).save()
+    ProviderAPI(UID="Pepperstone(cTrader)", Platform=Platform.cTrader, Name="Pepperstone Europe", Abbreviation="Pepperstone", db=db).save()
+    TickerAPI(UID="EURUSD", Category="Forex(Major)", BaseAsset="EUR", BaseName="Euro", QuoteAsset="USD", QuoteName="US Dollar", Description="Euro vs US Dollar", db=db).save()
+    ContractAPI(Ticker="EURUSD", Provider="Pepperstone(cTrader)", Type=ContractType.Spot, PipSize=0.0001, PointSize=0.00001, Digits=5, LotSize=100000, db=db).save()
+    sec = SecurityAPI(Ticker="EURUSD", Provider="Pepperstone(cTrader)", Contract=ContractType.Spot, Category="Forex(Major)", db=db)
     sec.save()
     return sec
 
