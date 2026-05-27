@@ -4,7 +4,7 @@ using cAlgo.API.Collections;
 using cAlgo.API.Indicators;
 using cAlgo.API.Internals;
 
-namespace cAlgo.Robots;
+namespace Connector;
 
 [Robot(AccessRights = AccessRights.FullAccess, AddIndicators = true)]
 public class Connector : Robot

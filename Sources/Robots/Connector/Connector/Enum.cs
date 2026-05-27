@@ -1,4 +1,4 @@
-namespace cAlgo.Robots
+namespace Connector
 {
     public enum PositionTypeID
     {

@@ -1,6 +1,6 @@
 using cAlgo.API.Internals;
 
-namespace cAlgo.Robots;
+namespace Connector;
 
 public class Logging
 {
