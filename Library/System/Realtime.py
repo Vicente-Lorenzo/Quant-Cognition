@@ -27,8 +27,9 @@ from Library.Protocol.Binary import BinaryAPI
 from Library.Protocol.Update import UpdateID, BarUpdateAPI, CompleteUpdateAPI
 from Library.System.System import SystemAPI, SystemType
 from Library.Protocol.Transport import TransportAPI
+from Library.Universe.Contract import CommissionMode, SwapMode
 from Library.Universe.Security import SecurityAPI
-from Library.Utility.DateTime import timestamp_to_datetime
+from Library.Utility.DateTime import Weekday, timestamp_to_datetime
 from Library.Utility.Statistic import Timer, timer
 
 if TYPE_CHECKING:
@@ -188,12 +189,7 @@ class RealtimeAPI(SystemAPI):
             volume_min, volume_max, volume_step, commission, commission_type,
             swap_long, swap_short, swap_calculation_type, swap_3_days_rollover
         ) = self._binary_security_.unpack(self._last_update_data_, 1)
-
-        from Library.Universe.Contract import CommissionMode, SwapMode
-        from Library.Utility.DateTime import Weekday
-
         day_of_week = {0: Weekday.Sunday, 1: Weekday.Monday, 2: Weekday.Tuesday, 3: Weekday.Wednesday, 4: Weekday.Thursday, 5: Weekday.Friday, 6: Weekday.Saturday}
-
         if self._security_:
             if self._security_.Ticker:
                 self._security_.Ticker.BaseAsset = base_asset
@@ -212,7 +208,6 @@ class RealtimeAPI(SystemAPI):
                 self._security_.Contract.SwapShort = swap_short
                 self._security_.Contract.SwapMode = SwapMode(swap_calculation_type)
                 self._security_.Contract.SwapExtraDay = day_of_week.get(swap_3_days_rollover, Weekday.Wednesday)
-
         return self._security_
 
     def receive_update_order(self) -> OrderAPI:
