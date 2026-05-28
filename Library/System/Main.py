@@ -79,7 +79,7 @@ def _parse_() -> Namespace:
 def _market_(system: SystemType, batch: Union[int, None], interval: Union[float, None]) -> tuple[int, float]:
     match system:
         case SystemType.Live: auto_batch, auto_interval = 100, 60.0
-        case SystemType.Simulation: auto_batch, auto_interval = 5000, 0.0
+        case SystemType.Simulation: auto_batch, auto_interval = 50000, 0.0
         case _: auto_batch, auto_interval = 0, 0.0
     batch = batch if batch is not None else auto_batch
     interval = interval if interval is not None else auto_interval
