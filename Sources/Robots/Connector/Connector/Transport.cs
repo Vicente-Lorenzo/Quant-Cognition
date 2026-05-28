@@ -9,6 +9,7 @@ namespace Connector;
 
 public class TransportAPI : IDisposable
 {
+    private readonly Robot _robot_;
     private readonly Logging _console_;
     private bool _disposed_;
     private volatile bool _peer_dead_;
@@ -27,6 +28,7 @@ public class TransportAPI : IDisposable
 
     public TransportAPI(Robot robot, VerboseLevel console, string iid)
     {
+        _robot_ = robot;
         _console_ = new Logging(robot, "Transport", console);
         var prefix = $"cAlgo_{iid}";
         _update_mmf_ = MemoryMappedFile.CreateOrOpen($"{prefix}_update", BUF_SIZE);
@@ -47,10 +49,19 @@ public class TransportAPI : IDisposable
         if (peer == null) return;
         System.Threading.Tasks.Task.Run(() =>
         {
-            try { peer.WaitForExit(); }
-            catch (Exception e) { _console_.Warning($"Watchdog failed: {e.Message}"); }
-            _peer_dead_ = true;
-            _console_.Warning($"Python process exited (code {peer.ExitCode}); transport will unblock");
+            try
+            {
+                peer.WaitForExit();
+                int? exitCode = null;
+                try { exitCode = peer.ExitCode; } catch (Exception) { }
+                _peer_dead_ = true;
+                _console_.Warning($"Python process exited (code {exitCode?.ToString() ?? "N/A"}); transport will unblock and cBot will stop.");
+                _robot_.Stop();
+            }
+            catch (Exception e)
+            {
+                _console_.Warning($"Watchdog failed: {e.Message}");
+            }
         });
     }
 
