@@ -116,7 +116,7 @@ public class RobotAPI : IDisposable
 
         _system_mode_ = ResolveSystemMode(_robot_.RunningMode);
         _database_ = ResolveDatabase(_system_mode_, strategy, database);
-        _tick_stream_ = tick_stream == TickStreamMode.Auto ? (strategy == StrategyType.Download ? TickStreamMode.All : TickStreamMode.Target) : tick_stream;
+        _tick_stream_ = tick_stream == TickStreamMode.Auto ? TickStreamMode.Off : tick_stream;
         _bar_stream_ = bar_stream == BarStreamMode.Auto ? BarStreamMode.All : bar_stream;
         _order_stream_ = order_stream == OrderStreamMode.Auto ? OrderStreamMode.All : order_stream;
         _position_stream_ = position_stream == PositionStreamMode.Auto ? PositionStreamMode.All : position_stream;

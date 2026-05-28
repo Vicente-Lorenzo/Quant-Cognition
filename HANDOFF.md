@@ -154,7 +154,14 @@ Benchmark: `Tests/Benchmark/IPC.py`.
 
 ---
 
-## 7. System Module Backlog
+## 7. Future Work & Performance Ideas
+
+- **Parallel Database Worker:** Refactor `BufferAPI` to use a dedicated background worker thread/process for database I/O. Currently, `_drain_` runs synchronously in the main loop, blocking the ingestion of new ticks/bars while waiting for database round-trips. A parallel worker would allow the main loop to continue receiving market data at high speed while persistence happens out-of-band.
+- **Bulk Ingestion API:** Implement a native `bulk_insert` or `copy` feature in `DatabaseAPI` that abstracts high-speed data loading (e.g., Postgres `COPY`) while handling identity returns and conflict resolution in a standardized way.
+
+---
+
+## 8. System Module Backlog
 
 ### Phase D — IPC Migration (ZMQ → Shared Memory) — DONE
 - B-D-1: ~~Replace `SystemAPI` C# transport.~~ Done.
