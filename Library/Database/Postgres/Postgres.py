@@ -1,4 +1,4 @@
-﻿import psycopg
+import psycopg
 from typing import Union, Callable, Any
 from collections.abc import Sequence
 
@@ -13,7 +13,7 @@ class PostgresAPI(DatabaseAPI):
 
     _ADMIN_: str = "postgres"
     _PARAMETER_TOKEN_: Callable[[int], str] = staticmethod(lambda i: "%s")
-    _PARAMETER_LIMIT_: int = 60000
+    _PARAMETER_LIMIT_: int = 65000
 
     _CHECK_DATATYPE_MAPPING_: dict = {
         pl.Binary: "bytea",
