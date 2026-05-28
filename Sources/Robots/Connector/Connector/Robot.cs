@@ -238,7 +238,7 @@ public class RobotAPI : IDisposable
         }
         catch (Exception e)
         {
-            _log_.Exception($"Activation failed (likely Python crashed): {e.Message}. Stopping cBot.");
+            _log_.Exception($"Activation failed: {e.Message}. Stopping cBot.");
             _robot_.Stop();
         }
     }

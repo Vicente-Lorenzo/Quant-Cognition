@@ -6,3 +6,36 @@ Download:
   FundamentalManagement: null
   SentimentalManagement: null
   PortfolioManagement: null
+NNFX:
+  MoneyManagement:
+    RiskPercentage: [1.0]
+  RiskManagement:
+    StopLossScale: [1.5]
+    ScalingOutScale: [1.0]
+    ScalingOutPercentage: [50.0]
+    TrailingStopLossScale: [1.5]
+  SignalManagement:
+    BaselineMode: [Signal]
+    Filter1Mode: [Filter]
+    Filter2Mode: [Filter]
+    VolumeMode: [Filter]
+  TechnicalManagement:
+    Baseline:
+      Type: MA
+      Period: [20]
+    Filter1:
+      Type: RSI
+      Period: [14]
+    Filter2:
+      Type: RSI
+      Period: [14]
+    Volume:
+      Type: ATR
+      Period: [14]
+    Volatility:
+      Type: ATR
+      Period: [14]
+  FundamentalManagement: null
+  SentimentalManagement: null
+  PortfolioManagement: null
+

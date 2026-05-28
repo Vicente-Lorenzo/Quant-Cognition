@@ -95,16 +95,16 @@ class RealtimeAPI(SystemAPI):
         stack.__enter__()
         self._stack_ = stack
         try:
-            self.strategy = self._strategy_(money_management=self._parameters_.MoneyManagement, risk_management=self._parameters_.RiskManagement, signal_management=self._parameters_.SignalManagement)
-            self.market = MarketAPI()
-            self.indicator = IndicatorAPI(technical=self._parameters_.TechnicalManagement, fundamental=self._parameters_.FundamentalManagement, sentimental=self._parameters_.SentimentalManagement)
-            self.portfolio = PortfolioAPI(Parameter=self._parameters_.PortfolioManagement)
-            self._db_ = None if self._database_ is None else self._stack_.enter_context(PostgresAPI(database=self._database_))
             self._transport_ = TransportAPI(iid=self._iid_, create=False)
             self._stack_.callback(lambda: self._transport_.close() if self._transport_ else None)
             peer_pid = self._handshake_()
             self._transport_.watchdog(peer_pid)
             self._log_.info(lambda: f"Connect Operation: Shared Memory bound (iid={self._iid_}, peer_pid={peer_pid})")
+            self.strategy = self._strategy_(money_management=self._parameters_.MoneyManagement, risk_management=self._parameters_.RiskManagement, signal_management=self._parameters_.SignalManagement)
+            self.market = MarketAPI()
+            self.indicator = IndicatorAPI(technical=self._parameters_.TechnicalManagement, fundamental=self._parameters_.FundamentalManagement, sentimental=self._parameters_.SentimentalManagement)
+            self.portfolio = PortfolioAPI(Parameter=self._parameters_.PortfolioManagement)
+            self._db_ = None if self._database_ is None else self._stack_.enter_context(PostgresAPI(database=self._database_))
         except Exception as e:
             self._log_.error(lambda: f"Connect Operation: Failed ({e})")
             self._stack_.__exit__(None, None, None)
