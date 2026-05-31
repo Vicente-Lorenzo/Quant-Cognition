@@ -28,7 +28,7 @@ class AverageTrueRangeAPI(TechnicalAPI):
         tr1 = highs - lows
         tr2 = (highs - prev_closes).abs()
         tr3 = (lows - prev_closes).abs()
-        tr = pl.DataFrame([tr1, tr2, tr3]).max_horizontal()
+        tr = pl.DataFrame({"tr1": tr1, "tr2": tr2, "tr3": tr3}).max_horizontal()
         atr = tr.ewm_mean(alpha=1.0 / self.Window, adjust=False)
         nulls = [None] * self.Window
         if len(atr) > self.Window:
@@ -56,7 +56,7 @@ class AverageTrueRangeAPI(TechnicalAPI):
             t1 = highs - lows
             t2 = (highs - prev_closes).abs()
             t3 = (lows - prev_closes).abs()
-            tr_series = pl.DataFrame([t1, t2, t3]).max_horizontal().drop_nulls()
+            tr_series = pl.DataFrame({"t1": t1, "t2": t2, "t3": t3}).max_horizontal().drop_nulls()
             if len(tr_series) < self.Window: return self._pad_()
             return pl.DataFrame({self.Name: pl.Series([float(tr_series.mean())], dtype=pl.Float64)})
         new_atr = (prev_atr * (self.Window - 1) + tr) / self.Window

@@ -137,9 +137,9 @@ Benchmark: `Tests/Benchmark/IPC.py`.
 
 ## 5. Next steps
 
-1. **Phase E — Backtesting rewrite.** Re-enable `BacktestingAPI` in `Library/System/Main.py`; address B-E-1 UID collision.
-2. **Phase G — Strategy state recovery.** Hook strategy state checkpoints to `SessionAPI`.
-3. **NNFX Strategy Smoke Test** — Exercise Position/Order/Trade streaming + PnL accounting coherence.
+1. **Re-run NNFX smoke test with fresh IID** — after the `BarAPI.flatten()` fix (see §9), SMA crossovers should now drive entries/exits and produce a non-empty net report.
+2. **Phase E — Backtesting rewrite.** Re-enable `BacktestingAPI` in `Library/System/Main.py`; address B-E-1 UID collision.
+3. **Phase G — Strategy state recovery.** Hook strategy state checkpoints to `SessionAPI`.
 4. **Wire up `receive_update_security`** — Parse C# security data to enrich `SecurityAPI` with runtime info (pip size, commission, etc.).
 
 ---
@@ -179,3 +179,38 @@ Benchmark: `Tests/Benchmark/IPC.py`.
 
 ### Phase G — Strategy State Recovery
 - B-G-1: Persist Signal/Risk machine state on Live restart.
+
+---
+
+## 9. Indicator Module Refactor + BarAPI.flatten() Fix
+
+### Indicator module refactor
+
+Unified the indicator framework around a single base lifecycle and slimmed concrete indicators to essential overrides only.
+
+**`Library/Indicator/Technical/Technical.py` (base):**
+- `TechnicalAPI.__init__` accepts `**indicators` children, auto-attaches them, and computes `Window = self._window_() or window`.
+- `_window_()` helper returns `max(child.Window for child in self._indicators_)` (or `0` if no children). Used by the base and by cross indicators (`MAC`, `DMAC`, `TMAC`) to replace explicit `max(self.Fast.Window, self.Slow.Window)`.
+- Default `batch`, `stream`, `calculate`, `_extract_`, `_pad_`, `init_data`, `update_data`, `update_offset`, `filter_buy/sell`, `signal_buy/sell` live on the base. Concrete indicators override only what they need.
+- `Window: int` (was `Union[int, None]`); dummies pass `window=0`.
+
+**`Library/Indicator/Fundamental/Fundamental.py` and `Library/Indicator/Sentimental/Sentimental.py`:** Aligned with the same `_window_()` helper and aggregator window rule.
+
+**Concrete indicators (`Baseline/{SMA,EMA,WMA,HMA,KAMA,TRIMA,DMA,TMA,MA}.py`, `Overlap/{MAC,DMAC,TMAC}.py`, `Momentum/MACD.py`, `Volatility/ATR.py`):** Slimmed to `_batch_` staticmethod, `batch`, `stream`, and filter/signal overrides. `MA.py` wraps a typed sub-MA and delegates lifecycle. Cross indicators (`*MAC`) compare `Fast.Result`/`Slow.Result` via `over/under/crossover/crossunder`.
+
+**New dummy indicators (`Library/Indicator/Technical/Other/{TT,TF,FT,FF}.py`):** First letter = signal, second = filter (e.g. `TF` = signal True, filter False). Used to isolate one real indicator while keeping the strategy's filter/signal wiring intact. Parsed by `Library/Indicator/Indicator.py` via single-arg form `[TT]`.
+
+**Parameter schema (`Library/Parameter/.../Realtime.yml` for NNFX):** `SignalManagement` modes are now triplets `[normal_entry, continuation_entry, normal_exit]` per slot (`Baseline`, `Filter1`, `Filter2`, `Volume`). Strings `Off | Filter | Signal` are matched against `IndicatorMode.<name>` in `NNFXStrategyAPI.__init__`.
+
+### `BarAPI.flatten()` — root cause of the empty-report smoke test
+
+**Symptom:** NNFX smoke test ran cleanly (516 bars, 2580 ticks processed) but produced zero orders/positions/trades.
+
+**Root cause:** `BarAPI.dict()` collapsed each nested tick (`GapTick/OpenTick/HighTick/LowTick/CloseTick`) to its `UID` via `DataclassAPI._parse_`, and live ticks have `UID=None`. The market DataFrame ended up with columns like `CloseTick: None` instead of `CloseTick.Bid`, `CloseTick.Ask`, etc. Every `SeriesAPI("CloseTick.Bid").last()` returned `None`, so SMA `over/under/crossover/crossunder` was always `False`.
+
+**Fix:**
+- `Library/Market/Bar.py` — added `BarAPI.flatten()` returning the bar's flat fields plus each tick expanded as `{TickName}.{field}` (e.g. `CloseTick.Bid`, `OpenTick.Ask`).
+- `Library/System/Realtime.py` — `init_market` uses `b.flatten()` instead of `b.dict()` when seeding the market DataFrame.
+- `Library/Market/Market.py` — `MarketAPI.update_data` uses `data.flatten()` for `BarAPI` inputs and keeps `data.dict()` for `TickAPI` inputs.
+
+Tests: 290 / 290 pass.
