@@ -154,6 +154,22 @@ def parse_technical(parameters: Union[dict, None]) -> TechnicalAPI:
                 signal = config[3] if len(config) > 3 else 9
                 mode_val = config[4] if len(config) > 4 else IndicatorMode.Off
                 indicators[name] = MovingAverageConvergenceDivergenceAPI(name=name, slow_period=slow, fast_period=fast, signal_period=signal, mode=IndicatorMode.parse(mode_val))
+            case "TT":
+                from Library.Indicator.Technical.Other.TT import TrueTrueAPI
+                mode_val = config[1] if len(config) > 1 else IndicatorMode.Off
+                indicators[name] = TrueTrueAPI(name=name, mode=IndicatorMode.parse(mode_val))
+            case "TF":
+                from Library.Indicator.Technical.Other.TF import TrueFalseAPI
+                mode_val = config[1] if len(config) > 1 else IndicatorMode.Off
+                indicators[name] = TrueFalseAPI(name=name, mode=IndicatorMode.parse(mode_val))
+            case "FT":
+                from Library.Indicator.Technical.Other.FT import FalseTrueAPI
+                mode_val = config[1] if len(config) > 1 else IndicatorMode.Off
+                indicators[name] = FalseTrueAPI(name=name, mode=IndicatorMode.parse(mode_val))
+            case "FF":
+                from Library.Indicator.Technical.Other.FF import FalseFalseAPI
+                mode_val = config[1] if len(config) > 1 else IndicatorMode.Off
+                indicators[name] = FalseFalseAPI(name=name, mode=IndicatorMode.parse(mode_val))
             case _:
                 pass
     return TechnicalAPI(name="Technical", window=None, mode=IndicatorMode.Off, **indicators)

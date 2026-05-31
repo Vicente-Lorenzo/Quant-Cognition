@@ -45,6 +45,18 @@ class TechnicalAPI:
         for ind in self._indicators_:
             if hasattr(ind, "update_offset"): ind.update_offset(offset)
 
+    def filter_buy(self, market: MarketAPI) -> bool:
+        return False
+
+    def filter_sell(self, market: MarketAPI) -> bool:
+        return False
+
+    def signal_buy(self, market: MarketAPI) -> bool:
+        return False
+
+    def signal_sell(self, market: MarketAPI) -> bool:
+        return False
+
     def _pad_(self) -> pl.DataFrame:
         from Library.Database.Dataframe import pl
         return pl.DataFrame()
