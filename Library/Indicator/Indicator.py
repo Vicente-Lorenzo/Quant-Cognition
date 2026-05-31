@@ -40,7 +40,7 @@ class IndicatorAPI:
 def parse_technical(parameters: Union[dict, None]) -> TechnicalAPI:
     from Library.Indicator.Technical.Technical import TechnicalAPI
     if not parameters:
-        return TechnicalAPI(name="Technical", window=None, mode=IndicatorMode.Off)
+        return TechnicalAPI(name="Technical", window=0, mode=IndicatorMode.Off)
     indicators = {}
     for name, config in parameters.items():
         if not config: continue
@@ -172,18 +172,18 @@ def parse_technical(parameters: Union[dict, None]) -> TechnicalAPI:
                 indicators[name] = FalseFalseAPI(name=name, mode=IndicatorMode.parse(mode_val))
             case _:
                 pass
-    return TechnicalAPI(name="Technical", window=None, mode=IndicatorMode.Off, **indicators)
+    return TechnicalAPI(name="Technical", window=0, mode=IndicatorMode.Off, **indicators)
 
 def parse_fundamental(parameters: Union[dict, None]) -> FundamentalAPI:
     from Library.Indicator.Fundamental.Fundamental import FundamentalAPI
     if not parameters:
-        return FundamentalAPI(name="Fundamental", window=None, mode=IndicatorMode.Off)
+        return FundamentalAPI(name="Fundamental", window=0, mode=IndicatorMode.Off)
     indicators = {}
-    return FundamentalAPI(name="Fundamental", window=None, mode=IndicatorMode.Off, **indicators)
+    return FundamentalAPI(name="Fundamental", window=0, mode=IndicatorMode.Off, **indicators)
 
 def parse_sentimental(parameters: Union[dict, None]) -> SentimentalAPI:
     from Library.Indicator.Sentimental.Sentimental import SentimentalAPI
     if not parameters:
-        return SentimentalAPI(name="Sentimental", window=None, mode=IndicatorMode.Off)
+        return SentimentalAPI(name="Sentimental", window=0, mode=IndicatorMode.Off)
     indicators = {}
-    return SentimentalAPI(name="Sentimental", window=None, mode=IndicatorMode.Off, **indicators)
+    return SentimentalAPI(name="Sentimental", window=0, mode=IndicatorMode.Off, **indicators)

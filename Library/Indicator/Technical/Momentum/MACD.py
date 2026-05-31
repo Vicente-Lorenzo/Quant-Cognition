@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Union
 
 from Library.Database.Dataframe import pl
-from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
 from Library.Indicator.Indicator import IndicatorMode
+from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
 from Library.Market.Series import SeriesAPI
 
 if TYPE_CHECKING:
@@ -15,37 +15,13 @@ class MovingAverageConvergenceDivergenceAPI(TechnicalAPI):
     Type = TechnicalType.Momentum
 
     def __init__(self, name: str, slow_period: int, fast_period: int, signal_period: int, mode: IndicatorMode) -> None:
-        window = slow_period + signal_period - 1
-        super().__init__(name=name, window=window, mode=mode)
+        super().__init__(name=name, window=slow_period + signal_period - 1, mode=mode)
         self.SlowPeriod: int = slow_period
         self.FastPeriod: int = fast_period
         self.SignalPeriod: int = signal_period
-        self.MACD = SeriesAPI(f"{self.Name}.MACD")
-        self.Signal = SeriesAPI(f"{self.Name}.Signal")
-        self.Histogram = SeriesAPI(f"{self.Name}.Histogram")
-        self._data_ = None
-
-    def _extract_(self, market: MarketAPI) -> pl.Series:
-        return market.CloseTicks.Price.tail()
-
-    def init_data(self, market: MarketAPI) -> None:
-        self._data_ = self.calculate(self._extract_(market), batch=True)
-        self.MACD.init_data(self._data_)
-        self.Signal.init_data(self._data_)
-        return self.Histogram.init_data(self._data_)
-
-    def update_data(self, market: MarketAPI) -> None:
-        if self._data_ is None: return self.init_data(market)
-        df = self.calculate(self._extract_(market), batch=False)
-        self._data_ = self._data_.vstack(df)
-        self.MACD.init_data(self._data_)
-        self.Signal.init_data(self._data_)
-        return self.Histogram.init_data(self._data_)
-
-    def update_offset(self, offset: int = 1) -> None:
-        self.MACD.update_offset(offset)
-        self.Signal.update_offset(offset)
-        self.Histogram.update_offset(offset)
+        self.MACD: SeriesAPI = SeriesAPI(f"{self.Name}.MACD")
+        self.Signal: SeriesAPI = SeriesAPI(f"{self.Name}.Signal")
+        self.Histogram: SeriesAPI = SeriesAPI(f"{self.Name}.Histogram")
 
     def _pad_(self) -> pl.DataFrame:
         return pl.DataFrame({
@@ -57,10 +33,9 @@ class MovingAverageConvergenceDivergenceAPI(TechnicalAPI):
         })
 
     def batch(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
-        series = data
-        if series.is_empty(): return self._pad_()
-        fast_ema = series.ewm_mean(span=self.FastPeriod, adjust=False)
-        slow_ema = series.ewm_mean(span=self.SlowPeriod, adjust=False)
+        if data.is_empty(): return self._pad_()
+        fast_ema = data.ewm_mean(span=self.FastPeriod, adjust=False)
+        slow_ema = data.ewm_mean(span=self.SlowPeriod, adjust=False)
         macd = fast_ema - slow_ema
         nulls = [None] * (self.SlowPeriod - 1)
         if len(macd) > self.SlowPeriod - 1:
@@ -82,7 +57,7 @@ class MovingAverageConvergenceDivergenceAPI(TechnicalAPI):
         })
 
     def stream(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
-        prev_row = self._data_.row(-1, named=True) if len(self._data_) > 0 else {}
+        prev_row = self._data_.row(-1, named=True) if self._data_ is not None and len(self._data_) > 0 else {}
         prev_fast = prev_row.get(f"{self.Name}.FastEMA")
         prev_slow = prev_row.get(f"{self.Name}.SlowEMA")
         prev_signal = prev_row.get(f"{self.Name}.Signal")
@@ -94,14 +69,16 @@ class MovingAverageConvergenceDivergenceAPI(TechnicalAPI):
         if prev_fast is None:
             prices = data.tail(self.SlowPeriod)
             if len(prices) < self.SlowPeriod: return self._pad_()
-            new_fast = prices.tail(self.FastPeriod).mean()
-            new_slow = prices.mean()
+            new_fast = float(prices.tail(self.FastPeriod).mean())
+            new_slow = float(prices.mean())
             new_macd = new_fast - new_slow
             new_signal = None
             new_hist = None
         else:
-            new_fast = (new_price - prev_fast) * alpha_fast + prev_fast
-            new_slow = (new_price - prev_slow) * alpha_slow + prev_slow
+            pf = float(prev_fast)
+            ps = float(prev_slow)
+            new_fast = (new_price - pf) * alpha_fast + pf
+            new_slow = (new_price - ps) * alpha_slow + ps
             new_macd = new_fast - new_slow
             if prev_signal is None:
                 macds = self.MACD.tail(self.SignalPeriod - 1, dataframe=True).drop_nulls()
@@ -112,7 +89,8 @@ class MovingAverageConvergenceDivergenceAPI(TechnicalAPI):
                     new_signal = None
                     new_hist = None
             else:
-                new_signal = (new_macd - prev_signal) * alpha_signal + prev_signal
+                psig = float(prev_signal)
+                new_signal = (new_macd - psig) * alpha_signal + psig
                 new_hist = new_macd - new_signal
         return pl.DataFrame({
             f"{self.Name}.FastEMA": pl.Series([new_fast], dtype=pl.Float64),
@@ -122,6 +100,33 @@ class MovingAverageConvergenceDivergenceAPI(TechnicalAPI):
             f"{self.Name}.Histogram": pl.Series([new_hist], dtype=pl.Float64)
         })
 
-    def calculate(self, data: Union[pl.Series, pl.DataFrame], batch: bool = False) -> pl.DataFrame:
-        if batch: return self.batch(data)
-        return self.stream(data)
+    def init_data(self, market: MarketAPI) -> None:
+        self._data_ = self.calculate(self._extract_(market), batch=True)
+        self.MACD.init_data(self._data_)
+        self.Signal.init_data(self._data_)
+        self.Histogram.init_data(self._data_)
+
+    def update_data(self, market: MarketAPI) -> None:
+        if self._data_ is None: return self.init_data(market)
+        df = self.calculate(self._extract_(market), batch=False)
+        self._data_ = self._data_.vstack(df)
+        self.MACD.init_data(self._data_)
+        self.Signal.init_data(self._data_)
+        self.Histogram.init_data(self._data_)
+
+    def update_offset(self, offset: int = 1) -> None:
+        self.MACD.update_offset(offset)
+        self.Signal.update_offset(offset)
+        self.Histogram.update_offset(offset)
+
+    def filter_buy(self, market: MarketAPI) -> bool:
+        return bool(self.MACD.over(self.Signal))
+
+    def filter_sell(self, market: MarketAPI) -> bool:
+        return bool(self.MACD.under(self.Signal))
+
+    def signal_buy(self, market: MarketAPI) -> bool:
+        return bool(self.MACD.crossover(self.Signal))
+
+    def signal_sell(self, market: MarketAPI) -> bool:
+        return bool(self.MACD.crossunder(self.Signal))

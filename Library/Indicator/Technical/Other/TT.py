@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
 from Library.Indicator.Indicator import IndicatorMode
+from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
 
 if TYPE_CHECKING:
     from Library.Market.Market import MarketAPI
@@ -13,7 +13,16 @@ class TrueTrueAPI(TechnicalAPI):
     Type = TechnicalType.Other
 
     def __init__(self, name: str, mode: IndicatorMode) -> None:
-        super().__init__(name=name, window=None, mode=mode)
+        super().__init__(name=name, window=0, mode=mode)
+
+    def init_data(self, market: MarketAPI) -> None:
+        pass
+
+    def update_data(self, market: MarketAPI) -> None:
+        pass
+
+    def update_offset(self, offset: int = 1) -> None:
+        pass
 
     def filter_buy(self, market: MarketAPI) -> bool:
         return True

@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
+from Library.Indicator.Indicator import IndicatorMode
 from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
 from Library.Utility.Enumeration import EnumerationAPI
-from Library.Indicator.Indicator import IndicatorMode
 
 if TYPE_CHECKING:
     from Library.Market.Market import MarketAPI
@@ -24,11 +24,11 @@ class MovingAverageAPI(TechnicalAPI):
 
     def __init__(self, name: str, window: int, type: MovingAverageType, mode: IndicatorMode) -> None:
         super().__init__(name=name, window=window, mode=mode)
-        self.TypeMA = type
+        self.TypeMA: MovingAverageType = type
         match self.TypeMA:
             case MovingAverageType.Simple:
                 from Library.Indicator.Technical.Baseline.SMA import SimpleMovingAverageAPI
-                self.MA = SimpleMovingAverageAPI(name=name, window=window, mode=IndicatorMode.Off)
+                self.MA: TechnicalAPI = SimpleMovingAverageAPI(name=name, window=window, mode=IndicatorMode.Off)
             case MovingAverageType.Exponential:
                 from Library.Indicator.Technical.Baseline.EMA import ExponentialMovingAverageAPI
                 self.MA = ExponentialMovingAverageAPI(name=name, window=window, mode=IndicatorMode.Off)
@@ -66,13 +66,25 @@ class MovingAverageAPI(TechnicalAPI):
                 return TriangularMovingAverageAPI._batch_(series, window)
             case MovingAverageType.Kaufman:
                 from Library.Indicator.Technical.Baseline.KAMA import KaufmanAdaptiveMovingAverageAPI
-                return KaufmanAdaptiveMovingAverageAPI.compute_batch(series, window)
+                return KaufmanAdaptiveMovingAverageAPI._batch_(series, window)
 
     def init_data(self, market: MarketAPI) -> None:
-        return self.MA.init_data(market)
+        self.MA.init_data(market)
 
     def update_data(self, market: MarketAPI) -> None:
-        return self.MA.update_data(market)
+        self.MA.update_data(market)
 
     def update_offset(self, offset: int = 1) -> None:
-        return self.MA.update_offset(offset)
+        self.MA.update_offset(offset)
+
+    def filter_buy(self, market: MarketAPI) -> bool:
+        return bool(market.CloseTicks.Price.over(self.Result))
+
+    def filter_sell(self, market: MarketAPI) -> bool:
+        return bool(market.CloseTicks.Price.under(self.Result))
+
+    def signal_buy(self, market: MarketAPI) -> bool:
+        return bool(market.CloseTicks.Price.crossover(self.Result))
+
+    def signal_sell(self, market: MarketAPI) -> bool:
+        return bool(market.CloseTicks.Price.crossunder(self.Result))
