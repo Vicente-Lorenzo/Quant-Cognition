@@ -15,27 +15,16 @@ NNFX:
     ScalingOutPercentage: [50.0]
     TrailingStopLossScale: [1.5]
   SignalManagement:
-    BaselineMode: [Signal]
-    Filter1Mode: [Filter]
-    Filter2Mode: [Filter]
-    VolumeMode: [Filter]
+    BaselineMode: [Signal, Signal, Signal]
+    Filter1Mode: [Filter, Filter, Off]
+    Filter2Mode: [Filter, Filter, Off]
+    VolumeMode: [Filter, Filter, Off]
   TechnicalManagement:
-    Baseline:
-      Type: MA
-      Period: [20]
-    Filter1:
-      Type: RSI
-      Period: [14]
-    Filter2:
-      Type: RSI
-      Period: [14]
-    Volume:
-      Type: ATR
-      Period: [14]
-    Volatility:
-      Type: ATR
-      Period: [14]
+    Baseline: [SMA, 20]
+    Filter1: [TT]
+    Filter2: [TT]
+    Volume: [TT]
+    Volatility: [ATR, 14]
   FundamentalManagement: null
   SentimentalManagement: null
   PortfolioManagement: null
-
