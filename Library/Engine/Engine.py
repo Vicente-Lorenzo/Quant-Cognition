@@ -8,6 +8,7 @@ from Library.Engine.Machine import MachineAPI
 
 @dataclass(slots=True)
 class EngineAPI(DataclassAPI):
+
     machines: InitVar[list[MachineAPI]]
     _machines_: list[MachineAPI] = field(default_factory=list, init=False, repr=False)
 
@@ -19,10 +20,10 @@ class EngineAPI(DataclassAPI):
         return all(m.At.End for m in self._machines_)
 
     def perform(self, event: Any, args: Any) -> list:
-        first = None
+        actions = []
         for m in self._machines_:
             r = m.perform(event, args)
-            if r and first is None: first = r
-        return first if first is not None else []
+            if r: actions.extend(r)
+        return actions
 
 __all__ = ["EngineAPI"]

@@ -7,19 +7,14 @@ from typing import Union, ClassVar, TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
-from Library.Utility.Enumeration import EnumerationAPI
 from Library.Database.Query import QueryAPI
+from Library.Market.Price import PriceMode
 from Library.Market.Series import SeriesAPI
 
-if TYPE_CHECKING: 
+if TYPE_CHECKING:
     from Library.Database.Database import DatabaseAPI
     from Library.Market.Tick import TickAPI
     from Library.Market.Bar import BarAPI
-
-class PriceMode(EnumerationAPI):
-    Ask = 0
-    Mid = 1
-    Bid = 2
 
 @dataclass(kw_only=True)
 class MarketAPI(DatapointAPI):
