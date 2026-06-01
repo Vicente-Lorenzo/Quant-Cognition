@@ -23,3 +23,15 @@ class FalseFalseAPI(TechnicalAPI):
 
     def update_offset(self, offset: int = 1) -> None:
         pass
+
+    def filter_buy(self, market: MarketAPI) -> bool:
+        return False
+
+    def filter_sell(self, market: MarketAPI) -> bool:
+        return False
+
+    def signal_buy(self, market: MarketAPI) -> bool:
+        return False
+
+    def signal_sell(self, market: MarketAPI) -> bool:
+        return False

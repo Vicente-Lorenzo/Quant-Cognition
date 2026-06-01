@@ -61,3 +61,15 @@ class AverageTrueRangeAPI(TechnicalAPI):
             return pl.DataFrame({self.Name: pl.Series([float(tr_series.mean())], dtype=pl.Float64)})
         new_atr = (prev_atr * (self.Window - 1) + tr) / self.Window
         return pl.DataFrame({self.Name: pl.Series([new_atr], dtype=pl.Float64)})
+
+    def filter_buy(self, market: MarketAPI) -> bool:
+        return True
+
+    def filter_sell(self, market: MarketAPI) -> bool:
+        return True
+
+    def signal_buy(self, market: MarketAPI) -> bool:
+        return False
+
+    def signal_sell(self, market: MarketAPI) -> bool:
+        return False
