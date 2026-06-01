@@ -15,7 +15,7 @@ NNFX:
     ScalingOutPercentage: [50.0]
     TrailingStopLossScale: [1.5]
   SignalManagement:
-    BaselineMode: [Signal, Signal, Signal]
+    BaselineMode: [Signal, Off, Signal]
     Filter1Mode: [Filter, Filter, Off]
     Filter2Mode: [Filter, Filter, Off]
     VolumeMode: [Filter, Filter, Off]
