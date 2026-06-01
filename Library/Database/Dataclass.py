@@ -78,9 +78,10 @@ class DataclassAPI:
         cls.ID = DatametaAPI(cls, full=False)
         cls.OID = DatametaAPI(cls, full=True)
 
-    def _parse_(self, name):
+    def _parse_(self, name, flatten=False):
         f = getattr(self, name)
         if isinstance(f, Enum): return f.name
+        if flatten and isinstance(f, DataclassAPI): return f
         if isinstance(f, DataclassAPI) and (uid := f.UID) is not MISSING: return uid
         return f
 
@@ -109,16 +110,23 @@ class DataclassAPI:
                 setattr(self, k, v)
         return self
 
-    def data(self, include_fields, include_initvar_fields, include_hidden_fields, include_override_fields, include_properties):
+    def data(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, flatten=False):
         attrs = self.__class__.__dict__
+        def _yield_(name):
+            val = self._parse_(name, flatten=flatten)
+            if flatten and isinstance(val, DataclassAPI):
+                for sub_k, sub_v in val.data(include_fields, include_initvar_fields, include_hidden_fields, include_override_fields, include_properties, flatten):
+                    yield f"{name}.{sub_k}", sub_v
+            else:
+                yield name, val
         if include_fields:
             for f_name, f in attrs.get("__dataclass_fields__", {}).items():
                 if getattr(f, "_field_type", None) == getattr(dataclasses, "_FIELD_CLASSVAR", None):
                     continue
                 if include_initvar_fields and getattr(f, "_field_type", None) == getattr(dataclasses, "_FIELD_INITVAR", None):
-                    yield f_name, self._parse_(f_name)
+                    yield from _yield_(f_name)
                 elif getattr(f, "_field_type", None) != getattr(dataclasses, "_FIELD_INITVAR", None) and (include_hidden_fields or f.repr):
-                    yield f_name, self._parse_(f_name)
+                    yield from _yield_(f_name)
         if include_override_fields or include_properties:
             for cls in reversed(type(self).mro()):
                 if cls is object:
@@ -127,38 +135,41 @@ class DataclassAPI:
                     if isinstance(attr, property):
                         is_field = getattr(attr.fget, "_overridefield_", False)
                         if include_override_fields and is_field:
-                            yield attr_name, self._parse_(attr_name)
+                            yield from _yield_(attr_name)
                         if include_properties and not is_field:
-                            yield attr_name, self._parse_(attr_name)
+                            yield from _yield_(attr_name)
 
-    def tuple(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False):
+    def tuple(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, flatten=False):
         return tuple([v for _, v in self.data(
             include_fields=include_fields,
             include_initvar_fields=include_initvar_fields,
             include_hidden_fields=include_hidden_fields,
             include_override_fields=include_override_fields,
-            include_properties=include_properties
+            include_properties=include_properties,
+            flatten=flatten
         )])
 
-    def list(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False):
+    def list(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, flatten=False):
         return list([v for _, v in self.data(
             include_fields=include_fields,
             include_initvar_fields=include_initvar_fields,
             include_hidden_fields=include_hidden_fields,
             include_override_fields=include_override_fields,
-            include_properties=include_properties
+            include_properties=include_properties,
+            flatten=flatten
         )])
 
-    def dict(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False):
+    def dict(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, flatten=False):
         return dict({k: v for k, v in self.data(
             include_fields=include_fields,
             include_initvar_fields=include_initvar_fields,
             include_hidden_fields=include_hidden_fields,
             include_override_fields=include_override_fields,
-            include_properties=include_properties
+            include_properties=include_properties,
+            flatten=flatten
         )})
 
-    def json(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, **extras) -> str:
-        d = self.dict(include_fields=include_fields, include_initvar_fields=include_initvar_fields, include_hidden_fields=include_hidden_fields, include_override_fields=include_override_fields, include_properties=include_properties)
+    def json(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, flatten=False, **extras) -> str:
+        d = self.dict(include_fields=include_fields, include_initvar_fields=include_initvar_fields, include_hidden_fields=include_hidden_fields, include_override_fields=include_override_fields, include_properties=include_properties, flatten=flatten)
         d.update(extras)
         return json.dumps({k: v for k, v in d.items() if v is not None and v is not MISSING})
