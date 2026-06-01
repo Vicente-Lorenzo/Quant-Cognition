@@ -214,21 +214,7 @@ public class RobotAPI : IDisposable
         SpawnTerminal(inner_cmd);
         try
         {
-            _system_.SendUpdateInitialization(Process.GetCurrentProcess().Id);
-            var init_action = _system_.Receive();
-            if (init_action[0] != (byte)ActionID.Initialization)
-                throw new InvalidOperationException($"Expected Initialization action, got {init_action[0]}");
-            int python_pid = BitConverter.ToInt32(init_action, 1);
-            _log_.Debug($"Handshake complete (python_pid={python_pid})");
-            try
-            {
-                var python_process = Process.GetProcessById(python_pid);
-                _system_.Watchdog(python_process);
-            }
-            catch (Exception e)
-            {
-                _log_.Warning($"Could not open Python process {python_pid}: {e.Message}");
-            }
+            _system_.SendUpdateInit(Process.GetCurrentProcess().Id);
             _system_.SendUpdateAccount(_robot_.Account);
             _system_.SendUpdateSymbol(_robot_.Symbol);
             _system_.SendUpdateComplete();
@@ -809,6 +795,12 @@ public class RobotAPI : IDisposable
             switch (action_id)
             {
                 case ActionID.Complete: break;
+                case ActionID.Init:
+                    int python_pid = ReadInt32(data, 1);
+                    _log_.Debug($"Handshake complete (python_pid={python_pid})");
+                    try { _system_.Watchdog(Process.GetProcessById(python_pid)); }
+                    catch (Exception e) { _log_.Warning($"Could not open Python process {python_pid}: {e.Message}"); }
+                    break;
                 case ActionID.OpenBuyPosition:
                 case ActionID.OpenSellPosition:
                     int offset = 1;

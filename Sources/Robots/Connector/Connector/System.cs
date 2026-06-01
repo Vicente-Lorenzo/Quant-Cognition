@@ -160,10 +160,10 @@ public class SystemAPI : IDisposable
         WriteString(ms, trade.Label);
     }
 
-    public void SendUpdateInitialization(int pid)
+    public void SendUpdateInit(int pid)
     {
         using var ms = new MemoryStream();
-        ms.WriteByte((byte)UpdateID.Initialization);
+        ms.WriteByte((byte)UpdateID.Init);
         ms.Write(BitConverter.GetBytes(pid), 0, 4);
         Send(ms.ToArray());
     }

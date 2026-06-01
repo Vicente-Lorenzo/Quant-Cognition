@@ -36,7 +36,7 @@ namespace Connector
 
     public enum UpdateID
     {
-        Initialization = 0,
+        Init = 0,
         Account = 1,
         Security = 2,
         Tick = 3,
@@ -120,7 +120,7 @@ namespace Connector
 
     public enum ActionID
     {
-        Initialization = 0,
+        Init = 0,
         AskAboveTarget = 1,
         AskBelowTarget = 2,
         BidAboveTarget = 3,
