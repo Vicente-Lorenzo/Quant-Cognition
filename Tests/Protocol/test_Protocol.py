@@ -7,7 +7,7 @@ from Library.Protocol.Update import *
 from Library.Protocol.Binary import BinaryAPI
 
 def test_action_id_enum_values():
-    assert ActionID.Initialization.value == 0
+    assert ActionID.Init.value == 0
     assert ActionID.OpenBuyPosition.value == 43
     assert ActionID.OpenBuyStopOrder.value == 5
     assert ActionID.OpenBuyLimitOrder.value == 17
@@ -15,7 +15,7 @@ def test_action_id_enum_values():
     assert ActionID.Complete.value == 53
 
 def test_update_id_enum_values():
-    assert UpdateID.Initialization.value == 0
+    assert UpdateID.Init.value == 0
     assert UpdateID.Account.value == 1
     assert UpdateID.Security.value == 2
     assert UpdateID.Tick.value == 3
@@ -182,10 +182,10 @@ def test_codec_exception_round_trip():
     _, reason = codec.unpack(data)
     assert reason == "disconnect"
 
-def test_codec_initialization_round_trip():
+def test_codec_init_round_trip():
     codec = BinaryAPI('B', 'i')
-    data = codec.pack(UpdateID.Initialization.value, 1234)
-    assert data[0] == UpdateID.Initialization.value
+    data = codec.pack(UpdateID.Init.value, 1234)
+    assert data[0] == UpdateID.Init.value
     _, pid = codec.unpack(data)
     assert pid == 1234
 

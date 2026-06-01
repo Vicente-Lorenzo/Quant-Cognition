@@ -176,9 +176,11 @@ Benchmark: `Tests/Benchmark/IPC.py`.
 
 ### Phase E — Backtesting
 - B-E-1: Internal UID counters must not collide with cTrader UIDs (use negative space).
+  - *Conclusion from aborted implementation:* Changing `count(start=1)` to `count(start=-1, step=-1)` for simulated UIDs (`_pids` and `_tids`) in `Backtesting.py` perfectly resolves this. Additionally, `BacktestingAPI`, `OptimizationAPI`, and `LearningAPI` need to be uncommented in `Main.py` and exported in `__init__.py`.
 
 ### Phase G — Strategy State Recovery
 - B-G-1: Persist Signal/Risk machine state on Live restart.
+  - *Conclusion from aborted implementation:* A `State: Union[bytes, None] = None` field should be added to `SessionAPI` (`pl.Binary()` in DB structure). `EngineAPI` can be updated with a `State` property that maps each machine's name to its current state name, serialized as a JSON byte string. `SystemAPI` can load this state from the session at the start of `deploy()` and save it to the session on `UpdateID.Shutdown` within `_process_updates_()`.
 
 ---
 
@@ -202,7 +204,7 @@ Unified the indicator framework around a single base lifecycle and slimmed concr
 
 **Parameter schema (`Library/Parameter/.../Realtime.yml` for NNFX):** `SignalManagement` modes are now triplets `[normal_entry, continuation_entry, normal_exit]` per slot (`Baseline`, `Filter1`, `Filter2`, `Volume`). Strings `Off | Filter | Signal` are matched against `IndicatorMode.<name>` in `NNFXStrategyAPI.__init__`.
 
-### `BarAPI.flatten()` — root cause of the empty-report smoke test
+### `BarAPI.flatten()` — root cause 1 of the empty-report smoke test
 
 **Symptom:** NNFX smoke test ran cleanly (516 bars, 2580 ticks processed) but produced zero orders/positions/trades.
 
@@ -212,5 +214,21 @@ Unified the indicator framework around a single base lifecycle and slimmed concr
 - `Library/Market/Bar.py` — added `BarAPI.flatten()` returning the bar's flat fields plus each tick expanded as `{TickName}.{field}` (e.g. `CloseTick.Bid`, `OpenTick.Ask`).
 - `Library/System/Realtime.py` — `init_market` uses `b.flatten()` instead of `b.dict()` when seeding the market DataFrame.
 - `Library/Market/Market.py` — `MarketAPI.update_data` uses `data.flatten()` for `BarAPI` inputs and keeps `data.dict()` for `TickAPI` inputs.
+
+### `Initialization` IPC Deadlock & `Volume` Filter Block — root cause 2 and 3 of the empty-report smoke test
+
+**Symptom:** The user's live smoke test output abruptly stopped at `Fetch All` and no entries/exits occurred.
+
+**Root cause 2 (IPC Deadlock):** C#'s `Robot.cs` sent an `Initialization` payload and immediately blocked waiting for an `Initialization` Action response (`ActionID.Initialization = 0`). However, Python lacked an `InitializationActionAPI` in its definitions, meaning the initial message was silently skipped, prompting Python to wait for the next update and effectively deadlocking the connection. To compound this, Python responded to the *next* step with a `Complete` action (`53`), which would normally trigger an `InvalidOperationException` in C#.
+
+**Fix 2:**
+- Re-aligned Python definitions to fully map `InitializationUpdateAPI` and `InitializationActionAPI`.
+- Adjusted `Realtime.py` lifecycle transitions so `UpdateID.Initialization` now seamlessly fires an `init_handshake` method that responds back with `InitializationActionAPI(ProcessID=os.getpid())` and properly completes the handshake without Python continuing its standard loop processing.
+
+**Root cause 3 (Default Volatility.ATR Blocking Trades):** The default settings mapping for NNFX explicitly used `Volatility.ATR` as the `Volume` filter. Because `Volatility.ATR` inherently lacked an explicit `filter_buy` definition in Python, it fell back to `TechnicalAPI`'s default `filter_buy`, which returns `False`. The NNFX logic demands that **all** entry criteria are met (`all(f(update) for f in normal_entries_buy)`). As a result, `Volatility.ATR` consistently blocked the valid SMA crossovers.
+
+**Fix 3:**
+- Systematically populated `filter_buy`, `filter_sell`, `signal_buy`, and `signal_sell` methods strictly onto all existing, uninherited technical indicators (including `FF.py`, `ATR.py` and checking all cross-indicators).
+- Explicitly set `Volatility.ATR` filters to return `True` to allow strategy execution based on base setups without halting valid signal generation logic in default tests.
 
 Tests: 290 / 290 pass.
