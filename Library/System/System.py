@@ -206,6 +206,11 @@ class SystemAPI(ABC):
     def receive_update_security(self, offset: int = 1) -> SecurityAPI:
         raise NotImplementedError
 
+    def _receive_update_security_(self) -> SecurityAPI:
+        security = self.receive_update_security()
+        if self._portfolio_.Active: security.save()
+        return security
+
     @abstractmethod
     def receive_update_tick(self, offset: int = 1) -> TickAPI:
         raise NotImplementedError
@@ -302,7 +307,7 @@ class SystemAPI(ABC):
                     self.account = self._receive_update_account_()
                     actions += engine.perform(update_id, AccountUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio))
                 case UpdateID.Security:
-                    self.security = self.receive_update_security()
+                    self.security = self._receive_update_security_()
                     actions += engine.perform(update_id, SecurityUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio))
                 case UpdateID.Tick:
                     actions += engine.perform(update_id, TickUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Tick=self._receive_update_tick_()))
