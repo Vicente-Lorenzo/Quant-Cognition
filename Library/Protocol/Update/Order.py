@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 from Library.Protocol.Update.Update import UpdateAPI
 from Library.Portfolio.Order import OrderAPI
-from Library.Portfolio.Position import PositionAPI
 from Library.Market.Bar import BarAPI
 
 @dataclass(slots=True)
@@ -71,13 +70,11 @@ class ClosedSellStopOrderUpdateAPI(UpdateAPI):
 class FilledBuyStopOrderUpdateAPI(UpdateAPI):
     Bar: BarAPI
     Order: OrderAPI
-    Position: PositionAPI
 
 @dataclass(slots=True)
 class FilledSellStopOrderUpdateAPI(UpdateAPI):
     Bar: BarAPI
     Order: OrderAPI
-    Position: PositionAPI
 
 @dataclass(slots=True)
 class ExpiredBuyStopOrderUpdateAPI(UpdateAPI):
@@ -153,13 +150,11 @@ class ClosedSellLimitOrderUpdateAPI(UpdateAPI):
 class FilledBuyLimitOrderUpdateAPI(UpdateAPI):
     Bar: BarAPI
     Order: OrderAPI
-    Position: PositionAPI
 
 @dataclass(slots=True)
 class FilledSellLimitOrderUpdateAPI(UpdateAPI):
     Bar: BarAPI
     Order: OrderAPI
-    Position: PositionAPI
 
 @dataclass(slots=True)
 class ExpiredBuyLimitOrderUpdateAPI(UpdateAPI):
@@ -245,13 +240,11 @@ class ClosedSellStopLimitOrderUpdateAPI(UpdateAPI):
 class FilledBuyStopLimitOrderUpdateAPI(UpdateAPI):
     Bar: BarAPI
     Order: OrderAPI
-    Position: PositionAPI
 
 @dataclass(slots=True)
 class FilledSellStopLimitOrderUpdateAPI(UpdateAPI):
     Bar: BarAPI
     Order: OrderAPI
-    Position: PositionAPI
 
 @dataclass(slots=True)
 class ExpiredBuyStopLimitOrderUpdateAPI(UpdateAPI):
