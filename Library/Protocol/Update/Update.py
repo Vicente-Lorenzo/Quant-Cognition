@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from Library.Portfolio.Portfolio import PortfolioAPI
 
 class UpdateID(EnumerationAPI):
-    Initialization = 0
+    Init = 0
     Account = 1
     Security = 2
     Tick = 3
@@ -114,6 +114,10 @@ class CompleteUpdateAPI(UpdateAPI):
     pass
 
 @dataclass(slots=True)
+class InitUpdateAPI(UpdateAPI):
+    ProcessID: int
+
+@dataclass(slots=True)
 class AccountUpdateAPI(UpdateAPI):
     pass
 
@@ -133,6 +137,7 @@ __all__ = [
     "UpdateID",
     "UpdateAPI",
     "CompleteUpdateAPI",
+    "InitUpdateAPI",
     "AccountUpdateAPI",
     "SecurityUpdateAPI",
     "TickUpdateAPI",

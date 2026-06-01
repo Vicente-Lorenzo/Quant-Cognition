@@ -9,7 +9,7 @@ from Library.Utility.Enumeration import EnumerationAPI
 from Library.Utility.Typing import cast
 
 class ActionID(EnumerationAPI):
-    Initialization = 0
+    Init = 0
     AskAboveTarget = 1
     AskBelowTarget = 2
     BidAboveTarget = 3
@@ -78,6 +78,14 @@ class CompleteActionAPI(ActionAPI):
         return self._binary_.pack(self.ActionID.value)
 
 @dataclass(slots=True)
+class InitActionAPI(ActionAPI):
+    ActionID: ClassVar[ActionID] = ActionID.Init
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
+    ProcessID: int
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.ProcessID)
+
+@dataclass(slots=True)
 class AskAboveTargetActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.AskAboveTarget
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'D')
@@ -121,6 +129,7 @@ __all__ = [
     "ActionID",
     "ActionAPI",
     "CompleteActionAPI",
+    "InitActionAPI",
     "AskAboveTargetActionAPI",
     "AskBelowTargetActionAPI",
     "BidAboveTargetActionAPI",
