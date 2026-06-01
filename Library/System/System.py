@@ -19,6 +19,7 @@ from Library.Protocol.Action import ActionAPI, ActionID, CompleteActionAPI
 from Library.Protocol.Update import (
     UpdateID,
     CompleteUpdateAPI,
+    InitUpdateAPI,
     AccountUpdateAPI,
     SecurityUpdateAPI,
     BarUpdateAPI,
@@ -183,6 +184,10 @@ class SystemAPI(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def _receive_update_init_(self, offset: int = 1) -> InitUpdateAPI:
+        raise NotImplementedError
+
+    @abstractmethod
     def receive_update_account(self, offset: int = 1) -> AccountAPI:
         raise NotImplementedError
 
@@ -285,6 +290,8 @@ class SystemAPI(ABC):
         while True:
             update_id = self.receive_update_id()
             match update_id:
+                case UpdateID.Init:
+                    actions += engine.perform(update_id, self._receive_update_init_())
                 case UpdateID.Complete:
                     actions += engine.perform(update_id, CompleteUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio))
                     return actions
