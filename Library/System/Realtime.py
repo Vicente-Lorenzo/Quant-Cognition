@@ -360,7 +360,7 @@ class RealtimeAPI(SystemAPI):
             if self._execution_timer_._start_ is not None and self._execution_timer_._stop_ is None:
                 self._execution_timer_.stop()
                 self._log_.info(lambda: f"Phase Execution: completed ({self._execution_timer_.result()})")
-            if self.portfolio and self.portfolio.Security: self.portfolio.Security.save()
+            if self._portfolio_.Active and self.portfolio and self.portfolio.Security: self.portfolio.Security.save()
             if self._initial_account_ and self._start_timestamp_ and self._stop_timestamp_:
                 self.statistics = generate_net_report(update.Portfolio.Positions, update.Portfolio.Trades, self._initial_account_, self._start_timestamp_.date(), self._stop_timestamp_.date())
                 self._log_.warning(lambda: str(self.statistics))
