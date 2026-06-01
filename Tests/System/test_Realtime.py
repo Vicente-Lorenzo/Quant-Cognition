@@ -42,12 +42,12 @@ def test_realtime_system_initialization(realtime_system):
 
 def test_realtime_system_management_initial_state(realtime_system):
     engine = realtime_system.system_management()
-    assert engine.At.Name == "Initialisation"
+    assert engine.At.Name == "Initialization"
 
 def test_realtime_system_management_has_three_states(realtime_system):
     engine = realtime_system.system_management()
     names = {s for s in engine._states_}
-    assert names == {"Initialisation", "Execution", "Termination"}
+    assert names == {"Initialization", "Execution", "Termination"}
 
 def test_direct_attribute_state(realtime_system):
     assert realtime_system.account is None
@@ -125,8 +125,8 @@ def test_sync_market_routes_warmup_to_market_buffer(realtime_system):
     bar.GapTick, bar.OpenTick, bar.HighTick, bar.LowTick, bar.CloseTick = g, o, h, l, c
     update = MagicMock(); update.Bar = bar
     engine = realtime_system.system_management()
-    initialisation = engine.state(name="Initialisation")
-    transition = next(t for t in initialisation._transitions_ if t is not None and getattr(t, "Action", None) and t.Action.__name__ == "sync_market")
+    initialization = engine.state(name="Initialization")
+    transition = next(t for t in initialization._transitions_ if t is not None and getattr(t, "Action", None) and t.Action.__name__ == "sync_market")
     transition.perform(update)
     assert [call.args[0] for call in realtime_system._market_.add.call_args_list] == [g, o, h, l, c, bar]
     assert realtime_system._sync_buffer_ == [bar]
@@ -139,8 +139,8 @@ def test_init_market_clears_sync_buffer(realtime_system):
     update = MagicMock()
     update.Portfolio.Account = MagicMock()
     engine = realtime_system.system_management()
-    initialisation = engine.state(name="Initialisation")
-    transition = next(t for t in initialisation._transitions_ if t is not None and getattr(t, "Action", None) and t.Action.__name__ == "init_market")
+    initialization = engine.state(name="Initialization")
+    transition = next(t for t in initialization._transitions_ if t is not None and getattr(t, "Action", None) and t.Action.__name__ == "init_market")
     transition.perform(update)
     assert realtime_system._sync_buffer_ == []
 

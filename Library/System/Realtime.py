@@ -22,9 +22,9 @@ from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.Position import PositionAPI, PositionType
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Trade import TradeAPI
-from Library.Protocol.Action import ActionAPI, ActionID
+from Library.Protocol.Action import ActionAPI, ActionID, InitActionAPI
 from Library.Protocol.Binary import BinaryAPI
-from Library.Protocol.Update import UpdateID, BarUpdateAPI, CompleteUpdateAPI
+from Library.Protocol.Update import UpdateID, CompleteUpdateAPI, InitUpdateAPI, BarUpdateAPI
 from Library.System.System import SystemAPI, SystemType
 from Library.Protocol.Transport import TransportAPI
 from Library.Universe.Contract import CommissionMode, SwapMode
@@ -43,7 +43,6 @@ class RealtimeAPI(SystemAPI):
     _ORDER_TYPE_ = {0: OrderType.Limit, 1: OrderType.Stop, 2: OrderType.StopLimit}  # cTrader PendingOrderType: Limit=0, Stop=1, StopLimit=2
 
     _binary_init_ = BinaryAPI('i')
-    _binary_init_action_ = BinaryAPI('B', 'i')
     _binary_denied_ = BinaryAPI('B', 's')
     _binary_exception_ = BinaryAPI('s')
 
@@ -97,9 +96,7 @@ class RealtimeAPI(SystemAPI):
         try:
             self._transport_ = TransportAPI(iid=self._iid_, create=False)
             self._stack_.callback(lambda: self._transport_.close() if self._transport_ else None)
-            peer_pid = self._handshake_()
-            self._transport_.watchdog(peer_pid)
-            self._log_.info(lambda: f"Connect Operation: Shared Memory bound (iid={self._iid_}, peer_pid={peer_pid})")
+            self._log_.info(lambda: f"Connect Operation: Shared Memory bound (iid={self._iid_})")
             self.strategy = self._strategy_(money_management=self._parameters_.MoneyManagement, risk_management=self._parameters_.RiskManagement, signal_management=self._parameters_.SignalManagement)
             self.market = MarketAPI()
             self.indicator = IndicatorAPI(technical=self._parameters_.TechnicalManagement, fundamental=self._parameters_.FundamentalManagement, sentimental=self._parameters_.SentimentalManagement)
@@ -114,16 +111,6 @@ class RealtimeAPI(SystemAPI):
             self._session_.save()
         self._warmup_timer_.start()
         return super().__enter__()
-
-    def _handshake_(self) -> int:
-        data = self._transport_.receive()
-        update_id = data[0]
-        if update_id != UpdateID.Initialization.value:
-            raise RuntimeError(f"Expected Initialization update, got {update_id}")
-        (peer_pid,) = self._binary_init_.unpack(data, 1)
-        self._transport_.send(self._binary_init_action_.pack(ActionID.Initialization.value, os.getpid()))
-        self._log_.info(lambda: f"Handshake Operation: Exchanged PIDs (peer={peer_pid}, self={os.getpid()})")
-        return peer_pid
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         if self._execution_timer_._start_ is not None and self._execution_timer_._stop_ is None:
@@ -165,6 +152,10 @@ class RealtimeAPI(SystemAPI):
     def receive_update_id(self) -> UpdateID:
         self._last_update_data_ = self._receive_()
         return UpdateID(self._last_update_data_[0])
+
+    def _receive_update_init_(self, offset: int = 1) -> InitUpdateAPI:
+        pid = self._binary_init_.unpack(self._last_update_data_, offset)[0]
+        return InitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, ProcessID=pid)
 
     def receive_update_account(self, offset: int = 1) -> AccountAPI:
         number, environment, account_type, asset, balance, equity, credit, leverage, margin_used, margin_free, margin_level, margin_stop, margin_mode = self._binary_account_.unpack(self._last_update_data_, 1)
@@ -330,9 +321,14 @@ class RealtimeAPI(SystemAPI):
     def system_management(self) -> MachineAPI:
         system_engine = MachineAPI(Name="System Management", Events=len(UpdateID))
 
-        initialisation = system_engine.state(name="Initialisation")
+        initialization = system_engine.state(name="Initialization")
         execution = system_engine.state(name="Execution")
         termination = system_engine.state(name="Termination", end=True)
+
+        def init_handshake(update: InitUpdateAPI):
+            self._transport_.watchdog(update.ProcessID)
+            self._log_.info(lambda: f"Handshake Operation: Exchanged PIDs (peer={update.ProcessID}, self={os.getpid()})")
+            return [InitActionAPI(ProcessID=os.getpid())]
 
         def sync_market(update: BarUpdateAPI):
             self._market_.add(update.Bar.GapTick)
@@ -369,9 +365,9 @@ class RealtimeAPI(SystemAPI):
                 self.statistics = generate_net_report(update.Portfolio.Positions, update.Portfolio.Trades, self._initial_account_, self._start_timestamp_.date(), self._stop_timestamp_.date())
                 self._log_.warning(lambda: str(self.statistics))
 
-        initialisation.on(event=UpdateID.BarClosed, to=initialisation, action=sync_market, reason=None)
-        initialisation.on(event=UpdateID.Complete, to=execution, action=init_market, reason="Market Initialized")
-        initialisation.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Abruptly Terminated")
+        initialization.on(event=UpdateID.Init, to=initialization, action=init_handshake, reason="Handshake Initialized")
+        initialization.on(event=UpdateID.BarClosed, to=initialization, action=sync_market, reason=None)
+        initialization.on(event=UpdateID.Complete, to=execution, action=init_market, reason="Market Initialized")
 
         execution.on(event=UpdateID.BarClosed, to=execution, action=update_market, reason=None)
         execution.on(event=UpdateID.Shutdown, to=termination, action=report_statistics, reason="Safely Terminated")

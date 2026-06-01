@@ -24,7 +24,7 @@ def test_download_strategy_machine_initial_state():
     p = ParameterAPI()
     strat = DownloadStrategyAPI(p, p, p)
     eng = strat.strategy_management()
-    assert eng.At.Name == "Initialisation"
+    assert eng.At.Name == "Initialization"
 
 def test_account_update_sets_portfolio_account():
     p = ParameterAPI()
@@ -36,7 +36,7 @@ def test_account_update_sets_portfolio_account():
     eng.perform(UpdateID.Account, update)
     assert portfolio.Account is account
 
-def test_security_update_sets_portfolio_security_in_initialisation():
+def test_security_update_sets_portfolio_security_in_initialization():
     p = ParameterAPI()
     strat = DownloadStrategyAPI(p, p, p)
     eng = strat.strategy_management()
@@ -45,7 +45,7 @@ def test_security_update_sets_portfolio_security_in_initialisation():
     eng.perform(UpdateID.Security, update)
     assert portfolio.Security is None
 
-def test_complete_transitions_initialisation_to_execution():
+def test_complete_transitions_initialization_to_execution():
     p = ParameterAPI()
     strat = DownloadStrategyAPI(p, p, p)
     eng = strat.strategy_management()
@@ -60,7 +60,7 @@ def test_complete_transitions_initialisation_to_execution():
     fundamental.init_data.assert_called_once_with(market)
     sentimental.init_data.assert_called_once_with(market)
 
-def test_shutdown_transitions_to_termination_from_initialisation():
+def test_shutdown_transitions_to_termination_from_initialization():
     p = ParameterAPI()
     strat = DownloadStrategyAPI(p, p, p)
     eng = strat.strategy_management()
