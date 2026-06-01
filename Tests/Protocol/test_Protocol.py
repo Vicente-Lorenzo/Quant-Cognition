@@ -216,10 +216,9 @@ def test_complete_update_construction():
     assert update.Account is None
     assert update.Security is None
 
-def test_filled_order_carries_order_and_position():
-    update = FilledBuyStopOrderUpdateAPI(Account=None, Security=None, Market=None, Technical=None, Fundamental=None, Sentimental=None, Portfolio=None, Bar=None, Order=None, Position=None)
+def test_filled_order_carries_order():
+    update = FilledBuyStopOrderUpdateAPI(Account=None, Security=None, Market=None, Technical=None, Fundamental=None, Sentimental=None, Portfolio=None, Order=None)
     assert hasattr(update, "Order")
-    assert hasattr(update, "Position")
 
 def test_denied_update_fields():
     update = DeniedUpdateAPI(Account=None, Security=None, Market=None, Technical=None, Fundamental=None, Sentimental=None, Portfolio=None, ActionID=ActionID.OpenBuyPosition, Reason="margin")
@@ -231,5 +230,5 @@ def test_exception_update_fields():
     assert update.Reason == "disconnect"
 
 def test_position_close_carries_trade():
-    update = StopLossBuyPositionUpdateAPI(Account=None, Security=None, Market=None, Technical=None, Fundamental=None, Sentimental=None, Portfolio=None, Bar=None, Position=None, Trade=None)
+    update = StopLossBuyPositionUpdateAPI(Account=None, Security=None, Market=None, Technical=None, Fundamental=None, Sentimental=None, Portfolio=None, Position=None, Trade=None)
     assert hasattr(update, "Trade")

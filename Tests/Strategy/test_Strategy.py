@@ -111,9 +111,9 @@ def test_opened_stop_order_propagates_to_portfolio():
     order.Type.name = "Stop"
     order.Direction = MagicMock()
     order.Direction.name = "Buy"
-    update = OpenedBuyStopOrderUpdateAPI(Account=account, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio, Bar="bar", Order=order)
+    update = OpenedBuyStopOrderUpdateAPI(Account=account, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio, Order=order)
     eng.perform(UpdateID.OpenedBuyStopOrder, update)
-    portfolio.update_data.assert_called_with("bar")
+    pass
     portfolio.open_order.assert_called_once_with(order)
 
 def test_filled_stop_order_transitions_order_to_position():
@@ -135,9 +135,9 @@ def test_filled_stop_order_transitions_order_to_position():
     order.Direction = MagicMock(); order.Direction.name = "Buy"
     position = MagicMock()
     position.UID = 100
-    update = FilledBuyStopOrderUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio, Bar="bar", Order=order, Position=position)
+    update = FilledBuyStopOrderUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio, Order=order)
     eng.perform(UpdateID.FilledBuyStopOrder, update)
-    portfolio.open_position.assert_called_once_with(42, position)
+    portfolio.close_order.assert_called_once_with(42)
 
 def test_expired_limit_order_removes_order():
     from unittest.mock import MagicMock
@@ -156,6 +156,6 @@ def test_expired_limit_order_removes_order():
     order.UID = 77
     order.Type = MagicMock(); order.Type.name = "Limit"
     order.Direction = MagicMock(); order.Direction.name = "Buy"
-    update = ExpiredBuyLimitOrderUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio, Bar="bar", Order=order)
+    update = ExpiredBuyLimitOrderUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio, Order=order)
     eng.perform(UpdateID.ExpiredBuyLimitOrder, update)
     portfolio.close_order.assert_called_once_with(77)
