@@ -262,8 +262,8 @@ class StrategyAPI(ABC):
         def update_filled_order(update: Any):
             update.Portfolio.update_data(update.Bar)
             update.Portfolio.Account = update.Account
-            update.Portfolio.open_position(update.Order.UID, update.Position)
-            self._log_.alert(lambda: f"Filled {update.Order.Type.name} {update.Order.Direction.name} Order -> Position {update.Position.UID}")
+            update.Portfolio.close_order(update.Order.UID)
+            self._log_.alert(lambda: f"Filled {update.Order.Type.name} {update.Order.Direction.name} Order")
 
         def update_expired_order(update: Any):
             update.Portfolio.update_data(update.Bar)
