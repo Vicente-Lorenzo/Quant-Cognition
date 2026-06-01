@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import traceback
 from abc import ABC, abstractmethod
 from typing import Type, Union, TYPE_CHECKING
 from typing_extensions import Self
@@ -166,7 +167,8 @@ class SystemAPI(ABC):
         if exc_type or exc_value or exc_traceback:
             self._log_.exception(lambda: f"Exception type: {exc_type}")
             self._log_.exception(lambda: f"Exception value: {exc_value}")
-            self._log_.exception(lambda: f"Traceback: {exc_traceback}")
+            tb_str = "".join(traceback.format_tb(exc_traceback)) if exc_traceback else ""
+            self._log_.exception(lambda: f"Traceback:\n{tb_str}")
         if self._market_.Active: self._market_.shutdown()
         if self._portfolio_.Active: self._portfolio_.shutdown()
         self._log_.debug(lambda: "Terminated")
@@ -181,7 +183,7 @@ class SystemAPI(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def receive_update_account(self) -> AccountAPI:
+    def receive_update_account(self, offset: int = 1) -> AccountAPI:
         raise NotImplementedError
 
     def _receive_update_account_(self) -> AccountAPI:
@@ -196,11 +198,11 @@ class SystemAPI(ABC):
         return account
 
     @abstractmethod
-    def receive_update_security(self) -> SecurityAPI:
+    def receive_update_security(self, offset: int = 1) -> SecurityAPI:
         raise NotImplementedError
 
     @abstractmethod
-    def receive_update_tick(self) -> TickAPI:
+    def receive_update_tick(self, offset: int = 1) -> TickAPI:
         raise NotImplementedError
 
     def _receive_update_tick_(self) -> TickAPI:
@@ -209,7 +211,7 @@ class SystemAPI(ABC):
         return tick
 
     @abstractmethod
-    def receive_update_bar(self) -> BarAPI:
+    def receive_update_bar(self, offset: int = 1) -> BarAPI:
         raise NotImplementedError
 
     def _receive_update_bar_(self) -> BarAPI:
@@ -223,7 +225,7 @@ class SystemAPI(ABC):
         return bar
 
     @abstractmethod
-    def receive_update_order(self) -> OrderAPI:
+    def receive_update_order(self, offset: int = 1) -> OrderAPI:
         raise NotImplementedError
 
     def _receive_update_order_(self) -> OrderAPI:
@@ -233,7 +235,7 @@ class SystemAPI(ABC):
         return order
 
     @abstractmethod
-    def receive_update_position(self) -> PositionAPI:
+    def receive_update_position(self, offset: int = 1) -> PositionAPI:
         raise NotImplementedError
 
     def _receive_update_position_(self) -> PositionAPI:
@@ -243,8 +245,21 @@ class SystemAPI(ABC):
         return position
 
     @abstractmethod
-    def receive_update_trade(self) -> TradeAPI:
+    def receive_update_trade(self, offset: int = 1) -> TradeAPI:
         raise NotImplementedError
+
+    @abstractmethod
+    def receive_update_position_trade(self, offset: int = 1) -> tuple[PositionAPI, TradeAPI]:
+        raise NotImplementedError
+
+    
+    def _receive_update_position_trade_(self):
+        pos, trade = self.receive_update_position_trade(offset=337)
+        self._attach_session_(pos)
+        self._attach_session_(trade)
+        self._portfolio_.add(pos)
+        self._portfolio_.add(trade)
+        return pos, trade
 
     def _receive_update_trade_(self) -> TradeAPI:
         trade = self.receive_update_trade()
@@ -253,17 +268,18 @@ class SystemAPI(ABC):
         return trade
 
     @abstractmethod
-    def receive_update_denied(self) -> tuple[ActionID, str]:
+    def receive_update_denied(self, offset: int = 1) -> tuple[ActionID, str]:
         raise NotImplementedError
 
     @abstractmethod
-    def receive_update_exception(self) -> str:
+    def receive_update_exception(self, offset: int = 1) -> str:
         raise NotImplementedError
 
     @abstractmethod
     def system_management(self) -> MachineAPI:
         raise NotImplementedError
 
+    # noinspection PyTypeChecker
     def _process_updates_(self, engine: LifecycleAPI) -> list[ActionAPI]:
         actions: list[ActionAPI] = []
         while True:
@@ -296,137 +312,147 @@ class SystemAPI(ABC):
                 case UpdateID.BidBelowTarget:
                     actions += engine.perform(update_id, TickUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Tick=self._receive_update_tick_()))
                 case UpdateID.OpenedBuyPosition:
-                    actions += engine.perform(update_id, OpenedBuyPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Position=self._receive_update_position_()))
+                    actions += engine.perform(update_id, OpenedBuyPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=self._receive_update_position_()))
                 case UpdateID.OpenedSellPosition:
-                    actions += engine.perform(update_id, OpenedSellPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Position=self._receive_update_position_()))
+                    actions += engine.perform(update_id, OpenedSellPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=self._receive_update_position_()))
                 case UpdateID.ModifiedBuyPositionVolume:
-                    actions += engine.perform(update_id, ModifiedBuyPositionVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Position=self._receive_update_position_(), Trade=self._receive_update_trade_()))
+                    pos, trade = self._receive_update_position_trade_()
+                    actions += engine.perform(update_id, ModifiedBuyPositionVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.ModifiedSellPositionVolume:
-                    actions += engine.perform(update_id, ModifiedSellPositionVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Position=self._receive_update_position_(), Trade=self._receive_update_trade_()))
+                    pos, trade = self._receive_update_position_trade_()
+                    actions += engine.perform(update_id, ModifiedSellPositionVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.ModifiedBuyPositionStopLoss:
-                    actions += engine.perform(update_id, ModifiedBuyPositionStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Position=self._receive_update_position_()))
+                    actions += engine.perform(update_id, ModifiedBuyPositionStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=self._receive_update_position_()))
                 case UpdateID.ModifiedSellPositionStopLoss:
-                    actions += engine.perform(update_id, ModifiedSellPositionStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Position=self._receive_update_position_()))
+                    actions += engine.perform(update_id, ModifiedSellPositionStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=self._receive_update_position_()))
                 case UpdateID.ModifiedBuyPositionTakeProfit:
-                    actions += engine.perform(update_id, ModifiedBuyPositionTakeProfitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Position=self._receive_update_position_()))
+                    actions += engine.perform(update_id, ModifiedBuyPositionTakeProfitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=self._receive_update_position_()))
                 case UpdateID.ModifiedSellPositionTakeProfit:
-                    actions += engine.perform(update_id, ModifiedSellPositionTakeProfitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Position=self._receive_update_position_()))
+                    actions += engine.perform(update_id, ModifiedSellPositionTakeProfitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=self._receive_update_position_()))
                 case UpdateID.ClosedBuyPosition:
-                    actions += engine.perform(update_id, ClosedBuyPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Position=self._receive_update_position_(), Trade=self._receive_update_trade_()))
+                    pos, trade = self._receive_update_position_trade_()
+                    actions += engine.perform(update_id, ClosedBuyPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.ClosedSellPosition:
-                    actions += engine.perform(update_id, ClosedSellPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Position=self._receive_update_position_(), Trade=self._receive_update_trade_()))
+                    pos, trade = self._receive_update_position_trade_()
+                    actions += engine.perform(update_id, ClosedSellPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.StopLossBuyPosition:
-                    actions += engine.perform(update_id, StopLossBuyPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Position=self._receive_update_position_(), Trade=self._receive_update_trade_()))
+                    pos, trade = self._receive_update_position_trade_()
+                    actions += engine.perform(update_id, StopLossBuyPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.StopLossSellPosition:
-                    actions += engine.perform(update_id, StopLossSellPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Position=self._receive_update_position_(), Trade=self._receive_update_trade_()))
+                    pos, trade = self._receive_update_position_trade_()
+                    actions += engine.perform(update_id, StopLossSellPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.TakeProfitBuyPosition:
-                    actions += engine.perform(update_id, TakeProfitBuyPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Position=self._receive_update_position_(), Trade=self._receive_update_trade_()))
+                    pos, trade = self._receive_update_position_trade_()
+                    actions += engine.perform(update_id, TakeProfitBuyPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.TakeProfitSellPosition:
-                    actions += engine.perform(update_id, TakeProfitSellPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Position=self._receive_update_position_(), Trade=self._receive_update_trade_()))
+                    pos, trade = self._receive_update_position_trade_()
+                    actions += engine.perform(update_id, TakeProfitSellPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.MarginCallBuyPosition:
-                    actions += engine.perform(update_id, MarginCallBuyPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Position=self._receive_update_position_(), Trade=self._receive_update_trade_()))
+                    pos, trade = self._receive_update_position_trade_()
+                    actions += engine.perform(update_id, MarginCallBuyPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.MarginCallSellPosition:
-                    actions += engine.perform(update_id, MarginCallSellPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Position=self._receive_update_position_(), Trade=self._receive_update_trade_()))
+                    pos, trade = self._receive_update_position_trade_()
+                    actions += engine.perform(update_id, MarginCallSellPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.OpenedBuyStopOrder:
-                    actions += engine.perform(update_id, OpenedBuyStopOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, OpenedBuyStopOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.OpenedSellStopOrder:
-                    actions += engine.perform(update_id, OpenedSellStopOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, OpenedSellStopOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedBuyStopOrderVolume:
-                    actions += engine.perform(update_id, ModifiedBuyStopOrderVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedBuyStopOrderVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedSellStopOrderVolume:
-                    actions += engine.perform(update_id, ModifiedSellStopOrderVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedSellStopOrderVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedBuyStopOrderStopPrice:
-                    actions += engine.perform(update_id, ModifiedBuyStopOrderStopPriceUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedBuyStopOrderStopPriceUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedSellStopOrderStopPrice:
-                    actions += engine.perform(update_id, ModifiedSellStopOrderStopPriceUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedSellStopOrderStopPriceUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedBuyStopOrderStopLoss:
-                    actions += engine.perform(update_id, ModifiedBuyStopOrderStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedBuyStopOrderStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedSellStopOrderStopLoss:
-                    actions += engine.perform(update_id, ModifiedSellStopOrderStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedSellStopOrderStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedBuyStopOrderTakeProfit:
-                    actions += engine.perform(update_id, ModifiedBuyStopOrderTakeProfitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedBuyStopOrderTakeProfitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedSellStopOrderTakeProfit:
-                    actions += engine.perform(update_id, ModifiedSellStopOrderTakeProfitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedSellStopOrderTakeProfitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ClosedBuyStopOrder:
-                    actions += engine.perform(update_id, ClosedBuyStopOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ClosedBuyStopOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ClosedSellStopOrder:
-                    actions += engine.perform(update_id, ClosedSellStopOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ClosedSellStopOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.FilledBuyStopOrder:
-                    actions += engine.perform(update_id, FilledBuyStopOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_(), Position=self._receive_update_position_()))
+                    actions += engine.perform(update_id, FilledBuyStopOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.FilledSellStopOrder:
-                    actions += engine.perform(update_id, FilledSellStopOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_(), Position=self._receive_update_position_()))
+                    actions += engine.perform(update_id, FilledSellStopOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ExpiredBuyStopOrder:
-                    actions += engine.perform(update_id, ExpiredBuyStopOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ExpiredBuyStopOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ExpiredSellStopOrder:
-                    actions += engine.perform(update_id, ExpiredSellStopOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ExpiredSellStopOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.OpenedBuyLimitOrder:
-                    actions += engine.perform(update_id, OpenedBuyLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, OpenedBuyLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.OpenedSellLimitOrder:
-                    actions += engine.perform(update_id, OpenedSellLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, OpenedSellLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedBuyLimitOrderVolume:
-                    actions += engine.perform(update_id, ModifiedBuyLimitOrderVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedBuyLimitOrderVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedSellLimitOrderVolume:
-                    actions += engine.perform(update_id, ModifiedSellLimitOrderVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedSellLimitOrderVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedBuyLimitOrderLimitPrice:
-                    actions += engine.perform(update_id, ModifiedBuyLimitOrderLimitPriceUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedBuyLimitOrderLimitPriceUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedSellLimitOrderLimitPrice:
-                    actions += engine.perform(update_id, ModifiedSellLimitOrderLimitPriceUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedSellLimitOrderLimitPriceUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedBuyLimitOrderStopLoss:
-                    actions += engine.perform(update_id, ModifiedBuyLimitOrderStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedBuyLimitOrderStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedSellLimitOrderStopLoss:
-                    actions += engine.perform(update_id, ModifiedSellLimitOrderStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedSellLimitOrderStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedBuyLimitOrderTakeProfit:
-                    actions += engine.perform(update_id, ModifiedBuyLimitOrderTakeProfitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedBuyLimitOrderTakeProfitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedSellLimitOrderTakeProfit:
-                    actions += engine.perform(update_id, ModifiedSellLimitOrderTakeProfitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedSellLimitOrderTakeProfitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ClosedBuyLimitOrder:
-                    actions += engine.perform(update_id, ClosedBuyLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ClosedBuyLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ClosedSellLimitOrder:
-                    actions += engine.perform(update_id, ClosedSellLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ClosedSellLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.FilledBuyLimitOrder:
-                    actions += engine.perform(update_id, FilledBuyLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_(), Position=self._receive_update_position_()))
+                    actions += engine.perform(update_id, FilledBuyLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.FilledSellLimitOrder:
-                    actions += engine.perform(update_id, FilledSellLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_(), Position=self._receive_update_position_()))
+                    actions += engine.perform(update_id, FilledSellLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ExpiredBuyLimitOrder:
-                    actions += engine.perform(update_id, ExpiredBuyLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ExpiredBuyLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ExpiredSellLimitOrder:
-                    actions += engine.perform(update_id, ExpiredSellLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ExpiredSellLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.OpenedBuyStopLimitOrder:
-                    actions += engine.perform(update_id, OpenedBuyStopLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, OpenedBuyStopLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.OpenedSellStopLimitOrder:
-                    actions += engine.perform(update_id, OpenedSellStopLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, OpenedSellStopLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedBuyStopLimitOrderVolume:
-                    actions += engine.perform(update_id, ModifiedBuyStopLimitOrderVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedBuyStopLimitOrderVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedSellStopLimitOrderVolume:
-                    actions += engine.perform(update_id, ModifiedSellStopLimitOrderVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedSellStopLimitOrderVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedBuyStopLimitOrderStopPrice:
-                    actions += engine.perform(update_id, ModifiedBuyStopLimitOrderStopPriceUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedBuyStopLimitOrderStopPriceUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedSellStopLimitOrderStopPrice:
-                    actions += engine.perform(update_id, ModifiedSellStopLimitOrderStopPriceUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedSellStopLimitOrderStopPriceUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedBuyStopLimitOrderLimitPrice:
-                    actions += engine.perform(update_id, ModifiedBuyStopLimitOrderLimitPriceUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedBuyStopLimitOrderLimitPriceUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedSellStopLimitOrderLimitPrice:
-                    actions += engine.perform(update_id, ModifiedSellStopLimitOrderLimitPriceUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedSellStopLimitOrderLimitPriceUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedBuyStopLimitOrderStopLoss:
-                    actions += engine.perform(update_id, ModifiedBuyStopLimitOrderStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedBuyStopLimitOrderStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedSellStopLimitOrderStopLoss:
-                    actions += engine.perform(update_id, ModifiedSellStopLimitOrderStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedSellStopLimitOrderStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedBuyStopLimitOrderTakeProfit:
-                    actions += engine.perform(update_id, ModifiedBuyStopLimitOrderTakeProfitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedBuyStopLimitOrderTakeProfitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ModifiedSellStopLimitOrderTakeProfit:
-                    actions += engine.perform(update_id, ModifiedSellStopLimitOrderTakeProfitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ModifiedSellStopLimitOrderTakeProfitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ClosedBuyStopLimitOrder:
-                    actions += engine.perform(update_id, ClosedBuyStopLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ClosedBuyStopLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ClosedSellStopLimitOrder:
-                    actions += engine.perform(update_id, ClosedSellStopLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ClosedSellStopLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.FilledBuyStopLimitOrder:
-                    actions += engine.perform(update_id, FilledBuyStopLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_(), Position=self._receive_update_position_()))
+                    actions += engine.perform(update_id, FilledBuyStopLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.FilledSellStopLimitOrder:
-                    actions += engine.perform(update_id, FilledSellStopLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_(), Position=self._receive_update_position_()))
+                    actions += engine.perform(update_id, FilledSellStopLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ExpiredBuyStopLimitOrder:
-                    actions += engine.perform(update_id, ExpiredBuyStopLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ExpiredBuyStopLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.ExpiredSellStopLimitOrder:
-                    actions += engine.perform(update_id, ExpiredSellStopLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self.receive_update_bar(), Order=self._receive_update_order_()))
+                    actions += engine.perform(update_id, ExpiredSellStopLimitOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
                 case UpdateID.Denied:
                     action_id, reason = self.receive_update_denied()
                     actions += engine.perform(update_id, DeniedUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, ActionID=action_id, Reason=reason))
@@ -438,6 +464,7 @@ class SystemAPI(ABC):
         for action in actions: self.send_action(action)
         self.send_action(CompleteActionAPI())
 
+    # noinspection PyTypeChecker,PyUnresolvedReferences
     def deploy(self) -> None:
         engine = LifecycleAPI(
             system_machine=self.system_management(),
