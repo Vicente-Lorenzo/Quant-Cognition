@@ -166,7 +166,7 @@ class RealtimeAPI(SystemAPI):
         self._last_update_data_ = self._receive_()
         return UpdateID(self._last_update_data_[0])
 
-    def receive_update_account(self) -> AccountAPI:
+    def receive_update_account(self, offset: int = 1) -> AccountAPI:
         number, environment, account_type, asset, balance, equity, credit, leverage, margin_used, margin_free, margin_level, margin_stop, margin_mode = self._binary_account_.unpack(self._last_update_data_, 1)
         self._metrics_["Accounts"] += 1
         return AccountAPI(
@@ -183,11 +183,10 @@ class RealtimeAPI(SystemAPI):
             db=self._db_
         )
 
-    def receive_update_security(self) -> SecurityAPI:
-        (
-            base_asset, quote_asset, digits, tick_size, pip_size, lot_size,
-            volume_min, volume_max, volume_step, commission, commission_type,
-            swap_long, swap_short, swap_calculation_type, swap_3_days_rollover
+    def receive_update_security(self, offset: int = 1) -> SecurityAPI:
+        (base_asset, quote_asset, digits, tick_size, pip_size, lot_size,
+         volume_min, volume_max, volume_step, commission, commission_type,
+         swap_long, swap_short, swap_calculation_type, swap_3_days_rollover
         ) = self._binary_security_.unpack(self._last_update_data_, 1)
         day_of_week = {0: Weekday.Sunday, 1: Weekday.Monday, 2: Weekday.Tuesday, 3: Weekday.Wednesday, 4: Weekday.Thursday, 5: Weekday.Friday, 6: Weekday.Saturday}
         if self._security_:
@@ -210,8 +209,8 @@ class RealtimeAPI(SystemAPI):
                 self._security_.Contract.SwapExtraDay = day_of_week.get(swap_3_days_rollover, Weekday.Wednesday)
         return self._security_
 
-    def receive_update_order(self) -> OrderAPI:
-        uid, order_type_id, direction_id, volume, target_price, stop_loss, take_profit, expiration_ts, label = self._binary_order_.unpack(self._last_update_data_, 1)
+    def receive_update_order(self, offset: int = 1) -> OrderAPI:
+        uid, order_type_id, direction_id, volume, target_price, stop_loss, take_profit, expiration_ts, label = self._binary_order_.unpack(self._last_update_data_, offset)
         self._metrics_["Orders"] += 1
         order_type = self._ORDER_TYPE_[order_type_id]
         has_limit = order_type in (OrderType.Limit, OrderType.StopLimit)
@@ -232,8 +231,8 @@ class RealtimeAPI(SystemAPI):
             db=self._db_
         )
 
-    def receive_update_position(self) -> PositionAPI:
-        uid, pos_type_id, direction_id, entry_ts, entry_price, volume, quantity, gross_pnl, commission_pnl, swap_pnl, net_pnl, used_margin, stop_loss, take_profit, label = self._binary_position_.unpack(self._last_update_data_, 1)
+    def receive_update_position(self, offset: int = 1) -> PositionAPI:
+        uid, pos_type_id, direction_id, entry_ts, entry_price, volume, quantity, gross_pnl, commission_pnl, swap_pnl, net_pnl, used_margin, stop_loss, take_profit, label = self._binary_position_.unpack(self._last_update_data_, offset)
         self._metrics_["Positions"] += 1
         pos_type = PositionType(pos_type_id)
         return PositionAPI(
@@ -251,8 +250,14 @@ class RealtimeAPI(SystemAPI):
             db=self._db_
         )
 
-    def receive_update_trade(self) -> TradeAPI:
-        uid, position_id, pos_type_id, direction_id, entry_ts, exit_ts, entry_price, exit_price, volume, quantity, gross_pnl, commission_pnl, swap_pnl, net_pnl, label = self._binary_trade_.unpack(self._last_update_data_, 1)
+    def receive_update_position_trade(self, offset: int = 1) -> tuple[PositionAPI, TradeAPI]:
+        pos = self.receive_update_position(offset)
+        trade_offset = offset + 94 + 2 + (len(pos.Label.encode('utf-8')) if pos.Label else 0)
+        trade = self.receive_update_trade(trade_offset)
+        return pos, trade
+
+    def receive_update_trade(self, offset: int = 1) -> TradeAPI:
+        uid, position_id, pos_type_id, direction_id, entry_ts, exit_ts, entry_price, exit_price, volume, quantity, gross_pnl, commission_pnl, swap_pnl, net_pnl, label = self._binary_trade_.unpack(self._last_update_data_, offset)
         self._metrics_["Trades"] += 1
         pos_type = PositionType(pos_type_id)
         return TradeAPI(
@@ -271,7 +276,7 @@ class RealtimeAPI(SystemAPI):
             db=self._db_
         )
 
-    def receive_update_tick(self) -> TickAPI:
+    def receive_update_tick(self, offset: int = 1) -> TickAPI:
         ts, ask, bid, ask_base, bid_base, ask_quote, bid_quote, volume = self._binary_tick_.unpack(self._last_update_data_, 1)
         self._metrics_["Ticks"] += 1
         return TickAPI(
@@ -294,7 +299,7 @@ class RealtimeAPI(SystemAPI):
             Volume=volume, db=self._db_
         )
 
-    def receive_update_bar(self) -> BarAPI:
+    def receive_update_bar(self, offset: int = 1) -> BarAPI:
         data = self._last_update_data_
         bar_ts = struct.unpack_from('<q', data, 1)[0]
         tick_size = self._binary_tick_._size_
@@ -314,11 +319,11 @@ class RealtimeAPI(SystemAPI):
             Volume=volume, db=self._db_
         )
 
-    def receive_update_denied(self) -> tuple[ActionID, str]:
+    def receive_update_denied(self, offset: int = 1) -> tuple[ActionID, str]:
         action_id, reason = self._binary_denied_.unpack(self._last_update_data_, 1)
         return ActionID(action_id), reason or ""
 
-    def receive_update_exception(self) -> str:
+    def receive_update_exception(self, offset: int = 1) -> str:
         (reason,) = self._binary_exception_.unpack(self._last_update_data_, 1)
         return reason or ""
 
@@ -346,7 +351,7 @@ class RealtimeAPI(SystemAPI):
             self._initial_account_ = update.Portfolio.Account
             if not self._sync_buffer_: return
             self._start_timestamp_ = self._sync_buffer_[-1].Timestamp.DateTime
-            df = pl.DataFrame([b.dict() for b in self._sync_buffer_])
+            df = pl.DataFrame([b.flatten() for b in self._sync_buffer_])
             update.Market.init_data(df)
             self._sync_buffer_.clear()
 
