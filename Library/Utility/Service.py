@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import traceback
 from abc import ABC
 from typing import Callable
 
@@ -93,7 +94,8 @@ class ServiceAPI(DataframeAPI, ABC):
         if exc_type or exc_val or exc_tb:
             self._log_.exception(lambda: f"Exception type: {exc_type}")
             self._log_.exception(lambda: f"Exception value: {exc_val}")
-            self._log_.exception(lambda: f"Traceback: {exc_tb}")
+            tb_str = "".join(traceback.format_tb(exc_tb)) if exc_tb else ""
+            self._log_.exception(lambda: f"Traceback:\n{tb_str}")
         self.disconnect()
         return not exc_type
 
