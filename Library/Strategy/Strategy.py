@@ -121,7 +121,7 @@ class StrategyAPI(ABC):
     def strategy_management(self) -> Union[MachineAPI, None]:
         strategy_engine = MachineAPI(Name="Strategy Management", Events=len(UpdateID))
 
-        initialisation = strategy_engine.state(name="Initialisation")
+        initialization = strategy_engine.state(name="Initialization")
         execution = strategy_engine.state(name="Execution")
         termination = strategy_engine.state(name="Termination", end=True)
 
@@ -271,12 +271,12 @@ class StrategyAPI(ABC):
             update.Portfolio.close_order(update.Order.UID)
             self._log_.alert(lambda: f"Expired {update.Order.Type.name} {update.Order.Direction.name} Order")
 
-        initialisation.on(event=UpdateID.Account, to=initialisation, action=init_account, reason="Account Initialized")
-        initialisation.on(event=UpdateID.Security, to=initialisation, action=init_security, reason="Security Initialized")
-        initialisation.on(event=UpdateID.Complete, to=execution, action=init_indicators, reason="Initialized")
-        initialisation.on(event=UpdateID.Denied, to=initialisation, action=self._log_denied_, reason=None)
-        initialisation.on(event=UpdateID.Exception, to=termination, action=self._log_exception_, reason="Exception")
-        initialisation.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Abruptly Terminated")
+        initialization.on(event=UpdateID.Account, to=initialization, action=init_account, reason="Account Initialized")
+        initialization.on(event=UpdateID.Security, to=initialization, action=init_security, reason="Security Initialized")
+        initialization.on(event=UpdateID.Complete, to=execution, action=init_indicators, reason="Initialized")
+        initialization.on(event=UpdateID.Denied, to=initialization, action=self._log_denied_, reason=None)
+        initialization.on(event=UpdateID.Exception, to=termination, action=self._log_exception_, reason="Exception")
+        initialization.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Abruptly Terminated")
 
         execution.on(event=UpdateID.Account, to=execution, action=init_account, reason="Account Updated")
         execution.on(event=UpdateID.Security, to=execution, action=init_security, reason="Security Updated")

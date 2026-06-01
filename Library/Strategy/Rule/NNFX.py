@@ -144,15 +144,15 @@ class NNFXStrategyAPI(StrategyAPI):
     def risk_management(self) -> MachineAPI:
         risk_engine = MachineAPI(Name="Risk Management", Events=len(UpdateID))
 
-        initialisation = risk_engine.state(name="Initialisation")
+        initialization = risk_engine.state(name="Initialization")
         waiting_open = risk_engine.state(name="No Position")
         waiting_so = risk_engine.state(name="Waiting SO")
         waiting_tsl = risk_engine.state(name="Waiting TSL")
         waiting_close = risk_engine.state(name="Waiting Close")
         termination = risk_engine.state(name="Termination", end=True)
 
-        initialisation.on(event=UpdateID.Complete, to=waiting_open, action=None, reason="Initialized")
-        initialisation.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Abruptly Terminated")
+        initialization.on(event=UpdateID.Complete, to=waiting_open, action=None, reason="Initialized")
+        initialization.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Abruptly Terminated")
 
         waiting_open.on(event=UpdateID.OpenedBuyPosition, to=waiting_so, action=self.define_so_buy_action, reason="Opened Buy Position")
         waiting_open.on(event=UpdateID.OpenedSellPosition, to=waiting_so, action=self.define_so_sell_action, reason="Opened Sell Position")
@@ -247,12 +247,12 @@ class NNFXStrategyAPI(StrategyAPI):
     def signal_management(self) -> MachineAPI:
         signal_engine = MachineAPI(Name="Signal Management", Events=len(UpdateID))
 
-        initialisation = signal_engine.state(name="Initialisation")
+        initialization = signal_engine.state(name="Initialization")
         waiting_signal = signal_engine.state(name="Waiting Signal")
         termination = signal_engine.state(name="Termination", end=True)
 
-        initialisation.on(event=UpdateID.Complete, to=waiting_signal, action=None, reason="Initialized")
-        initialisation.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Abruptly Terminated")
+        initialization.on(event=UpdateID.Complete, to=waiting_signal, action=None, reason="Initialized")
+        initialization.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Abruptly Terminated")
 
         waiting_signal.on(event=UpdateID.BarClosed, to=waiting_signal, action=self.update_position, reason=None)
         waiting_signal.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Safely Terminated")
