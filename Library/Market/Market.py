@@ -165,7 +165,7 @@ class MarketAPI(DatapointAPI):
 
     def update_data(self, data: Union[TickAPI, BarAPI]) -> None:
         from Library.Market.Bar import BarAPI
-        df = pl.DataFrame([data.dict()], strict=False)
+        df = pl.DataFrame([data.dict(flatten=True)], strict=False)
         if self._data_ is None or self._data_.width == 0:
             self._data_ = df.rechunk()
         else:
