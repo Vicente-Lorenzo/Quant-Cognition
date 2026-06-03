@@ -621,32 +621,27 @@ def _safe_df_(df: pl.DataFrame) -> pl.DataFrame:
 def generate_realized_report(trades_df: pl.DataFrame, account: AccountAPI, start: date, stop: date) -> pl.DataFrame:
     initial_balance = account.Balance or 0.0
     safe_trades = _safe_df_(trades_df)
-    
     ind = sort_items(safe_trades)
     ind_df = dependent_metrics(initial_balance, start, stop, ind, REALIZED_BUY_INDIVIDUAL, REALIZED_SELL_INDIVIDUAL, REALIZED_TOTAL_INDIVIDUAL)
     agg = sort_items(aggregate_items(safe_trades))
     agg_df = dependent_metrics(initial_balance, start, stop, agg, REALIZED_BUY_AGGREGATED, REALIZED_SELL_AGGREGATED, REALIZED_TOTAL_AGGREGATED)
-    
     labels_df = pl.DataFrame({STATISTICS_METRICS_LABEL: Metrics})
     return pl.concat([labels_df, ind_df, agg_df], how="horizontal")
 
 def generate_unrealized_report(positions_df: pl.DataFrame, account: AccountAPI, start: date, stop: date) -> pl.DataFrame:
     initial_balance = account.Balance or 0.0
     safe_positions = _safe_df_(positions_df)
-    
     ind = sort_items(safe_positions)
     ind_df = dependent_metrics(initial_balance, start, stop, ind, UNREALIZED_BUY_INDIVIDUAL, UNREALIZED_SELL_INDIVIDUAL, UNREALIZED_TOTAL_INDIVIDUAL)
     agg = sort_items(aggregate_items(safe_positions))
     agg_df = dependent_metrics(initial_balance, start, stop, agg, UNREALIZED_BUY_AGGREGATED, UNREALIZED_SELL_AGGREGATED, UNREALIZED_TOTAL_AGGREGATED)
-    
     labels_df = pl.DataFrame({STATISTICS_METRICS_LABEL: Metrics})
     return pl.concat([labels_df, ind_df, agg_df], how="horizontal")
 
 def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, account: AccountAPI, start: date, stop: date) -> pl.DataFrame:
-    initial_balance = account.Balance or 0.0
+    initial_balance = (account.Balance if account is not None else 0.0) or 0.0
     safe_positions = _safe_df_(positions_df)
     safe_trades = _safe_df_(trades_df)
-
     if not safe_trades.is_empty() and not safe_positions.is_empty():
         common_cols = set(safe_trades.columns).intersection(set(safe_positions.columns))
         net_df = pl.concat([safe_trades.select(list(common_cols)), safe_positions.select(list(common_cols))], how="vertical")
@@ -654,11 +649,9 @@ def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, acc
         net_df = safe_trades
     else:
         net_df = safe_positions
-
     ind = sort_items(net_df)
     ind_df = dependent_metrics(initial_balance, start, stop, ind, NET_BUY_INDIVIDUAL, NET_SELL_INDIVIDUAL, NET_TOTAL_INDIVIDUAL)
     agg = sort_items(aggregate_items(net_df))
     agg_df = dependent_metrics(initial_balance, start, stop, agg, NET_BUY_AGGREGATED, NET_SELL_AGGREGATED, NET_TOTAL_AGGREGATED)
-
     labels_df = pl.DataFrame({STATISTICS_METRICS_LABEL: Metrics})
     return pl.concat([labels_df, ind_df, agg_df], how="horizontal")
