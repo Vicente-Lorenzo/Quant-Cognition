@@ -173,6 +173,11 @@ public class SystemAPI : IDisposable
         Send(new[] { (byte)UpdateID.Complete });
     }
 
+    public void SendUpdateExecution()
+    {
+        Send(new[] { (byte)UpdateID.Execution });
+    }
+
     public void SendUpdateShutdown()
     {
         Send(new[] { (byte)UpdateID.Shutdown });
