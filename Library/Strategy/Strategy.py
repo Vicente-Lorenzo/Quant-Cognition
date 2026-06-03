@@ -105,7 +105,7 @@ class StrategyAPI(ABC):
         self._log_.error(lambda: f"Margin Call on Sell ({self._type_name_(update.Position)} Position)")
 
     def _log_denied_(self, update: DeniedUpdateAPI) -> None:
-        self._log_.error(lambda: f"Action Denied [{update.ActionID.name}]: {update.Reason}")
+        self._log_.error(lambda: f"Action Denied: {update.ActionID.name} · {update.Reason}")
 
     def _log_exception_(self, update: ExceptionUpdateAPI) -> None:
         self._log_.exception(lambda: f"Exception: {update.Reason}")

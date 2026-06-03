@@ -22,7 +22,7 @@ from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.Position import PositionAPI, PositionType
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Trade import TradeAPI
-from Library.Protocol.Action import ActionAPI, ActionID, InitActionAPI
+from Library.Protocol.Action import ActionAPI, ActionID, InitActionAPI, ExecutionActionAPI
 from Library.Protocol.Binary import BinaryAPI
 from Library.Protocol.Update import UpdateID, CompleteUpdateAPI, InitUpdateAPI, BarUpdateAPI
 from Library.System.System import SystemAPI, SystemType
@@ -55,6 +55,8 @@ class RealtimeAPI(SystemAPI):
     _binary_position_ = BinaryAPI('i', 'B', 'B', 'q', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'D', 'D', 's')
     _binary_trade_ = BinaryAPI('i', 'i', 'B', 'B', 'q', 'q', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 's')
 
+    _bar_payload_ = 1 + 8 + 5 * _binary_tick_._size_ + 8
+
     def __init__(self,
                  system: SystemType,
                  strategy: Type[StrategyAPI],
@@ -78,8 +80,12 @@ class RealtimeAPI(SystemAPI):
         self._stack_: Union[contextlib.ExitStack, None] = None
         self._transport_: Union[TransportAPI, None] = None
         self._last_update_data_: bytes = b""
+        self._exc_info_: tuple = (None, None, None)
 
         self._sync_buffer_: list[BarAPI] = []
+        self._warmup_window_: Union[int, None] = None
+        self._warmup_database_: int = 0
+        self._warmup_ready_: bool = False
         self._initial_account_: Union[AccountAPI, None] = None
         self._start_timestamp_: Union[datetime, None] = None
         self._stop_timestamp_: Union[datetime, None] = None
@@ -89,30 +95,33 @@ class RealtimeAPI(SystemAPI):
         self._execution_timer_: Timer = Timer()
         self._shutdown_timer_: Timer = Timer()
 
-    def __enter__(self):
+    def _connect_(self) -> None:
         stack = contextlib.ExitStack()
         stack.__enter__()
         self._stack_ = stack
         try:
             self._transport_ = TransportAPI(iid=self._iid_, create=False)
             self._stack_.callback(lambda: self._transport_.close() if self._transport_ else None)
-            self._log_.info(lambda: f"Connect Operation: Shared Memory bound (iid={self._iid_})")
+            self._log_.debug(lambda: f"Connect Operation: Bound Shared Memory (iid {self._iid_})")
             self.strategy = self._strategy_(money_management=self._parameters_.MoneyManagement, risk_management=self._parameters_.RiskManagement, signal_management=self._parameters_.SignalManagement)
             self.market = MarketAPI()
             self.indicator = IndicatorAPI(technical=self._parameters_.TechnicalManagement, fundamental=self._parameters_.FundamentalManagement, sentimental=self._parameters_.SentimentalManagement)
             self.portfolio = PortfolioAPI(Parameter=self._parameters_.PortfolioManagement)
             self._db_ = None if self._database_ is None else self._stack_.enter_context(PostgresAPI(database=self._database_))
-        except Exception as e:
-            self._log_.error(lambda: f"Connect Operation: Failed ({e})")
+        except Exception:
             self._stack_.__exit__(None, None, None)
             raise
         if self._portfolio_.Active:
             self._session_ = SessionAPI(IID=self._iid_, Type=self._system_, Strategy=self._strategy_.__name__, Security=self._security_, StartTimestamp=datetime.now(), db=self._db_)
             self._session_.save()
         self._warmup_timer_.start()
-        return super().__enter__()
+        super()._connect_()
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
+        self._exc_info_ = (exc_type, exc_value, exc_traceback)
+        return super().__exit__(exc_type, exc_value, exc_traceback)
+
+    def _disconnect_(self) -> None:
         if self._execution_timer_._start_ is not None and self._execution_timer_._stop_ is None:
             self._execution_timer_.stop()
         self._shutdown_timer_.start()
@@ -122,12 +131,11 @@ class RealtimeAPI(SystemAPI):
             if self.account is not None and self.account.UID is not None:
                 self._session_.FinalAccount = self.account
             self._session_.save()
-        result = super().__exit__(exc_type, exc_value, exc_traceback)
-        if self._stack_: self._stack_.__exit__(exc_type, exc_value, exc_traceback)
+        super()._disconnect_()
+        if self._stack_: self._stack_.__exit__(*self._exc_info_)
         self._shutdown_timer_.stop()
         self._log_metrics_()
-        self._log_.info(lambda: f"Disconnect Operation: Closed (iid={self._iid_})")
-        return result
+        self._log_.debug(lambda: f"Disconnect Operation: Closed (iid {self._iid_})")
 
     def _log_metrics_(self) -> None:
         m = self._metrics_
@@ -138,9 +146,9 @@ class RealtimeAPI(SystemAPI):
         bars_per_sec = (m["Bars"] / exec_delta) if exec_delta > 0 else 0.0
         ticks_per_sec = (m["Ticks"] / exec_delta) if exec_delta > 0 else 0.0
         self._log_.info(lambda: f"Phase Warmup: {warmup}")
-        self._log_.info(lambda: f"Phase Execution: {execution} ({ticks_per_sec:.1f} Ticks/s, {bars_per_sec:.1f} Bars/s)")
+        self._log_.info(lambda: f"Phase Execution: {execution} · {ticks_per_sec:.1f} Ticks/s · {bars_per_sec:.1f} Bars/s")
         self._log_.info(lambda: f"Phase Shutdown: {shutdown}")
-        self._log_.info(lambda: f"Summary: " + ", ".join(f"{k}={v}" for k, v in m.items()))
+        self._log_.info(lambda: "Summary: " + " · ".join(f"{k} {v}" for k, v in m.items()))
 
     def send_action(self, action: ActionAPI) -> None:
         self._transport_.send(action.serialize())
@@ -200,7 +208,7 @@ class RealtimeAPI(SystemAPI):
                 self._security_.Contract.SwapExtraDay = day_of_week.get(swap_3_days_rollover, Weekday.Wednesday)
         return self._security_
 
-    def receive_update_order(self, offset: int = 1) -> OrderAPI:
+    def receive_update_order(self, offset: int = _bar_payload_) -> OrderAPI:
         uid, order_type_id, direction_id, volume, target_price, stop_loss, take_profit, expiration_ts, label = self._binary_order_.unpack(self._last_update_data_, offset)
         self._metrics_["Orders"] += 1
         order_type = self._ORDER_TYPE_[order_type_id]
@@ -222,7 +230,7 @@ class RealtimeAPI(SystemAPI):
             db=self._db_
         )
 
-    def receive_update_position(self, offset: int = 1) -> PositionAPI:
+    def receive_update_position(self, offset: int = _bar_payload_) -> PositionAPI:
         uid, pos_type_id, direction_id, entry_ts, entry_price, volume, quantity, gross_pnl, commission_pnl, swap_pnl, net_pnl, used_margin, stop_loss, take_profit, label = self._binary_position_.unpack(self._last_update_data_, offset)
         self._metrics_["Positions"] += 1
         pos_type = PositionType(pos_type_id)
@@ -241,7 +249,7 @@ class RealtimeAPI(SystemAPI):
             db=self._db_
         )
 
-    def receive_update_position_trade(self, offset: int = 1) -> tuple[PositionAPI, TradeAPI]:
+    def receive_update_position_trade(self, offset: int = _bar_payload_) -> tuple[PositionAPI, TradeAPI]:
         pos = self.receive_update_position(offset)
         trade_offset = offset + 94 + 2 + (len(pos.Label.encode('utf-8')) if pos.Label else 0)
         trade = self.receive_update_trade(trade_offset)
@@ -318,6 +326,12 @@ class RealtimeAPI(SystemAPI):
         (reason,) = self._binary_exception_.unpack(self._last_update_data_, 1)
         return reason or ""
 
+    def _indicator_window_(self) -> int:
+        windows = [getattr(self.indicator.Technical, "Window", 0) or 0,
+                   getattr(self.indicator.Fundamental, "Window", 0) or 0,
+                   getattr(self.indicator.Sentimental, "Window", 0) or 0]
+        return max(windows) or 1
+
     def system_management(self) -> MachineAPI:
         system_engine = MachineAPI(Name="System Management", Events=len(UpdateID))
 
@@ -327,10 +341,15 @@ class RealtimeAPI(SystemAPI):
 
         def init_handshake(update: InitUpdateAPI):
             self._transport_.watchdog(update.ProcessID)
-            self._log_.info(lambda: f"Handshake Operation: Exchanged PIDs (peer={update.ProcessID}, self={os.getpid()})")
+            self._log_.debug(lambda: f"Handshake Operation: Exchanged PIDs (peer {update.ProcessID} · self {os.getpid()})")
             return [InitActionAPI(ProcessID=os.getpid())]
 
-        def sync_market(update: BarUpdateAPI):
+        def warmup(update: BarUpdateAPI):
+            if self._warmup_window_ is None:
+                self._warmup_window_ = self._indicator_window_()
+                if self._db_ is not None and self._security_ is not None and self._security_.UID is not None:
+                    self._warmup_database_ = MarketAPI.pull_bars(self._db_, self._security_.UID, self._timeframe_.UID, stop=update.Bar.Timestamp.DateTime, limit=self._warmup_window_).height
+                self._log_.debug(lambda: f"Phase Warmup: Started · Window {self._warmup_window_} · Database {self._warmup_database_} Bars")
             self._market_.add(update.Bar.GapTick)
             self._market_.add(update.Bar.OpenTick)
             self._market_.add(update.Bar.HighTick)
@@ -338,20 +357,33 @@ class RealtimeAPI(SystemAPI):
             self._market_.add(update.Bar.CloseTick)
             self._market_.add(update.Bar)
             self._sync_buffer_.append(update.Bar)
+            if not self._warmup_ready_ and self._warmup_database_ + len(self._sync_buffer_) >= self._warmup_window_:
+                self._warmup_ready_ = True
+                return [ExecutionActionAPI()]
 
         def init_market(update: CompleteUpdateAPI):
+            stream = len(self._sync_buffer_)
+            first = self._sync_buffer_[0].Timestamp.DateTime if self._sync_buffer_ else None
+            last = self._sync_buffer_[-1].Timestamp.DateTime if self._sync_buffer_ else None
             if self._warmup_timer_._start_ is not None:
                 self._warmup_timer_.stop()
-                self._log_.info(lambda: f"Phase Warmup: completed ({self._warmup_timer_.result()}, {self._metrics_['Ticks']} Ticks, {self._metrics_['Bars']} Bars)")
+                self._log_.info(lambda: f"Phase Warmup: Completed · {self._warmup_timer_.result()} · {self._metrics_['Ticks']} Ticks · {self._metrics_['Bars']} Bars")
+            self._log_.debug(lambda: f"Phase Warmup: Window {self._warmup_window_} · Database {self._warmup_database_} Bars · Updates {stream} Bars")
+            self._log_.debug(lambda: f"Phase Warmup: First Bar {first}")
+            self._log_.debug(lambda: f"Phase Warmup: Last Bar {last}")
             self._execution_timer_.start()
             self._initial_account_ = update.Portfolio.Account
-            if not self._sync_buffer_: return
-            self._start_timestamp_ = self._sync_buffer_[-1].Timestamp.DateTime
-            df = pl.DataFrame([b.flatten() for b in self._sync_buffer_])
-            update.Market.init_data(df)
+            frames = []
+            if self._warmup_window_ is not None and self._db_ is not None and self._sync_buffer_ and self._security_ is not None and self._security_.UID is not None:
+                database = MarketAPI.pull_bars(self._db_, self._security_.UID, self._timeframe_.UID, stop=self._sync_buffer_[0].Timestamp.DateTime, limit=self._warmup_window_)
+                if database.height: frames.append(database)
+            if self._sync_buffer_: frames.append(pl.DataFrame([b.dict(flatten=True) for b in self._sync_buffer_], strict=False))
+            if frames:
+                update.Market.init_data(frames[0] if len(frames) == 1 else pl.concat(frames, how="diagonal_relaxed"))
             self._sync_buffer_.clear()
 
         def update_market(update: BarUpdateAPI):
+            if self._start_timestamp_ is None: self._start_timestamp_ = update.Bar.Timestamp.DateTime
             self._stop_timestamp_ = update.Bar.Timestamp.DateTime
             update.Market.update_data(update.Bar)
 
@@ -359,15 +391,18 @@ class RealtimeAPI(SystemAPI):
             from Library.Portfolio.Statistic import generate_net_report
             if self._execution_timer_._start_ is not None and self._execution_timer_._stop_ is None:
                 self._execution_timer_.stop()
-                self._log_.info(lambda: f"Phase Execution: completed ({self._execution_timer_.result()})")
+                self._log_.info(lambda: f"Phase Execution: Completed · {self._execution_timer_.result()}")
+            self._log_.debug(lambda: f"Phase Execution: First Bar {self._start_timestamp_}")
+            self._log_.debug(lambda: f"Phase Execution: Last Bar {self._stop_timestamp_}")
             if self._portfolio_.Active and self.portfolio and self.portfolio.Security: self.portfolio.Security.save()
             if self._initial_account_ and self._start_timestamp_ and self._stop_timestamp_:
                 self.statistics = generate_net_report(update.Portfolio.Positions, update.Portfolio.Trades, self._initial_account_, self._start_timestamp_.date(), self._stop_timestamp_.date())
-                self._log_.warning(lambda: str(self.statistics))
+                self._log_.info(lambda: str(self.statistics))
 
         initialization.on(event=UpdateID.Init, to=initialization, action=init_handshake, reason="Handshake Initialized")
-        initialization.on(event=UpdateID.BarClosed, to=initialization, action=sync_market, reason=None)
-        initialization.on(event=UpdateID.Complete, to=execution, action=init_market, reason="Market Initialized")
+        initialization.on(event=UpdateID.BarClosed, to=initialization, action=warmup, reason=None)
+        initialization.on(event=UpdateID.Execution, to=execution, action=init_market, reason="Market Initialized")
+        initialization.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Abruptly Terminated")
 
         execution.on(event=UpdateID.BarClosed, to=execution, action=update_market, reason=None)
         execution.on(event=UpdateID.Shutdown, to=termination, action=report_statistics, reason="Safely Terminated")

@@ -87,10 +87,10 @@ class MarketAPI(DatapointAPI):
             data.save(by=by)
 
     @staticmethod
-    def pull_bars(db: DatabaseAPI, security: int, timeframe: str, start: datetime, stop: datetime) -> pl.DataFrame:
+    def pull_bars(db: DatabaseAPI, security: int, timeframe: str, start: Union[datetime, None] = None, stop: Union[datetime, None] = None, limit: Union[int, None] = None) -> pl.DataFrame:
         from Library.Market.Bar import BarAPI
         from Library.Market.Tick import TickAPI
-        sql = f'''
+        select = f'''
         SELECT b."{BarAPI.ID.UID}", b."{BarAPI.ID.Timestamp}", b."{BarAPI.ID.Security}", b."{BarAPI.ID.Timeframe}",
                b."{BarAPI.ID.GapTick}", b."{BarAPI.ID.OpenTick}", b."{BarAPI.ID.HighTick}", b."{BarAPI.ID.LowTick}", b."{BarAPI.ID.CloseTick}",
                b."{BarAPI.ID.Volume}", b."{BarAPI.ID.UpdatedBy}", b."{BarAPI.ID.UpdatedAt}",
@@ -125,12 +125,22 @@ class MarketAPI(DatapointAPI):
         LEFT JOIN "{TickAPI.Schema}"."{TickAPI.Table}" h ON b."{BarAPI.ID.HighTick}"  = h."{TickAPI.ID.UID}"
         LEFT JOIN "{TickAPI.Schema}"."{TickAPI.Table}" l ON b."{BarAPI.ID.LowTick}"   = l."{TickAPI.ID.UID}"
         LEFT JOIN "{TickAPI.Schema}"."{TickAPI.Table}" c ON b."{BarAPI.ID.CloseTick}" = c."{TickAPI.ID.UID}"
+        '''
+        if limit is not None:
+            sql = select + f'''
+        WHERE b."{BarAPI.ID.Security}" = :security: AND b."{BarAPI.ID.Timeframe}" = :timeframe:
+          AND b."{BarAPI.ID.Timestamp}" < :stop:
+        ORDER BY b."{BarAPI.ID.Timestamp}" DESC
+        LIMIT {int(limit)}
+        '''
+            df = db.executeone(QueryAPI(sql), security=security, timeframe=timeframe, stop=stop, schema=BarAPI.Schema, table=BarAPI.Table).fetchall(legacy=False)
+            return df.reverse() if df.height else df
+        sql = select + f'''
         WHERE b."{BarAPI.ID.Security}" = :security: AND b."{BarAPI.ID.Timeframe}" = :timeframe:
           AND b."{BarAPI.ID.Timestamp}" BETWEEN :start: AND :stop:
         ORDER BY b."{BarAPI.ID.Timestamp}"
         '''
-        df = db.executeone(QueryAPI(sql), security=security, timeframe=timeframe, start=start, stop=stop, schema=BarAPI.Schema, table=BarAPI.Table).fetchall(legacy=False)
-        return df
+        return db.executeone(QueryAPI(sql), security=security, timeframe=timeframe, start=start, stop=stop, schema=BarAPI.Schema, table=BarAPI.Table).fetchall(legacy=False)
 
     @staticmethod
     def push_bars(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:

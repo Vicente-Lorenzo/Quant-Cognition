@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import traceback
 from abc import ABC, abstractmethod
 from typing import Type, Union, TYPE_CHECKING
-from typing_extensions import Self
 
 from Library.Database import BufferAPI
 from Library.Utility.Enumeration import EnumerationAPI
+from Library.Utility.Service import ServiceAPI
 from Library.Logging import HandlerLoggingAPI
 from Library.Market.Bar import BarAPI
 from Library.Market.Tick import TickAPI
@@ -117,7 +116,7 @@ class SystemType(EnumerationAPI):
     Optimization = 5
     Learning = 6
 
-class SystemAPI(ABC):
+class SystemAPI(ServiceAPI, ABC):
 
     def __init__(self,
                  strategy: Type[StrategyAPI],
@@ -126,6 +125,7 @@ class SystemAPI(ABC):
                  parameters: Parameter,
                  market: tuple[int, float],
                  portfolio: tuple[int, float]) -> None:
+        super().__init__()
         self._strategy_: Type[StrategyAPI] = strategy
         self._security_: SecurityAPI = security
         self._timeframe_: TimeframeAPI = timeframe
@@ -146,6 +146,7 @@ class SystemAPI(ABC):
         self._portfolio_: BufferAPI = BufferAPI(types=[AccountAPI, OrderAPI, PositionAPI, TradeAPI], batch=portfolio[0], interval=portfolio[1])
 
         self._session_: Union[SessionAPI, None] = None
+        self._connected_: bool = False
 
         self._log_: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="System Management")
 
@@ -155,26 +156,25 @@ class SystemAPI(ABC):
         if not isinstance(record, AccountAPI):
             record.Account = self.account
 
-    def __enter__(self) -> Self:
-        self._log_.debug(lambda: "Initiated")
+    def connected(self) -> bool:
+        return self._connected_
+
+    def disconnected(self) -> bool:
+        return not self._connected_
+
+    def _connect_(self) -> None:
         if self.indicator is not None:
             self.technical = self.indicator.Technical
             self.fundamental = self.indicator.Fundamental
             self.sentimental = self.indicator.Sentimental
         if self._market_.Active: self._market_.start()
         if self._portfolio_.Active: self._portfolio_.start()
-        return self
+        self._connected_ = True
 
-    def __exit__(self, exc_type, exc_value, exc_traceback) -> Self:
-        if exc_type or exc_value or exc_traceback:
-            self._log_.exception(lambda: f"Exception type: {exc_type}")
-            self._log_.exception(lambda: f"Exception value: {exc_value}")
-            tb_str = "".join(traceback.format_tb(exc_traceback)) if exc_traceback else ""
-            self._log_.exception(lambda: f"Traceback:\n{tb_str}")
+    def _disconnect_(self) -> None:
         if self._market_.Active: self._market_.shutdown()
         if self._portfolio_.Active: self._portfolio_.shutdown()
-        self._log_.debug(lambda: "Terminated")
-        return self
+        self._connected_ = False
 
     @abstractmethod
     def send_action(self, action: ActionAPI) -> None:
@@ -264,7 +264,7 @@ class SystemAPI(ABC):
         raise NotImplementedError
 
     
-    def _receive_update_position_trade_(self, status: PositionStatus = PositionStatus.Opened):
+    def _receive_update_position_trade_(self, status: PositionStatus):
         pos, trade = self.receive_update_position_trade()
         pos.Status = status
         self._attach_session_(pos)
@@ -332,10 +332,10 @@ class SystemAPI(ABC):
                 case UpdateID.OpenedSellPosition:
                     actions += engine.perform(update_id, OpenedSellPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=self._receive_update_position_()))
                 case UpdateID.ModifiedBuyPositionVolume:
-                    pos, trade = self._receive_update_position_trade_()
+                    pos, trade = self._receive_update_position_trade_(PositionStatus.Opened)
                     actions += engine.perform(update_id, ModifiedBuyPositionVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.ModifiedSellPositionVolume:
-                    pos, trade = self._receive_update_position_trade_()
+                    pos, trade = self._receive_update_position_trade_(PositionStatus.Opened)
                     actions += engine.perform(update_id, ModifiedSellPositionVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.ModifiedBuyPositionStopLoss:
                     actions += engine.perform(update_id, ModifiedBuyPositionStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=self._receive_update_position_()))

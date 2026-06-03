@@ -407,7 +407,7 @@ class DatabaseAPI(ServiceAPI, ABC):
             self._connection_.commit()
             self._transaction_ = False
             timer.stop()
-            self._log_.info(lambda: f"Commit Operation: Closed Transaction ({timer.result()})")
+            self._log_.debug(lambda: f"Commit Operation: Closed Transaction ({timer.result()})")
         return self
 
     def rollback(self) -> Self:
@@ -424,7 +424,7 @@ class DatabaseAPI(ServiceAPI, ABC):
             self._connection_.rollback()
             self._transaction_ = False
             timer.stop()
-            self._log_.info(lambda: f"Rollback Operation: Closed Transaction ({timer.result()})")
+            self._log_.debug(lambda: f"Rollback Operation: Closed Transaction ({timer.result()})")
         return self
 
     def fetchone(self, *, legacy: Union[bool, Missing] = MISSING) -> Union[pd.DataFrame, pl.DataFrame]:
@@ -434,7 +434,7 @@ class DatabaseAPI(ServiceAPI, ABC):
         :return: A DataFrame containing the fetched row.
         """
         timer, df = self._fetch_(callback=lambda: self._frame_(self._cursor_.fetchone(), legacy=legacy), abort=self.rollback)
-        self._log_.info(lambda: f"Fetch One Operation: Fetched {len(df)} data points ({timer.result()})")
+        self._log_.debug(lambda: f"Fetch One Operation: Fetched {len(df)} Data Points ({timer.result()})")
         return df
 
     def fetchmany(self, *, n: int, legacy: Union[bool, Missing] = MISSING) -> Union[pd.DataFrame, pl.DataFrame]:
@@ -445,7 +445,7 @@ class DatabaseAPI(ServiceAPI, ABC):
         :return: A DataFrame containing the fetched rows.
         """
         timer, df = self._fetch_(callback=lambda: self._frame_(self._cursor_.fetchmany(n), legacy=legacy), abort=self.rollback)
-        self._log_.info(lambda: f"Fetch Many Operation: Fetched {len(df)} data points ({timer.result()})")
+        self._log_.debug(lambda: f"Fetch Many Operation: Fetched {len(df)} Data Points ({timer.result()})")
         return df
 
     def fetchall(self, *, legacy: Union[bool, Missing] = MISSING) -> Union[pd.DataFrame, pl.DataFrame]:
@@ -455,7 +455,7 @@ class DatabaseAPI(ServiceAPI, ABC):
         :return: A DataFrame containing the fetched rows.
         """
         timer, df = self._fetch_(callback=lambda: self._frame_(self._cursor_.fetchall(), legacy=legacy), abort=self.rollback)
-        self._log_.info(lambda: f"Fetch All Operation: Fetched {len(df)} data points ({timer.result()})")
+        self._log_.debug(lambda: f"Fetch All Operation: Fetched {len(df)} Data Points ({timer.result()})")
         return df
 
     def executeone(self, query: QueryAPI, *args, database: Union[str, Sequence, None, Missing] = MISSING, schema: Union[str, Sequence, None, Missing] = MISSING, table: Union[str, Sequence, None, Missing] = MISSING, admin: Union[bool, Missing] = MISSING, **kwargs) -> Self:
@@ -484,7 +484,7 @@ class DatabaseAPI(ServiceAPI, ABC):
             else: self._cursor_.execute(sql)
             self._transaction_ = True
         timer = self._execute_(callback=_execute_, abort=self.rollback)
-        self._log_.info(lambda: f"Execute One Operation: Executed ({timer.result()})")
+        self._log_.debug(lambda: f"Execute One Operation: Executed ({timer.result()})")
         return self
 
     def executemany(self, query: QueryAPI, *args, database: Union[str, Sequence, None, Missing] = MISSING, schema: Union[str, Sequence, None, Missing] = MISSING, table: Union[str, Sequence, None, Missing] = MISSING, admin: Union[bool, Missing] = MISSING, **kwargs) -> Self:
@@ -509,13 +509,13 @@ class DatabaseAPI(ServiceAPI, ABC):
         batch = self.flatten(args[0]) if len(args) == 1 else self.flatten(args)
         if not batch or not all(isinstance(row, (list, tuple, dict)) for row in batch):
             e = ValueError("Expecting batch as tuple/list of tuples/lists or tuple/list of dicts")
-            self._log_.error(lambda: "Execute Many Operation: Failed")
-            self._log_.exception(lambda: str(e))
+            self._log_.error(lambda: f"Execute Many Operation: Failed · {e}")
+            self._log_.exception(lambda: f"Execute Many Operation: Failed · {e}")
             raise e
         if not all(isinstance(row, type(batch[0])) for row in batch):
             e = ValueError("Expecting batch to be the same type (all tuples, all lists, or all dicts)")
-            self._log_.error(lambda: "Execute Many Operation: Failed")
-            self._log_.exception(lambda: str(e))
+            self._log_.error(lambda: f"Execute Many Operation: Failed · {e}")
+            self._log_.exception(lambda: f"Execute Many Operation: Failed · {e}")
             raise e
         sql, configuration, kwargs = self._query_(query, **kwargs)
         parameters = []
@@ -526,7 +526,7 @@ class DatabaseAPI(ServiceAPI, ABC):
             self._cursor_.executemany(sql, parameters)
             self._transaction_ = True
         timer = self._execute_(callback=_execute_, abort=self.rollback)
-        self._log_.info(lambda: f"Execute Many Operation: Executed ({timer.result()})")
+        self._log_.debug(lambda: f"Execute Many Operation: Executed ({timer.result()})")
         return self
 
     def execute(self, query: QueryAPI, *args, database: Union[str, Sequence, None, Missing] = MISSING, schema: Union[str, Sequence, None, Missing] = MISSING, table: Union[str, Sequence, None, Missing] = MISSING, admin: Union[bool, Missing] = MISSING, **kwargs) -> Self:

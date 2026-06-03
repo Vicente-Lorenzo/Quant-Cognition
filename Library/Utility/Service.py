@@ -53,8 +53,8 @@ class ServiceAPI(DataframeAPI, ABC):
             self._log_.info(lambda: f"Connect Operation: Connected ({timer.result()})")
             return self
         except Exception as e:
-            self._log_.error(lambda: "Connect Operation: Failed")
-            self._log_.exception(lambda: str(e))
+            self._log_.error(lambda: f"Connect Operation: Failed · {e}")
+            self._log_.exception(lambda: f"Connect Operation: Failed · {e}")
             raise
 
     def __enter__(self): return self.connect()
@@ -86,8 +86,8 @@ class ServiceAPI(DataframeAPI, ABC):
             self._log_.info(lambda: f"Disconnect Operation: Disconnected ({timer.result()})")
             return self
         except Exception as e:
-            self._log_.error(lambda: "Disconnect Operation: Failed")
-            self._log_.exception(lambda: str(e))
+            self._log_.error(lambda: f"Disconnect Operation: Failed · {e}")
+            self._log_.exception(lambda: f"Disconnect Operation: Failed · {e}")
             raise
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -112,8 +112,8 @@ class ServiceAPI(DataframeAPI, ABC):
             return timer, result
         except Exception as e:
             if abort is not None: abort()
-            self._log_.error(lambda: "Fetch Operation: Failed")
-            self._log_.exception(lambda: str(e))
+            self._log_.error(lambda: f"Fetch Operation: Failed · {e}")
+            self._log_.exception(lambda: f"Fetch Operation: Failed · {e}")
             raise
         finally: timer.stop()
 
@@ -126,7 +126,7 @@ class ServiceAPI(DataframeAPI, ABC):
             return timer
         except Exception as e:
             if abort is not None: abort()
-            self._log_.error(lambda: "Execute Operation: Failed")
-            self._log_.exception(lambda: str(e))
+            self._log_.error(lambda: f"Execute Operation: Failed · {e}")
+            self._log_.exception(lambda: f"Execute Operation: Failed · {e}")
             raise
         finally: timer.stop()
