@@ -5,7 +5,7 @@ import functools
 import dataclasses
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import Union, Type, Any, Self
+from typing import Union, Type, Any, ClassVar, Self
 
 from Library.Utility.Typing import MISSING
 
@@ -73,6 +73,8 @@ class DataclassAPI:
 
     UID: Any = field(default=MISSING, kw_only=True)
 
+    _flatten_: ClassVar[tuple[str, ...]] = ()
+
     def __init_subclass__(cls, **kwargs):
         super(DataclassAPI, cls).__init_subclass__(**kwargs)
         cls.ID = DatametaAPI(cls, full=False)
@@ -81,7 +83,7 @@ class DataclassAPI:
     def _parse_(self, name, flatten=False):
         f = getattr(self, name)
         if isinstance(f, Enum): return f.name
-        if flatten and isinstance(f, DataclassAPI): return f
+        if flatten and name in self._flatten_ and isinstance(f, DataclassAPI): return f
         if isinstance(f, DataclassAPI) and (uid := f.UID) is not MISSING: return uid
         return f
 
