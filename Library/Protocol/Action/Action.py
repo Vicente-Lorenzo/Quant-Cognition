@@ -10,59 +10,60 @@ from Library.Utility.Typing import cast
 
 class ActionID(EnumerationAPI):
     Init = 0
-    AskAboveTarget = 1
-    AskBelowTarget = 2
-    BidAboveTarget = 3
-    BidBelowTarget = 4
-    OpenBuyStopOrder = 5
-    OpenSellStopOrder = 6
-    ModifyBuyStopOrderVolume = 7
-    ModifySellStopOrderVolume = 8
-    ModifyBuyStopOrderStopPrice = 9
-    ModifySellStopOrderStopPrice = 10
-    ModifyBuyStopOrderStopLoss = 11
-    ModifySellStopOrderStopLoss = 12
-    ModifyBuyStopOrderTakeProfit = 13
-    ModifySellStopOrderTakeProfit = 14
-    CloseBuyStopOrder = 15
-    CloseSellStopOrder = 16
-    OpenBuyLimitOrder = 17
-    OpenSellLimitOrder = 18
-    ModifyBuyLimitOrderVolume = 19
-    ModifySellLimitOrderVolume = 20
-    ModifyBuyLimitOrderLimitPrice = 21
-    ModifySellLimitOrderLimitPrice = 22
-    ModifyBuyLimitOrderStopLoss = 23
-    ModifySellLimitOrderStopLoss = 24
-    ModifyBuyLimitOrderTakeProfit = 25
-    ModifySellLimitOrderTakeProfit = 26
-    CloseBuyLimitOrder = 27
-    CloseSellLimitOrder = 28
-    OpenBuyStopLimitOrder = 29
-    OpenSellStopLimitOrder = 30
-    ModifyBuyStopLimitOrderVolume = 31
-    ModifySellStopLimitOrderVolume = 32
-    ModifyBuyStopLimitOrderStopPrice = 33
-    ModifySellStopLimitOrderStopPrice = 34
-    ModifyBuyStopLimitOrderLimitPrice = 35
-    ModifySellStopLimitOrderLimitPrice = 36
-    ModifyBuyStopLimitOrderStopLoss = 37
-    ModifySellStopLimitOrderStopLoss = 38
-    ModifyBuyStopLimitOrderTakeProfit = 39
-    ModifySellStopLimitOrderTakeProfit = 40
-    CloseBuyStopLimitOrder = 41
-    CloseSellStopLimitOrder = 42
-    OpenBuyPosition = 43
-    OpenSellPosition = 44
-    ModifyBuyPositionVolume = 45
-    ModifySellPositionVolume = 46
-    ModifyBuyPositionStopLoss = 47
-    ModifySellPositionStopLoss = 48
-    ModifyBuyPositionTakeProfit = 49
-    ModifySellPositionTakeProfit = 50
-    CloseBuyPosition = 51
-    CloseSellPosition = 52
-    Complete = 53
+    Execution = 1
+    AskAboveTarget = 2
+    AskBelowTarget = 3
+    BidAboveTarget = 4
+    BidBelowTarget = 5
+    OpenBuyStopOrder = 6
+    OpenSellStopOrder = 7
+    ModifyBuyStopOrderVolume = 8
+    ModifySellStopOrderVolume = 9
+    ModifyBuyStopOrderStopPrice = 10
+    ModifySellStopOrderStopPrice = 11
+    ModifyBuyStopOrderStopLoss = 12
+    ModifySellStopOrderStopLoss = 13
+    ModifyBuyStopOrderTakeProfit = 14
+    ModifySellStopOrderTakeProfit = 15
+    CloseBuyStopOrder = 16
+    CloseSellStopOrder = 17
+    OpenBuyLimitOrder = 18
+    OpenSellLimitOrder = 19
+    ModifyBuyLimitOrderVolume = 20
+    ModifySellLimitOrderVolume = 21
+    ModifyBuyLimitOrderLimitPrice = 22
+    ModifySellLimitOrderLimitPrice = 23
+    ModifyBuyLimitOrderStopLoss = 24
+    ModifySellLimitOrderStopLoss = 25
+    ModifyBuyLimitOrderTakeProfit = 26
+    ModifySellLimitOrderTakeProfit = 27
+    CloseBuyLimitOrder = 28
+    CloseSellLimitOrder = 29
+    OpenBuyStopLimitOrder = 30
+    OpenSellStopLimitOrder = 31
+    ModifyBuyStopLimitOrderVolume = 32
+    ModifySellStopLimitOrderVolume = 33
+    ModifyBuyStopLimitOrderStopPrice = 34
+    ModifySellStopLimitOrderStopPrice = 35
+    ModifyBuyStopLimitOrderLimitPrice = 36
+    ModifySellStopLimitOrderLimitPrice = 37
+    ModifyBuyStopLimitOrderStopLoss = 38
+    ModifySellStopLimitOrderStopLoss = 39
+    ModifyBuyStopLimitOrderTakeProfit = 40
+    ModifySellStopLimitOrderTakeProfit = 41
+    CloseBuyStopLimitOrder = 42
+    CloseSellStopLimitOrder = 43
+    OpenBuyPosition = 44
+    OpenSellPosition = 45
+    ModifyBuyPositionVolume = 46
+    ModifySellPositionVolume = 47
+    ModifyBuyPositionStopLoss = 48
+    ModifySellPositionStopLoss = 49
+    ModifyBuyPositionTakeProfit = 50
+    ModifySellPositionTakeProfit = 51
+    CloseBuyPosition = 52
+    CloseSellPosition = 53
+    Complete = 54
 
 @dataclass(slots=True)
 class ActionAPI(DataclassAPI):
@@ -84,6 +85,13 @@ class InitActionAPI(ActionAPI):
     ProcessID: int
     def serialize(self) -> bytes:
         return self._binary_.pack(self.ActionID.value, self.ProcessID)
+
+@dataclass(slots=True)
+class ExecutionActionAPI(ActionAPI):
+    ActionID: ClassVar[ActionID] = ActionID.Execution
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B')
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value)
 
 @dataclass(slots=True)
 class AskAboveTargetActionAPI(ActionAPI):
@@ -130,6 +138,7 @@ __all__ = [
     "ActionAPI",
     "CompleteActionAPI",
     "InitActionAPI",
+    "ExecutionActionAPI",
     "AskAboveTargetActionAPI",
     "AskBelowTargetActionAPI",
     "BidAboveTargetActionAPI",

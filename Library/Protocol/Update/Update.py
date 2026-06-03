@@ -21,83 +21,84 @@ class UpdateID(EnumerationAPI):
     Init = 0
     Account = 1
     Security = 2
-    Tick = 3
-    BarOpened = 4
-    BarClosed = 5
-    AskAboveTarget = 6
-    AskBelowTarget = 7
-    BidAboveTarget = 8
-    BidBelowTarget = 9
-    OpenedBuyStopOrder = 10
-    OpenedSellStopOrder = 11
-    ModifiedBuyStopOrderVolume = 12
-    ModifiedSellStopOrderVolume = 13
-    ModifiedBuyStopOrderStopPrice = 14
-    ModifiedSellStopOrderStopPrice = 15
-    ModifiedBuyStopOrderStopLoss = 16
-    ModifiedSellStopOrderStopLoss = 17
-    ModifiedBuyStopOrderTakeProfit = 18
-    ModifiedSellStopOrderTakeProfit = 19
-    ClosedBuyStopOrder = 20
-    ClosedSellStopOrder = 21
-    FilledBuyStopOrder = 22
-    FilledSellStopOrder = 23
-    ExpiredBuyStopOrder = 24
-    ExpiredSellStopOrder = 25
-    OpenedBuyLimitOrder = 26
-    OpenedSellLimitOrder = 27
-    ModifiedBuyLimitOrderVolume = 28
-    ModifiedSellLimitOrderVolume = 29
-    ModifiedBuyLimitOrderLimitPrice = 30
-    ModifiedSellLimitOrderLimitPrice = 31
-    ModifiedBuyLimitOrderStopLoss = 32
-    ModifiedSellLimitOrderStopLoss = 33
-    ModifiedBuyLimitOrderTakeProfit = 34
-    ModifiedSellLimitOrderTakeProfit = 35
-    ClosedBuyLimitOrder = 36
-    ClosedSellLimitOrder = 37
-    FilledBuyLimitOrder = 38
-    FilledSellLimitOrder = 39
-    ExpiredBuyLimitOrder = 40
-    ExpiredSellLimitOrder = 41
-    OpenedBuyStopLimitOrder = 42
-    OpenedSellStopLimitOrder = 43
-    ModifiedBuyStopLimitOrderVolume = 44
-    ModifiedSellStopLimitOrderVolume = 45
-    ModifiedBuyStopLimitOrderStopPrice = 46
-    ModifiedSellStopLimitOrderStopPrice = 47
-    ModifiedBuyStopLimitOrderLimitPrice = 48
-    ModifiedSellStopLimitOrderLimitPrice = 49
-    ModifiedBuyStopLimitOrderStopLoss = 50
-    ModifiedSellStopLimitOrderStopLoss = 51
-    ModifiedBuyStopLimitOrderTakeProfit = 52
-    ModifiedSellStopLimitOrderTakeProfit = 53
-    ClosedBuyStopLimitOrder = 54
-    ClosedSellStopLimitOrder = 55
-    FilledBuyStopLimitOrder = 56
-    FilledSellStopLimitOrder = 57
-    ExpiredBuyStopLimitOrder = 58
-    ExpiredSellStopLimitOrder = 59
-    OpenedBuyPosition = 60
-    OpenedSellPosition = 61
-    ModifiedBuyPositionVolume = 62
-    ModifiedSellPositionVolume = 63
-    ModifiedBuyPositionStopLoss = 64
-    ModifiedSellPositionStopLoss = 65
-    ModifiedBuyPositionTakeProfit = 66
-    ModifiedSellPositionTakeProfit = 67
-    ClosedBuyPosition = 68
-    ClosedSellPosition = 69
-    StopLossBuyPosition = 70
-    StopLossSellPosition = 71
-    TakeProfitBuyPosition = 72
-    TakeProfitSellPosition = 73
-    MarginCallBuyPosition = 74
-    MarginCallSellPosition = 75
-    Complete = 76
-    Denied = 77
-    Exception = 78
-    Shutdown = 79
+    Execution = 3
+    Tick = 4
+    BarOpened = 5
+    BarClosed = 6
+    AskAboveTarget = 7
+    AskBelowTarget = 8
+    BidAboveTarget = 9
+    BidBelowTarget = 10
+    OpenedBuyStopOrder = 11
+    OpenedSellStopOrder = 12
+    ModifiedBuyStopOrderVolume = 13
+    ModifiedSellStopOrderVolume = 14
+    ModifiedBuyStopOrderStopPrice = 15
+    ModifiedSellStopOrderStopPrice = 16
+    ModifiedBuyStopOrderStopLoss = 17
+    ModifiedSellStopOrderStopLoss = 18
+    ModifiedBuyStopOrderTakeProfit = 19
+    ModifiedSellStopOrderTakeProfit = 20
+    ClosedBuyStopOrder = 21
+    ClosedSellStopOrder = 22
+    FilledBuyStopOrder = 23
+    FilledSellStopOrder = 24
+    ExpiredBuyStopOrder = 25
+    ExpiredSellStopOrder = 26
+    OpenedBuyLimitOrder = 27
+    OpenedSellLimitOrder = 28
+    ModifiedBuyLimitOrderVolume = 29
+    ModifiedSellLimitOrderVolume = 30
+    ModifiedBuyLimitOrderLimitPrice = 31
+    ModifiedSellLimitOrderLimitPrice = 32
+    ModifiedBuyLimitOrderStopLoss = 33
+    ModifiedSellLimitOrderStopLoss = 34
+    ModifiedBuyLimitOrderTakeProfit = 35
+    ModifiedSellLimitOrderTakeProfit = 36
+    ClosedBuyLimitOrder = 37
+    ClosedSellLimitOrder = 38
+    FilledBuyLimitOrder = 39
+    FilledSellLimitOrder = 40
+    ExpiredBuyLimitOrder = 41
+    ExpiredSellLimitOrder = 42
+    OpenedBuyStopLimitOrder = 43
+    OpenedSellStopLimitOrder = 44
+    ModifiedBuyStopLimitOrderVolume = 45
+    ModifiedSellStopLimitOrderVolume = 46
+    ModifiedBuyStopLimitOrderStopPrice = 47
+    ModifiedSellStopLimitOrderStopPrice = 48
+    ModifiedBuyStopLimitOrderLimitPrice = 49
+    ModifiedSellStopLimitOrderLimitPrice = 50
+    ModifiedBuyStopLimitOrderStopLoss = 51
+    ModifiedSellStopLimitOrderStopLoss = 52
+    ModifiedBuyStopLimitOrderTakeProfit = 53
+    ModifiedSellStopLimitOrderTakeProfit = 54
+    ClosedBuyStopLimitOrder = 55
+    ClosedSellStopLimitOrder = 56
+    FilledBuyStopLimitOrder = 57
+    FilledSellStopLimitOrder = 58
+    ExpiredBuyStopLimitOrder = 59
+    ExpiredSellStopLimitOrder = 60
+    OpenedBuyPosition = 61
+    OpenedSellPosition = 62
+    ModifiedBuyPositionVolume = 63
+    ModifiedSellPositionVolume = 64
+    ModifiedBuyPositionStopLoss = 65
+    ModifiedSellPositionStopLoss = 66
+    ModifiedBuyPositionTakeProfit = 67
+    ModifiedSellPositionTakeProfit = 68
+    ClosedBuyPosition = 69
+    ClosedSellPosition = 70
+    StopLossBuyPosition = 71
+    StopLossSellPosition = 72
+    TakeProfitBuyPosition = 73
+    TakeProfitSellPosition = 74
+    MarginCallBuyPosition = 75
+    MarginCallSellPosition = 76
+    Complete = 77
+    Denied = 78
+    Exception = 79
+    Shutdown = 80
 
 @dataclass(slots=True)
 class UpdateAPI(DataclassAPI):
@@ -126,6 +127,10 @@ class SecurityUpdateAPI(UpdateAPI):
     pass
 
 @dataclass(slots=True)
+class ExecutionUpdateAPI(UpdateAPI):
+    pass
+
+@dataclass(slots=True)
 class TickUpdateAPI(UpdateAPI):
     Tick: TickAPI
 
@@ -140,6 +145,7 @@ __all__ = [
     "InitUpdateAPI",
     "AccountUpdateAPI",
     "SecurityUpdateAPI",
+    "ExecutionUpdateAPI",
     "TickUpdateAPI",
     "BarUpdateAPI"
 ]
