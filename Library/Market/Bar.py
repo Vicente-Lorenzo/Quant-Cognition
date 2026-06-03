@@ -23,6 +23,8 @@ class BarAPI(DatapointAPI):
     Schema: ClassVar[str] = MarketAPI.Schema
     Table: ClassVar[str] = "Bar"
 
+    _flatten_: ClassVar[tuple[str, ...]] = ("GapTick", "OpenTick", "HighTick", "LowTick", "CloseTick")
+
     UID: Union[int, None] = field(default=None, kw_only=True)
     Security: InitVar[Union[int, SecurityAPI, None]] = field(default=MISSING)
     Timeframe: InitVar[Union[str, TimeframeAPI, None]] = field(default=MISSING)
