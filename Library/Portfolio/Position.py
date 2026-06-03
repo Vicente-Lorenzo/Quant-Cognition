@@ -26,6 +26,10 @@ class PositionType(EnumerationAPI):
     Normal = 0
     Continuation = 1
 
+class PositionStatus(EnumerationAPI):
+    Opened = 1
+    Closed = 2
+
 @dataclass
 class PositionAPI(DatapointAPI):
 
@@ -39,6 +43,7 @@ class PositionAPI(DatapointAPI):
     Order: InitVar[Union[int, OrderAPI, None]] = field(default=MISSING)
     Security: InitVar[Union[int, SecurityAPI, None]] = field(default=MISSING)
     Type: InitVar[Union[PositionType, str, None]] = field(default=MISSING)
+    Status: InitVar[Union[PositionStatus, str, None]] = field(default=MISSING)
     Direction: InitVar[Union[Direction, str, None]] = field(default=MISSING)
     Volume: Union[float, None] = None
     Quantity: Union[float, None] = None
@@ -68,6 +73,7 @@ class PositionAPI(DatapointAPI):
     _order_: Union[OrderAPI, None] = field(default=None, init=False, repr=False)
     _security_: Union[SecurityAPI, None] = field(default=None, init=False, repr=False)
     _type_: Union[PositionType, None] = field(default=None, init=False, repr=False)
+    _status_: Union[PositionStatus, None] = field(default=None, init=False, repr=False)
     _direction_: Union[Direction, None] = field(default=None, init=False, repr=False)
     _entry_timestamp_: Union[TimestampAPI, None] = field(default=None, init=False, repr=False)
     _entry_price_: Union[PriceAPI, None] = field(default=None, init=False, repr=False)
@@ -97,6 +103,7 @@ class PositionAPI(DatapointAPI):
             self.ID.Order: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{OrderAPI.Table}"("{OrderAPI.ID.UID}")'),
             self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
             self.ID.Type: pl.String(),
+            self.ID.Status: pl.String(),
             self.ID.Direction: pl.String(),
             self.ID.Volume: pl.Float64(),
             self.ID.Quantity: pl.Float64(),
@@ -137,6 +144,7 @@ class PositionAPI(DatapointAPI):
                       order: Union[int, OrderAPI, None],
                       security: Union[int, SecurityAPI, None],
                       type: Union[PositionType, str, None],
+                      status: Union[PositionStatus, str, None],
                       direction: Union[Direction, str, None],
                       entry_timestamp: Union[datetime, TimestampAPI, None],
                       entry_price: Union[float, PriceAPI, None],
@@ -160,6 +168,7 @@ class PositionAPI(DatapointAPI):
         order = coerce(order)
         security = coerce(security)
         type = coerce(type)
+        status = coerce(status)
         direction = coerce(direction)
         entry_timestamp = coerce(entry_timestamp)
         entry_price = coerce(entry_price)
@@ -191,6 +200,7 @@ class PositionAPI(DatapointAPI):
         elif security is not MISSING and security is not None:
             self._security_ = SecurityAPI(UID=security, db=db, autoload=True)
         self._type_ = PositionType.parse(type) if type is not MISSING else None
+        self._status_ = PositionStatus.parse(status) if status is not MISSING else PositionStatus.Opened
         self._direction_ = Direction.parse(direction) if direction is not MISSING else None
         if isinstance(entry_timestamp, TimestampAPI): self._entry_timestamp_ = entry_timestamp
         elif entry_timestamp is not MISSING and entry_timestamp is not None:
@@ -218,6 +228,7 @@ class PositionAPI(DatapointAPI):
         row = super()._pull_(overload=overload)
         if row:
             self._type_ = PositionType.parse(row.get(self.ID.Type))
+            self._status_ = PositionStatus.parse(row.get(self.ID.Status))
             self._direction_ = Direction.parse(row.get(self.ID.Direction))
         return row
 
@@ -268,6 +279,14 @@ class PositionAPI(DatapointAPI):
     @Type.setter
     def Type(self, val: Union[PositionType, str, None]) -> None:
         self._type_ = PositionType.parse(val)
+
+    @property
+    @overridefield
+    def Status(self) -> Union[PositionStatus, None]:
+        return self._status_
+    @Status.setter
+    def Status(self, val: Union[PositionStatus, str, None]) -> None:
+        self._status_ = PositionStatus.parse(val)
 
     @property
     @overridefield

@@ -9,7 +9,7 @@ from Library.Database.Database import PrimaryKey, ForeignKey, DatabaseAPI
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Dataclass import overridefield, coerce
 from Library.Portfolio.Portfolio import PortfolioAPI
-from Library.Portfolio.Position import PositionAPI, PositionType
+from Library.Portfolio.Position import PositionAPI, PositionType, PositionStatus
 from Library.Portfolio.Order import OrderAPI
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Account import AccountAPI
@@ -89,6 +89,7 @@ class TradeAPI(PositionAPI):
                       order: Union[int, OrderAPI, None],
                       security: Union[int, SecurityAPI, None],
                       type: Union[PositionType, str, None],
+                      status: Union[PositionStatus, str, None],
                       direction: Union[Direction, str, None],
                       entry_timestamp: Union[datetime, TimestampAPI, None],
                       entry_price: Union[float, PriceAPI, None],
@@ -129,6 +130,7 @@ class TradeAPI(PositionAPI):
                               order=order,
                               security=security,
                               type=type,
+                              status=PositionStatus.Closed,
                               direction=direction,
                               entry_timestamp=entry_timestamp,
                               entry_price=entry_price,
