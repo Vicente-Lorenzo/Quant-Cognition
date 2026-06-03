@@ -12,7 +12,7 @@ from Library.Market.Bar import BarAPI
 from Library.Market.Tick import TickAPI
 from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.Order import OrderAPI
-from Library.Portfolio.Position import PositionAPI
+from Library.Portfolio.Position import PositionAPI, PositionStatus
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Trade import TradeAPI
 from Library.Protocol.Action import ActionAPI, ActionID, CompleteActionAPI
@@ -22,6 +22,7 @@ from Library.Protocol.Update import (
     InitUpdateAPI,
     AccountUpdateAPI,
     SecurityUpdateAPI,
+    ExecutionUpdateAPI,
     BarUpdateAPI,
     TickUpdateAPI,
     OpenedBuyPositionUpdateAPI,
@@ -263,8 +264,9 @@ class SystemAPI(ABC):
         raise NotImplementedError
 
     
-    def _receive_update_position_trade_(self):
-        pos, trade = self.receive_update_position_trade(offset=337)
+    def _receive_update_position_trade_(self, status: PositionStatus = PositionStatus.Opened):
+        pos, trade = self.receive_update_position_trade()
+        pos.Status = status
         self._attach_session_(pos)
         self._attach_session_(trade)
         self._portfolio_.add(pos)
@@ -309,6 +311,8 @@ class SystemAPI(ABC):
                 case UpdateID.Security:
                     self.security = self._receive_update_security_()
                     actions += engine.perform(update_id, SecurityUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio))
+                case UpdateID.Execution:
+                    actions += engine.perform(update_id, ExecutionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio))
                 case UpdateID.Tick:
                     actions += engine.perform(update_id, TickUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Tick=self._receive_update_tick_()))
                 case UpdateID.BarOpened:
@@ -342,28 +346,28 @@ class SystemAPI(ABC):
                 case UpdateID.ModifiedSellPositionTakeProfit:
                     actions += engine.perform(update_id, ModifiedSellPositionTakeProfitUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=self._receive_update_position_()))
                 case UpdateID.ClosedBuyPosition:
-                    pos, trade = self._receive_update_position_trade_()
+                    pos, trade = self._receive_update_position_trade_(PositionStatus.Closed)
                     actions += engine.perform(update_id, ClosedBuyPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.ClosedSellPosition:
-                    pos, trade = self._receive_update_position_trade_()
+                    pos, trade = self._receive_update_position_trade_(PositionStatus.Closed)
                     actions += engine.perform(update_id, ClosedSellPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.StopLossBuyPosition:
-                    pos, trade = self._receive_update_position_trade_()
+                    pos, trade = self._receive_update_position_trade_(PositionStatus.Closed)
                     actions += engine.perform(update_id, StopLossBuyPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.StopLossSellPosition:
-                    pos, trade = self._receive_update_position_trade_()
+                    pos, trade = self._receive_update_position_trade_(PositionStatus.Closed)
                     actions += engine.perform(update_id, StopLossSellPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.TakeProfitBuyPosition:
-                    pos, trade = self._receive_update_position_trade_()
+                    pos, trade = self._receive_update_position_trade_(PositionStatus.Closed)
                     actions += engine.perform(update_id, TakeProfitBuyPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.TakeProfitSellPosition:
-                    pos, trade = self._receive_update_position_trade_()
+                    pos, trade = self._receive_update_position_trade_(PositionStatus.Closed)
                     actions += engine.perform(update_id, TakeProfitSellPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.MarginCallBuyPosition:
-                    pos, trade = self._receive_update_position_trade_()
+                    pos, trade = self._receive_update_position_trade_(PositionStatus.Closed)
                     actions += engine.perform(update_id, MarginCallBuyPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.MarginCallSellPosition:
-                    pos, trade = self._receive_update_position_trade_()
+                    pos, trade = self._receive_update_position_trade_(PositionStatus.Closed)
                     actions += engine.perform(update_id, MarginCallSellPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
                 case UpdateID.OpenedBuyStopOrder:
                     actions += engine.perform(update_id, OpenedBuyStopOrderUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Order=self._receive_update_order_()))
