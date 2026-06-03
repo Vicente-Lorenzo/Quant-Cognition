@@ -4,7 +4,7 @@ import os
 import struct
 import contextlib
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Type, Union, TYPE_CHECKING
 
 from Library.Database.Database import DatabaseAPI
@@ -85,6 +85,7 @@ class RealtimeAPI(SystemAPI):
         self._sync_buffer_: list[BarAPI] = []
         self._warmup_window_: Union[int, None] = None
         self._warmup_database_: int = 0
+        self._warmup_db_timestamps_: list[datetime] = []
         self._warmup_ready_: bool = False
         self._initial_account_: Union[AccountAPI, None] = None
         self._start_timestamp_: Union[datetime, None] = None
@@ -330,7 +331,32 @@ class RealtimeAPI(SystemAPI):
         windows = [getattr(self.indicator.Technical, "Window", 0) or 0,
                    getattr(self.indicator.Fundamental, "Window", 0) or 0,
                    getattr(self.indicator.Sentimental, "Window", 0) or 0]
-        return max(windows) or 1
+        return max(windows)
+
+    def _continuous_(self, earlier: datetime, later: datetime, weekdays: set[int]) -> bool:
+        value = self._timeframe_.Value or 1
+        if self._timeframe_.Unit == "D":
+            expected = earlier.date()
+            for _ in range(value):
+                expected += timedelta(days=1)
+                while expected.weekday() not in weekdays: expected += timedelta(days=1)
+            return expected == later.date()
+        step = self._timeframe_.Seconds or 0.0
+        return step > 0 and abs((later - earlier).total_seconds() - step) < 1.0
+
+    def _warmup_database_clean_(self) -> bool:
+        database = self._warmup_db_timestamps_
+        if self._warmup_window_ is None or not self._sync_buffer_: return False
+        if len(database) < self._warmup_window_:
+            self._log_.debug(lambda: f"Phase Warmup: Database Insufficient · {len(database)} of {self._warmup_window_} Bars")
+            return False
+        sequence = [*database, self._sync_buffer_[0].Timestamp.DateTime]
+        weekdays = {timestamp.weekday() for timestamp in sequence}
+        for earlier, later in zip(sequence, sequence[1:]):
+            if not self._continuous_(earlier, later, weekdays):
+                self._log_.debug(lambda: f"Phase Warmup: Database Discontinuous · After {earlier} Expected Next Bar · Got {later}")
+                return False
+        return True
 
     def system_management(self) -> MachineAPI:
         system_engine = MachineAPI(Name="System Management", Events=len(UpdateID))
@@ -347,9 +373,10 @@ class RealtimeAPI(SystemAPI):
         def warmup(update: BarUpdateAPI):
             if self._warmup_window_ is None:
                 self._warmup_window_ = self._indicator_window_()
-                if self._db_ is not None and self._security_ is not None and self._security_.UID is not None:
-                    self._warmup_database_ = MarketAPI.pull_bars(self._db_, self._security_.UID, self._timeframe_.UID, stop=update.Bar.Timestamp.DateTime, limit=self._warmup_window_).height
-                self._log_.debug(lambda: f"Phase Warmup: Started · Window {self._warmup_window_} · Database {self._warmup_database_} Bars")
+                if self._warmup_window_ > 0 and self._db_ is not None and self._security_ is not None and self._security_.UID is not None:
+                    frame = MarketAPI.pull_bars(self._db_, self._security_.UID, self._timeframe_.UID, stop=update.Bar.Timestamp.DateTime, limit=self._warmup_window_)
+                    self._warmup_db_timestamps_ = frame[str(BarAPI.ID.Timestamp)].to_list() if frame.height else []
+                self._log_.debug(lambda: f"Phase Warmup: Started · Window {self._warmup_window_} · Database {len(self._warmup_db_timestamps_)} Bars")
             self._market_.add(update.Bar.GapTick)
             self._market_.add(update.Bar.OpenTick)
             self._market_.add(update.Bar.HighTick)
@@ -357,29 +384,33 @@ class RealtimeAPI(SystemAPI):
             self._market_.add(update.Bar.CloseTick)
             self._market_.add(update.Bar)
             self._sync_buffer_.append(update.Bar)
+            if len(self._sync_buffer_) == 1:
+                self._warmup_database_ = self._warmup_window_ if self._warmup_database_clean_() else 0
+                if self._warmup_db_timestamps_ and not self._warmup_database_:
+                    self._log_.debug(lambda: f"Phase Warmup: Database Evicted · {len(self._warmup_db_timestamps_)} Bars Discontinuous")
             if not self._warmup_ready_ and self._warmup_database_ + len(self._sync_buffer_) >= self._warmup_window_:
                 self._warmup_ready_ = True
                 return [ExecutionActionAPI()]
 
         def execute(update: CompleteUpdateAPI):
-            stream = len(self._sync_buffer_)
+            updates = len(self._sync_buffer_)
             first = self._sync_buffer_[0].Timestamp.DateTime if self._sync_buffer_ else None
             last = self._sync_buffer_[-1].Timestamp.DateTime if self._sync_buffer_ else None
             if self._warmup_timer_._start_ is not None:
                 self._warmup_timer_.stop()
                 self._log_.info(lambda: f"Phase Warmup: Completed · {self._warmup_timer_.result()} · {self._metrics_['Ticks']} Ticks · {self._metrics_['Bars']} Bars")
-            self._log_.debug(lambda: f"Phase Warmup: Window {self._warmup_window_} · Database {self._warmup_database_} Bars · Updates {stream} Bars")
+            self._log_.debug(lambda: f"Phase Warmup: Window {self._warmup_window_} · Database {self._warmup_database_} Bars · Updates {updates} Bars")
             self._log_.debug(lambda: f"Phase Warmup: First Bar {first}")
             self._log_.debug(lambda: f"Phase Warmup: Last Bar {last}")
             self._execution_timer_.start()
             self._initial_account_ = update.Portfolio.Account
-            frames = []
-            if self._warmup_window_ is not None and self._db_ is not None and self._sync_buffer_ and self._security_ is not None and self._security_.UID is not None:
-                database = MarketAPI.pull_bars(self._db_, self._security_.UID, self._timeframe_.UID, stop=self._sync_buffer_[0].Timestamp.DateTime, limit=self._warmup_window_)
-                if database.height: frames.append(database)
-            if self._sync_buffer_: frames.append(pl.DataFrame([b.dict(flatten=True) for b in self._sync_buffer_], strict=False))
-            if frames:
-                update.Market.init_data(frames[0] if len(frames) == 1 else pl.concat(frames, how="diagonal_relaxed"))
+            if self._sync_buffer_:
+                stream = pl.DataFrame([b.dict(flatten=True) for b in self._sync_buffer_], strict=False)
+                combined = stream
+                if self._warmup_database_ and self._db_ is not None and self._security_ is not None and self._security_.UID is not None:
+                    database = MarketAPI.pull_bars(self._db_, self._security_.UID, self._timeframe_.UID, stop=self._sync_buffer_[0].Timestamp.DateTime, limit=self._warmup_window_)
+                    if database.height: combined = pl.concat([database, stream], how="diagonal_relaxed").select(stream.columns)
+                update.Market.init_data(combined)
             self._sync_buffer_.clear()
 
         def update(update: BarUpdateAPI):
