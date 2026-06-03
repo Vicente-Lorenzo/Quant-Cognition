@@ -16,9 +16,9 @@ NNFX:
     TrailingStopLossScale: [1.5]
   SignalManagement:
     BaselineMode: [Signal, Off, Signal]
-    Filter1Mode: [Filter, Filter, Off]
-    Filter2Mode: [Filter, Filter, Off]
-    VolumeMode: [Filter, Filter, Off]
+    Filter1Mode: [Filter, Off, Off]
+    Filter2Mode: [Filter, Off, Off]
+    VolumeMode: [Filter, Off, Off]
   TechnicalManagement:
     Baseline: [SMA, 20]
     Filter1: [TT]
