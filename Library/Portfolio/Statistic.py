@@ -619,7 +619,7 @@ def _safe_df_(df: pl.DataFrame) -> pl.DataFrame:
     return pl.DataFrame(schema=schema)
 
 def generate_realized_report(trades_df: pl.DataFrame, account: AccountAPI, start: date, stop: date) -> pl.DataFrame:
-    initial_balance = account.Balance or 0.0
+    initial_balance = (account.Balance if account is not None else 0.0) or 0.0
     safe_trades = _safe_df_(trades_df)
     ind = sort_items(safe_trades)
     ind_df = dependent_metrics(initial_balance, start, stop, ind, REALIZED_BUY_INDIVIDUAL, REALIZED_SELL_INDIVIDUAL, REALIZED_TOTAL_INDIVIDUAL)
@@ -629,7 +629,7 @@ def generate_realized_report(trades_df: pl.DataFrame, account: AccountAPI, start
     return pl.concat([labels_df, ind_df, agg_df], how="horizontal")
 
 def generate_unrealized_report(positions_df: pl.DataFrame, account: AccountAPI, start: date, stop: date) -> pl.DataFrame:
-    initial_balance = account.Balance or 0.0
+    initial_balance = (account.Balance if account is not None else 0.0) or 0.0
     safe_positions = _safe_df_(positions_df)
     ind = sort_items(safe_positions)
     ind_df = dependent_metrics(initial_balance, start, stop, ind, UNREALIZED_BUY_INDIVIDUAL, UNREALIZED_SELL_INDIVIDUAL, UNREALIZED_TOTAL_INDIVIDUAL)

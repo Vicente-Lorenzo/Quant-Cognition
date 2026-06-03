@@ -99,7 +99,6 @@ class LoggingAPI(ABC):
         cls._class_exception_tag_ = cls._format_tag_(tag=VerboseLevel.Exception.name)
 
     def set_instance_tags(self, *args, **kwargs) -> None:
-        if self.is_entered(): return
         if not (args or kwargs): return
         self._instance_tags_ = self._join_tags([self._format_tag_(tag=tag) for tag in (*args, *kwargs.values())])
 
