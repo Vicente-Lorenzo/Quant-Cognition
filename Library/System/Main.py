@@ -201,6 +201,7 @@ def main() -> None:
     execution: str = traceback_current_module().name
 
     log: HandlerLoggingAPI = HandlerLoggingAPI(Class=execution, Subclass="Execution Management")
+    log.set_class_tags(args.provider, args.ticker, args.timeframe)
     log.console.set_verbose_level(VerboseLevel[args.console])
     log.file.set_verbose_level(VerboseLevel[args.file])
 

@@ -388,16 +388,22 @@ class RealtimeAPI(SystemAPI):
             update.Market.update_data(update.Bar)
 
         def report(update: CompleteUpdateAPI):
-            from Library.Portfolio.Statistic import generate_net_report
+            from Library.Portfolio.Statistic import generate_realized_report, generate_unrealized_report, generate_net_report
             if self._execution_timer_._start_ is not None and self._execution_timer_._stop_ is None:
                 self._execution_timer_.stop()
                 self._log_.info(lambda: f"Phase Execution: Completed · {self._execution_timer_.result()}")
             self._log_.debug(lambda: f"Phase Execution: First Bar {self._start_timestamp_}")
             self._log_.debug(lambda: f"Phase Execution: Last Bar {self._stop_timestamp_}")
             if self._portfolio_.Active and self.portfolio and self.portfolio.Security: self.portfolio.Security.save()
-            if self._initial_account_ and self._start_timestamp_ and self._stop_timestamp_:
-                self.statistics = generate_net_report(update.Portfolio.Positions, update.Portfolio.Trades, self._initial_account_, self._start_timestamp_.date(), self._stop_timestamp_.date())
-                self._log_.info(lambda: str(self.statistics))
+            account = self._initial_account_ if self._initial_account_ is not None else update.Portfolio.Account
+            start = (self._start_timestamp_ if self._start_timestamp_ is not None else datetime.now()).date()
+            stop = (self._stop_timestamp_ if self._stop_timestamp_ is not None else datetime.now()).date()
+            unrealized = generate_unrealized_report(update.Portfolio.Positions, account, start, stop)
+            realized = generate_realized_report(update.Portfolio.Trades, account, start, stop)
+            self.statistics = generate_net_report(update.Portfolio.Positions, update.Portfolio.Trades, account, start, stop)
+            self._log_.info(lambda: "Report Unrealized:\n" + str(unrealized))
+            self._log_.info(lambda: "Report Realized:\n" + str(realized))
+            self._log_.info(lambda: "Report Net:\n" + str(self.statistics))
 
         initialization.on(event=UpdateID.Init, to=initialization, action=init, reason="Handshake Initialized")
         initialization.on(event=UpdateID.BarClosed, to=initialization, action=warmup, reason=None)
