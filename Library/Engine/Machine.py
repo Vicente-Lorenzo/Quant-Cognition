@@ -35,7 +35,8 @@ class MachineAPI(DataclassAPI):
             return []
         ret = transition.perform(args)
         if transition.Reason is not None:
-            self._log_.info(lambda: f"[{self.At.Name}] → ({transition.Reason}) → [{transition.To.Name}]")
+            log = self._log_.debug if transition.To is self.At else self._log_.info
+            log(lambda: f"[{self.At.Name}] → ({transition.Reason}) → [{transition.To.Name}]")
         self.At = transition.To
         return ret if ret is not None else []
 

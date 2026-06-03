@@ -45,16 +45,16 @@ def test_security_update_sets_portfolio_security_in_initialization():
     eng.perform(UpdateID.Security, update)
     assert portfolio.Security is None
 
-def test_complete_transitions_initialization_to_execution():
+def test_execution_transitions_initialization_to_execution():
     p = ParameterAPI()
     strat = DownloadStrategyAPI(p, p, p)
     eng = strat.strategy_management()
     portfolio = PortfolioAPI()
     from unittest.mock import MagicMock
     market, technical, fundamental, sentimental = MagicMock(), MagicMock(), MagicMock(), MagicMock()
-    from Library.Protocol.Update import CompleteUpdateAPI
-    update = CompleteUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio)
-    eng.perform(UpdateID.Complete, update)
+    from Library.Protocol.Update import ExecutionUpdateAPI
+    update = ExecutionUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio)
+    eng.perform(UpdateID.Execution, update)
     assert eng.At.Name == "Execution"
     technical.init_data.assert_called_once_with(market)
     fundamental.init_data.assert_called_once_with(market)
@@ -79,7 +79,7 @@ def test_bar_closed_propagates_to_indicators_and_portfolio():
     from unittest.mock import MagicMock
     market, technical, fundamental, sentimental = MagicMock(), MagicMock(), MagicMock(), MagicMock()
     from Library.Protocol.Update import CompleteUpdateAPI
-    eng.perform(UpdateID.Complete, CompleteUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio_mock))
+    eng.perform(UpdateID.Execution, CompleteUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio_mock))
     portfolio_mock.update_data = MagicMock()
     bar_update = BarUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio_mock, Bar="bar_obj")
     eng.perform(UpdateID.BarClosed, bar_update)
@@ -104,14 +104,14 @@ def test_opened_stop_order_propagates_to_portfolio():
     portfolio.Account = None
     portfolio.Security = None
     market, technical, fundamental, sentimental = MagicMock(), MagicMock(), MagicMock(), MagicMock()
-    eng.perform(UpdateID.Complete, CompleteUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio))
+    eng.perform(UpdateID.Execution, CompleteUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio))
     account = MagicMock()
     order = MagicMock()
     order.Type = MagicMock()
     order.Type.name = "Stop"
     order.Direction = MagicMock()
     order.Direction.name = "Buy"
-    update = OpenedBuyStopOrderUpdateAPI(Account=account, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio, Order=order)
+    update = OpenedBuyStopOrderUpdateAPI(Account=account, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio, Bar=None, Order=order)
     eng.perform(UpdateID.OpenedBuyStopOrder, update)
     pass
     portfolio.open_order.assert_called_once_with(order)
@@ -128,14 +128,14 @@ def test_filled_stop_order_transitions_order_to_position():
     portfolio.Account = None
     portfolio.Security = None
     market, technical, fundamental, sentimental = MagicMock(), MagicMock(), MagicMock(), MagicMock()
-    eng.perform(UpdateID.Complete, CompleteUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio))
+    eng.perform(UpdateID.Execution, CompleteUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio))
     order = MagicMock()
     order.UID = 42
     order.Type = MagicMock(); order.Type.name = "Stop"
     order.Direction = MagicMock(); order.Direction.name = "Buy"
     position = MagicMock()
     position.UID = 100
-    update = FilledBuyStopOrderUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio, Order=order)
+    update = FilledBuyStopOrderUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio, Bar=None, Order=order)
     eng.perform(UpdateID.FilledBuyStopOrder, update)
     portfolio.close_order.assert_called_once_with(42)
 
@@ -151,11 +151,11 @@ def test_expired_limit_order_removes_order():
     portfolio.Account = None
     portfolio.Security = None
     market, technical, fundamental, sentimental = MagicMock(), MagicMock(), MagicMock(), MagicMock()
-    eng.perform(UpdateID.Complete, CompleteUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio))
+    eng.perform(UpdateID.Execution, CompleteUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio))
     order = MagicMock()
     order.UID = 77
     order.Type = MagicMock(); order.Type.name = "Limit"
     order.Direction = MagicMock(); order.Direction.name = "Buy"
-    update = ExpiredBuyLimitOrderUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio, Order=order)
+    update = ExpiredBuyLimitOrderUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio, Bar=None, Order=order)
     eng.perform(UpdateID.ExpiredBuyLimitOrder, update)
     portfolio.close_order.assert_called_once_with(77)

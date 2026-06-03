@@ -39,7 +39,7 @@ public class TransportAPI : IDisposable
         _uc_ = new EventWaitHandle(false, EventResetMode.AutoReset, $"{prefix}_uc");
         _ar_ = new EventWaitHandle(false, EventResetMode.AutoReset, $"{prefix}_ar");
         _ac_ = new EventWaitHandle(false, EventResetMode.AutoReset, $"{prefix}_ac");
-        _console_.Info($"Shared Memory transport created (iid={iid})");
+        _console_.Debug($"Connect Operation: Created Shared Memory (iid {iid})");
     }
 
     public bool PeerDead => _peer_dead_;
@@ -55,12 +55,12 @@ public class TransportAPI : IDisposable
                 int? exitCode = null;
                 try { exitCode = peer.ExitCode; } catch (Exception) { }
                 _peer_dead_ = true;
-                _console_.Warning($"Python process exited (code {exitCode?.ToString() ?? "N/A"}); transport will unblock and cBot will stop.");
+                _console_.Warning($"Watchdog Operation: Python Process Exited (code {exitCode?.ToString() ?? "N/A"}) · Transport Will Unblock");
                 _robot_.Stop();
             }
             catch (Exception e)
             {
-                _console_.Warning($"Watchdog failed: {e.Message}");
+                _console_.Warning($"Watchdog Operation: Failed · {e.Message}");
             }
         });
     }
@@ -116,6 +116,6 @@ public class TransportAPI : IDisposable
         _uc_?.Dispose();
         _ar_?.Dispose();
         _ac_?.Dispose();
-        _console_.Info("Transport disposed");
+        _console_.Debug("Disconnect Operation: Disposed Transport");
     }
 }

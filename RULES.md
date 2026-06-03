@@ -34,6 +34,16 @@ For all shell executions, use the following patterns:
 7. **Architecture:** Order methods by category (Connection → Disconnection → Business) and then by complexity (simplest first). Use `@staticmethod` for stateless logic and `InitVar` for temporary inputs.
 8. **Dataframes:** Capitalize framework-level columns (e.g., "Date", "Security"). Prefer Polars (`pl`) for performance; use Pandas (`pd`) for compatibility.
 
+## LOGGING CONVENTIONS
+Logs must be short, objective, informative, and visually distinctive so a specific line is easy to find.
+1. **Message Format:** Use `<Category> Operation: <Outcome> (<primary detail>)`. Join any additional fields with the middle dot ` · ` (e.g., `Phase Warmup: Completed · 1.20s · 205 Ticks · 41 Bars`).
+2. **State Transitions:** Render machine moves as `[StateA] → (Reason) → [StateB]`. The arrow `→` conveys motion and is reserved for transitions. A true state change (`To` differs from the current state) logs at `Info`; a self-loop (`To` equals the current state) logs at `Debug`. Hot-path self-loops on per-bar/per-tick events keep `reason=None` so they stay silent entirely.
+3. **No Commas or Periods:** Never use `,` or `.` in a log. Keep everything in one sentence; use `:`, ` · `, parentheses, and symbols instead. No end-of-sentence periods.
+4. **Debug vs Info:** `Info` is strictly trading/execution and periodic trader-useful information (machine state switches, orders/positions/trades opened or closed, reports, phase summaries). `Debug` is everything else (bloat): connection/handshake details, per-query execution, transaction commits, warmup internals (computed Window, Bars fetched from database, Bars received from updates, first/last warmup dates, first/last execution dates).
+5. **Errors & Exceptions:** Error and exception logs share one format and text: `<Category> Operation: Failed · <Reason>`, with the reason's leading word capitalized (e.g., `Connect Operation: Failed · Due to port being in use`).
+6. **Tags:** Rely on the logging module's class tags (common prefix shown before the verbose level) and instance tags (identifying the calling class/subclass). Keep tags coherent and transversal across all logs so the source is always identifiable.
+7. **Capitalization:** Use Title Case for fixed labels and nouns (`Bars`, `Ticks`, `Data Points`) and capitalize the leading word of free-text reasons.
+
 ## CONTEXT AWARENESS PROTOCOL
 Before answering code-related questions, execute this check:
 1. **Scan References:** Identify classes/functions referenced in the request.

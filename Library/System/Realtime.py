@@ -339,7 +339,7 @@ class RealtimeAPI(SystemAPI):
         execution = system_engine.state(name="Execution")
         termination = system_engine.state(name="Termination", end=True)
 
-        def init_handshake(update: InitUpdateAPI):
+        def init(update: InitUpdateAPI):
             self._transport_.watchdog(update.ProcessID)
             self._log_.debug(lambda: f"Handshake Operation: Exchanged PIDs (peer {update.ProcessID} · self {os.getpid()})")
             return [InitActionAPI(ProcessID=os.getpid())]
@@ -361,7 +361,7 @@ class RealtimeAPI(SystemAPI):
                 self._warmup_ready_ = True
                 return [ExecutionActionAPI()]
 
-        def init_market(update: CompleteUpdateAPI):
+        def execute(update: CompleteUpdateAPI):
             stream = len(self._sync_buffer_)
             first = self._sync_buffer_[0].Timestamp.DateTime if self._sync_buffer_ else None
             last = self._sync_buffer_[-1].Timestamp.DateTime if self._sync_buffer_ else None
@@ -382,12 +382,12 @@ class RealtimeAPI(SystemAPI):
                 update.Market.init_data(frames[0] if len(frames) == 1 else pl.concat(frames, how="diagonal_relaxed"))
             self._sync_buffer_.clear()
 
-        def update_market(update: BarUpdateAPI):
+        def update(update: BarUpdateAPI):
             if self._start_timestamp_ is None: self._start_timestamp_ = update.Bar.Timestamp.DateTime
             self._stop_timestamp_ = update.Bar.Timestamp.DateTime
             update.Market.update_data(update.Bar)
 
-        def report_statistics(update: CompleteUpdateAPI):
+        def report(update: CompleteUpdateAPI):
             from Library.Portfolio.Statistic import generate_net_report
             if self._execution_timer_._start_ is not None and self._execution_timer_._stop_ is None:
                 self._execution_timer_.stop()
@@ -399,13 +399,13 @@ class RealtimeAPI(SystemAPI):
                 self.statistics = generate_net_report(update.Portfolio.Positions, update.Portfolio.Trades, self._initial_account_, self._start_timestamp_.date(), self._stop_timestamp_.date())
                 self._log_.info(lambda: str(self.statistics))
 
-        initialization.on(event=UpdateID.Init, to=initialization, action=init_handshake, reason="Handshake Initialized")
+        initialization.on(event=UpdateID.Init, to=initialization, action=init, reason="Handshake Initialized")
         initialization.on(event=UpdateID.BarClosed, to=initialization, action=warmup, reason=None)
-        initialization.on(event=UpdateID.Execution, to=execution, action=init_market, reason="Market Initialized")
+        initialization.on(event=UpdateID.Execution, to=execution, action=execute, reason="Market Initialized")
         initialization.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Abruptly Terminated")
 
-        execution.on(event=UpdateID.BarClosed, to=execution, action=update_market, reason=None)
-        execution.on(event=UpdateID.Shutdown, to=termination, action=report_statistics, reason="Safely Terminated")
+        execution.on(event=UpdateID.BarClosed, to=execution, action=update, reason=None)
+        execution.on(event=UpdateID.Shutdown, to=termination, action=report, reason="Safely Terminated")
 
         return system_engine
 

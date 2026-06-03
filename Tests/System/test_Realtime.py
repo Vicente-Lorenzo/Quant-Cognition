@@ -118,7 +118,9 @@ def test_simulation_mode_drops_portfolio_records():
     system = _make_system_(market=(100, 60.0), portfolio=(0, 0.0))
     assert system._portfolio_.add is system._portfolio_._noop_
 
-def test_sync_market_routes_warmup_to_market_buffer(realtime_system):
+def test_warmup_routes_bar_to_market_buffer(realtime_system):
+    realtime_system._db_ = None
+    realtime_system._indicator_window_ = lambda: 999
     realtime_system._market_.add = MagicMock()
     g, o, h, l, c = MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
     bar = MagicMock()
@@ -126,10 +128,23 @@ def test_sync_market_routes_warmup_to_market_buffer(realtime_system):
     update = MagicMock(); update.Bar = bar
     engine = realtime_system.system_management()
     initialization = engine.state(name="Initialization")
-    transition = next(t for t in initialization._transitions_ if t is not None and getattr(t, "Action", None) and t.Action.__name__ == "sync_market")
+    transition = next(t for t in initialization._transitions_ if t is not None and getattr(t, "Action", None) and t.Action.__name__ == "warmup")
     transition.perform(update)
     assert [call.args[0] for call in realtime_system._market_.add.call_args_list] == [g, o, h, l, c, bar]
     assert realtime_system._sync_buffer_ == [bar]
+
+def test_warmup_emits_execution_when_window_reached(realtime_system):
+    realtime_system._db_ = None
+    realtime_system._indicator_window_ = lambda: 1
+    realtime_system._market_.add = MagicMock()
+    bar = MagicMock()
+    update = MagicMock(); update.Bar = bar
+    engine = realtime_system.system_management()
+    initialization = engine.state(name="Initialization")
+    transition = next(t for t in initialization._transitions_ if t is not None and getattr(t, "Action", None) and t.Action.__name__ == "warmup")
+    actions = transition.perform(update)
+    assert realtime_system._warmup_ready_ is True
+    assert actions[0].ActionID == ActionID.Execution
 
 def test_init_market_clears_sync_buffer(realtime_system):
     bar = MagicMock()
@@ -140,7 +155,7 @@ def test_init_market_clears_sync_buffer(realtime_system):
     update.Portfolio.Account = MagicMock()
     engine = realtime_system.system_management()
     initialization = engine.state(name="Initialization")
-    transition = next(t for t in initialization._transitions_ if t is not None and getattr(t, "Action", None) and t.Action.__name__ == "init_market")
+    transition = next(t for t in initialization._transitions_ if t is not None and getattr(t, "Action", None) and t.Action.__name__ == "execute")
     transition.perform(update)
     assert realtime_system._sync_buffer_ == []
 
@@ -190,6 +205,7 @@ def test_receive_update_security_updates_and_returns_security(realtime_system):
 def test_exit_drains_buffers_before_closing_stack():
     system = _make_system_()
     calls = []
+    system._connected_ = True
     system._market_._active_ = True
     system._portfolio_._active_ = True
     system._market_.shutdown = lambda: calls.append("market_shutdown")

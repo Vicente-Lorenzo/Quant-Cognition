@@ -8,26 +8,28 @@ from Library.Protocol.Binary import BinaryAPI
 
 def test_action_id_enum_values():
     assert ActionID.Init.value == 0
-    assert ActionID.OpenBuyPosition.value == 43
-    assert ActionID.OpenBuyStopOrder.value == 5
-    assert ActionID.OpenBuyLimitOrder.value == 17
-    assert ActionID.OpenBuyStopLimitOrder.value == 29
-    assert ActionID.Complete.value == 53
+    assert ActionID.Execution.value == 1
+    assert ActionID.OpenBuyPosition.value == 44
+    assert ActionID.OpenBuyStopOrder.value == 6
+    assert ActionID.OpenBuyLimitOrder.value == 18
+    assert ActionID.OpenBuyStopLimitOrder.value == 30
+    assert ActionID.Complete.value == 54
 
 def test_update_id_enum_values():
     assert UpdateID.Init.value == 0
     assert UpdateID.Account.value == 1
     assert UpdateID.Security.value == 2
-    assert UpdateID.Tick.value == 3
-    assert UpdateID.BarOpened.value == 4
-    assert UpdateID.BarClosed.value == 5
-    assert UpdateID.OpenedBuyStopOrder.value == 10
-    assert UpdateID.OpenedBuyPosition.value == 60
-    assert UpdateID.StopLossBuyPosition.value == 70
-    assert UpdateID.Complete.value == 76
-    assert UpdateID.Denied.value == 77
-    assert UpdateID.Exception.value == 78
-    assert UpdateID.Shutdown.value == 79
+    assert UpdateID.Execution.value == 3
+    assert UpdateID.Tick.value == 4
+    assert UpdateID.BarOpened.value == 5
+    assert UpdateID.BarClosed.value == 6
+    assert UpdateID.OpenedBuyStopOrder.value == 11
+    assert UpdateID.OpenedBuyPosition.value == 61
+    assert UpdateID.StopLossBuyPosition.value == 71
+    assert UpdateID.Complete.value == 77
+    assert UpdateID.Denied.value == 78
+    assert UpdateID.Exception.value == 79
+    assert UpdateID.Shutdown.value == 80
 
 def test_open_buy_position_action_serialization():
     action = OpenBuyPositionActionAPI(PositionType=PositionType.Normal, Volume=1000.0, StopLoss=1.0500, TakeProfit=1.0600)
@@ -217,7 +219,7 @@ def test_complete_update_construction():
     assert update.Security is None
 
 def test_filled_order_carries_order():
-    update = FilledBuyStopOrderUpdateAPI(Account=None, Security=None, Market=None, Technical=None, Fundamental=None, Sentimental=None, Portfolio=None, Order=None)
+    update = FilledBuyStopOrderUpdateAPI(Account=None, Security=None, Market=None, Technical=None, Fundamental=None, Sentimental=None, Portfolio=None, Bar=None, Order=None)
     assert hasattr(update, "Order")
 
 def test_denied_update_fields():
@@ -230,5 +232,5 @@ def test_exception_update_fields():
     assert update.Reason == "disconnect"
 
 def test_position_close_carries_trade():
-    update = StopLossBuyPositionUpdateAPI(Account=None, Security=None, Market=None, Technical=None, Fundamental=None, Sentimental=None, Portfolio=None, Position=None, Trade=None)
+    update = StopLossBuyPositionUpdateAPI(Account=None, Security=None, Market=None, Technical=None, Fundamental=None, Sentimental=None, Portfolio=None, Bar=None, Position=None, Trade=None)
     assert hasattr(update, "Trade")

@@ -112,7 +112,7 @@ public class RobotAPI : IDisposable
         _verification_ = verification;
 
         _log_ = new Logging(_robot_, "Strategy", console);
-        _log_.Info("Starting");
+        _log_.Info("Start Operation: Starting");
 
         _system_mode_ = ResolveSystemMode(_robot_.RunningMode);
         _database_ = ResolveDatabase(_system_mode_, strategy, database);
@@ -128,7 +128,7 @@ public class RobotAPI : IDisposable
         _portfolio_batch_ = portfolio_batch;
         _portfolio_interval_ = portfolio_interval;
 
-        _log_.Debug($"Streams: tick={_tick_stream_}, bar={_bar_stream_}, order={_order_stream_}, position={_position_stream_}, trade={_trade_stream_}");
+        _log_.Debug($"Streams: Tick {_tick_stream_} · Bar {_bar_stream_} · Order {_order_stream_} · Position {_position_stream_} · Trade {_trade_stream_}");
 
         var base_conversions = FindConversions(_robot_.Symbol.BaseAsset, _robot_.Account.Asset);
         _ask_base_conversion_ = base_conversions.Ask;
@@ -171,7 +171,7 @@ public class RobotAPI : IDisposable
         }
         else
         {
-            _log_.Info($"Verifying data accuracy ({_verification_} bars)");
+            _log_.Info($"Activation Operation: Verifying Accuracy ({_verification_} Bars)");
         }
     }
 
@@ -210,7 +210,7 @@ public class RobotAPI : IDisposable
         var portfolio_interval_arg = _portfolio_buffering_ == BufferingMode.Auto ? "" : $" --portfolio-interval {_portfolio_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{market_batch_arg}{market_interval_arg}{portfolio_batch_arg}{portfolio_interval_arg}";
         var inner_cmd = $"cd /d \"{base_directory}\" && conda run --no-capture-output -n Quant python -m Library.System.Main {script_args}";
-        _log_.Debug($"Activating: {script_args}");
+        _log_.Debug($"Activation Operation: Launching Python · {script_args}");
         SpawnTerminal(inner_cmd);
         try
         {
@@ -218,13 +218,13 @@ public class RobotAPI : IDisposable
             _system_.SendUpdateAccount(_robot_.Account);
             _system_.SendUpdateSymbol(_robot_.Symbol);
             _system_.SendUpdateComplete();
-            _log_.Debug("Handshake sent, awaiting Python actions");
+            _log_.Debug("Handshake Operation: Sent · Awaiting Python Actions");
             ReceiveAndProcessActions();
-            _log_.Info("Activated, Python instance is ready");
+            _log_.Info("Activation Operation: Activated · Python Ready");
         }
         catch (Exception e)
         {
-            _log_.Exception($"Activation failed: {e.Message}. Stopping cBot.");
+            _log_.Exception($"Activation Operation: Failed · {e.Message}");
             _robot_.Stop();
         }
     }
@@ -269,9 +269,9 @@ public class RobotAPI : IDisposable
                 if (symbol.BaseAsset == from_asset && symbol.QuoteAsset == to_asset) return (Ask: () => symbol.Ask, Bid: () => symbol.Bid);
                 if (symbol.QuoteAsset == from_asset && symbol.BaseAsset == to_asset) return (Ask: () => 1.0 / symbol.Bid, Bid: () => 1.0 / symbol.Ask);
             }
-            catch (Exception e) { _log_.Warning(e.Message); }
+            catch (Exception e) { _log_.Warning($"Conversion Operation: Failed · {e.Message}"); }
         }
-        throw new Exception($"No conversion symbol found for {from_asset} -> {to_asset}");
+        throw new Exception($"No conversion symbol found for {from_asset} → {to_asset}");
     }
 
     private xTick CurrentTick()
@@ -589,12 +589,12 @@ public class RobotAPI : IDisposable
             {
                 if (_degraded_bars_ >= _verification_)
                 {
-                    _log_.Exception("Accuracy check failed: set Data='Tick data from Server', tick 'Download historical data' and 'Apply commission automatically', restart");
+                    _log_.Exception("Activation Operation: Failed · Set Data to 'Tick data from Server' · Tick 'Download historical data' · Tick 'Apply commission automatically' · Restart");
                     _robot_.Stop();
                     return;
                 }
                 _verified_ = true;
-                _log_.Info($"Accuracy verified ({_verification_ - _degraded_bars_}/{_verification_}), activating");
+                _log_.Info($"Activation Operation: Accuracy Verified ({_verification_ - _degraded_bars_}/{_verification_}) · Activating");
                 Activate();
                 if (_bar_stream_ != BarStreamMode.Off)
                 {
@@ -606,7 +606,7 @@ public class RobotAPI : IDisposable
                         _bars_sent_++;
                         ReceiveAndProcessActions();
                     }
-                    _log_.Debug($"Replayed verification buffer ({_verification_buffer_.Count} Bars), total Bars sent={_bars_sent_}");
+                    _log_.Debug($"Warmup Operation: Replayed Buffer ({_verification_buffer_.Count} Bars) · Total Sent {_bars_sent_} Bars");
                 }
                 _verification_buffer_.Clear();
             }
@@ -617,7 +617,7 @@ public class RobotAPI : IDisposable
             _system_.SendUpdateComplete();
             _ticks_sent_ += 5;
             _bars_sent_++;
-            if (_bars_sent_ % 100 == 0) _log_.Debug($"Progress: Ticks={_ticks_sent_}, Bars={_bars_sent_}, Orders={_orders_sent_}, Positions={_positions_sent_}, Trades={_trades_sent_}, Actions={_actions_received_}");
+            if (_bars_sent_ % 100 == 0) _log_.Debug($"Progress: Ticks {_ticks_sent_} · Bars {_bars_sent_} · Orders {_orders_sent_} · Positions {_positions_sent_} · Trades {_trades_sent_} · Actions {_actions_received_}");
             ReceiveAndProcessActions();
         }
         _bar_.Timestamp = last_bar.OpenTime;
@@ -626,21 +626,20 @@ public class RobotAPI : IDisposable
 
     public void OnError(Error error)
     {
-        _log_.Error("An unexpected error occurred in the robot execution");
-        _log_.Error(error.TradeResult.ToString());
+        _log_.Error($"Execution Operation: Failed · Unexpected Error · {error.TradeResult}");
     }
 
     public void OnException(Exception exception)
     {
-        _log_.Error("An unexpected exception occurred in the robot execution");
-        _log_.Error(exception.ToString());
+        _log_.Exception($"Execution Operation: Failed · {exception.Message}");
+        _log_.Exception($"Execution Operation: Failed · {exception}");
         _robot_.Stop();
     }
 
     public void OnShutdown()
     {
-        _log_.Warning("Shutdown strategy and safely terminate operations");
-        _log_.Info($"Summary: Ticks={_ticks_sent_}, Bars={_bars_sent_}, Orders={_orders_sent_}, Positions={_positions_sent_}, Trades={_trades_sent_}, Actions={_actions_received_}");
+        _log_.Info("Shutdown Operation: Safely Terminating");
+        _log_.Info($"Summary: Ticks {_ticks_sent_} · Bars {_bars_sent_} · Orders {_orders_sent_} · Positions {_positions_sent_} · Trades {_trades_sent_} · Actions {_actions_received_}");
         try
         {
             if (_verified_)
@@ -649,7 +648,7 @@ public class RobotAPI : IDisposable
                 ReceiveAndProcessActions();
             }
         }
-        catch (Exception e) { _log_.Warning($"Shutdown send failed (Python likely gone): {e.Message}"); }
+        catch (Exception e) { _log_.Warning($"Shutdown Operation: Failed · {e.Message}"); }
     }
 
     private static double? NullIfNan(double value)
@@ -686,7 +685,7 @@ public class RobotAPI : IDisposable
     private bool ProcessActionModifyVolume(int position_id, double volume)
     {
         var position = FindPosition(position_id);
-        if (position == null) { _log_.Warning("Modify Volume did not find the position"); return true; }
+        if (position == null) { _log_.Warning("Modify Volume Operation: Failed · Position Not Found"); return true; }
         var result = position.ModifyVolume(volume);
         return result.IsSuccessful;
     }
@@ -694,7 +693,7 @@ public class RobotAPI : IDisposable
     private bool ProcessActionModifyStopLoss(int position_id, double? sl_price)
     {
         var position = FindPosition(position_id);
-        if (position == null) { _log_.Warning("Modify Stop Loss did not find the position"); return true; }
+        if (position == null) { _log_.Warning("Modify Stop Loss Operation: Failed · Position Not Found"); return true; }
         var result = position.ModifyStopLossPrice(sl_price);
         return result.IsSuccessful;
     }
@@ -702,7 +701,7 @@ public class RobotAPI : IDisposable
     private bool ProcessActionModifyTakeProfit(int position_id, double? tp_price)
     {
         var position = FindPosition(position_id);
-        if (position == null) { _log_.Warning("Modify Take Profit did not find the position"); return true; }
+        if (position == null) { _log_.Warning("Modify Take Profit Operation: Failed · Position Not Found"); return true; }
         var result = position.ModifyTakeProfitPrice(tp_price);
         return result.IsSuccessful;
     }
@@ -710,7 +709,7 @@ public class RobotAPI : IDisposable
     private bool ProcessActionClosePosition(int position_id)
     {
         var position = FindPosition(position_id);
-        if (position == null) { _log_.Warning("Close Position did not find the position"); return true; }
+        if (position == null) { _log_.Warning("Close Position Operation: Failed · Position Not Found"); return true; }
         return _robot_.ClosePosition(position).IsSuccessful;
     }
 
@@ -737,21 +736,21 @@ public class RobotAPI : IDisposable
     private bool ProcessActionModifyOrderVolume(int order_id, double volume)
     {
         var order = FindOrder(order_id);
-        if (order == null) { _log_.Warning("Modify Order Volume did not find the order"); return true; }
+        if (order == null) { _log_.Warning("Modify Order Volume Operation: Failed · Order Not Found"); return true; }
         return order.ModifyVolume(volume).IsSuccessful;
     }
 
     private bool ProcessActionModifyOrderPrice(int order_id, double price)
     {
         var order = FindOrder(order_id);
-        if (order == null) { _log_.Warning("Modify Order Price did not find the order"); return true; }
+        if (order == null) { _log_.Warning("Modify Order Price Operation: Failed · Order Not Found"); return true; }
         return order.ModifyTargetPrice(price).IsSuccessful;
     }
 
     private bool ProcessActionModifyOrderLimitPrice(int order_id, double limit_price)
     {
         var order = FindOrder(order_id);
-        if (order == null) { _log_.Warning("Modify Order Limit Price did not find the order"); return true; }
+        if (order == null) { _log_.Warning("Modify Order Limit Price Operation: Failed · Order Not Found"); return true; }
         double range_pips = Math.Abs(limit_price - order.TargetPrice) / _robot_.Symbol.PipSize;
         return order.ModifyStopLimitRange(range_pips).IsSuccessful;
     }
@@ -759,34 +758,35 @@ public class RobotAPI : IDisposable
     private bool ProcessActionModifyOrderStopLoss(int order_id, double? sl_price)
     {
         var order = FindOrder(order_id);
-        if (order == null) { _log_.Warning("Modify Order Stop Loss did not find the order"); return true; }
+        if (order == null) { _log_.Warning("Modify Order Stop Loss Operation: Failed · Order Not Found"); return true; }
         return order.ModifyStopLossPrice(sl_price).IsSuccessful;
     }
 
     private bool ProcessActionModifyOrderTakeProfit(int order_id, double? tp_price)
     {
         var order = FindOrder(order_id);
-        if (order == null) { _log_.Warning("Modify Order Take Profit did not find the order"); return true; }
+        if (order == null) { _log_.Warning("Modify Order Take Profit Operation: Failed · Order Not Found"); return true; }
         return order.ModifyTakeProfitPrice(tp_price).IsSuccessful;
     }
 
     private bool ProcessActionCloseOrder(int order_id)
     {
         var order = FindOrder(order_id);
-        if (order == null) { _log_.Warning("Close Order did not find the order"); return true; }
+        if (order == null) { _log_.Warning("Close Order Operation: Failed · Order Not Found"); return true; }
         return _robot_.CancelPendingOrder(order).IsSuccessful;
     }
 
     private void ReceiveAndProcessActions()
     {
         ActionID action_id;
+        var go_live = false;
         do
         {
             byte[] data;
             try { data = _system_.Receive(); }
             catch (Exception e)
             {
-                _log_.Exception($"Failed to receive action from Python: {e.Message}. Stopping cBot.");
+                _log_.Exception($"Receive Operation: Failed · {e.Message}");
                 _robot_.Stop();
                 return;
             }
@@ -795,11 +795,12 @@ public class RobotAPI : IDisposable
             switch (action_id)
             {
                 case ActionID.Complete: break;
+                case ActionID.Execution: go_live = true; break;
                 case ActionID.Init:
                     int python_pid = ReadInt32(data, 1);
-                    _log_.Debug($"Handshake complete (python_pid={python_pid})");
+                    _log_.Debug($"Handshake Operation: Completed (pid {python_pid})");
                     try { _system_.Watchdog(Process.GetProcessById(python_pid)); }
-                    catch (Exception e) { _log_.Warning($"Could not open Python process {python_pid}: {e.Message}"); }
+                    catch (Exception e) { _log_.Warning($"Handshake Operation: Failed · Could Not Open Python Process {python_pid} · {e.Message}"); }
                     break;
                 case ActionID.OpenBuyPosition:
                 case ActionID.OpenSellPosition:
@@ -887,8 +888,15 @@ public class RobotAPI : IDisposable
                 case ActionID.AskBelowTarget: _ask_below_target_ = NullIfNan(ReadDouble(data, 1)); break;
                 case ActionID.BidAboveTarget: _bid_above_target_ = NullIfNan(ReadDouble(data, 1)); break;
                 case ActionID.BidBelowTarget: _bid_below_target_ = NullIfNan(ReadDouble(data, 1)); break;
-                default: _log_.Exception($"Received invalid action ID: {action_id}"); throw new ArgumentOutOfRangeException();
+                default: _log_.Exception($"Receive Operation: Failed · Invalid Action ID {action_id}"); throw new ArgumentOutOfRangeException();
             }
         } while (action_id != ActionID.Complete);
+        if (go_live)
+        {
+            _system_.SendUpdateExecution();
+            _system_.SendUpdateComplete();
+            _log_.Info("Execution Operation: Trading Enabled · Python Warmed Up");
+            ReceiveAndProcessActions();
+        }
     }
 }

@@ -21,7 +21,7 @@ public class Connector : Robot
     [Parameter("Database", Group = "System Management", DefaultValue = DatabaseType.Auto)]
     public DatabaseType Database { get; set; }
 
-    [Parameter("Verification", Group = "System Management", DefaultValue = 3, MinValue = 1)]
+    [Parameter("Verification", Group = "System Management", DefaultValue = 1, MinValue = 1)]
     public int Verification { get; set; }
 
     [Parameter("Tick Stream", Group = "System Management", DefaultValue = TickStreamMode.Auto)]
