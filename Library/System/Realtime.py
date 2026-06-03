@@ -400,10 +400,11 @@ class RealtimeAPI(SystemAPI):
             stop = (self._stop_timestamp_ if self._stop_timestamp_ is not None else datetime.now()).date()
             unrealized = generate_unrealized_report(update.Portfolio.Positions, account, start, stop)
             realized = generate_realized_report(update.Portfolio.Trades, account, start, stop)
-            self.statistics = generate_net_report(update.Portfolio.Positions, update.Portfolio.Trades, account, start, stop)
-            self._log_.info(lambda: "Report Unrealized:" + str(unrealized))
-            self._log_.info(lambda: "Report Realized:" + str(realized))
-            self._log_.info(lambda: "Report Net:" + str(self.statistics))
+            net = generate_net_report(update.Portfolio.Positions, update.Portfolio.Trades, account, start, stop)
+            self._log_.info(lambda: f"Report Unrealized: {unrealized}")
+            self._log_.info(lambda: f"Report Realized: {realized}")
+            self._log_.info(lambda: f"Report Net: {net}")
+            self.statistics = net
 
         initialization.on(event=UpdateID.Init, to=initialization, action=init, reason="Handshake Initialized")
         initialization.on(event=UpdateID.BarClosed, to=initialization, action=warmup, reason=None)
