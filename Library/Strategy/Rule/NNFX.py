@@ -151,7 +151,7 @@ class NNFXStrategyAPI(StrategyAPI):
         waiting_close = risk_engine.state(name="Waiting Close")
         termination = risk_engine.state(name="Termination", end=True)
 
-        initialization.on(event=UpdateID.Complete, to=waiting_open, action=None, reason="Initialized")
+        initialization.on(event=UpdateID.Execution, to=waiting_open, action=None, reason="Initialized")
         initialization.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Abruptly Terminated")
 
         waiting_open.on(event=UpdateID.OpenedBuyPosition, to=waiting_so, action=self.define_so_buy_action, reason="Opened Buy Position")
@@ -251,7 +251,7 @@ class NNFXStrategyAPI(StrategyAPI):
         waiting_signal = signal_engine.state(name="Waiting Signal")
         termination = signal_engine.state(name="Termination", end=True)
 
-        initialization.on(event=UpdateID.Complete, to=waiting_signal, action=None, reason="Initialized")
+        initialization.on(event=UpdateID.Execution, to=waiting_signal, action=None, reason="Initialized")
         initialization.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Abruptly Terminated")
 
         waiting_signal.on(event=UpdateID.BarClosed, to=waiting_signal, action=self.update_position, reason=None)

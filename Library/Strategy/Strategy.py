@@ -196,49 +196,49 @@ class StrategyAPI(ABC):
         def update_closed_buy(update: ClosedBuyPositionUpdateAPI):
             update.Portfolio.update_data(update.Bar)
             update.Portfolio.Account = update.Account
-            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
+            update.Portfolio.close_position(update.Position.UID, None, update.Trade)
             self._log_closed_buy_(update)
 
         def update_closed_sell(update: ClosedSellPositionUpdateAPI):
             update.Portfolio.update_data(update.Bar)
             update.Portfolio.Account = update.Account
-            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
+            update.Portfolio.close_position(update.Position.UID, None, update.Trade)
             self._log_closed_sell_(update)
 
         def update_stop_loss_buy(update: StopLossBuyPositionUpdateAPI):
             update.Portfolio.update_data(update.Bar)
             update.Portfolio.Account = update.Account
-            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
+            update.Portfolio.close_position(update.Position.UID, None, update.Trade)
             self._log_stop_loss_buy_(update)
 
         def update_stop_loss_sell(update: StopLossSellPositionUpdateAPI):
             update.Portfolio.update_data(update.Bar)
             update.Portfolio.Account = update.Account
-            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
+            update.Portfolio.close_position(update.Position.UID, None, update.Trade)
             self._log_stop_loss_sell_(update)
 
         def update_take_profit_buy(update: TakeProfitBuyPositionUpdateAPI):
             update.Portfolio.update_data(update.Bar)
             update.Portfolio.Account = update.Account
-            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
+            update.Portfolio.close_position(update.Position.UID, None, update.Trade)
             self._log_take_profit_buy_(update)
 
         def update_take_profit_sell(update: TakeProfitSellPositionUpdateAPI):
             update.Portfolio.update_data(update.Bar)
             update.Portfolio.Account = update.Account
-            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
+            update.Portfolio.close_position(update.Position.UID, None, update.Trade)
             self._log_take_profit_sell_(update)
 
         def update_margin_call_buy(update: MarginCallBuyPositionUpdateAPI):
             update.Portfolio.update_data(update.Bar)
             update.Portfolio.Account = update.Account
-            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
+            update.Portfolio.close_position(update.Position.UID, None, update.Trade)
             self._log_margin_call_buy_(update)
 
         def update_margin_call_sell(update: MarginCallSellPositionUpdateAPI):
             update.Portfolio.update_data(update.Bar)
             update.Portfolio.Account = update.Account
-            update.Portfolio.close_position(update.Position.UID, update.Position, update.Trade)
+            update.Portfolio.close_position(update.Position.UID, None, update.Trade)
             self._log_margin_call_sell_(update)
 
         def update_opened_order(update: Any):
@@ -273,7 +273,7 @@ class StrategyAPI(ABC):
 
         initialization.on(event=UpdateID.Account, to=initialization, action=init_account, reason="Account Initialized")
         initialization.on(event=UpdateID.Security, to=initialization, action=init_security, reason="Security Initialized")
-        initialization.on(event=UpdateID.Complete, to=execution, action=init_indicators, reason="Initialized")
+        initialization.on(event=UpdateID.Execution, to=execution, action=init_indicators, reason="Initialized")
         initialization.on(event=UpdateID.Denied, to=initialization, action=self._log_denied_, reason=None)
         initialization.on(event=UpdateID.Exception, to=termination, action=self._log_exception_, reason="Exception")
         initialization.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Abruptly Terminated")
