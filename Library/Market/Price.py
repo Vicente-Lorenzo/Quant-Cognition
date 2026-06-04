@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 from Library.Database.Dataclass import DataclassAPI
 from Library.Utility.Enumeration import EnumerationAPI
+from Library.Utility.Typing import MISSING
 
 if TYPE_CHECKING:
     from Library.Universe.Contract import ContractAPI
@@ -31,7 +32,7 @@ class PriceAPI(DataclassAPI):
         return self.Price
     @UID.setter
     def UID(self, value) -> None:
-        pass
+        if value is not MISSING: self.Price = value
 
     @property
     def LogPrice(self) -> Union[float, None]:

@@ -5,8 +5,9 @@ from dataclasses import dataclass, field
 
 from Library.Database.Dataclass import DataclassAPI
 from Library.Market.Price import Direction
+from Library.Utility.Typing import MISSING
 
-@dataclass(slots=True, kw_only=True)
+@dataclass(kw_only=True)
 class PnLAPI(DataclassAPI):
 
     PnL: float = field(init=True, repr=True)
@@ -16,6 +17,9 @@ class PnLAPI(DataclassAPI):
     @property
     def UID(self) -> float:
         return self.PnL
+    @UID.setter
+    def UID(self, value) -> None:
+        if value is not MISSING: self.PnL = value
 
     @property
     def LogPnL(self) -> Union[float, None]:

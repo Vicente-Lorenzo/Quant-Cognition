@@ -7,6 +7,7 @@ from calendar import monthrange, isleap
 from dataclasses import dataclass, field
 
 from Library.Database.Dataclass import DataclassAPI
+from Library.Utility.Typing import MISSING
 
 @dataclass(kw_only=True)
 class CycleAPI(DataclassAPI):
@@ -19,7 +20,7 @@ class CycleAPI(DataclassAPI):
         return self.Value
     @UID.setter
     def UID(self, val) -> None:
-        pass
+        if val is not MISSING: self.Value = val
 
     @property
     def Normalized(self) -> Union[float, None]:
@@ -48,7 +49,7 @@ class TimestampAPI(DataclassAPI):
         return self.DateTime
     @UID.setter
     def UID(self, val) -> None:
-        pass
+        if val is not MISSING: self.DateTime = val
 
     @property
     def Epoch(self) -> float:
