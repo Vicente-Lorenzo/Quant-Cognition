@@ -429,6 +429,9 @@ class RealtimeAPI(SystemAPI):
             account = self._initial_account_ if self._initial_account_ is not None else update.Portfolio.Account
             start = (self._start_timestamp_ if self._start_timestamp_ is not None else datetime.now()).date()
             stop = (self._stop_timestamp_ if self._stop_timestamp_ is not None else datetime.now()).date()
+            self._log_.info(lambda: f"Report Orders: {update.Portfolio.Orders}")
+            self._log_.info(lambda: f"Report Positions: {update.Portfolio.Positions}")
+            self._log_.info(lambda: f"Report Trades: {update.Portfolio.Trades}")
             unrealized = generate_unrealized_report(update.Portfolio.Positions, account, start, stop)
             realized = generate_realized_report(update.Portfolio.Trades, account, start, stop)
             net = generate_net_report(update.Portfolio.Positions, update.Portfolio.Trades, account, start, stop)

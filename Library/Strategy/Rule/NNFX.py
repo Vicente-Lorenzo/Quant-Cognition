@@ -6,7 +6,7 @@ from Library.Engine import MachineAPI
 from Library.Indicator.Indicator import IndicatorMode
 from Library.Market.Price import Direction
 from Library.Portfolio import PositionType
-from Library.Portfolio.Sizing import calculate_fixed_fractional_volume
+from Library.Portfolio.Sizing import calculate_fixed_fractional_volume, calculate_normalized_volume
 from Library.Protocol.Action import (
     AskBelowTargetActionAPI,
     BidAboveTargetActionAPI,
@@ -107,12 +107,14 @@ class NNFXStrategyAPI(StrategyAPI):
 
     def close_buy_partially_action(self, update: TickUpdateAPI) -> list:
         position = update.Portfolio.position(self._last_position_id_)
-        volume = position.Volume * (1.0 - self._scaling_out_percentage_ / 100)
+        volume = calculate_normalized_volume(position.Volume * (1.0 - self._scaling_out_percentage_ / 100), update.Portfolio.Security.Contract)
+        if volume >= position.Volume: return [CloseBuyPositionActionAPI(PositionID=self._last_position_id_)]
         return [ModifyBuyPositionVolumeActionAPI(PositionID=self._last_position_id_, Volume=volume)]
 
     def close_sell_partially_action(self, update: TickUpdateAPI) -> list:
         position = update.Portfolio.position(self._last_position_id_)
-        volume = position.Volume * (1.0 - self._scaling_out_percentage_ / 100)
+        volume = calculate_normalized_volume(position.Volume * (1.0 - self._scaling_out_percentage_ / 100), update.Portfolio.Security.Contract)
+        if volume >= position.Volume: return [CloseSellPositionActionAPI(PositionID=self._last_position_id_)]
         return [ModifySellPositionVolumeActionAPI(PositionID=self._last_position_id_, Volume=volume)]
 
     def breakeven_buy_action(self, update: ModifiedBuyPositionVolumeUpdateAPI) -> list:
