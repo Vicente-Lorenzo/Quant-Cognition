@@ -115,7 +115,7 @@ public class RobotAPI : IDisposable
         _log_.Info("Start Operation: Starting");
 
         _system_mode_ = ResolveSystemMode(_robot_.RunningMode);
-        _database_ = ResolveDatabase(_system_mode_, strategy, database);
+        _database_ = ResolveDatabase(database);
         _tick_stream_ = ResolveTickStream(strategy, tick_stream);
         _bar_stream_ = bar_stream == BarStreamMode.Auto ? BarStreamMode.All : bar_stream;
         _order_stream_ = order_stream == OrderStreamMode.Auto ? OrderStreamMode.All : order_stream;
@@ -192,12 +192,10 @@ public class RobotAPI : IDisposable
         }
     }
 
-    private static DatabaseType ResolveDatabase(SystemMode system, StrategyType strat, DatabaseType chosen)
+    private static DatabaseType ResolveDatabase(DatabaseType chosen)
     {
         if (chosen != DatabaseType.Auto) return chosen;
-        if (system == SystemMode.Live) return DatabaseType.Quant;
-        if (strat == StrategyType.Download) return DatabaseType.Quant;
-        return DatabaseType.Tests;
+        return DatabaseType.Quant;
     }
 
     private static TickStreamMode ResolveTickStream(StrategyType strat, TickStreamMode chosen)
