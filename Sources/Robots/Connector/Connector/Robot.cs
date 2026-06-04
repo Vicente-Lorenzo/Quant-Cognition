@@ -116,7 +116,7 @@ public class RobotAPI : IDisposable
 
         _system_mode_ = ResolveSystemMode(_robot_.RunningMode);
         _database_ = ResolveDatabase(_system_mode_, strategy, database);
-        _tick_stream_ = tick_stream == TickStreamMode.Auto ? TickStreamMode.Off : tick_stream;
+        _tick_stream_ = ResolveTickStream(strategy, tick_stream);
         _bar_stream_ = bar_stream == BarStreamMode.Auto ? BarStreamMode.All : bar_stream;
         _order_stream_ = order_stream == OrderStreamMode.Auto ? OrderStreamMode.All : order_stream;
         _position_stream_ = position_stream == PositionStreamMode.Auto ? PositionStreamMode.All : position_stream;
@@ -198,6 +198,13 @@ public class RobotAPI : IDisposable
         if (system == SystemMode.Live) return DatabaseType.Quant;
         if (strat == StrategyType.Download) return DatabaseType.Quant;
         return DatabaseType.Tests;
+    }
+
+    private static TickStreamMode ResolveTickStream(StrategyType strat, TickStreamMode chosen)
+    {
+        if (chosen != TickStreamMode.Auto) return chosen;
+        if (strat == StrategyType.Download) return TickStreamMode.Off;
+        return TickStreamMode.Target;
     }
 
     private void Activate()
