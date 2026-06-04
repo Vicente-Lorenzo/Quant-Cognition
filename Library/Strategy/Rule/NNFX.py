@@ -227,21 +227,18 @@ class NNFXStrategyAPI(StrategyAPI):
         return [CloseSellPositionActionAPI(PositionID=self._last_position_id_)] if update.Portfolio.SellPositions else []
 
     def update_position(self, update: BarUpdateAPI) -> Union[list, None]:
-        if not update.Portfolio.BuyPositions:
-            if self._normal_entry_buy_(update):
-                return self.open_buy_position(update, PositionType.Normal)
-            if self._last_position_trade_type_ and self._last_position_trade_type_ == Direction.Buy and self._continuation_entry_buy_(update):
-                return self.open_buy_position(update, PositionType.Continuation)
-        elif self._normal_exit_buy_(update):
+        if not update.Portfolio.BuyPositions and self._normal_entry_buy_(update):
+            return self.open_buy_position(update, PositionType.Normal)
+        if not update.Portfolio.SellPositions and self._normal_entry_sell_(update):
+            return self.open_sell_position(update, PositionType.Normal)
+        if update.Portfolio.BuyPositions and self._normal_exit_buy_(update):
             return self.close_buy_position(update)
-
-        if not update.Portfolio.SellPositions:
-            if self._normal_entry_sell_(update):
-                return self.open_sell_position(update, PositionType.Normal)
-            if self._last_position_trade_type_ and self._last_position_trade_type_ == Direction.Sell and self._continuation_entry_sell_(update):
-                return self.open_sell_position(update, PositionType.Continuation)
-        elif self._normal_exit_sell_(update):
+        if update.Portfolio.SellPositions and self._normal_exit_sell_(update):
             return self.close_sell_position(update)
+        if not update.Portfolio.BuyPositions and self._last_position_trade_type_ == Direction.Buy and self._continuation_entry_buy_(update):
+            return self.open_buy_position(update, PositionType.Continuation)
+        if not update.Portfolio.SellPositions and self._last_position_trade_type_ == Direction.Sell and self._continuation_entry_sell_(update):
+            return self.open_sell_position(update, PositionType.Continuation)
         return None
 
     def signal_management(self) -> MachineAPI:
