@@ -6,6 +6,7 @@ from typing import Union, TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
 from Library.Market.Price import Direction
+from Library.Portfolio.Order import OrderAPI
 from Library.Portfolio.Position import PositionAPI
 from Library.Portfolio.Trade import TradeAPI
 
@@ -239,6 +240,108 @@ Metrics = [
     CALMARRATIO,
     FITNESSRATIO
 ]
+
+OrderView = {
+    str(OrderAPI.ID.UID): pl.Int64(),
+    str(OrderAPI.ID.Position): pl.Int64(),
+    str(OrderAPI.ID.Direction): pl.String(),
+    str(OrderAPI.ID.OrderType): pl.String(),
+    str(OrderAPI.ID.OrderStatus): pl.String(),
+    str(OrderAPI.ID.Volume): pl.Float64(),
+    str(OrderAPI.ID.ExecutedVolume): pl.Float64(),
+    str(OrderAPI.ID.EntryTimestamp): pl.Datetime(),
+    str(OrderAPI.ID.ExpirationTimestamp): pl.Datetime(),
+    str(OrderAPI.ID.ExecutionPrice): pl.Float64(),
+    str(OrderAPI.ID.LimitPrice): pl.Float64(),
+    str(OrderAPI.ID.StopPrice): pl.Float64(),
+    str(OrderAPI.ID.StopLossPrice): pl.Float64(),
+    str(OrderAPI.ID.TakeProfitPrice): pl.Float64()
+}
+
+PositionView = {
+    str(PositionAPI.ID.UID): pl.Int64(),
+    str(PositionAPI.ID.Direction): pl.String(),
+    str(PositionAPI.ID.Volume): pl.Float64(),
+    str(PositionAPI.ID.Quantity): pl.Float64(),
+    str(PositionAPI.ID.EntryTimestamp): pl.Datetime(),
+    str(PositionAPI.ID.EntryPrice): pl.Float64(),
+    str(PositionAPI.ID.StopLossPrice): pl.Float64(),
+    str(PositionAPI.ID.TakeProfitPrice): pl.Float64(),
+    str(PositionAPI.ID.MaxRunupPrice): pl.Float64(),
+    str(PositionAPI.ID.MaxDrawdownPrice): pl.Float64(),
+    str(PositionAPI.ID.ExitPrice): pl.Float64(),
+    str(PositionAPI.ID.EntryBalance): pl.Float64(),
+    str(PositionAPI.ID.MidBalance): pl.Float64(),
+    str(PositionAPI.ID.Points): pl.Float64(),
+    str(PositionAPI.ID.MaxRunupPoints): pl.Float64(),
+    str(PositionAPI.ID.MaxDrawdownPoints): pl.Float64(),
+    str(PositionAPI.ID.GrossPnL): pl.Float64(),
+    str(PositionAPI.ID.CommissionPnL): pl.Float64(),
+    str(PositionAPI.ID.SwapPnL): pl.Float64(),
+    str(PositionAPI.ID.NetPnL): pl.Float64()
+}
+
+TradeView = {
+    str(TradeAPI.ID.UID): pl.Int64(),
+    str(TradeAPI.ID.Position): pl.Int64(),
+    str(TradeAPI.ID.Direction): pl.String(),
+    str(TradeAPI.ID.Volume): pl.Float64(),
+    str(TradeAPI.ID.EntryTimestamp): pl.Datetime(),
+    str(TradeAPI.ID.ExitTimestamp): pl.Datetime(),
+    str(TradeAPI.ID.EntryPrice): pl.Float64(),
+    str(TradeAPI.ID.ExitPrice): pl.Float64(),
+    str(TradeAPI.ID.StopLossPrice): pl.Float64(),
+    str(TradeAPI.ID.TakeProfitPrice): pl.Float64(),
+    str(TradeAPI.ID.MaxRunupPrice): pl.Float64(),
+    str(TradeAPI.ID.MaxDrawdownPrice): pl.Float64(),
+    str(TradeAPI.ID.EntryBalance): pl.Float64(),
+    str(TradeAPI.ID.ExitBalance): pl.Float64(),
+    str(TradeAPI.ID.MidBalance): pl.Float64(),
+    str(TradeAPI.ID.Points): pl.Float64(),
+    str(TradeAPI.ID.MaxRunupPoints): pl.Float64(),
+    str(TradeAPI.ID.MaxDrawdownPoints): pl.Float64(),
+    str(TradeAPI.ID.GrossPnL): pl.Float64(),
+    str(TradeAPI.ID.CommissionPnL): pl.Float64(),
+    str(TradeAPI.ID.SwapPnL): pl.Float64(),
+    str(TradeAPI.ID.NetPnL): pl.Float64()
+}
+
+DealView = {
+    str(TradeAPI.ID.Position): pl.Int64(),
+    str(TradeAPI.ID.UID): pl.List(pl.Int64),
+    str(TradeAPI.ID.Direction): pl.String(),
+    str(TradeAPI.ID.Volume): pl.Float64(),
+    str(TradeAPI.ID.EntryTimestamp): pl.Datetime(),
+    str(TradeAPI.ID.ExitTimestamp): pl.Datetime(),
+    str(TradeAPI.ID.EntryPrice): pl.Float64(),
+    str(TradeAPI.ID.ExitPrice): pl.Float64(),
+    str(TradeAPI.ID.EntryBalance): pl.Float64(),
+    str(TradeAPI.ID.ExitBalance): pl.Float64(),
+    str(TradeAPI.ID.MidBalance): pl.Float64(),
+    str(TradeAPI.ID.Points): pl.Float64(),
+    str(TradeAPI.ID.MaxRunupPoints): pl.Float64(),
+    str(TradeAPI.ID.MaxDrawdownPoints): pl.Float64(),
+    str(TradeAPI.ID.GrossPnL): pl.Float64(),
+    str(TradeAPI.ID.CommissionPnL): pl.Float64(),
+    str(TradeAPI.ID.SwapPnL): pl.Float64(),
+    str(TradeAPI.ID.NetPnL): pl.Float64()
+}
+
+def reporting_view(df: pl.DataFrame, schema: dict) -> pl.DataFrame:
+    if df.is_empty(): return pl.DataFrame(schema=schema)
+    return df.select([col for col in schema if col in df.columns])
+
+def order_view(df: pl.DataFrame) -> pl.DataFrame:
+    return reporting_view(df, OrderView)
+
+def position_view(df: pl.DataFrame) -> pl.DataFrame:
+    return reporting_view(df, PositionView)
+
+def trade_view(df: pl.DataFrame) -> pl.DataFrame:
+    return reporting_view(df, TradeView)
+
+def deal_view(df: pl.DataFrame) -> pl.DataFrame:
+    return reporting_view(df, DealView)
 
 def sort_items(df: pl.DataFrame) -> pl.DataFrame:
     entry_ts = str(PositionAPI.ID.EntryTimestamp)
