@@ -226,26 +226,26 @@ class PortfolioAPI(DatapointAPI):
             contract = pos.Security.Contract if pos.Security else None
             best_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(best_price, entry_price, pos.IsLong), pos.Volume), comm, swap)
             worst_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(worst_price, entry_price, pos.IsLong), pos.Volume), comm, swap)
-            if pos._max_runup_price_ is None:
-                pos._max_runup_price_ = PriceAPI(Price=best_price, Reference=entry_price, Contract=contract)
-            elif (pos.IsLong and best_price > pos._max_runup_price_.Price) or (pos.IsShort and best_price < pos._max_runup_price_.Price):
-                pos._max_runup_price_.Price = best_price
             if pos._max_drawdown_price_ is None:
                 pos._max_drawdown_price_ = PriceAPI(Price=worst_price, Reference=entry_price, Contract=contract)
             elif (pos.IsLong and worst_price < pos._max_drawdown_price_.Price) or (pos.IsShort and worst_price > pos._max_drawdown_price_.Price):
                 pos._max_drawdown_price_.Price = worst_price
-            if pos._max_runup_pnl_ is None:
-                pos._max_runup_pnl_ = PnLAPI(PnL=best_pnl, Reference=ref_balance, Duration=duration)
-            elif best_pnl > pos._max_runup_pnl_.PnL:
-                pos._max_runup_pnl_.PnL = best_pnl
-                pos._max_runup_pnl_.Reference = ref_balance
-                pos._max_runup_pnl_.Duration = duration
+            if pos._max_runup_price_ is None:
+                pos._max_runup_price_ = PriceAPI(Price=best_price, Reference=entry_price, Contract=contract)
+            elif (pos.IsLong and best_price > pos._max_runup_price_.Price) or (pos.IsShort and best_price < pos._max_runup_price_.Price):
+                pos._max_runup_price_.Price = best_price
             if pos._max_drawdown_pnl_ is None:
                 pos._max_drawdown_pnl_ = PnLAPI(PnL=worst_pnl, Reference=ref_balance, Duration=duration)
             elif worst_pnl < pos._max_drawdown_pnl_.PnL:
                 pos._max_drawdown_pnl_.PnL = worst_pnl
                 pos._max_drawdown_pnl_.Reference = ref_balance
                 pos._max_drawdown_pnl_.Duration = duration
+            if pos._max_runup_pnl_ is None:
+                pos._max_runup_pnl_ = PnLAPI(PnL=best_pnl, Reference=ref_balance, Duration=duration)
+            elif best_pnl > pos._max_runup_pnl_.PnL:
+                pos._max_runup_pnl_.PnL = best_pnl
+                pos._max_runup_pnl_.Reference = ref_balance
+                pos._max_runup_pnl_.Duration = duration
 
     def open_order(self, order: OrderAPI) -> None:
         self._orders_[order.UID] = order
@@ -272,10 +272,10 @@ class PortfolioAPI(DatapointAPI):
             if dst._take_profit_price_ is None: setattr(dst, 'TakeProfitPrice', src.TakeProfitPrice)
             if dst._stop_loss_pnl_ is None: setattr(dst, 'StopLossPnL', src.StopLossPnL)
             if dst._take_profit_pnl_ is None: setattr(dst, 'TakeProfitPnL', src.TakeProfitPnL)
-        if dst._max_runup_price_ is None: setattr(dst, 'MaxRunupPrice', src.MaxRunupPrice)
         if dst._max_drawdown_price_ is None: setattr(dst, 'MaxDrawdownPrice', src.MaxDrawdownPrice)
-        if dst._max_runup_pnl_ is None: setattr(dst, 'MaxRunupPnL', src.MaxRunupPnL)
+        if dst._max_runup_price_ is None: setattr(dst, 'MaxRunupPrice', src.MaxRunupPrice)
         if dst._max_drawdown_pnl_ is None: setattr(dst, 'MaxDrawdownPnL', src.MaxDrawdownPnL)
+        if dst._max_runup_pnl_ is None: setattr(dst, 'MaxRunupPnL', src.MaxRunupPnL)
         if dst._entry_balance_ is None: setattr(dst, 'EntryBalance', src.EntryBalance)
         if dst.Volume is None: dst.Volume = src.Volume
         if dst.Quantity is None: dst.Quantity = src.Quantity
@@ -332,20 +332,20 @@ class PortfolioAPI(DatapointAPI):
             setattr(trade, 'EntryBalance', old_pos.EntryBalance)
             if trade.ExitPrice and trade.ExitPrice.Price is not None:
                 exit_price = trade.ExitPrice.Price
-                if trade._max_runup_price_ and ((trade.IsLong and exit_price > trade._max_runup_price_.Price) or (trade.IsShort and exit_price < trade._max_runup_price_.Price)):
-                    trade._max_runup_price_.Price = exit_price
                 if trade._max_drawdown_price_ and ((trade.IsLong and exit_price < trade._max_drawdown_price_.Price) or (trade.IsShort and exit_price > trade._max_drawdown_price_.Price)):
                     trade._max_drawdown_price_.Price = exit_price
+                if trade._max_runup_price_ and ((trade.IsLong and exit_price > trade._max_runup_price_.Price) or (trade.IsShort and exit_price < trade._max_runup_price_.Price)):
+                    trade._max_runup_price_.Price = exit_price
             net = trade.NetPnL.PnL if (trade.NetPnL and trade.NetPnL.PnL is not None) else 0.0
             if trade.NetPnL:
-                if trade._max_runup_pnl_ and net > trade._max_runup_pnl_.PnL:
-                    trade._max_runup_pnl_.PnL = net
-                    trade._max_runup_pnl_.Reference = trade.NetPnL.Reference
-                    trade._max_runup_pnl_.Duration = trade.NetPnL.Duration
                 if trade._max_drawdown_pnl_ and net < trade._max_drawdown_pnl_.PnL:
                     trade._max_drawdown_pnl_.PnL = net
                     trade._max_drawdown_pnl_.Reference = trade.NetPnL.Reference
                     trade._max_drawdown_pnl_.Duration = trade.NetPnL.Duration
+                if trade._max_runup_pnl_ and net > trade._max_runup_pnl_.PnL:
+                    trade._max_runup_pnl_.PnL = net
+                    trade._max_runup_pnl_.Reference = trade.NetPnL.Reference
+                    trade._max_runup_pnl_.Duration = trade.NetPnL.Duration
             base = old_pos.MidBalance if old_pos.MidBalance is not None else (old_pos.EntryBalance or 0.0)
             new_mid = base + net
             old_pos.MidBalance = new_mid
