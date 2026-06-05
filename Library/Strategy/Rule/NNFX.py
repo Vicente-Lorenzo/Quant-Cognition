@@ -48,6 +48,7 @@ class NNFXStrategyAPI(StrategyAPI):
         self._scaling_out_scale_, = self.RiskManagement.ScalingOutScale
         self._scaling_out_percentage_, = self.RiskManagement.ScalingOutPercentage
         self._trailing_stop_loss_scale_, = self.RiskManagement.TrailingStopLossScale
+        self._trailing_stop_loss_step_, = self.RiskManagement.TrailingStopLossStep
 
         modes = {
             "Baseline": self.SignalManagement.BaselineMode,
@@ -124,10 +125,10 @@ class NNFXStrategyAPI(StrategyAPI):
         return [ModifySellPositionStopLossActionAPI(PositionID=self._last_position_id_, StopLoss=update.Position.EntryPrice.Price)]
 
     def define_tsl_buy_action(self, update: ModifiedBuyPositionStopLossUpdateAPI) -> list:
-        return [BidAboveTargetActionAPI(Bid=update.Position.StopLossPrice.Price + self._trailing_stop_loss_scale_ * self._last_position_atr_ + update.Portfolio.Security.Contract.PointSize)]
+        return [BidAboveTargetActionAPI(Bid=update.Position.StopLossPrice.Price + (self._trailing_stop_loss_scale_ + self._trailing_stop_loss_step_) * self._last_position_atr_ + update.Portfolio.Security.Contract.PointSize)]
 
     def define_tsl_sell_action(self, update: ModifiedSellPositionStopLossUpdateAPI) -> list:
-        return [AskBelowTargetActionAPI(Ask=update.Position.StopLossPrice.Price - self._trailing_stop_loss_scale_ * self._last_position_atr_ - update.Portfolio.Security.Contract.PointSize)]
+        return [AskBelowTargetActionAPI(Ask=update.Position.StopLossPrice.Price - (self._trailing_stop_loss_scale_ + self._trailing_stop_loss_step_) * self._last_position_atr_ - update.Portfolio.Security.Contract.PointSize)]
 
     def detected_tsl_buy_action(self, update: TickUpdateAPI) -> list:
         return [ModifyBuyPositionStopLossActionAPI(PositionID=self._last_position_id_, StopLoss=update.Tick.Bid.Price - self._trailing_stop_loss_scale_ * self._last_position_atr_)]

@@ -8,11 +8,13 @@ NNFX:
       ScalingOutScale: [ 1.0 ]
       ScalingOutPercentage: [ 0.0 ]
       TrailingStopLossScale: [ 1.5 ]
+      TrailingStopLossStep: [ 0.25 ]
     3-4:
       StopLossScale: [ 1.5 ]
       ScalingOutScale: [ 1.0 ]
       ScalingOutPercentage: [ 50.0 ]
       TrailingStopLossScale: [ 1.5 ]
+      TrailingStopLossStep: [ 0.25 ]
   SignalManagement:
     1:
       BaselineMode: [ Filter, Off, Filter ]

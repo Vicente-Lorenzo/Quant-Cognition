@@ -316,7 +316,7 @@ public class RobotAPI : IDisposable
 
     private HistoricalTrade FindTrade(int position_id)
     {
-        return FindTrades().FirstOrDefault(t => t.PositionId == position_id);
+        return FindTrades().Where(t => t.PositionId == position_id).OrderByDescending(t => t.ClosingTime).FirstOrDefault();
     }
 
     private bool IsOrderFromRobot(PendingOrder order)
