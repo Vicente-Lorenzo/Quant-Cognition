@@ -494,16 +494,22 @@ class PortfolioAPI(DatapointAPI):
         return calculate_log_percentage(self.AnnualizedLogReturn)
 
     @property
-    def Trades(self) -> pl.DataFrame:
-        if not self._trades_: return pl.DataFrame()
-        return pl.DataFrame([t.dict() for t in self._trades_], strict=False)
+    def Orders(self) -> pl.DataFrame:
+        if not self._orders_: return pl.DataFrame()
+        return pl.DataFrame([o.dict() for o in self._orders_.values()], strict=False)
 
     @property
     def Positions(self) -> pl.DataFrame:
         if not self._positions_: return pl.DataFrame()
         return pl.DataFrame([p.dict() for p in self._positions_.values()], strict=False)
-        
+
     @property
-    def Orders(self) -> pl.DataFrame:
-        if not self._orders_: return pl.DataFrame()
-        return pl.DataFrame([o.dict() for o in self._orders_.values()], strict=False)
+    def Trades(self) -> pl.DataFrame:
+        if not self._trades_: return pl.DataFrame()
+        return pl.DataFrame([t.dict() for t in self._trades_], strict=False)
+
+    @property
+    def Deals(self) -> pl.DataFrame:
+        from Library.Portfolio.Statistic import aggregate_trades
+        if not self._trades_: return pl.DataFrame()
+        return aggregate_trades(self.Trades)

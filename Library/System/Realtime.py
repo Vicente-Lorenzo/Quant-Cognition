@@ -66,11 +66,13 @@ class RealtimeAPI(SystemAPI):
                  iid: str,
                  database: Union[str, None],
                  market: tuple[int, float],
-                 portfolio: tuple[int, float]) -> None:
+                 portfolio: tuple[int, float],
+                 report: bool = True,
+                 export: bool = True) -> None:
         if database is None:
             market = (0, 0.0)
             portfolio = (0, 0.0)
-        super().__init__(strategy=strategy, security=security, timeframe=timeframe, parameters=parameters, market=market, portfolio=portfolio)
+        super().__init__(strategy=strategy, security=security, timeframe=timeframe, parameters=parameters, market=market, portfolio=portfolio, report=report, export=export)
 
         self._system_: SystemType = system
         self._iid_: str = iid
@@ -419,7 +421,6 @@ class RealtimeAPI(SystemAPI):
             update.Market.update_data(update.Bar)
 
         def report(update: CompleteUpdateAPI):
-            from Library.Portfolio.Statistic import generate_realized_report, generate_unrealized_report, generate_net_report
             if self._execution_timer_._start_ is not None and self._execution_timer_._stop_ is None:
                 self._execution_timer_.stop()
                 self._log_.info(lambda: f"Phase Execution: Completed · {self._execution_timer_.result()}")
@@ -429,16 +430,7 @@ class RealtimeAPI(SystemAPI):
             account = self._initial_account_ if self._initial_account_ is not None else update.Portfolio.Account
             start = (self._start_timestamp_ if self._start_timestamp_ is not None else datetime.now()).date()
             stop = (self._stop_timestamp_ if self._stop_timestamp_ is not None else datetime.now()).date()
-            self._log_.info(lambda: f"Report Orders: {update.Portfolio.Orders}")
-            self._log_.info(lambda: f"Report Positions: {update.Portfolio.Positions}")
-            self._log_.info(lambda: f"Report Trades: {update.Portfolio.Trades}")
-            unrealized = generate_unrealized_report(update.Portfolio.Positions, account, start, stop)
-            realized = generate_realized_report(update.Portfolio.Trades, account, start, stop)
-            net = generate_net_report(update.Portfolio.Positions, update.Portfolio.Trades, account, start, stop)
-            self._log_.info(lambda: f"Report Unrealized: {unrealized}")
-            self._log_.info(lambda: f"Report Realized: {realized}")
-            self._log_.info(lambda: f"Report Net: {net}")
-            self.statistics = net
+            self._report_(update.Portfolio, account, start, stop)
 
         initialization.on(event=UpdateID.Init, to=initialization, action=init, reason="Handshake Initialized")
         initialization.on(event=UpdateID.BarClosed, to=initialization, action=warmup, reason=None)

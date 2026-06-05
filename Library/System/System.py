@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from pathlib import Path
+from datetime import datetime
 from typing import Type, Union, TYPE_CHECKING
 
 from Library.Database import BufferAPI
+from Library.Database.Dataframe import pl
 from Library.Utility.Enumeration import EnumerationAPI
 from Library.Utility.Service import ServiceAPI
 from Library.Logging import HandlerLoggingAPI
@@ -124,8 +127,12 @@ class SystemAPI(ServiceAPI, ABC):
                  timeframe: TimeframeAPI,
                  parameters: Parameter,
                  market: tuple[int, float],
-                 portfolio: tuple[int, float]) -> None:
+                 portfolio: tuple[int, float],
+                 report: bool = True,
+                 export: bool = True) -> None:
         super().__init__()
+        self._reporting_: bool = report
+        self._exporting_: bool = export
         self._strategy_: Type[StrategyAPI] = strategy
         self._security_: SecurityAPI = security
         self._timeframe_: TimeframeAPI = timeframe
@@ -175,6 +182,45 @@ class SystemAPI(ServiceAPI, ABC):
         if self._market_.Active: self._market_.shutdown()
         if self._portfolio_.Active: self._portfolio_.shutdown()
         self._connected_ = False
+
+    @staticmethod
+    def _stringify_(df: pl.DataFrame) -> pl.DataFrame:
+        if df.is_empty(): return df
+        casts = [pl.col(name).cast(pl.List(pl.Utf8)).list.join(",") for name, dtype in df.schema.items() if isinstance(dtype, pl.List)]
+        return df.with_columns(casts) if casts else df
+
+    def _export_(self, tables: dict) -> None:
+        try:
+            ident = getattr(self, "_iid_", None) or getattr(self._session_, "IID", None) or self.__class__.__name__
+            folder = Path(__file__).resolve().parents[2] / "Reports" / f"{datetime.now():%Y-%m-%d %H-%M-%S} {ident}"
+            folder.mkdir(parents=True, exist_ok=True)
+            for name, table in tables.items():
+                self._stringify_(table).write_csv(str(folder / f"{name.lower()}.csv"))
+            self._log_.info(lambda: f"Export Operation: Saved · {folder}")
+        except Exception as error:
+            self._log_.error(lambda: f"Export Operation: Failed · {error}")
+
+    def _report_(self, portfolio: PortfolioAPI, account: Union[AccountAPI, None], start, stop) -> None:
+        from Library.Portfolio.Statistic import generate_realized_report, generate_unrealized_report, generate_net_report
+        if portfolio is None: return
+        unrealized = generate_unrealized_report(portfolio.Positions, account, start, stop)
+        realized = generate_realized_report(portfolio.Trades, account, start, stop)
+        net = generate_net_report(portfolio.Positions, portfolio.Trades, account, start, stop)
+        tables = {
+            "Orders": portfolio.Orders,
+            "Positions": portfolio.Positions,
+            "Trades": portfolio.Trades,
+            "Deals": portfolio.Deals,
+            "Unrealized": unrealized,
+            "Realized": realized,
+            "Net": net,
+        }
+        if self._reporting_:
+            for name, table in tables.items():
+                self._log_.info(lambda name=name, table=table: f"Report {name}: {table}")
+        if self._exporting_:
+            self._export_(tables)
+        self.statistics = net
 
     @abstractmethod
     def send_action(self, action: ActionAPI) -> None:

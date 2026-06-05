@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Type, Union
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser, BooleanOptionalAction, Namespace
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -26,7 +26,9 @@ def _parse_() -> Namespace:
     base_parser.add_argument("--provider", type=str, required=True)
     base_parser.add_argument("--ticker", type=str, required=True)
     base_parser.add_argument("--timeframe", type=str, required=True)
-    base_parser.add_argument("--profile", action="store_true", default=False)
+    base_parser.add_argument("--profile", action=BooleanOptionalAction, default=False)
+    base_parser.add_argument("--report", action=BooleanOptionalAction, default=True)
+    base_parser.add_argument("--export", action=BooleanOptionalAction, default=True)
 
     period_parser = ArgumentParser(add_help=False)
     period_parser.add_argument("--start", type=str, required=True)
@@ -112,7 +114,9 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 iid=args.iid,
                 database=args.database,
                 market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
-                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval)
+                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval),
+                report=args.report,
+                export=args.export
             )
         case SystemType.Simulation:
             params: Parameter = parameters.Realtime[args.strategy]
@@ -125,7 +129,9 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 iid=args.iid,
                 database=args.database,
                 market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
-                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval)
+                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval),
+                report=args.report,
+                export=args.export
             )
         case SystemType.Testing:
             params: Parameter = parameters.Realtime[args.strategy]
@@ -138,7 +144,9 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 iid=args.iid,
                 database=args.database,
                 market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
-                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval)
+                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval),
+                report=args.report,
+                export=args.export
             )
         case SystemType.Backtesting:
             return None

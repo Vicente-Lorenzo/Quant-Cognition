@@ -248,12 +248,10 @@ def sort_items(df: pl.DataFrame) -> pl.DataFrame:
 def aggregate_items(df: pl.DataFrame) -> pl.DataFrame:
     position = str(TradeAPI.ID.Position)
     if df.is_empty() or position not in df.columns: return df
-
     def _take_(col: str, op):
         return op(pl.col(col)) if col in df.columns else pl.lit(0.0).alias(col)
-
     agg_exprs = [
-        pl.col(str(PositionAPI.ID.UID)).first(),
+        pl.col(str(PositionAPI.ID.UID)),
         pl.col(str(PositionAPI.ID.Direction)).first(),
         pl.col(str(PositionAPI.ID.EntryTimestamp)).min(),
         pl.col(str(PositionAPI.ID.EntryPrice)).first(),
@@ -283,6 +281,9 @@ def aggregate_items(df: pl.DataFrame) -> pl.DataFrame:
             _take_(str(TradeAPI.ID.ExitBalance), lambda x: x.last()),
         ])
     return df.group_by(position).agg(agg_exprs)
+
+def aggregate_trades(df: pl.DataFrame) -> pl.DataFrame:
+    return sort_items(aggregate_items(df))
 
 def split_buy_sell(df: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
     direction = str(PositionAPI.ID.Direction)
