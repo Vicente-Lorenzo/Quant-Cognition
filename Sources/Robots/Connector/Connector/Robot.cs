@@ -69,6 +69,9 @@ public class RobotAPI : IDisposable
     private readonly BufferingMode _portfolio_buffering_;
     private readonly int _portfolio_batch_;
     private readonly double _portfolio_interval_;
+    private readonly bool _report_;
+    private readonly bool _export_;
+    private readonly bool _profile_;
     private readonly SystemMode _system_mode_;
 
     private readonly Dictionary<int, LastPositionData> _positions_;
@@ -103,7 +106,8 @@ public class RobotAPI : IDisposable
                     TickStreamMode tick_stream, BarStreamMode bar_stream, OrderStreamMode order_stream,
                     PositionStreamMode position_stream, TradeStreamMode trade_stream,
                     BufferingMode market_buffering, int market_batch, double market_interval,
-                    BufferingMode portfolio_buffering, int portfolio_batch, double portfolio_interval)
+                    BufferingMode portfolio_buffering, int portfolio_batch, double portfolio_interval,
+                    bool report, bool export, bool profile)
     {
         _robot_ = algo;
         _console_ = console;
@@ -127,6 +131,9 @@ public class RobotAPI : IDisposable
         _portfolio_buffering_ = portfolio_buffering;
         _portfolio_batch_ = portfolio_batch;
         _portfolio_interval_ = portfolio_interval;
+        _report_ = report;
+        _export_ = export;
+        _profile_ = profile;
 
         _log_.Debug($"Streams: Tick {_tick_stream_} · Bar {_bar_stream_} · Order {_order_stream_} · Position {_position_stream_} · Trade {_trade_stream_}");
 
@@ -213,7 +220,10 @@ public class RobotAPI : IDisposable
         var market_interval_arg = _market_buffering_ == BufferingMode.Auto ? "" : $" --market-interval {_market_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         var portfolio_batch_arg = _portfolio_buffering_ == BufferingMode.Auto ? "" : $" --portfolio-batch {_portfolio_batch_}";
         var portfolio_interval_arg = _portfolio_buffering_ == BufferingMode.Auto ? "" : $" --portfolio-interval {_portfolio_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
-        var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{market_batch_arg}{market_interval_arg}{portfolio_batch_arg}{portfolio_interval_arg}";
+        var report_arg = _report_ ? " --report" : "";
+        var export_arg = _export_ ? " --export" : "";
+        var profile_arg = _profile_ ? " --profile" : "";
+        var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{market_batch_arg}{market_interval_arg}{portfolio_batch_arg}{portfolio_interval_arg}{report_arg}{export_arg}{profile_arg}";
         var inner_cmd = $"cd /d \"{base_directory}\" && conda run --no-capture-output -n Quant python -m Library.System.Main {script_args}";
         _log_.Debug($"Activation Operation: Launching Python · {script_args}");
         SpawnTerminal(inner_cmd);

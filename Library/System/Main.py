@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Type, Union
-from argparse import ArgumentParser, BooleanOptionalAction, Namespace
+from argparse import ArgumentParser, Namespace
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -26,9 +26,9 @@ def _parse_() -> Namespace:
     base_parser.add_argument("--provider", type=str, required=True)
     base_parser.add_argument("--ticker", type=str, required=True)
     base_parser.add_argument("--timeframe", type=str, required=True)
-    base_parser.add_argument("--profile", action=BooleanOptionalAction, default=False)
-    base_parser.add_argument("--report", action=BooleanOptionalAction, default=True)
-    base_parser.add_argument("--export", action=BooleanOptionalAction, default=True)
+    base_parser.add_argument("--report", action="store_true", default=False)
+    base_parser.add_argument("--export", action="store_true", default=False)
+    base_parser.add_argument("--profile", action="store_true", default=False)
 
     period_parser = ArgumentParser(add_help=False)
     period_parser.add_argument("--start", type=str, required=True)

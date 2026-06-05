@@ -57,6 +57,15 @@ public class Connector : Robot
     [Parameter("Portfolio Interval", Group = "Buffering Management", DefaultValue = 60.0, MinValue = 0.0)]
     public double PortfolioInterval { get; set; }
 
+    [Parameter("Report", Group = "Reporting Management", DefaultValue = true)]
+    public bool Report { get; set; }
+
+    [Parameter("Export", Group = "Reporting Management", DefaultValue = true)]
+    public bool Export { get; set; }
+
+    [Parameter("Profile", Group = "Reporting Management", DefaultValue = false)]
+    public bool Profile { get; set; }
+
     private RobotAPI _robot_api_;
 
     protected override void OnStart()
@@ -64,7 +73,8 @@ public class Connector : Robot
         _robot_api_ = new RobotAPI(this, Console, File, Strategy, Database, Verification,
             TickStream, BarStream, OrderStream, PositionStream, TradeStream,
             MarketBuffering, MarketBatch, MarketInterval,
-            PortfolioBuffering, PortfolioBatch, PortfolioInterval);
+            PortfolioBuffering, PortfolioBatch, PortfolioInterval,
+            Report, Export, Profile);
     }
 
     protected override void OnStop()
