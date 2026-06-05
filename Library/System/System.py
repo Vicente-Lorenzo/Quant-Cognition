@@ -17,6 +17,7 @@ from Library.Portfolio.Order import OrderAPI
 from Library.Portfolio.Position import PositionAPI, PositionStatus
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Trade import TradeAPI
+from Library.Portfolio.Statistic import generate_net_report, order_view, position_view, trade_view, deal_view
 from Library.Protocol.Action import ActionAPI, ActionID, CompleteActionAPI
 from Library.Protocol.Update import (
     UpdateID,
@@ -201,22 +202,18 @@ class SystemAPI(ServiceAPI, ABC):
             self._log_.error(lambda: f"Export Operation: Failed · {error}")
 
     def _report_(self, portfolio: PortfolioAPI, account: Union[AccountAPI, None], start, stop) -> None:
-        from Library.Portfolio.Statistic import generate_realized_report, generate_unrealized_report, generate_net_report
         if portfolio is None: return
-        unrealized = generate_unrealized_report(portfolio.Positions, account, start, stop)
-        realized = generate_realized_report(portfolio.Trades, account, start, stop)
         net = generate_net_report(portfolio.Positions, portfolio.Trades, account, start, stop)
         tables = {
-            "Orders": portfolio.Orders,
-            "Positions": portfolio.Positions,
-            "Trades": portfolio.Trades,
-            "Deals": portfolio.Deals,
-            "Unrealized": unrealized,
-            "Realized": realized,
+            "Orders": order_view(portfolio.Orders),
+            "Positions": position_view(portfolio.Positions),
+            "Trades": trade_view(portfolio.Trades),
+            "Deals": deal_view(portfolio.Deals),
             "Net": net,
         }
         if self._reporting_:
             for name, table in tables.items():
+                if table.is_empty(): continue
                 self._log_.info(lambda name=name, table=table: f"Report {name}: {table}")
         if self._exporting_:
             self._export_(tables)
