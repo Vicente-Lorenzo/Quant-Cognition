@@ -10,7 +10,7 @@ from Library.Utility.Statistic import profiler, timer
 from Library.System.System import SystemType
 from Library.Strategy.Model import DDPGStrategyAPI
 from Library.Strategy.Strategy import StrategyType
-from Library.System import RealtimeAPI, SystemAPI
+from Library.System import BacktestingAPI, RealtimeAPI, SystemAPI
 from Library.Parameter import Parameter, ParameterAPI
 from Library.Utility.Path import traceback_current_module
 from Library.Logging import HandlerLoggingAPI, VerboseLevel
@@ -42,6 +42,8 @@ def _parse_() -> Namespace:
     realtime_parser = ArgumentParser(add_help=False)
     realtime_parser.add_argument("--iid", type=str, required=True)
     realtime_parser.add_argument("--database", type=str, required=False, default=None, choices=["Quant", "Tests"])
+    realtime_parser.add_argument("--universe-batch", type=int, required=False, default=None)
+    realtime_parser.add_argument("--universe-interval", type=float, required=False, default=None)
     realtime_parser.add_argument("--market-batch", type=int, required=False, default=None)
     realtime_parser.add_argument("--market-interval", type=float, required=False, default=None)
     realtime_parser.add_argument("--portfolio-batch", type=int, required=False, default=None)
@@ -78,6 +80,14 @@ def _parse_() -> Namespace:
 
     return parser.parse_args()
 
+def _universe_(system: SystemType, batch: Union[int, None], interval: Union[float, None]) -> tuple[int, float]:
+    match system:
+        case SystemType.Live | SystemType.Simulation: auto_batch, auto_interval = 1, 0.0
+        case _: auto_batch, auto_interval = 0, 0.0
+    batch = batch if batch is not None else auto_batch
+    interval = interval if interval is not None else auto_interval
+    return batch, interval
+
 def _market_(system: SystemType, batch: Union[int, None], interval: Union[float, None]) -> tuple[int, float]:
     match system:
         case SystemType.Live: auto_batch, auto_interval = 100, 60.0
@@ -113,6 +123,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 parameters=params,
                 iid=args.iid,
                 database=args.database,
+                universe=_universe_(SystemType(args.system), args.universe_batch, args.universe_interval),
                 market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
                 portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval),
                 report=args.report,
@@ -128,6 +139,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 parameters=params,
                 iid=args.iid,
                 database=args.database,
+                universe=_universe_(SystemType(args.system), args.universe_batch, args.universe_interval),
                 market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
                 portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval),
                 report=args.report,
@@ -143,26 +155,28 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 parameters=params,
                 iid=args.iid,
                 database=args.database,
+                universe=_universe_(SystemType(args.system), args.universe_batch, args.universe_interval),
                 market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
                 portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval),
                 report=args.report,
                 export=args.export
             )
         case SystemType.Backtesting:
-            return None
-        #     params: Parameter = parameters.Backtesting[args.strategy]
-        #     return BacktestingAPI(
-        #         strategy=strategy,
-        #         security=security,
-        #         timeframe=timeframe,
-        #         parameters=params,
-        #         start=args.start,
-        #         stop=args.stop,
-        #         account=(args.account_asset, args.account_balance, args.account_leverage),
-        #         spread=(SpreadType(args.spread_type), args.spread_value),
-        #         commission=(CommissionType(args.commission_type), args.commission_value),
-        #         swap=(SwapType(args.swap_type), args.swap_buy, args.swap_sell)
-        #     )
+            params: Parameter = parameters.Backtesting[args.strategy]
+            return BacktestingAPI(
+                strategy=strategy,
+                security=security,
+                timeframe=timeframe,
+                parameters=params,
+                start=args.start,
+                stop=args.stop,
+                account=(args.account_asset, args.account_balance, args.account_leverage),
+                spread=(SpreadType(args.spread_type), args.spread_value),
+                commission=(CommissionType(args.commission_type), args.commission_value),
+                swap=(SwapType(args.swap_type), args.swap_buy, args.swap_sell),
+                report=args.report,
+                export=args.export
+            )
         case SystemType.Optimization:
             return None
         #     params: Parameter = parameters.Backtesting[args.strategy]
