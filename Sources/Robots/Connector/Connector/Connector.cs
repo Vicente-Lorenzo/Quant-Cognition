@@ -39,6 +39,15 @@ public class Connector : Robot
     [Parameter("Trade Stream", Group = "System Management", DefaultValue = TradeStreamMode.Auto)]
     public TradeStreamMode TradeStream { get; set; }
 
+    [Parameter("Universe Buffering", Group = "Buffering Management", DefaultValue = BufferingMode.Auto)]
+    public BufferingMode UniverseBuffering { get; set; }
+
+    [Parameter("Universe Batch", Group = "Buffering Management", DefaultValue = 1, MinValue = 0)]
+    public int UniverseBatch { get; set; }
+
+    [Parameter("Universe Interval", Group = "Buffering Management", DefaultValue = 0.0, MinValue = 0.0)]
+    public double UniverseInterval { get; set; }
+
     [Parameter("Market Buffering", Group = "Buffering Management", DefaultValue = BufferingMode.Auto)]
     public BufferingMode MarketBuffering { get; set; }
 
@@ -72,6 +81,7 @@ public class Connector : Robot
     {
         _robot_api_ = new RobotAPI(this, Console, File, Strategy, Database, Verification,
             TickStream, BarStream, OrderStream, PositionStream, TradeStream,
+            UniverseBuffering, UniverseBatch, UniverseInterval,
             MarketBuffering, MarketBatch, MarketInterval,
             PortfolioBuffering, PortfolioBatch, PortfolioInterval,
             Report, Export, Profile);

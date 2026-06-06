@@ -63,6 +63,9 @@ public class RobotAPI : IDisposable
     private readonly OrderStreamMode _order_stream_;
     private readonly PositionStreamMode _position_stream_;
     private readonly TradeStreamMode _trade_stream_;
+    private readonly BufferingMode _universe_buffering_;
+    private readonly int _universe_batch_;
+    private readonly double _universe_interval_;
     private readonly BufferingMode _market_buffering_;
     private readonly int _market_batch_;
     private readonly double _market_interval_;
@@ -105,6 +108,7 @@ public class RobotAPI : IDisposable
                     DatabaseType database, int verification,
                     TickStreamMode tick_stream, BarStreamMode bar_stream, OrderStreamMode order_stream,
                     PositionStreamMode position_stream, TradeStreamMode trade_stream,
+                    BufferingMode universe_buffering, int universe_batch, double universe_interval,
                     BufferingMode market_buffering, int market_batch, double market_interval,
                     BufferingMode portfolio_buffering, int portfolio_batch, double portfolio_interval,
                     bool report, bool export, bool profile)
@@ -125,6 +129,9 @@ public class RobotAPI : IDisposable
         _order_stream_ = order_stream == OrderStreamMode.Auto ? OrderStreamMode.All : order_stream;
         _position_stream_ = position_stream == PositionStreamMode.Auto ? PositionStreamMode.All : position_stream;
         _trade_stream_ = trade_stream == TradeStreamMode.Auto ? TradeStreamMode.All : trade_stream;
+        _universe_buffering_ = universe_buffering;
+        _universe_batch_ = universe_batch;
+        _universe_interval_ = universe_interval;
         _market_buffering_ = market_buffering;
         _market_batch_ = market_batch;
         _market_interval_ = market_interval;
@@ -216,6 +223,8 @@ public class RobotAPI : IDisposable
     {
         var base_directory = new DirectoryInfo(Environment.CurrentDirectory).Parent?.Parent?.Parent?.FullName;
         var database_arg = _database_ == DatabaseType.Off ? "" : $" --database \"{_database_}\"";
+        var universe_batch_arg = _universe_buffering_ == BufferingMode.Auto ? "" : $" --universe-batch {_universe_batch_}";
+        var universe_interval_arg = _universe_buffering_ == BufferingMode.Auto ? "" : $" --universe-interval {_universe_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         var market_batch_arg = _market_buffering_ == BufferingMode.Auto ? "" : $" --market-batch {_market_batch_}";
         var market_interval_arg = _market_buffering_ == BufferingMode.Auto ? "" : $" --market-interval {_market_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         var portfolio_batch_arg = _portfolio_buffering_ == BufferingMode.Auto ? "" : $" --portfolio-batch {_portfolio_batch_}";
@@ -223,7 +232,7 @@ public class RobotAPI : IDisposable
         var report_arg = _report_ ? " --report" : "";
         var export_arg = _export_ ? " --export" : "";
         var profile_arg = _profile_ ? " --profile" : "";
-        var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{market_batch_arg}{market_interval_arg}{portfolio_batch_arg}{portfolio_interval_arg}{report_arg}{export_arg}{profile_arg}";
+        var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{universe_batch_arg}{universe_interval_arg}{market_batch_arg}{market_interval_arg}{portfolio_batch_arg}{portfolio_interval_arg}{report_arg}{export_arg}{profile_arg}";
         var inner_cmd = $"cd /d \"{base_directory}\" && conda run --no-capture-output -n Quant python -m Library.System.Main {script_args}";
         _log_.Debug($"Activation Operation: Launching Python · {script_args}");
         SpawnTerminal(inner_cmd);
@@ -378,6 +387,18 @@ public class RobotAPI : IDisposable
         throw new ArgumentException($"Unknown action {action} for {order.OrderType}");
     }
 
+    private static UpdateID ResolvePositionCloseUpdateID(Position position, PositionCloseReason reason)
+    {
+        bool isBuy = position.TradeType == TradeType.Buy;
+        switch (reason)
+        {
+            case PositionCloseReason.StopLoss: return isBuy ? UpdateID.StopLossBuyPosition : UpdateID.StopLossSellPosition;
+            case PositionCloseReason.TakeProfit: return isBuy ? UpdateID.TakeProfitBuyPosition : UpdateID.TakeProfitSellPosition;
+            case PositionCloseReason.StopOut: return isBuy ? UpdateID.MarginCallBuyPosition : UpdateID.MarginCallSellPosition;
+            default: return isBuy ? UpdateID.ClosedBuyPosition : UpdateID.ClosedSellPosition;
+        }
+    }
+
     private void OnOrderCreated(PendingOrderCreatedEventArgs args)
     {
         if (!IsOrderFromRobot(args.PendingOrder)) return;
@@ -522,7 +543,7 @@ public class RobotAPI : IDisposable
         _positions_.Remove(args.Position.Id);
         if (_trade_stream_ == TradeStreamMode.Off) return;
         var trade = FindTrade(args.Position.Id);
-        UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.ClosedBuyPosition : UpdateID.ClosedSellPosition;
+        UpdateID update_id = ResolvePositionCloseUpdateID(args.Position, args.Reason);
         _system_.SendUpdatePositionTrade(update_id, _bar_, args.Position, trade);
         _system_.SendUpdateComplete();
         _trades_sent_++;
