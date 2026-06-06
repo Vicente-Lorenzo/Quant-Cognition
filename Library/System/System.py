@@ -526,7 +526,6 @@ class SystemAPI(ServiceAPI, ABC):
         for action in actions: self.send_action(action)
         self.send_action(CompleteActionAPI())
 
-    # noinspection PyTypeChecker,PyUnresolvedReferences
     def deploy(self) -> None:
         engine = LifecycleAPI(
             system_machine=self.system_management(),

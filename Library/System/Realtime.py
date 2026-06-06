@@ -42,7 +42,7 @@ _MARKET_CLOSURE_ = timedelta(days=4)
 class RealtimeAPI(SystemAPI):
 
     _DIRECTION_ = {0: Direction.Buy, 1: Direction.Sell}
-    _ORDER_TYPE_ = {0: OrderType.Limit, 1: OrderType.Stop, 2: OrderType.StopLimit}  # cTrader PendingOrderType: Limit=0, Stop=1, StopLimit=2
+    _ORDER_TYPE_ = {0: OrderType.Limit, 1: OrderType.Stop, 2: OrderType.StopLimit}
 
     _binary_init_ = BinaryAPI('i')
     _binary_denied_ = BinaryAPI('B', 's')
