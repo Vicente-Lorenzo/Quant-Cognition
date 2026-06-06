@@ -37,6 +37,8 @@ if TYPE_CHECKING:
     from Library.Strategy.Strategy import StrategyAPI
     from Library.Universe.Timeframe import TimeframeAPI
 
+_MARKET_CLOSURE_ = timedelta(days=4)
+
 class RealtimeAPI(SystemAPI):
 
     _DIRECTION_ = {0: Direction.Buy, 1: Direction.Sell}
@@ -335,16 +337,9 @@ class RealtimeAPI(SystemAPI):
                    getattr(self.indicator.Sentimental, "Window", 0) or 0]
         return max(windows)
 
-    def _continuous_(self, earlier: datetime, later: datetime, weekdays: set[int]) -> bool:
-        value = self._timeframe_.Value or 1
-        if self._timeframe_.Unit == "D":
-            expected = earlier.date()
-            for _ in range(value):
-                expected += timedelta(days=1)
-                while expected.weekday() not in weekdays: expected += timedelta(days=1)
-            return expected == later.date()
+    def _warmup_horizon_(self) -> timedelta:
         step = self._timeframe_.Seconds or 0.0
-        return step > 0 and abs((later - earlier).total_seconds() - step) < 1.0
+        return timedelta(seconds=step) + _MARKET_CLOSURE_
 
     def _warmup_database_clean_(self) -> bool:
         database = self._warmup_db_timestamps_
@@ -352,11 +347,11 @@ class RealtimeAPI(SystemAPI):
         if len(database) < self._warmup_window_:
             self._log_.debug(lambda: f"Phase Warmup: Database Insufficient · {len(database)} of {self._warmup_window_} Bars")
             return False
+        horizon = self._warmup_horizon_()
         sequence = [*database, self._sync_buffer_[0].Timestamp.DateTime]
-        weekdays = {timestamp.weekday() for timestamp in sequence}
         for earlier, later in zip(sequence, sequence[1:]):
-            if not self._continuous_(earlier, later, weekdays):
-                self._log_.debug(lambda: f"Phase Warmup: Database Discontinuous · After {earlier} Expected Next Bar · Got {later}")
+            if not earlier < later <= earlier + horizon:
+                self._log_.debug(lambda: f"Phase Warmup: Database Discontinuous · After {earlier} Got {later} · Beyond {horizon}")
                 return False
         return True
 

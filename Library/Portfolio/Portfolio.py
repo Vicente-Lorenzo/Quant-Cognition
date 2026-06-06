@@ -38,6 +38,15 @@ class PortfolioAPI(DatapointAPI):
     _positions_: dict[int, PositionAPI] = field(default_factory=dict, init=False)
     _trades_: list[TradeAPI] = field(default_factory=list, init=False)
 
+    _equity_peak_: Union[float, None] = field(default=None, init=False)
+    _equity_trough_: Union[float, None] = field(default=None, init=False)
+    _max_equity_drawdown_: float = field(default=0.0, init=False)
+    _max_equity_runup_: float = field(default=0.0, init=False)
+    _equity_drawdown_sum_: float = field(default=0.0, init=False)
+    _equity_runup_sum_: float = field(default=0.0, init=False)
+    _equity_samples_: int = field(default=0, init=False)
+    _equity_timestamp_: Union[datetime, None] = field(default=None, init=False)
+
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],
                       migrate: bool,
@@ -95,7 +104,7 @@ class PortfolioAPI(DatapointAPI):
         SELECT o.*,
                s."UID" AS "Security_UID", s."Provider" AS "Security_Provider", s."Category" AS "Security_Category", s."Ticker" AS "Security_Ticker", s."Contract" AS "Security_Contract",
                c."UID" AS "Contract_UID", c."Ticker" AS "Contract_Ticker", c."Provider" AS "Contract_Provider", c."Type" AS "Contract_Type", c."Digits" AS "Contract_Digits", c."PointSize" AS "Contract_PointSize", c."PipSize" AS "Contract_PipSize", c."LotSize" AS "Contract_LotSize", c."VolumeMin" AS "Contract_VolumeMin", c."VolumeMax" AS "Contract_VolumeMax", c."VolumeStep" AS "Contract_VolumeStep", c."Commission" AS "Contract_Commission", c."CommissionMode" AS "Contract_CommissionMode", c."SwapLong" AS "Contract_SwapLong", c."SwapShort" AS "Contract_SwapShort", c."SwapMode" AS "Contract_SwapMode", c."SwapExtraDay" AS "Contract_SwapExtraDay", c."SwapSummerTime" AS "Contract_SwapSummerTime", c."SwapWinterTime" AS "Contract_SwapWinterTime", c."SwapPeriod" AS "Contract_SwapPeriod", c."Expiry" AS "Contract_Expiry",
-               p."UID" AS "Position_UID", p."Security" AS "Position_Security", p."PositionType" AS "Position_PositionType", p."Direction" AS "Position_TradeType", p."Volume" AS "Position_Volume", p."Quantity" AS "Position_Quantity", p."EntryTimestamp" AS "Position_EntryTimestamp", p."EntryPrice" AS "Position_EntryPrice", p."StopLossPrice" AS "Position_StopLossPrice", p."TakeProfitPrice" AS "Position_TakeProfitPrice", p."MaxRunUpPrice" AS "Position_MaxRunUpPrice", p."MaxDrawDownPrice" AS "Position_MaxDrawDownPrice", p."ExitPrice" AS "Position_ExitPrice", p."StopLossPnL" AS "Position_StopLossPnL", p."TakeProfitPnL" AS "Position_TakeProfitPnL", p."MaxRunUpPnL" AS "Position_MaxRunUpPnL", p."MaxDrawDownPnL" AS "Position_MaxDrawDownPnL", p."GrossPnL" AS "Position_GrossPnL", p."CommissionPnL" AS "Position_CommissionPnL", p."SwapPnL" AS "Position_SwapPnL", p."NetPnL" AS "Position_NetPnL", p."UsedMargin" AS "Position_UsedMargin", p."EntryBalance" AS "Position_EntryBalance", p."MidBalance" AS "Position_MidBalance"
+               p."UID" AS "Position_UID", p."Security" AS "Position_Security", p."PositionType" AS "Position_PositionType", p."Direction" AS "Position_TradeType", p."Volume" AS "Position_Volume", p."Quantity" AS "Position_Quantity", p."EntryTimestamp" AS "Position_EntryTimestamp", p."EntryPrice" AS "Position_EntryPrice", p."StopLossPrice" AS "Position_StopLossPrice", p."TakeProfitPrice" AS "Position_TakeProfitPrice", p."ExitPrice" AS "Position_ExitPrice", p."StopLossPnL" AS "Position_StopLossPnL", p."TakeProfitPnL" AS "Position_TakeProfitPnL", p."GrossPnL" AS "Position_GrossPnL", p."CommissionPnL" AS "Position_CommissionPnL", p."SwapPnL" AS "Position_SwapPnL", p."NetPnL" AS "Position_NetPnL", p."UsedMargin" AS "Position_UsedMargin", p."EntryBalance" AS "Position_EntryBalance", p."MidBalance" AS "Position_MidBalance"
         FROM "{OrderAPI.Schema}"."{OrderAPI.Table}" o
         LEFT JOIN "Universe"."Security" s ON o."Security" = s."UID"
         LEFT JOIN "Universe"."Contract" c ON s."Contract" = c."UID"
@@ -165,7 +174,7 @@ class PortfolioAPI(DatapointAPI):
         from Library.Portfolio.Trade import TradeAPI
         sql = f'''
         SELECT t.*,
-               p."UID" AS "Position_UID", p."Security" AS "Position_Security", p."PositionType" AS "Position_PositionType", p."Direction" AS "Position_TradeType", p."Volume" AS "Position_Volume", p."Quantity" AS "Position_Quantity", p."EntryTimestamp" AS "Position_EntryTimestamp", p."EntryPrice" AS "Position_EntryPrice", p."StopLossPrice" AS "Position_StopLossPrice", p."TakeProfitPrice" AS "Position_TakeProfitPrice", p."MaxRunUpPrice" AS "Position_MaxRunUpPrice", p."MaxDrawDownPrice" AS "Position_MaxDrawDownPrice", p."ExitPrice" AS "Position_ExitPrice", p."StopLossPnL" AS "Position_StopLossPnL", p."TakeProfitPnL" AS "Position_TakeProfitPnL", p."MaxRunUpPnL" AS "Position_MaxRunUpPnL", p."MaxDrawDownPnL" AS "Position_MaxDrawDownPnL", p."GrossPnL" AS "Position_GrossPnL", p."CommissionPnL" AS "Position_CommissionPnL", p."SwapPnL" AS "Position_SwapPnL", p."NetPnL" AS "Position_NetPnL", p."UsedMargin" AS "Position_UsedMargin", p."EntryBalance" AS "Position_EntryBalance", p."MidBalance" AS "Position_MidBalance",
+               p."UID" AS "Position_UID", p."Security" AS "Position_Security", p."PositionType" AS "Position_PositionType", p."Direction" AS "Position_TradeType", p."Volume" AS "Position_Volume", p."Quantity" AS "Position_Quantity", p."EntryTimestamp" AS "Position_EntryTimestamp", p."EntryPrice" AS "Position_EntryPrice", p."StopLossPrice" AS "Position_StopLossPrice", p."TakeProfitPrice" AS "Position_TakeProfitPrice", p."ExitPrice" AS "Position_ExitPrice", p."StopLossPnL" AS "Position_StopLossPnL", p."TakeProfitPnL" AS "Position_TakeProfitPnL", p."GrossPnL" AS "Position_GrossPnL", p."CommissionPnL" AS "Position_CommissionPnL", p."SwapPnL" AS "Position_SwapPnL", p."NetPnL" AS "Position_NetPnL", p."UsedMargin" AS "Position_UsedMargin", p."EntryBalance" AS "Position_EntryBalance", p."MidBalance" AS "Position_MidBalance",
                s."UID" AS "Security_UID", s."Provider" AS "Security_Provider", s."Category" AS "Security_Category", s."Ticker" AS "Security_Ticker", s."Contract" AS "Security_Contract",
                c."UID" AS "Contract_UID", c."Ticker" AS "Contract_Ticker", c."Provider" AS "Contract_Provider", c."Type" AS "Contract_Type", c."Digits" AS "Contract_Digits", c."PointSize" AS "Contract_PointSize", c."PipSize" AS "Contract_PipSize", c."LotSize" AS "Contract_LotSize", c."VolumeMin" AS "Contract_VolumeMin", c."VolumeMax" AS "Contract_VolumeMax", c."VolumeStep" AS "Contract_VolumeStep", c."Commission" AS "Contract_Commission", c."CommissionMode" AS "Contract_CommissionMode", c."SwapLong" AS "Contract_SwapLong", c."SwapShort" AS "Contract_SwapShort", c."SwapMode" AS "Contract_SwapMode", c."SwapExtraDay" AS "Contract_SwapExtraDay", c."SwapSummerTime" AS "Contract_SwapSummerTime", c."SwapWinterTime" AS "Contract_SwapWinterTime", c."SwapPeriod" AS "Contract_SwapPeriod", c."Expiry" AS "Contract_Expiry"
         FROM "{TradeAPI.Schema}"."{TradeAPI.Table}" t
@@ -206,6 +215,7 @@ class PortfolioAPI(DatapointAPI):
             low_bid = data.LowTick.Bid.Price if data.LowTick and data.LowTick.Bid else bid
             high_ask = data.HighTick.Ask.Price if data.HighTick and data.HighTick.Ask else ask
             low_ask = data.LowTick.Ask.Price if data.LowTick and data.LowTick.Ask else ask
+        sum_current = sum_best = sum_worst = 0.0
         for pos in self._positions_.values():
             if pos.NetPnL is None or pos.EntryPrice is None: continue
             current_price = bid if pos.IsLong else ask
@@ -226,26 +236,76 @@ class PortfolioAPI(DatapointAPI):
             contract = pos.Security.Contract if pos.Security else None
             best_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(best_price, entry_price, pos.IsLong), pos.Volume), comm, swap)
             worst_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(worst_price, entry_price, pos.IsLong), pos.Volume), comm, swap)
-            if pos._max_drawdown_price_ is None:
-                pos._max_drawdown_price_ = PriceAPI(Price=worst_price, Reference=entry_price, Contract=contract)
-            elif (pos.IsLong and worst_price < pos._max_drawdown_price_.Price) or (pos.IsShort and worst_price > pos._max_drawdown_price_.Price):
-                pos._max_drawdown_price_.Price = worst_price
-            if pos._max_runup_price_ is None:
-                pos._max_runup_price_ = PriceAPI(Price=best_price, Reference=entry_price, Contract=contract)
-            elif (pos.IsLong and best_price > pos._max_runup_price_.Price) or (pos.IsShort and best_price < pos._max_runup_price_.Price):
-                pos._max_runup_price_.Price = best_price
-            if pos._max_drawdown_pnl_ is None:
-                pos._max_drawdown_pnl_ = PnLAPI(PnL=worst_pnl, Reference=ref_balance, Duration=duration)
-            elif worst_pnl < pos._max_drawdown_pnl_.PnL:
-                pos._max_drawdown_pnl_.PnL = worst_pnl
-                pos._max_drawdown_pnl_.Reference = ref_balance
-                pos._max_drawdown_pnl_.Duration = duration
-            if pos._max_runup_pnl_ is None:
-                pos._max_runup_pnl_ = PnLAPI(PnL=best_pnl, Reference=ref_balance, Duration=duration)
-            elif best_pnl > pos._max_runup_pnl_.PnL:
-                pos._max_runup_pnl_.PnL = best_pnl
-                pos._max_runup_pnl_.Reference = ref_balance
-                pos._max_runup_pnl_.Duration = duration
+            sum_current += pos.NetPnL.PnL
+            sum_best += best_pnl
+            sum_worst += worst_pnl
+            if pos._max_equity_drawdown_price_ is None:
+                pos._max_equity_drawdown_price_ = PriceAPI(Price=worst_price, Reference=entry_price, Contract=contract)
+            elif (pos.IsLong and worst_price < pos._max_equity_drawdown_price_.Price) or (pos.IsShort and worst_price > pos._max_equity_drawdown_price_.Price):
+                pos._max_equity_drawdown_price_.Price = worst_price
+            if pos._max_equity_runup_price_ is None:
+                pos._max_equity_runup_price_ = PriceAPI(Price=best_price, Reference=entry_price, Contract=contract)
+            elif (pos.IsLong and best_price > pos._max_equity_runup_price_.Price) or (pos.IsShort and best_price < pos._max_equity_runup_price_.Price):
+                pos._max_equity_runup_price_.Price = best_price
+            if pos._max_equity_drawdown_pnl_ is None:
+                pos._max_equity_drawdown_pnl_ = PnLAPI(PnL=worst_pnl, Reference=ref_balance, Duration=duration)
+            elif worst_pnl < pos._max_equity_drawdown_pnl_.PnL:
+                pos._max_equity_drawdown_pnl_.PnL = worst_pnl
+                pos._max_equity_drawdown_pnl_.Reference = ref_balance
+                pos._max_equity_drawdown_pnl_.Duration = duration
+            if pos._max_equity_runup_pnl_ is None:
+                pos._max_equity_runup_pnl_ = PnLAPI(PnL=best_pnl, Reference=ref_balance, Duration=duration)
+            elif best_pnl > pos._max_equity_runup_pnl_.PnL:
+                pos._max_equity_runup_pnl_.PnL = best_pnl
+                pos._max_equity_runup_pnl_.Reference = ref_balance
+                pos._max_equity_runup_pnl_.Duration = duration
+        if self._account_ is not None and self._account_.Balance is not None:
+            balance = self._account_.Balance
+            self._track_equity_(balance + sum_worst, balance + sum_best, balance + sum_current, timestamp)
+
+    def _track_equity_(self, low: float, high: float, close: float, timestamp: datetime) -> None:
+        if self._equity_peak_ is None: self._equity_peak_ = self._equity_trough_ = close
+        self._equity_peak_ = max(self._equity_peak_, high)
+        self._equity_trough_ = min(self._equity_trough_, low)
+        self._max_equity_drawdown_ = max(self._max_equity_drawdown_, self._equity_peak_ - low)
+        self._max_equity_runup_ = max(self._max_equity_runup_, high - self._equity_trough_)
+        if timestamp != self._equity_timestamp_:
+            self._equity_timestamp_ = timestamp
+            self._equity_drawdown_sum_ += self._equity_peak_ - close
+            self._equity_runup_sum_ += close - self._equity_trough_
+            self._equity_samples_ += 1
+
+    @property
+    def MaxEquityDrawdown(self) -> float:
+        return self._max_equity_drawdown_
+
+    @property
+    def MaxEquityDrawdownPercent(self) -> float:
+        return (self._max_equity_drawdown_ / self._equity_peak_) * 100.0 if self._equity_peak_ else 0.0
+
+    @property
+    def MeanEquityDrawdown(self) -> float:
+        return self._equity_drawdown_sum_ / self._equity_samples_ if self._equity_samples_ else 0.0
+
+    @property
+    def MeanEquityDrawdownPercent(self) -> float:
+        return (self.MeanEquityDrawdown / self._equity_peak_) * 100.0 if self._equity_peak_ else 0.0
+
+    @property
+    def MaxEquityRunup(self) -> float:
+        return self._max_equity_runup_
+
+    @property
+    def MaxEquityRunupPercent(self) -> float:
+        return (self._max_equity_runup_ / self._equity_trough_) * 100.0 if self._equity_trough_ else 0.0
+
+    @property
+    def MeanEquityRunup(self) -> float:
+        return self._equity_runup_sum_ / self._equity_samples_ if self._equity_samples_ else 0.0
+
+    @property
+    def MeanEquityRunupPercent(self) -> float:
+        return (self.MeanEquityRunup / self._equity_trough_) * 100.0 if self._equity_trough_ else 0.0
 
     def open_order(self, order: OrderAPI) -> None:
         self._orders_[order.UID] = order
@@ -272,10 +332,10 @@ class PortfolioAPI(DatapointAPI):
             if dst._take_profit_price_ is None: setattr(dst, 'TakeProfitPrice', src.TakeProfitPrice)
             if dst._stop_loss_pnl_ is None: setattr(dst, 'StopLossPnL', src.StopLossPnL)
             if dst._take_profit_pnl_ is None: setattr(dst, 'TakeProfitPnL', src.TakeProfitPnL)
-        if dst._max_drawdown_price_ is None: setattr(dst, 'MaxDrawdownPrice', src.MaxDrawdownPrice)
-        if dst._max_runup_price_ is None: setattr(dst, 'MaxRunupPrice', src.MaxRunupPrice)
-        if dst._max_drawdown_pnl_ is None: setattr(dst, 'MaxDrawdownPnL', src.MaxDrawdownPnL)
-        if dst._max_runup_pnl_ is None: setattr(dst, 'MaxRunupPnL', src.MaxRunupPnL)
+        if dst._max_equity_drawdown_price_ is None: setattr(dst, 'MaxEquityDrawdownPrice', src.MaxEquityDrawdownPrice)
+        if dst._max_equity_runup_price_ is None: setattr(dst, 'MaxEquityRunupPrice', src.MaxEquityRunupPrice)
+        if dst._max_equity_drawdown_pnl_ is None: setattr(dst, 'MaxEquityDrawdownPnL', src.MaxEquityDrawdownPnL)
+        if dst._max_equity_runup_pnl_ is None: setattr(dst, 'MaxEquityRunupPnL', src.MaxEquityRunupPnL)
         if dst._entry_balance_ is None: setattr(dst, 'EntryBalance', src.EntryBalance)
         if dst.Volume is None: dst.Volume = src.Volume
         if dst.Quantity is None: dst.Quantity = src.Quantity
@@ -332,20 +392,20 @@ class PortfolioAPI(DatapointAPI):
             setattr(trade, 'EntryBalance', old_pos.EntryBalance)
             if trade.ExitPrice and trade.ExitPrice.Price is not None:
                 exit_price = trade.ExitPrice.Price
-                if trade._max_drawdown_price_ and ((trade.IsLong and exit_price < trade._max_drawdown_price_.Price) or (trade.IsShort and exit_price > trade._max_drawdown_price_.Price)):
-                    trade._max_drawdown_price_.Price = exit_price
-                if trade._max_runup_price_ and ((trade.IsLong and exit_price > trade._max_runup_price_.Price) or (trade.IsShort and exit_price < trade._max_runup_price_.Price)):
-                    trade._max_runup_price_.Price = exit_price
+                if trade._max_equity_drawdown_price_ and ((trade.IsLong and exit_price < trade._max_equity_drawdown_price_.Price) or (trade.IsShort and exit_price > trade._max_equity_drawdown_price_.Price)):
+                    trade._max_equity_drawdown_price_.Price = exit_price
+                if trade._max_equity_runup_price_ and ((trade.IsLong and exit_price > trade._max_equity_runup_price_.Price) or (trade.IsShort and exit_price < trade._max_equity_runup_price_.Price)):
+                    trade._max_equity_runup_price_.Price = exit_price
             net = trade.NetPnL.PnL if (trade.NetPnL and trade.NetPnL.PnL is not None) else 0.0
             if trade.NetPnL:
-                if trade._max_drawdown_pnl_ and net < trade._max_drawdown_pnl_.PnL:
-                    trade._max_drawdown_pnl_.PnL = net
-                    trade._max_drawdown_pnl_.Reference = trade.NetPnL.Reference
-                    trade._max_drawdown_pnl_.Duration = trade.NetPnL.Duration
-                if trade._max_runup_pnl_ and net > trade._max_runup_pnl_.PnL:
-                    trade._max_runup_pnl_.PnL = net
-                    trade._max_runup_pnl_.Reference = trade.NetPnL.Reference
-                    trade._max_runup_pnl_.Duration = trade.NetPnL.Duration
+                if trade._max_equity_drawdown_pnl_ and net < trade._max_equity_drawdown_pnl_.PnL:
+                    trade._max_equity_drawdown_pnl_.PnL = net
+                    trade._max_equity_drawdown_pnl_.Reference = trade.NetPnL.Reference
+                    trade._max_equity_drawdown_pnl_.Duration = trade.NetPnL.Duration
+                if trade._max_equity_runup_pnl_ and net > trade._max_equity_runup_pnl_.PnL:
+                    trade._max_equity_runup_pnl_.PnL = net
+                    trade._max_equity_runup_pnl_.Reference = trade.NetPnL.Reference
+                    trade._max_equity_runup_pnl_.Duration = trade.NetPnL.Duration
             base = old_pos.MidBalance if old_pos.MidBalance is not None else (old_pos.EntryBalance or 0.0)
             new_mid = base + net
             old_pos.MidBalance = new_mid
