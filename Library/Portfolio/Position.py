@@ -415,11 +415,39 @@ class PositionAPI(DatapointAPI):
 
     @property
     @overridefield
+    def GrossPoints(self) -> Union[float, None]:
+        if self.GrossPnL and self.Volume and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
+            return self.GrossPnL.PnL / (self.Volume * self.Security.Contract.PointSize)
+        return 0.0
+
+    @property
+    @overridefield
+    def GrossPips(self) -> Union[float, None]:
+        if self.GrossPnL and self.Volume and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
+            return self.GrossPnL.PnL / (self.Volume * self.Security.Contract.PipSize)
+        return 0.0
+
+    @property
+    @overridefield
     def CommissionPnL(self) -> Union[PnLAPI, None]:
         return self._commission_pnl_
     @CommissionPnL.setter
     def CommissionPnL(self, val: Union[float, PnLAPI, None]) -> None:
         self._commission_pnl_ = self._assign_pnl_(self._commission_pnl_, val)
+
+    @property
+    @overridefield
+    def CommissionPoints(self) -> Union[float, None]:
+        if self.CommissionPnL and self.Volume and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
+            return self.CommissionPnL.PnL / (self.Volume * self.Security.Contract.PointSize)
+        return 0.0
+
+    @property
+    @overridefield
+    def CommissionPips(self) -> Union[float, None]:
+        if self.CommissionPnL and self.Volume and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
+            return self.CommissionPnL.PnL / (self.Volume * self.Security.Contract.PipSize)
+        return 0.0
 
     @property
     @overridefield
@@ -431,11 +459,39 @@ class PositionAPI(DatapointAPI):
 
     @property
     @overridefield
+    def SwapPoints(self) -> Union[float, None]:
+        if self.SwapPnL and self.Volume and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
+            return self.SwapPnL.PnL / (self.Volume * self.Security.Contract.PointSize)
+        return 0.0
+
+    @property
+    @overridefield
+    def SwapPips(self) -> Union[float, None]:
+        if self.SwapPnL and self.Volume and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
+            return self.SwapPnL.PnL / (self.Volume * self.Security.Contract.PipSize)
+        return 0.0
+
+    @property
+    @overridefield
     def NetPnL(self) -> Union[PnLAPI, None]:
         return self._net_pnl_
     @NetPnL.setter
     def NetPnL(self, val: Union[float, PnLAPI, None]) -> None:
         self._net_pnl_ = self._assign_pnl_(self._net_pnl_, val)
+
+    @property
+    @overridefield
+    def NetPoints(self) -> Union[float, None]:
+        if self.NetPnL and self.Volume and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
+            return self.NetPnL.PnL / (self.Volume * self.Security.Contract.PointSize)
+        return 0.0
+
+    @property
+    @overridefield
+    def NetPips(self) -> Union[float, None]:
+        if self.NetPnL and self.Volume and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
+            return self.NetPnL.PnL / (self.Volume * self.Security.Contract.PipSize)
+        return 0.0
 
     @property
     def IsLong(self) -> bool:
