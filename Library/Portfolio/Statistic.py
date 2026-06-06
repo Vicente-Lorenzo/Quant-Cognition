@@ -285,14 +285,10 @@ PositionView = {
     str(PositionAPI.ID.EntryBalance): pl.Float64(),
     str(PositionAPI.ID.MidBalance): pl.Float64(),
     str(PositionAPI.ID.Points): pl.Float64(),
-    str(PositionAPI.ID.MaxBalanceDrawdownPoints): pl.Float64(),
     str(PositionAPI.ID.MaxEquityDrawdownPoints): pl.Float64(),
-    str(PositionAPI.ID.MaxBalanceRunupPoints): pl.Float64(),
     str(PositionAPI.ID.MaxEquityRunupPoints): pl.Float64(),
     str(PositionAPI.ID.Return): pl.Float64(),
-    str(PositionAPI.ID.MaxBalanceDrawdownReturn): pl.Float64(),
     str(PositionAPI.ID.MaxEquityDrawdownReturn): pl.Float64(),
-    str(PositionAPI.ID.MaxBalanceRunupReturn): pl.Float64(),
     str(PositionAPI.ID.MaxEquityRunupReturn): pl.Float64(),
     str(PositionAPI.ID.RiskAdjustedReturn): pl.Float64(),
     str(PositionAPI.ID.GrossPnL): pl.Float64(),
@@ -314,14 +310,10 @@ TradeView = {
     str(TradeAPI.ID.MidBalance): pl.Float64(),
     str(TradeAPI.ID.ExitBalance): pl.Float64(),
     str(TradeAPI.ID.Points): pl.Float64(),
-    str(TradeAPI.ID.MaxBalanceDrawdownPoints): pl.Float64(),
     str(TradeAPI.ID.MaxEquityDrawdownPoints): pl.Float64(),
-    str(TradeAPI.ID.MaxBalanceRunupPoints): pl.Float64(),
     str(TradeAPI.ID.MaxEquityRunupPoints): pl.Float64(),
     str(TradeAPI.ID.Return): pl.Float64(),
-    str(TradeAPI.ID.MaxBalanceDrawdownReturn): pl.Float64(),
     str(TradeAPI.ID.MaxEquityDrawdownReturn): pl.Float64(),
-    str(TradeAPI.ID.MaxBalanceRunupReturn): pl.Float64(),
     str(TradeAPI.ID.MaxEquityRunupReturn): pl.Float64(),
     str(TradeAPI.ID.RiskAdjustedReturn): pl.Float64(),
     str(TradeAPI.ID.GrossPnL): pl.Float64(),
@@ -343,14 +335,10 @@ DealView = {
     str(TradeAPI.ID.MidBalance): pl.Float64(),
     str(TradeAPI.ID.ExitBalance): pl.Float64(),
     str(TradeAPI.ID.Points): pl.Float64(),
-    str(TradeAPI.ID.MaxBalanceDrawdownPoints): pl.Float64(),
     str(TradeAPI.ID.MaxEquityDrawdownPoints): pl.Float64(),
-    str(TradeAPI.ID.MaxBalanceRunupPoints): pl.Float64(),
     str(TradeAPI.ID.MaxEquityRunupPoints): pl.Float64(),
     str(TradeAPI.ID.Return): pl.Float64(),
-    str(TradeAPI.ID.MaxBalanceDrawdownReturn): pl.Float64(),
     str(TradeAPI.ID.MaxEquityDrawdownReturn): pl.Float64(),
-    str(TradeAPI.ID.MaxBalanceRunupReturn): pl.Float64(),
     str(TradeAPI.ID.MaxEquityRunupReturn): pl.Float64(),
     str(TradeAPI.ID.RiskAdjustedReturn): pl.Float64(),
     str(TradeAPI.ID.GrossPnL): pl.Float64(),
@@ -419,14 +407,7 @@ def aggregate_items(df: pl.DataFrame) -> pl.DataFrame:
             pl.col(str(TradeAPI.ID.ExitPrice)).last(),
             _take_(str(TradeAPI.ID.ExitBalance), lambda x: x.last()),
         ])
-    aggregated = df.group_by(position).agg(agg_exprs)
-    points, ret = str(PositionAPI.ID.Points), str(PositionAPI.ID.Return)
-    return aggregated.with_columns(
-        pl.col(points).clip(upper_bound=0.0).alias(str(PositionAPI.ID.MaxBalanceDrawdownPoints)),
-        pl.col(points).clip(lower_bound=0.0).alias(str(PositionAPI.ID.MaxBalanceRunupPoints)),
-        pl.col(ret).clip(upper_bound=0.0).alias(str(PositionAPI.ID.MaxBalanceDrawdownReturn)),
-        pl.col(ret).clip(lower_bound=0.0).alias(str(PositionAPI.ID.MaxBalanceRunupReturn))
-    )
+    return df.group_by(position).agg(agg_exprs)
 
 def aggregate_trades(df: pl.DataFrame) -> pl.DataFrame:
     return sort_items(aggregate_items(df))
@@ -799,19 +780,40 @@ def generate_unrealized_report(positions_df: pl.DataFrame, account: AccountAPI, 
     labels_df = pl.DataFrame({STATISTICS_METRICS_LABEL: Metrics})
     return pl.concat([labels_df, ind_df, agg_df], how="horizontal")
 
-def equity_metrics(portfolio) -> dict:
+def equity_metrics(initial_balance: float, deals: pl.DataFrame) -> dict:
+    entry_bal, mid_bal = str(PositionAPI.ID.EntryBalance), str(PositionAPI.ID.MidBalance)
+    ddr, rur = str(PositionAPI.ID.MaxEquityDrawdownReturn), str(PositionAPI.ID.MaxEquityRunupReturn)
+    zero = {MAXEQUITYDRAWDOWNVALUE: 0.0, MAXEQUITYDRAWDOWNPERC: 0.0, MEANEQUITYDRAWDOWNVALUE: 0.0, MEANEQUITYDRAWDOWNPERC: 0.0, MAXEQUITYRUNUPVALUE: 0.0, MAXEQUITYRUNUPPERC: 0.0, MEANEQUITYRUNUPVALUE: 0.0, MEANEQUITYRUNUPPERC: 0.0}
+    if deals.is_empty() or entry_bal not in deals.columns: return zero
+    points = []
+    for row in deals.iter_rows(named=True):
+        opened = row.get(entry_bal) or initial_balance
+        points.append(opened)
+        points.append(opened + (row.get(rur) or 0.0) * opened)
+        points.append(opened + (row.get(ddr) or 0.0) * opened)
+        if row.get(mid_bal) is not None: points.append(row.get(mid_bal))
+    peak = trough = points[0]
+    max_dd = max_ru = drawdown_sum = runup_sum = 0.0
+    for value in points:
+        peak = max(peak, value)
+        trough = min(trough, value)
+        max_dd = max(max_dd, peak - value)
+        max_ru = max(max_ru, value - trough)
+        drawdown_sum += peak - value
+        runup_sum += value - trough
+    mean_dd, mean_ru = drawdown_sum / len(points), runup_sum / len(points)
     return {
-        MAXEQUITYDRAWDOWNVALUE: portfolio.MaxEquityDrawdown,
-        MAXEQUITYDRAWDOWNPERC: portfolio.MaxEquityDrawdownPercent,
-        MEANEQUITYDRAWDOWNVALUE: portfolio.MeanEquityDrawdown,
-        MEANEQUITYDRAWDOWNPERC: portfolio.MeanEquityDrawdownPercent,
-        MAXEQUITYRUNUPVALUE: portfolio.MaxEquityRunup,
-        MAXEQUITYRUNUPPERC: portfolio.MaxEquityRunupPercent,
-        MEANEQUITYRUNUPVALUE: portfolio.MeanEquityRunup,
-        MEANEQUITYRUNUPPERC: portfolio.MeanEquityRunupPercent
+        MAXEQUITYDRAWDOWNVALUE: max_dd,
+        MAXEQUITYDRAWDOWNPERC: (max_dd / peak) * 100.0 if peak else 0.0,
+        MEANEQUITYDRAWDOWNVALUE: mean_dd,
+        MEANEQUITYDRAWDOWNPERC: (mean_dd / peak) * 100.0 if peak else 0.0,
+        MAXEQUITYRUNUPVALUE: max_ru,
+        MAXEQUITYRUNUPPERC: (max_ru / trough) * 100.0 if trough else 0.0,
+        MEANEQUITYRUNUPVALUE: mean_ru,
+        MEANEQUITYRUNUPPERC: (mean_ru / trough) * 100.0 if trough else 0.0
     }
 
-def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, account: AccountAPI, start: date, stop: date, equity: Union[dict, None] = None) -> pl.DataFrame:
+def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, account: AccountAPI, start: date, stop: date) -> pl.DataFrame:
     initial_balance = (account.Balance if account is not None else 0.0) or 0.0
     safe_positions = _safe_df_(positions_df)
     safe_trades = _safe_df_(trades_df)
@@ -823,8 +825,9 @@ def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, acc
     else:
         net_df = safe_positions
     ind = sort_items(net_df)
-    ind_df = dependent_metrics(initial_balance, start, stop, ind, NET_BUY_INDIVIDUAL, NET_SELL_INDIVIDUAL, NET_TOTAL_INDIVIDUAL, equity)
     agg = sort_items(aggregate_items(net_df))
+    equity = equity_metrics(initial_balance, agg)
+    ind_df = dependent_metrics(initial_balance, start, stop, ind, NET_BUY_INDIVIDUAL, NET_SELL_INDIVIDUAL, NET_TOTAL_INDIVIDUAL, equity)
     agg_df = dependent_metrics(initial_balance, start, stop, agg, NET_BUY_AGGREGATED, NET_SELL_AGGREGATED, NET_TOTAL_AGGREGATED, equity)
     labels_df = pl.DataFrame({STATISTICS_METRICS_LABEL: Metrics})
     return pl.concat([labels_df, ind_df, agg_df], how="horizontal")

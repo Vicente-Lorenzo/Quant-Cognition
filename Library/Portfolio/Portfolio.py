@@ -38,15 +38,6 @@ class PortfolioAPI(DatapointAPI):
     _positions_: dict[int, PositionAPI] = field(default_factory=dict, init=False)
     _trades_: list[TradeAPI] = field(default_factory=list, init=False)
 
-    _equity_peak_: Union[float, None] = field(default=None, init=False)
-    _equity_trough_: Union[float, None] = field(default=None, init=False)
-    _max_equity_drawdown_: float = field(default=0.0, init=False)
-    _max_equity_runup_: float = field(default=0.0, init=False)
-    _equity_drawdown_sum_: float = field(default=0.0, init=False)
-    _equity_runup_sum_: float = field(default=0.0, init=False)
-    _equity_samples_: int = field(default=0, init=False)
-    _equity_timestamp_: Union[datetime, None] = field(default=None, init=False)
-
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],
                       migrate: bool,
@@ -215,7 +206,6 @@ class PortfolioAPI(DatapointAPI):
             low_bid = data.LowTick.Bid.Price if data.LowTick and data.LowTick.Bid else bid
             high_ask = data.HighTick.Ask.Price if data.HighTick and data.HighTick.Ask else ask
             low_ask = data.LowTick.Ask.Price if data.LowTick and data.LowTick.Ask else ask
-        sum_current = sum_best = sum_worst = 0.0
         for pos in self._positions_.values():
             if pos.NetPnL is None or pos.EntryPrice is None: continue
             current_price = bid if pos.IsLong else ask
@@ -236,9 +226,6 @@ class PortfolioAPI(DatapointAPI):
             contract = pos.Security.Contract if pos.Security else None
             best_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(best_price, entry_price, pos.IsLong), pos.Volume), comm, swap)
             worst_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(worst_price, entry_price, pos.IsLong), pos.Volume), comm, swap)
-            sum_current += pos.NetPnL.PnL
-            sum_best += best_pnl
-            sum_worst += worst_pnl
             if pos._max_equity_drawdown_price_ is None:
                 pos._max_equity_drawdown_price_ = PriceAPI(Price=worst_price, Reference=entry_price, Contract=contract)
             elif (pos.IsLong and worst_price < pos._max_equity_drawdown_price_.Price) or (pos.IsShort and worst_price > pos._max_equity_drawdown_price_.Price):
@@ -259,53 +246,6 @@ class PortfolioAPI(DatapointAPI):
                 pos._max_equity_runup_pnl_.PnL = best_pnl
                 pos._max_equity_runup_pnl_.Reference = ref_balance
                 pos._max_equity_runup_pnl_.Duration = duration
-        if self._account_ is not None and self._account_.Balance is not None:
-            balance = self._account_.Balance
-            self._track_equity_(balance + sum_worst, balance + sum_best, balance + sum_current, timestamp)
-
-    def _track_equity_(self, low: float, high: float, close: float, timestamp: datetime) -> None:
-        if self._equity_peak_ is None: self._equity_peak_ = self._equity_trough_ = close
-        self._equity_peak_ = max(self._equity_peak_, high)
-        self._equity_trough_ = min(self._equity_trough_, low)
-        self._max_equity_drawdown_ = max(self._max_equity_drawdown_, self._equity_peak_ - low)
-        self._max_equity_runup_ = max(self._max_equity_runup_, high - self._equity_trough_)
-        if timestamp != self._equity_timestamp_:
-            self._equity_timestamp_ = timestamp
-            self._equity_drawdown_sum_ += self._equity_peak_ - close
-            self._equity_runup_sum_ += close - self._equity_trough_
-            self._equity_samples_ += 1
-
-    @property
-    def MaxEquityDrawdown(self) -> float:
-        return self._max_equity_drawdown_
-
-    @property
-    def MaxEquityDrawdownPercent(self) -> float:
-        return (self._max_equity_drawdown_ / self._equity_peak_) * 100.0 if self._equity_peak_ else 0.0
-
-    @property
-    def MeanEquityDrawdown(self) -> float:
-        return self._equity_drawdown_sum_ / self._equity_samples_ if self._equity_samples_ else 0.0
-
-    @property
-    def MeanEquityDrawdownPercent(self) -> float:
-        return (self.MeanEquityDrawdown / self._equity_peak_) * 100.0 if self._equity_peak_ else 0.0
-
-    @property
-    def MaxEquityRunup(self) -> float:
-        return self._max_equity_runup_
-
-    @property
-    def MaxEquityRunupPercent(self) -> float:
-        return (self._max_equity_runup_ / self._equity_trough_) * 100.0 if self._equity_trough_ else 0.0
-
-    @property
-    def MeanEquityRunup(self) -> float:
-        return self._equity_runup_sum_ / self._equity_samples_ if self._equity_samples_ else 0.0
-
-    @property
-    def MeanEquityRunupPercent(self) -> float:
-        return (self.MeanEquityRunup / self._equity_trough_) * 100.0 if self._equity_trough_ else 0.0
 
     def open_order(self, order: OrderAPI) -> None:
         self._orders_[order.UID] = order
