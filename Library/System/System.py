@@ -17,7 +17,7 @@ from Library.Portfolio.Order import OrderAPI
 from Library.Portfolio.Position import PositionAPI, PositionStatus
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Trade import TradeAPI
-from Library.Portfolio.Statistic import generate_net_report, order_view, position_view, trade_view, deal_view
+from Library.Portfolio.Statistic import generate_net_report, equity_metrics, order_view, position_view, trade_view, deal_view
 from Library.Protocol.Action import ActionAPI, ActionID, CompleteActionAPI
 from Library.Protocol.Update import (
     UpdateID,
@@ -203,7 +203,7 @@ class SystemAPI(ServiceAPI, ABC):
 
     def _report_(self, portfolio: PortfolioAPI, account: Union[AccountAPI, None], start, stop) -> None:
         if portfolio is None: return
-        net = generate_net_report(portfolio.Positions, portfolio.Trades, account, start, stop)
+        net = generate_net_report(portfolio.Positions, portfolio.Trades, account, start, stop, equity_metrics(portfolio))
         tables = {
             "Orders": order_view(portfolio.Orders),
             "Positions": position_view(portfolio.Positions),

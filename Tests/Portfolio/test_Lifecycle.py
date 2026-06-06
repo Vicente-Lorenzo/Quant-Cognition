@@ -96,10 +96,10 @@ def test_update_data_tick_long_creates_runup_drawdown(env):
     pf.open_position(0, pos)
     tick = make_tick(env, ENTRY_DT + timedelta(minutes=5), ask=1.0560, bid=1.0555)
     pf.update_data(tick)
-    assert pos.MaxRunupPrice is not None and pos.MaxRunupPrice.Price == pytest.approx(1.0555)
-    assert pos.MaxDrawdownPrice is not None and pos.MaxDrawdownPrice.Price == pytest.approx(1.0555)
-    assert pos.MaxRunupPnL is not None and pos.MaxRunupPnL.PnL is not None
-    assert pos.MaxDrawdownPnL is not None and pos.MaxDrawdownPnL.PnL is not None
+    assert pos.MaxEquityRunupPrice is not None and pos.MaxEquityRunupPrice.Price == pytest.approx(1.0555)
+    assert pos.MaxEquityDrawdownPrice is not None and pos.MaxEquityDrawdownPrice.Price == pytest.approx(1.0555)
+    assert pos.MaxEquityRunupPnL is not None and pos.MaxEquityRunupPnL.PnL is not None
+    assert pos.MaxEquityDrawdownPnL is not None and pos.MaxEquityDrawdownPnL.PnL is not None
     assert pos.NetPnL.PnL == pytest.approx((1.0555 - 1.0500) * 100000.0 - 2.0)
 
 def test_update_data_tick_short_uses_ask(env):
@@ -109,8 +109,8 @@ def test_update_data_tick_short_uses_ask(env):
     tick = make_tick(env, ENTRY_DT + timedelta(minutes=5), ask=1.0480, bid=1.0475)
     pf.update_data(tick)
     assert pos.NetPnL.PnL == pytest.approx((1.0500 - 1.0480) * 100000.0 - 2.0)
-    assert pos.MaxRunupPrice.Price == pytest.approx(1.0480)
-    assert pos.MaxDrawdownPrice.Price == pytest.approx(1.0480)
+    assert pos.MaxEquityRunupPrice.Price == pytest.approx(1.0480)
+    assert pos.MaxEquityDrawdownPrice.Price == pytest.approx(1.0480)
 
 def test_update_data_running_extremes_track_correctly(env):
     pf = env["portfolio"]
@@ -119,10 +119,10 @@ def test_update_data_running_extremes_track_correctly(env):
     pf.update_data(make_tick(env, ENTRY_DT + timedelta(minutes=1), ask=1.0560, bid=1.0555))
     pf.update_data(make_tick(env, ENTRY_DT + timedelta(minutes=2), ask=1.0480, bid=1.0475))
     pf.update_data(make_tick(env, ENTRY_DT + timedelta(minutes=3), ask=1.0520, bid=1.0515))
-    assert pos.MaxRunupPrice.Price == pytest.approx(1.0555)
-    assert pos.MaxDrawdownPrice.Price == pytest.approx(1.0475)
-    assert pos.MaxRunupPnL.PnL > 0
-    assert pos.MaxDrawdownPnL.PnL < 0
+    assert pos.MaxEquityRunupPrice.Price == pytest.approx(1.0555)
+    assert pos.MaxEquityDrawdownPrice.Price == pytest.approx(1.0475)
+    assert pos.MaxEquityRunupPnL.PnL > 0
+    assert pos.MaxEquityDrawdownPnL.PnL < 0
 
 def test_update_data_bar_uses_high_low_extremes_long(env):
     pf = env["portfolio"]
@@ -134,8 +134,8 @@ def test_update_data_bar_uses_high_low_extremes_long(env):
                    low_ask=1.0420, low_bid=1.0418,
                    close_ask=1.0530, close_bid=1.0528)
     pf.update_data(bar)
-    assert pos.MaxRunupPrice.Price == pytest.approx(1.0598)
-    assert pos.MaxDrawdownPrice.Price == pytest.approx(1.0418)
+    assert pos.MaxEquityRunupPrice.Price == pytest.approx(1.0598)
+    assert pos.MaxEquityDrawdownPrice.Price == pytest.approx(1.0418)
     assert pos.NetPnL.PnL == pytest.approx((1.0528 - 1.0500) * 100000.0 - 2.0)
 
 def test_update_data_bar_uses_high_low_extremes_short(env):
@@ -148,8 +148,8 @@ def test_update_data_bar_uses_high_low_extremes_short(env):
                    low_ask=1.0420, low_bid=1.0418,
                    close_ask=1.0530, close_bid=1.0528)
     pf.update_data(bar)
-    assert pos.MaxRunupPrice.Price == pytest.approx(1.0420)
-    assert pos.MaxDrawdownPrice.Price == pytest.approx(1.0600)
+    assert pos.MaxEquityRunupPrice.Price == pytest.approx(1.0420)
+    assert pos.MaxEquityDrawdownPrice.Price == pytest.approx(1.0600)
 
 def test_update_data_skips_positions_without_netpnl(env):
     pf = env["portfolio"]
@@ -169,10 +169,10 @@ def test_close_position_full_propagates_state(env):
     pf.close_position(pos.UID, None, trade)
     assert pos.UID not in pf._positions_
     assert trade in pf._trades_
-    assert trade.MaxRunupPrice is not None and trade.MaxRunupPrice.Price == pytest.approx(1.0555)
-    assert trade.MaxDrawdownPrice is not None and trade.MaxDrawdownPrice.Price == pytest.approx(1.0475)
-    assert trade.MaxRunupPnL is not None
-    assert trade.MaxDrawdownPnL is not None
+    assert trade.MaxEquityRunupPrice is not None and trade.MaxEquityRunupPrice.Price == pytest.approx(1.0555)
+    assert trade.MaxEquityDrawdownPrice is not None and trade.MaxEquityDrawdownPrice.Price == pytest.approx(1.0475)
+    assert trade.MaxEquityRunupPnL is not None
+    assert trade.MaxEquityDrawdownPnL is not None
     assert trade.EntryBalance == 10000.0
     assert trade.ExitBalance == pytest.approx(10498.0)
     assert trade.MidBalance == pytest.approx(10498.0)
@@ -198,7 +198,7 @@ def test_close_position_exit_price_extends_extremes(env):
     pf.update_data(make_tick(env, ENTRY_DT + timedelta(minutes=1), ask=1.0510, bid=1.0508))
     trade = make_trade(env, exit_price=1.0700, net=1998.0)
     pf.close_position(pos.UID, None, trade)
-    assert trade.MaxRunupPrice.Price == pytest.approx(1.0700)
+    assert trade.MaxEquityRunupPrice.Price == pytest.approx(1.0700)
 
 def test_close_position_exit_pnl_extends_extremes(env):
     pf = env["portfolio"]
@@ -207,7 +207,7 @@ def test_close_position_exit_pnl_extends_extremes(env):
     pf.update_data(make_tick(env, ENTRY_DT + timedelta(minutes=1), ask=1.0510, bid=1.0508))
     trade = make_trade(env, exit_price=1.0700, net=1998.0)
     pf.close_position(pos.UID, None, trade)
-    assert trade.MaxRunupPnL.PnL == pytest.approx(1998.0)
+    assert trade.MaxEquityRunupPnL.PnL == pytest.approx(1998.0)
 
 def test_close_position_partial_single_partial(env):
     pf = env["portfolio"]
@@ -258,15 +258,15 @@ def test_close_position_partial_preserves_runup_drawdown_through_partials(env):
     pf.open_position(0, pos)
     pf.update_data(make_tick(env, ENTRY_DT + timedelta(minutes=1), ask=1.0560, bid=1.0555))
     pf.update_data(make_tick(env, ENTRY_DT + timedelta(minutes=2), ask=1.0440, bid=1.0438))
-    runup_before = pos.MaxRunupPrice.Price
-    drawdown_before = pos.MaxDrawdownPrice.Price
+    runup_before = pos.MaxEquityRunupPrice.Price
+    drawdown_before = pos.MaxEquityDrawdownPrice.Price
     trade1 = make_trade(env, uid=1, volume=50000.0, exit_price=1.0520, net=20.0)
     remaining = PositionAPI(UID=pos.UID, Volume=50000.0)
     pf.close_position(pos.UID, remaining, trade1)
-    assert remaining.MaxRunupPrice is not None and remaining.MaxRunupPrice.Price == runup_before
-    assert remaining.MaxDrawdownPrice is not None and remaining.MaxDrawdownPrice.Price == drawdown_before
-    assert trade1.MaxRunupPrice.Price == runup_before
-    assert trade1.MaxDrawdownPrice.Price == drawdown_before
+    assert remaining.MaxEquityRunupPrice is not None and remaining.MaxEquityRunupPrice.Price == runup_before
+    assert remaining.MaxEquityDrawdownPrice is not None and remaining.MaxEquityDrawdownPrice.Price == drawdown_before
+    assert trade1.MaxEquityRunupPrice.Price == runup_before
+    assert trade1.MaxEquityDrawdownPrice.Price == drawdown_before
 
 def test_close_position_loss_decreases_account_and_balances(env):
     pf = env["portfolio"]
@@ -284,14 +284,14 @@ def test_modify_position_preserves_runup_drawdown_and_balance(env):
     pf.open_position(0, pos)
     pf.update_data(make_tick(env, ENTRY_DT + timedelta(minutes=1), ask=1.0560, bid=1.0555))
     pf.update_data(make_tick(env, ENTRY_DT + timedelta(minutes=2), ask=1.0440, bid=1.0438))
-    runup_before = pos.MaxRunupPrice.Price
-    drawdown_before = pos.MaxDrawdownPrice.Price
+    runup_before = pos.MaxEquityRunupPrice.Price
+    drawdown_before = pos.MaxEquityDrawdownPrice.Price
     midbal_before = pos.MidBalance
     new_pos = PositionAPI(UID=pos.UID, StopLossPrice=1.0400)
     pf.modify_position(new_pos)
     assert pf._positions_[pos.UID] is new_pos
-    assert new_pos.MaxRunupPrice.Price == runup_before
-    assert new_pos.MaxDrawdownPrice.Price == drawdown_before
+    assert new_pos.MaxEquityRunupPrice.Price == runup_before
+    assert new_pos.MaxEquityDrawdownPrice.Price == drawdown_before
     assert new_pos.EntryBalance == 10000.0
     assert new_pos.MidBalance == midbal_before
     assert new_pos.Direction == Direction.Buy

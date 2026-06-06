@@ -13,15 +13,15 @@ def test_statistic_report_empty():
     positions_df = pl.DataFrame()
     
     report_r = generate_realized_report(trades_df, account, start, stop)
-    assert report_r.shape == (73, 7)
+    assert report_r.shape == (81, 7)
     assert "Realized Buy Metrics (Individual)" in report_r.columns
 
     report_u = generate_unrealized_report(positions_df, account, start, stop)
-    assert report_u.shape == (73, 7)
+    assert report_u.shape == (81, 7)
     assert "Unrealized Buy Metrics (Individual)" in report_u.columns
 
     report_n = generate_net_report(positions_df, trades_df, account, start, stop)
-    assert report_n.shape == (73, 7)
+    assert report_n.shape == (81, 7)
     assert "Net Buy Metrics (Individual)" in report_n.columns
 
 def test_statistic_report_populated():
@@ -34,8 +34,8 @@ def test_statistic_report_populated():
         "NetPnL": [500.0, -200.0],
         "GrossPnL": [510.0, -190.0],
         "NetReturn": [5.0, -2.0],
-        "MaxDrawdownPnL": [-50.0, -250.0],
-        "MaxRunupPnL": [550.0, 20.0],
+        "MaxEquityDrawdownPnL": [-50.0, -250.0],
+        "MaxEquityRunupPnL": [550.0, 20.0],
         "EntryTimestamp": [datetime(2023, 1, 2), datetime(2023, 1, 10)],
         "ExitTimestamp": [datetime(2023, 1, 5), datetime(2023, 1, 12)]
     }
@@ -46,8 +46,8 @@ def test_statistic_report_populated():
         "NetPnL": [300.0],
         "GrossPnL": [300.0],
         "NetReturn": [3.0],
-        "MaxDrawdownPnL": [-10.0],
-        "MaxRunupPnL": [350.0],
+        "MaxEquityDrawdownPnL": [-10.0],
+        "MaxEquityRunupPnL": [350.0],
         "EntryTimestamp": [datetime(2023, 1, 20)]
     }
     positions_df = pl.DataFrame(positions_data)
