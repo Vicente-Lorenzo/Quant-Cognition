@@ -18,6 +18,7 @@ from Library.Portfolio.Position import PositionAPI, PositionStatus
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Trade import TradeAPI
 from Library.Portfolio.Statistic import generate_net_report, order_view, position_view, trade_view, deal_view
+from Library.Universe.Security import SecurityAPI
 from Library.Protocol.Action import ActionAPI, ActionID, CompleteActionAPI
 from Library.Protocol.Update import (
     UpdateID,
@@ -127,8 +128,9 @@ class SystemAPI(ServiceAPI, ABC):
                  security: SecurityAPI,
                  timeframe: TimeframeAPI,
                  parameters: Parameter,
-                 market: tuple[int, float],
-                 portfolio: tuple[int, float],
+                 universe: tuple[int, float] = (0, 0.0),
+                 market: tuple[int, float] = (0, 0.0),
+                 portfolio: tuple[int, float] = (0, 0.0),
                  report: bool = True,
                  export: bool = True) -> None:
         super().__init__()
@@ -150,6 +152,7 @@ class SystemAPI(ServiceAPI, ABC):
         self.strategy: Union[StrategyAPI, None] = None
         self.statistics = None
 
+        self._universe_: BufferAPI = BufferAPI(types=[SecurityAPI], batch=universe[0], interval=universe[1])
         self._market_: BufferAPI = BufferAPI(types=[TickAPI, BarAPI], batch=market[0], interval=market[1])
         self._portfolio_: BufferAPI = BufferAPI(types=[AccountAPI, OrderAPI, PositionAPI, TradeAPI], batch=portfolio[0], interval=portfolio[1])
 
@@ -252,7 +255,7 @@ class SystemAPI(ServiceAPI, ABC):
 
     def _receive_update_security_(self) -> SecurityAPI:
         security = self.receive_update_security()
-        if self._portfolio_.Active: security.save()
+        if self._universe_.Active: security.save()
         return security
 
     @abstractmethod
