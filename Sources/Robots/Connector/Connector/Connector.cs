@@ -24,6 +24,9 @@ public class Connector : Robot
     [Parameter("Verification", Group = "System Management", DefaultValue = 1, MinValue = 1)]
     public int Verification { get; set; }
 
+    [Parameter("Accuracy", Group = "System Management", DefaultValue = AccuracyMode.Auto)]
+    public AccuracyMode Accuracy { get; set; }
+
     [Parameter("Tick Stream", Group = "System Management", DefaultValue = TickStreamMode.Auto)]
     public TickStreamMode TickStream { get; set; }
 
@@ -79,7 +82,7 @@ public class Connector : Robot
 
     protected override void OnStart()
     {
-        _robot_api_ = new RobotAPI(this, Console, File, Strategy, Database, Verification,
+        _robot_api_ = new RobotAPI(this, Console, File, Strategy, Database, Verification, Accuracy,
             TickStream, BarStream, OrderStream, PositionStream, TradeStream,
             UniverseBuffering, UniverseBatch, UniverseInterval,
             MarketBuffering, MarketBatch, MarketInterval,

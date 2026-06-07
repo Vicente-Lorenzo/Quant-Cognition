@@ -58,6 +58,8 @@ public class RobotAPI : IDisposable
 
     private readonly DatabaseType _database_;
     private readonly int _verification_;
+    private readonly AccuracyMode _accuracy_;
+    private bool _persist_market_ = true;
     private readonly TickStreamMode _tick_stream_;
     private readonly BarStreamMode _bar_stream_;
     private readonly OrderStreamMode _order_stream_;
@@ -96,6 +98,7 @@ public class RobotAPI : IDisposable
     private int _observed_bars_;
     private int _degraded_bars_;
     private bool _verified_;
+    private bool _primed_;
 
     private long _ticks_sent_;
     private long _bars_sent_;
@@ -105,7 +108,7 @@ public class RobotAPI : IDisposable
     private long _actions_received_;
 
     public RobotAPI(Robot algo, VerboseLevel console, VerboseLevel file, StrategyType strategy,
-                    DatabaseType database, int verification,
+                    DatabaseType database, int verification, AccuracyMode accuracy,
                     TickStreamMode tick_stream, BarStreamMode bar_stream, OrderStreamMode order_stream,
                     PositionStreamMode position_stream, TradeStreamMode trade_stream,
                     BufferingMode universe_buffering, int universe_batch, double universe_interval,
@@ -118,6 +121,7 @@ public class RobotAPI : IDisposable
         _file_ = file;
         _strategy_ = strategy;
         _verification_ = verification;
+        _accuracy_ = accuracy;
 
         _log_ = new Logging(_robot_, "Strategy", console);
         _log_.Info("Start Operation: Starting");
@@ -225,8 +229,8 @@ public class RobotAPI : IDisposable
         var database_arg = _database_ == DatabaseType.Off ? "" : $" --database \"{_database_}\"";
         var universe_batch_arg = _universe_buffering_ == BufferingMode.Auto ? "" : $" --universe-batch {_universe_batch_}";
         var universe_interval_arg = _universe_buffering_ == BufferingMode.Auto ? "" : $" --universe-interval {_universe_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
-        var market_batch_arg = _market_buffering_ == BufferingMode.Auto ? "" : $" --market-batch {_market_batch_}";
-        var market_interval_arg = _market_buffering_ == BufferingMode.Auto ? "" : $" --market-interval {_market_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        var market_batch_arg = !_persist_market_ ? " --market-batch 0" : (_market_buffering_ == BufferingMode.Auto ? "" : $" --market-batch {_market_batch_}");
+        var market_interval_arg = !_persist_market_ ? " --market-interval 0" : (_market_buffering_ == BufferingMode.Auto ? "" : $" --market-interval {_market_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
         var portfolio_batch_arg = _portfolio_buffering_ == BufferingMode.Auto ? "" : $" --portfolio-batch {_portfolio_batch_}";
         var portfolio_interval_arg = _portfolio_buffering_ == BufferingMode.Auto ? "" : $" --portfolio-interval {_portfolio_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         var report_arg = _report_ ? " --report" : "";
@@ -615,22 +619,40 @@ public class RobotAPI : IDisposable
     {
         var last_bar = _robot_.Bars.LastBar;
         _bar_.Volume = last_bar.TickVolume;
+        if (!_primed_)
+        {
+            _primed_ = true;
+            _bar_.Timestamp = last_bar.OpenTime;
+            _bar_.GapTick = _bar_.CloseTick;
+            return;
+        }
         if (!_verified_)
         {
             _observed_bars_++;
-            var ts_set = new HashSet<DateTime> { _bar_.GapTick.Timestamp, _bar_.OpenTick.Timestamp, _bar_.HighTick.Timestamp, _bar_.LowTick.Timestamp, _bar_.CloseTick.Timestamp };
-            if (ts_set.Count <= 2) _degraded_bars_++;
+            var bar_ticks = new[] { _bar_.GapTick, _bar_.OpenTick, _bar_.HighTick, _bar_.LowTick, _bar_.CloseTick };
+            var ts_set = new HashSet<DateTime>(bar_ticks.Select(t => t.Timestamp));
+            bool sub_minute = bar_ticks.Any(t => t.Timestamp.Second != 0 || t.Timestamp.Millisecond != 0);
+            if (!(ts_set.Count > 2 && sub_minute)) _degraded_bars_++;
             _verification_buffer_.Add(new xBar { Timestamp = _bar_.Timestamp, GapTick = _bar_.GapTick, OpenTick = _bar_.OpenTick, HighTick = _bar_.HighTick, LowTick = _bar_.LowTick, CloseTick = _bar_.CloseTick, Volume = _bar_.Volume });
             if (_observed_bars_ >= _verification_)
             {
-                if (_degraded_bars_ >= _verification_)
+                bool degraded = _degraded_bars_ >= _verification_;
+                if (_accuracy_ == AccuracyMode.Tick && degraded)
                 {
-                    _log_.Exception("Activation Operation: Failed · Set Data to 'Tick data from Server' · Tick 'Download historical data' · Tick 'Apply commission automatically' · Restart");
+                    _log_.Exception("Activation Operation: Failed · Accuracy = Tick but non-Tick Data detected · Set Data to 'Tick data from Server' or set Accuracy = Auto/Bar");
+                    _robot_.Stop();
+                    return;
+                }
+                if (_accuracy_ == AccuracyMode.Bar && !degraded)
+                {
+                    _log_.Exception("Activation Operation: Failed · Accuracy = Bar but Tick Data detected · Set Data to Bars or set Accuracy = Auto/Tick");
                     _robot_.Stop();
                     return;
                 }
                 _verified_ = true;
-                _log_.Info($"Activation Operation: Accuracy Verified ({_verification_ - _degraded_bars_}/{_verification_}) · Activating");
+                _persist_market_ = _accuracy_ == AccuracyMode.Tick || (_accuracy_ == AccuracyMode.Auto && !degraded);
+                if (!_persist_market_) _log_.Warning($"Activation Operation: Bar Mode ({_degraded_bars_}/{_verification_} non-Tick) · Market Persistence Disabled");
+                _log_.Info($"Activation Operation: Accuracy {(_persist_market_ ? "Tick" : "Bar")} ({_verification_ - _degraded_bars_}/{_verification_}) · Activating");
                 Activate();
                 if (_bar_stream_ != BarStreamMode.Off)
                 {

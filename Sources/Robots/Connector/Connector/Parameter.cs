@@ -14,6 +14,13 @@ public enum BufferingMode
     Manual = 1,
 }
 
+public enum AccuracyMode
+{
+    Auto = 0,
+    Tick = 1,
+    Bar = 2,
+}
+
 public enum TickStreamMode
 {
     Auto = 0,
