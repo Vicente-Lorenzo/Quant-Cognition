@@ -60,7 +60,7 @@ def test_buffer_chain_session_account_position(db):
     session.save()
     account = AccountAPI(Timestamp=datetime(2025, 1, 1, 12, 0, 1), Session=session, Environment=Environment.Demo, AccountType=AccountType.Hedged, MarginMode=MarginMode.Net, Asset="USD", Balance=10000.0, Equity=10000.0, db=db)
     position = PositionAPI(UID=5001, Security=sec, Session=session, Account=account, Type=PositionType.Normal, Direction=Direction.Buy, Volume=100000, Quantity=1.0, EntryTimestamp=datetime(2025, 1, 1, 12, 0, 2), EntryPrice=1.10, EntryBalance=10000.0)
-    buf = BufferAPI(types=[AccountAPI, OrderAPI, PositionAPI, TradeAPI], batch=10, interval=0.0, db=lambda: db)
+    buf = BufferAPI(types=[AccountAPI, OrderAPI, PositionAPI, TradeAPI], batch=10, interval=0.0, workers=1, db=lambda: db)
     buf.add(account)
     buf.add(position)
     buf.flush()

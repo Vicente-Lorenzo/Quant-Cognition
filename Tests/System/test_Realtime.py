@@ -15,7 +15,7 @@ from Library.System.System import SystemType
 from Library.Market.Tick import TickAPI
 from Library.Market.Bar import BarAPI
 
-def _make_system_(market: tuple = (100, 60.0), portfolio: tuple = (100, 60.0), system: SystemType = SystemType.Live, database: str = "Quant", **kwargs) -> RealtimeAPI:
+def _make_system_(market: tuple = (100, 60.0, 1, 64), portfolio: tuple = (100, 60.0, 1, 64), system: SystemType = SystemType.Live, database: str = "Quant", **kwargs) -> RealtimeAPI:
     p = ParameterAPI()
     system = RealtimeAPI(
         system=system,
@@ -63,17 +63,22 @@ def test_buffer_instances_carry_correct_types(realtime_system):
     assert realtime_system._portfolio_._types_ == (AccountAPI, OrderAPI, PositionAPI, TradeAPI)
 
 def test_live_mode_both_buffers_active():
-    system = _make_system_(market=(100, 60.0), portfolio=(100, 60.0))
+    system = _make_system_(market=(100, 60.0, 1, 64), portfolio=(100, 60.0, 1, 64))
     assert system._market_.Active is True
     assert system._portfolio_.Active is True
 
 def test_simulation_mode_only_market_active():
-    system = _make_system_(market=(5000, 0.0), portfolio=(0, 0.0))
+    system = _make_system_(market=(5000, 0.0, 8, 64), portfolio=(0, 0.0, 8, 64))
     assert system._market_.Active is True
     assert system._portfolio_.Active is False
 
 def test_testing_mode_both_inactive():
-    system = _make_system_(market=(0, 0.0), portfolio=(0, 0.0))
+    system = _make_system_(market=(0, 0.0, 0, 0), portfolio=(0, 0.0, 0, 0))
+    assert system._market_.Active is False
+    assert system._portfolio_.Active is False
+
+def test_workers_zero_disables_buffer():
+    system = _make_system_(market=(5000, 0.0, 0, 64), portfolio=(100, 60.0, 0, 64))
     assert system._market_.Active is False
     assert system._portfolio_.Active is False
 
@@ -115,7 +120,7 @@ def test_receive_update_trade_routes_to_portfolio_buffer(realtime_system):
     realtime_system._portfolio_.add.assert_called_once_with(trade)
 
 def test_simulation_mode_drops_portfolio_records():
-    system = _make_system_(market=(100, 60.0), portfolio=(0, 0.0))
+    system = _make_system_(market=(100, 60.0, 1, 64), portfolio=(0, 0.0, 8, 64))
     assert system._portfolio_.add is system._portfolio_._noop_
 
 def test_warmup_routes_bar_to_market_buffer(realtime_system):
