@@ -24,6 +24,9 @@ For all shell executions, use the following patterns:
     - Avoid unnecessary abstraction or complexity.
     - Prefer concise, readable, and performant code.
 
+## RESPONSE STYLE
+Keep answers concise and scannable: lead with the conclusion, prefer **bullet points and tables** over prose, and omit filler. Reserve long-form paragraphs for when they are explicitly requested.
+
 ## CODING STYLE & ORGANIZATION
 1. **Language:** All written content (code, identifiers, comments, markdown, docs) must use **English (US)** spelling (e.g., `Optimization`, not `Optimisation`; `Initialization`, not `Initialisation`; `behavior`, not `behaviour`). The only exception is identifiers that mirror an external API verbatim (e.g., cTrader's `Cancelled`), which keep the upstream spelling to preserve alignment.
 2. **General:** No docstrings or comments. Maintain tidy files (no trailing spaces). One blank line after `class` and between methods.
