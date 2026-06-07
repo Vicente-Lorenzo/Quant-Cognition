@@ -51,6 +51,12 @@ public class Connector : Robot
     [Parameter("Universe Interval", Group = "Buffering Management", DefaultValue = 0.0, MinValue = 0.0)]
     public double UniverseInterval { get; set; }
 
+    [Parameter("Universe Workers", Group = "Buffering Management", DefaultValue = 1, MinValue = 1)]
+    public int UniverseWorkers { get; set; }
+
+    [Parameter("Universe Maxsize", Group = "Buffering Management", DefaultValue = 64, MinValue = 0)]
+    public int UniverseMaxsize { get; set; }
+
     [Parameter("Market Buffering", Group = "Buffering Management", DefaultValue = BufferingMode.Auto)]
     public BufferingMode MarketBuffering { get; set; }
 
@@ -60,6 +66,12 @@ public class Connector : Robot
     [Parameter("Market Interval", Group = "Buffering Management", DefaultValue = 60.0, MinValue = 0.0)]
     public double MarketInterval { get; set; }
 
+    [Parameter("Market Workers", Group = "Buffering Management", DefaultValue = 8, MinValue = 1)]
+    public int MarketWorkers { get; set; }
+
+    [Parameter("Market Maxsize", Group = "Buffering Management", DefaultValue = 64, MinValue = 0)]
+    public int MarketMaxsize { get; set; }
+
     [Parameter("Portfolio Buffering", Group = "Buffering Management", DefaultValue = BufferingMode.Auto)]
     public BufferingMode PortfolioBuffering { get; set; }
 
@@ -68,6 +80,12 @@ public class Connector : Robot
 
     [Parameter("Portfolio Interval", Group = "Buffering Management", DefaultValue = 60.0, MinValue = 0.0)]
     public double PortfolioInterval { get; set; }
+
+    [Parameter("Portfolio Workers", Group = "Buffering Management", DefaultValue = 1, MinValue = 1)]
+    public int PortfolioWorkers { get; set; }
+
+    [Parameter("Portfolio Maxsize", Group = "Buffering Management", DefaultValue = 64, MinValue = 0)]
+    public int PortfolioMaxsize { get; set; }
 
     [Parameter("Report", Group = "Reporting Management", DefaultValue = true)]
     public bool Report { get; set; }
@@ -84,9 +102,9 @@ public class Connector : Robot
     {
         _robot_api_ = new RobotAPI(this, Console, File, Strategy, Database, Verification, Accuracy,
             TickStream, BarStream, OrderStream, PositionStream, TradeStream,
-            UniverseBuffering, UniverseBatch, UniverseInterval,
-            MarketBuffering, MarketBatch, MarketInterval,
-            PortfolioBuffering, PortfolioBatch, PortfolioInterval,
+            UniverseBuffering, UniverseBatch, UniverseInterval, UniverseWorkers, UniverseMaxsize,
+            MarketBuffering, MarketBatch, MarketInterval, MarketWorkers, MarketMaxsize,
+            PortfolioBuffering, PortfolioBatch, PortfolioInterval, PortfolioWorkers, PortfolioMaxsize,
             Report, Export, Profile);
     }
 

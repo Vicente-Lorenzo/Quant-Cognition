@@ -68,12 +68,18 @@ public class RobotAPI : IDisposable
     private readonly BufferingMode _universe_buffering_;
     private readonly int _universe_batch_;
     private readonly double _universe_interval_;
+    private readonly int _universe_workers_;
+    private readonly int _universe_maxsize_;
     private readonly BufferingMode _market_buffering_;
     private readonly int _market_batch_;
     private readonly double _market_interval_;
+    private readonly int _market_workers_;
+    private readonly int _market_maxsize_;
     private readonly BufferingMode _portfolio_buffering_;
     private readonly int _portfolio_batch_;
     private readonly double _portfolio_interval_;
+    private readonly int _portfolio_workers_;
+    private readonly int _portfolio_maxsize_;
     private readonly bool _report_;
     private readonly bool _export_;
     private readonly bool _profile_;
@@ -111,9 +117,9 @@ public class RobotAPI : IDisposable
                     DatabaseType database, int verification, AccuracyMode accuracy,
                     TickStreamMode tick_stream, BarStreamMode bar_stream, OrderStreamMode order_stream,
                     PositionStreamMode position_stream, TradeStreamMode trade_stream,
-                    BufferingMode universe_buffering, int universe_batch, double universe_interval,
-                    BufferingMode market_buffering, int market_batch, double market_interval,
-                    BufferingMode portfolio_buffering, int portfolio_batch, double portfolio_interval,
+                    BufferingMode universe_buffering, int universe_batch, double universe_interval, int universe_workers, int universe_maxsize,
+                    BufferingMode market_buffering, int market_batch, double market_interval, int market_workers, int market_maxsize,
+                    BufferingMode portfolio_buffering, int portfolio_batch, double portfolio_interval, int portfolio_workers, int portfolio_maxsize,
                     bool report, bool export, bool profile)
     {
         _robot_ = algo;
@@ -136,12 +142,18 @@ public class RobotAPI : IDisposable
         _universe_buffering_ = universe_buffering;
         _universe_batch_ = universe_batch;
         _universe_interval_ = universe_interval;
+        _universe_workers_ = universe_workers;
+        _universe_maxsize_ = universe_maxsize;
         _market_buffering_ = market_buffering;
         _market_batch_ = market_batch;
         _market_interval_ = market_interval;
+        _market_workers_ = market_workers;
+        _market_maxsize_ = market_maxsize;
         _portfolio_buffering_ = portfolio_buffering;
         _portfolio_batch_ = portfolio_batch;
         _portfolio_interval_ = portfolio_interval;
+        _portfolio_workers_ = portfolio_workers;
+        _portfolio_maxsize_ = portfolio_maxsize;
         _report_ = report;
         _export_ = export;
         _profile_ = profile;
@@ -229,14 +241,20 @@ public class RobotAPI : IDisposable
         var database_arg = _database_ == DatabaseType.Off ? "" : $" --database \"{_database_}\"";
         var universe_batch_arg = _universe_buffering_ == BufferingMode.Auto ? "" : $" --universe-batch {_universe_batch_}";
         var universe_interval_arg = _universe_buffering_ == BufferingMode.Auto ? "" : $" --universe-interval {_universe_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        var universe_workers_arg = _universe_buffering_ == BufferingMode.Auto ? "" : $" --universe-workers {_universe_workers_}";
+        var universe_maxsize_arg = _universe_buffering_ == BufferingMode.Auto ? "" : $" --universe-maxsize {_universe_maxsize_}";
         var market_batch_arg = !_persist_market_ ? " --market-batch 0" : (_market_buffering_ == BufferingMode.Auto ? "" : $" --market-batch {_market_batch_}");
         var market_interval_arg = !_persist_market_ ? " --market-interval 0" : (_market_buffering_ == BufferingMode.Auto ? "" : $" --market-interval {_market_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+        var market_workers_arg = !_persist_market_ ? "" : (_market_buffering_ == BufferingMode.Auto ? "" : $" --market-workers {_market_workers_}");
+        var market_maxsize_arg = !_persist_market_ ? "" : (_market_buffering_ == BufferingMode.Auto ? "" : $" --market-maxsize {_market_maxsize_}");
         var portfolio_batch_arg = _portfolio_buffering_ == BufferingMode.Auto ? "" : $" --portfolio-batch {_portfolio_batch_}";
         var portfolio_interval_arg = _portfolio_buffering_ == BufferingMode.Auto ? "" : $" --portfolio-interval {_portfolio_interval_.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        var portfolio_workers_arg = _portfolio_buffering_ == BufferingMode.Auto ? "" : $" --portfolio-workers {_portfolio_workers_}";
+        var portfolio_maxsize_arg = _portfolio_buffering_ == BufferingMode.Auto ? "" : $" --portfolio-maxsize {_portfolio_maxsize_}";
         var report_arg = _report_ ? " --report" : "";
         var export_arg = _export_ ? " --export" : "";
         var profile_arg = _profile_ ? " --profile" : "";
-        var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{universe_batch_arg}{universe_interval_arg}{market_batch_arg}{market_interval_arg}{portfolio_batch_arg}{portfolio_interval_arg}{report_arg}{export_arg}{profile_arg}";
+        var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{universe_batch_arg}{universe_interval_arg}{universe_workers_arg}{universe_maxsize_arg}{market_batch_arg}{market_interval_arg}{market_workers_arg}{market_maxsize_arg}{portfolio_batch_arg}{portfolio_interval_arg}{portfolio_workers_arg}{portfolio_maxsize_arg}{report_arg}{export_arg}{profile_arg}";
         var inner_cmd = $"cd /d \"{base_directory}\" && conda run --no-capture-output -n Quant python -m Library.System.Main {script_args}";
         _log_.Debug($"Activation Operation: Launching Python · {script_args}");
         SpawnTerminal(inner_cmd);
