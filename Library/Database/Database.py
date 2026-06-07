@@ -1260,6 +1260,23 @@ class DatabaseAPI(ServiceAPI, ABC):
         self._log_.alert(lambda: f"Upsert Operation: Processed {len(records)} rows in {table} Table")
         return self.frame(self._concat_(frames) if frames else pl.DataFrame(), legacy=self._legacy_)
 
+    def copy(self, *,
+             database: Union[str, Sequence, None, Missing] = MISSING,
+             schema: Union[str, Sequence, None, Missing] = MISSING,
+             table: Union[str, Sequence, None, Missing] = MISSING,
+             data: Any = None,
+             columns: Union[Sequence[str], None] = None) -> Self:
+        raise NotImplementedError(f"{self.__class__.__name__}.copy() is not implemented")
+
+    def merge(self, *,
+              database: Union[str, Sequence, None, Missing] = MISSING,
+              schema: Union[str, Sequence, None, Missing] = MISSING,
+              table: Union[str, Sequence, None, Missing] = MISSING,
+              data: Any = None,
+              key: Union[str, Sequence[str], None] = None,
+              exclude: Union[Sequence[str], None] = None) -> Self:
+        return self.upsert(database=database, schema=schema, table=table, data=data, key=key, exclude=exclude)
+
     def remove(self, *,
                database: Union[str, Sequence, None, Missing] = MISSING,
                schema: Union[str, Sequence, None, Missing] = MISSING,

@@ -25,6 +25,7 @@ class BufferAPI(threading.Thread):
                  by: str = "Autosave",
                  workers: int = 0,
                  maxsize: int = 0,
+                 bulk: bool = False,
                  db: Union[Callable[[], DatabaseAPI], None] = None) -> None:
         super().__init__(daemon=True, name=f"{type(self).__name__}-Worker")
 
@@ -32,6 +33,7 @@ class BufferAPI(threading.Thread):
         self._batch_: int = batch
         self._interval_: float = interval
         self._by_: str = by
+        self._bulk_: bool = bulk
         self._workers_: int = max(1, workers)
         self._active_: bool = workers > 0 and (batch > 0 or interval > 0)
 
@@ -135,7 +137,8 @@ class BufferAPI(threading.Thread):
                         val = df[col][i]
                         for r in mapping[k]: setattr(r, col, val)
             else:
-                db.upsert(schema=t.Schema, table=t.Table, data=data, key=key)
+                writer = db.merge if self._bulk_ else db.upsert
+                writer(schema=t.Schema, table=t.Table, data=data, key=key)
             timer.stop()
             self._log_.debug(lambda: f"Drain {t.Table}: {len(records)} records, {len(data)} unique rows ({timer.result()})")
         except Exception as e:

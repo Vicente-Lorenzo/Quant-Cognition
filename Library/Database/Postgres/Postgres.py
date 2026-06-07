@@ -1,10 +1,13 @@
+import io
 import psycopg
 from typing import Union, Callable, Any
+from typing_extensions import Self
 from collections.abc import Sequence
 
 from Library.Database.Dataframe import pl
 from Library.Database.Query import QueryAPI
-from Library.Database.Database import DatabaseAPI
+from Library.Database.Database import DatabaseAPI, IdentityKey, PrimaryKey, ForeignKey
+from Library.Utility.Typing import MISSING, Missing
 
 class PostgresAPI(DatabaseAPI):
     """
@@ -168,3 +171,64 @@ class PostgresAPI(DatabaseAPI):
         sql += f" DO UPDATE SET {updates}" if updates else " DO NOTHING"
         if returning: sql += f" RETURNING {self._quoted_(*returning)}"
         return sql
+
+    @staticmethod
+    def _csvframe_(data: Any, columns: Union[Sequence[str], None]) -> pl.DataFrame:
+        frame = data if isinstance(data, pl.DataFrame) else pl.DataFrame(data, strict=False)
+        if columns: frame = frame.select([c for c in columns if c in frame.columns])
+        return frame
+
+    def _copy_(self, target: str, frame: pl.DataFrame) -> None:
+        buffer = io.BytesIO()
+        frame.write_csv(buffer, include_header=False, quote_style="non_numeric", null_value="", datetime_format="%Y-%m-%d %H:%M:%S%.6f")
+        with self._cursor_.copy(f"COPY {target} ({self._quoted_(*frame.columns)}) FROM STDIN (FORMAT CSV, NULL '')") as copy:
+            copy.write(buffer.getvalue())
+
+    def copy(self, *,
+             database: Union[str, Sequence, None, Missing] = MISSING,
+             schema: Union[str, Sequence, None, Missing] = MISSING,
+             table: Union[str, Sequence, None, Missing] = MISSING,
+             data: Any = None,
+             columns: Union[Sequence[str], None] = None) -> Self:
+        routed = self._route_("copy", database, schema, table, data=data, columns=columns)
+        if isinstance(routed, list): return self
+        database, schema, table = routed
+        if not database or not schema or not table: raise ValueError("Database, Schema and Table must be provided to copy rows")
+        frame = self._csvframe_(data, columns)
+        if frame.is_empty(): return self
+        self._copy_(self._target_(schema, table), frame)
+        self._log_.alert(lambda: f"Copy Operation: Streamed {frame.height} rows in {table} Table")
+        return self
+
+    def merge(self, *,
+              database: Union[str, Sequence, None, Missing] = MISSING,
+              schema: Union[str, Sequence, None, Missing] = MISSING,
+              table: Union[str, Sequence, None, Missing] = MISSING,
+              data: Any = None,
+              key: Union[str, Sequence[str], None] = None,
+              exclude: Union[Sequence[str], None] = None) -> Self:
+        if not key:
+            if self._STRUCTURE_:
+                key = [name for name, dtype in self._STRUCTURE_.items() if isinstance(dtype, PrimaryKey) or (isinstance(dtype, (IdentityKey, ForeignKey)) and dtype.primary)]
+            if not key: raise ValueError("Key must be provided to merge rows")
+        routed = self._route_("merge", database, schema, table, data=data, key=key, exclude=exclude)
+        if isinstance(routed, list): return self
+        database, schema, table = routed
+        if not database or not schema or not table: raise ValueError("Database, Schema and Table must be provided to merge rows")
+        frame = self._csvframe_(data, None)
+        if frame.is_empty(): return self
+        target = self._target_(schema, table)
+        columns = list(frame.columns)
+        keys = [key] if isinstance(key, str) else list(key)
+        ql, qr = self._quote_
+        cols = self._quoted_(*columns)
+        key_str = self._quoted_(*keys)
+        updates = ", ".join(f"{ql}{c}{qr} = EXCLUDED.{ql}{c}{qr}" for c in columns if c not in keys and c not in (exclude or ()))
+        conflict = f"DO UPDATE SET {updates}" if updates else "DO NOTHING"
+        stage = f"{ql}_merge_{table}{qr}"
+        with self._connection_.transaction():
+            self._cursor_.execute(f"CREATE TEMP TABLE {stage} (LIKE {target} INCLUDING DEFAULTS) ON COMMIT DROP")
+            self._copy_(stage, frame)
+            self._cursor_.execute(f"INSERT INTO {target} ({cols}) SELECT {cols} FROM {stage} ON CONFLICT ({key_str}) {conflict}")
+        self._log_.alert(lambda: f"Merge Operation: Merged {frame.height} rows in {table} Table")
+        return self

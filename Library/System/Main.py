@@ -99,8 +99,8 @@ def _universe_(system: SystemType, batch: Union[int, None], interval: Union[floa
 
 def _market_(system: SystemType, batch: Union[int, None], interval: Union[float, None], workers: Union[int, None], maxsize: Union[int, None]) -> tuple[int, float, int, int]:
     match system:
-        case SystemType.Live: auto_batch, auto_interval, auto_workers, auto_maxsize = 100, 60.0, 1, 64
-        case SystemType.Simulation: auto_batch, auto_interval, auto_workers, auto_maxsize = 5000, 0.0, 8, 64
+        case SystemType.Live: auto_batch, auto_interval, auto_workers, auto_maxsize = 1000, 60.0, 1, 64
+        case SystemType.Simulation: auto_batch, auto_interval, auto_workers, auto_maxsize = 50000, 0.0, 8, 64
         case _: auto_batch, auto_interval, auto_workers, auto_maxsize = 0, 0.0, 0, 0
     batch = batch if batch is not None else auto_batch
     interval = interval if interval is not None else auto_interval
