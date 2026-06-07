@@ -5,17 +5,20 @@ from typing import Union, ClassVar
 from dataclasses import dataclass, field, InitVar
 
 from Library.Database.Dataframe import pl
-from Library.Database.Database import IdentityKey, PrimaryKey, ForeignKey, DatabaseAPI
+from Library.Database.Database import PrimaryKey, ForeignKey, DatabaseAPI
 from Library.Database.Datapoint import DatapointAPI
 from Library.Market.Market import MarketAPI
 from Library.Database.Dataclass import overridefield, coerce
 from Library.Market.Timestamp import TimestampAPI
 from Library.Market.Price import PriceAPI
 from Library.Universe.Security import SecurityAPI
+from Library.Utility.Datetime import datetime_to_epoch
 from Library.Utility.Typing import MISSING
 
 @dataclass
 class TickAPI(DatapointAPI):
+
+    _MS_BITS_: ClassVar[int] = 42
 
     Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = MarketAPI.Schema
@@ -49,9 +52,9 @@ class TickAPI(DatapointAPI):
     @property
     def Structure(self) -> dict:
         return {
-            self.ID.UID: IdentityKey(pl.Int64),
-            self.ID.Timestamp: PrimaryKey(pl.Datetime),
-            self.ID.Security: ForeignKey(pl.Int64, reference=f'"{SecurityAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")', primary=True),
+            self.ID.UID: PrimaryKey(pl.Int64),
+            self.ID.Security: ForeignKey(pl.Int64, reference=f'"{SecurityAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
+            self.ID.Timestamp: pl.Datetime(),
             self.ID.Ask: pl.Float64(),
             self.ID.Mid: pl.Float64(),
             self.ID.Bid: pl.Float64(),
@@ -115,11 +118,24 @@ class TickAPI(DatapointAPI):
         self._bid_base_conversion_ = _init_conv_(bid_base_conversion)
         self._ask_quote_conversion_ = _init_conv_(ask_quote_conversion)
         self._bid_quote_conversion_ = _init_conv_(bid_quote_conversion)
+        self._encode_uid_()
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+
+    @classmethod
+    def encode(cls, security: int, timestamp: datetime) -> int:
+        return (security << cls._MS_BITS_) | datetime_to_epoch(timestamp)
+
+    @classmethod
+    def encode_frame(cls, frame: pl.DataFrame) -> pl.DataFrame:
+        if frame.is_empty() or str(cls.ID.UID) in frame.columns: return frame
+        return frame.with_columns((pl.col(str(cls.ID.Security)).cast(pl.Int64) * (1 << cls._MS_BITS_) + pl.col(str(cls.ID.Timestamp)).dt.epoch("ms")).alias(str(cls.ID.UID)))
+
+    def _encode_uid_(self) -> None:
+        if self._security_ is not None and self._security_.UID is not None and self._timestamp_ is not None and self._timestamp_.DateTime is not None:
+            self.UID = self.encode(self._security_.UID, self._timestamp_.DateTime)
 
     def save(self, by: str = "Autosave") -> None:
         super().save(by=by)
-        if self.UID is None: self.load()
 
     @property
     @overridefield
@@ -137,6 +153,7 @@ class TickAPI(DatapointAPI):
         if self._bid_base_conversion_: self._bid_base_conversion_.Contract = contract
         if self._ask_quote_conversion_: self._ask_quote_conversion_.Contract = contract
         if self._bid_quote_conversion_: self._bid_quote_conversion_.Contract = contract
+        self._encode_uid_()
 
     @property
     @overridefield
@@ -148,6 +165,7 @@ class TickAPI(DatapointAPI):
         elif val is not None:
             if self._timestamp_: self._timestamp_.DateTime = val
             else: self._timestamp_ = TimestampAPI(DateTime=val)
+        self._encode_uid_()
 
     @property
     @overridefield
