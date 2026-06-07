@@ -140,9 +140,9 @@ class BufferAPI(threading.Thread):
                 writer = db.merge if self._bulk_ else db.upsert
                 writer(schema=t.Schema, table=t.Table, data=data, key=key)
             timer.stop()
-            self._log_.debug(lambda: f"Drain {t.Table}: {len(records)} records, {len(data)} unique rows ({timer.result()})")
+            self._log_.debug(lambda: f"Drain {t.Table}: {len(records)} Records · {len(data)} Unique Rows ({timer.result()})")
         except Exception as e:
-            self._log_.error(lambda: f"Persist error on {t.Table}: {e}")
+            self._log_.error(lambda: f"Drain {t.Table}: Failed · {e}")
 
     def _consume_(self, db: DatabaseAPI) -> None:
         for t in self._types_:
