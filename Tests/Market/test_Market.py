@@ -77,6 +77,38 @@ def test_market_empty_pulls(db, setup_market_test):
     bars = MarketAPI.pull_bars(db, sec_uid, "M1", start, stop)
     assert len(bars) == 0
 
+def test_copy_streams_rows(db, setup_market_test):
+    sec_uid = setup_market_test
+    base = datetime(2023, 6, 1, 10, 0, 0)
+    df = pl.DataFrame([{
+        "UID": TickAPI.encode(sec_uid, base + timedelta(seconds=i)),
+        "Security": sec_uid,
+        "Timestamp": base + timedelta(seconds=i),
+        "Ask": 1.1 + i * 0.001,
+        "Bid": 1.0 + i * 0.001,
+        "Volume": 100.0
+    } for i in range(50)])
+    db.copy(schema=TickAPI.Schema, table=TickAPI.Table, data=df)
+    pulled = MarketAPI.pull_ticks(db, sec_uid, base, base + timedelta(seconds=49))
+    assert len(pulled) == 50
+
+def test_merge_is_idempotent_and_updates(db, setup_market_test):
+    sec_uid = setup_market_test
+    base = datetime(2023, 7, 1, 10, 0, 0)
+    df = pl.DataFrame([{
+        "UID": TickAPI.encode(sec_uid, base + timedelta(seconds=i)),
+        "Security": sec_uid,
+        "Timestamp": base + timedelta(seconds=i),
+        "Ask": 1.1,
+        "Bid": 1.0,
+        "Volume": 100.0
+    } for i in range(20)])
+    db.merge(schema=TickAPI.Schema, table=TickAPI.Table, data=df, key=[str(TickAPI.ID.UID)])
+    db.merge(schema=TickAPI.Schema, table=TickAPI.Table, data=df.with_columns(pl.lit(2.0).alias("Ask")), key=[str(TickAPI.ID.UID)])
+    pulled = MarketAPI.pull_ticks(db, sec_uid, base, base + timedelta(seconds=19))
+    assert len(pulled) == 20
+    assert pulled["Ask"].max() == pytest.approx(2.0)
+
 def test_series_tick_initialization():
     market = MarketAPI()
     data = pl.DataFrame({

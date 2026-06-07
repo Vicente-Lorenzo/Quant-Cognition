@@ -65,3 +65,27 @@ def test_buffer_fk_chain_handles_multiple_bars(db, universe, market):
         offset = i * 5
         assert persisted["GapTick"] == all_ticks[offset].UID
         assert persisted["CloseTick"] == all_ticks[offset + 4].UID
+
+def test_buffer_merge_bulk_fk_chain_idempotent(db, universe, market):
+    sec = universe["security"]
+    tf = universe["timeframe"]
+    db.executeone(QueryAPI(f'DELETE FROM "{BarAPI.Schema}"."{BarAPI.Table}"')).commit()
+    db.executeone(QueryAPI(f'DELETE FROM "{TickAPI.Schema}"."{TickAPI.Table}"')).commit()
+    dt = datetime(2025, 3, 1, 12, 0, 0)
+    ticks = [_make_tick_(sec, dt - timedelta(seconds=5 - j), 1.1 + 0.001 * j, 1.0998 + 0.001 * j) for j in range(5)]
+    bar = _make_bar_(sec, tf, dt, ticks)
+    def _run_():
+        buf = BufferAPI(types=[TickAPI, BarAPI], batch=10, interval=0.0, workers=1, bulk=True, db=lambda: db)
+        for t in ticks: buf.add(t)
+        buf.add(bar)
+        buf.flush()
+        buf._consume_(db)
+    _run_()
+    _run_()
+    count = db.executeone(QueryAPI(f'SELECT count(*) AS n FROM "{TickAPI.Schema}"."{TickAPI.Table}"')).fetchall(legacy=False)
+    assert count.row(0, named=True)["n"] == 5
+    row = db.select(schema=BarAPI.Schema, table=BarAPI.Table, condition='"Timestamp" = :dt:', parameters={"dt": dt}, limit=1, legacy=False)
+    assert not row.is_empty()
+    persisted = row.row(0, named=True)
+    assert persisted["GapTick"] == ticks[0].UID
+    assert persisted["CloseTick"] == ticks[4].UID
