@@ -59,18 +59,19 @@ class MarketAPI(DatapointAPI):
     @staticmethod
     def pull_ticks(db: DatabaseAPI, security: int, start: datetime, stop: datetime) -> pl.DataFrame:
         from Library.Market.Tick import TickAPI
+        lo, hi = TickAPI.encode(security, start), TickAPI.encode(security, stop)
         sql = f'''
         SELECT * FROM "{TickAPI.Schema}"."{TickAPI.Table}"
-        WHERE "{TickAPI.ID.Security}" = :security: AND "{TickAPI.ID.Timestamp}" BETWEEN :start: AND :stop:
-        ORDER BY "{TickAPI.ID.Timestamp}"
+        WHERE "{TickAPI.ID.UID}" BETWEEN :lo: AND :hi:
+        ORDER BY "{TickAPI.ID.UID}"
         '''
-        df = db.executeone(QueryAPI(sql), security=security, start=start, stop=stop, schema=TickAPI.Schema, table=TickAPI.Table).fetchall(legacy=False)
-        return df
+        return db.executeone(QueryAPI(sql), lo=lo, hi=hi, schema=TickAPI.Schema, table=TickAPI.Table).fetchall(legacy=False)
 
     @staticmethod
     def push_ticks(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Market.Tick import TickAPI
-        db.upsert(schema=TickAPI.Schema, table=TickAPI.Table, data=data, key=[str(TickAPI.ID.Timestamp), str(TickAPI.ID.Security)])
+        if isinstance(data, pl.DataFrame): data = TickAPI.encode_frame(data)
+        db.upsert(schema=TickAPI.Schema, table=TickAPI.Table, data=data, key=[str(TickAPI.ID.UID)])
 
     @staticmethod
     def load_bars(data: Union[BarAPI, Sequence[BarAPI]]) -> None:
@@ -91,7 +92,7 @@ class MarketAPI(DatapointAPI):
         from Library.Market.Bar import BarAPI
         from Library.Market.Tick import TickAPI
         select = f'''
-        SELECT b."{BarAPI.ID.UID}", b."{BarAPI.ID.Timestamp}", b."{BarAPI.ID.Security}", b."{BarAPI.ID.Timeframe}",
+        SELECT b."{BarAPI.ID.Timestamp}", b."{BarAPI.ID.Security}", b."{BarAPI.ID.Timeframe}",
                b."{BarAPI.ID.GapTick}", b."{BarAPI.ID.OpenTick}", b."{BarAPI.ID.HighTick}", b."{BarAPI.ID.LowTick}", b."{BarAPI.ID.CloseTick}",
                b."{BarAPI.ID.Volume}", b."{BarAPI.ID.UpdatedBy}", b."{BarAPI.ID.UpdatedAt}",
                g."{TickAPI.ID.UID}" AS "{BarAPI.OID.GapTick.UID}", g."{TickAPI.ID.Timestamp}" AS "{BarAPI.OID.GapTick.Timestamp}", g."{TickAPI.ID.Security}" AS "{BarAPI.OID.GapTick.Security}",

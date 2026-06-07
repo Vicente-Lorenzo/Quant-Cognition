@@ -5,7 +5,7 @@ from typing import Union, ClassVar
 from dataclasses import dataclass, field, InitVar
 
 from Library.Database.Dataframe import pl
-from Library.Database.Database import IdentityKey, PrimaryKey, ForeignKey, DatabaseAPI
+from Library.Database.Database import PrimaryKey, ForeignKey, DatabaseAPI
 from Library.Database.Datapoint import DatapointAPI
 from Library.Market.Market import MarketAPI
 from Library.Database.Dataclass import overridefield, coerce
@@ -50,10 +50,9 @@ class BarAPI(DatapointAPI):
     @property
     def Structure(self) -> dict:
         return {
-            self.ID.UID: IdentityKey(pl.Int64),
-            self.ID.Timestamp: PrimaryKey(pl.Datetime),
             self.ID.Security: ForeignKey(pl.Int64, reference=f'"{SecurityAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")', primary=True),
             self.ID.Timeframe: ForeignKey(pl.String, reference=f'"{TimeframeAPI.Schema}"."{TimeframeAPI.Table}"("{TimeframeAPI.ID.UID}")', primary=True),
+            self.ID.Timestamp: PrimaryKey(pl.Datetime),
             self.ID.GapTick: ForeignKey(pl.Int64, reference=f'"{TickAPI.Schema}"."{TickAPI.Table}"("{TickAPI.ID.UID}")'),
             self.ID.OpenTick: ForeignKey(pl.Int64, reference=f'"{TickAPI.Schema}"."{TickAPI.Table}"("{TickAPI.ID.UID}")'),
             self.ID.HighTick: ForeignKey(pl.Int64, reference=f'"{TickAPI.Schema}"."{TickAPI.Table}"("{TickAPI.ID.UID}")'),
@@ -110,7 +109,6 @@ class BarAPI(DatapointAPI):
         for t in (self._gap_tick_, self._open_tick_, self._high_tick_, self._low_tick_, self._close_tick_):
             if t: t.save(by=by)
         super().save(by=by)
-        if self.UID is None: self.load()
 
     @property
     @overridefield
