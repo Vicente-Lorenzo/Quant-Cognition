@@ -1,4 +1,5 @@
 import atexit
+import threading
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 import pytest
@@ -10,6 +11,7 @@ class _RecA_:
     def dict(self): return {"v": self.v}
     def identity_keys(self): return ["UID"]
     def natural_keys(self): return ["v"]
+    def _parse_(self, c): return getattr(self, c)
     def _stamp_(self, by, at=None): pass
 class _RecB_:
     Schema = "Test"
@@ -18,6 +20,7 @@ class _RecB_:
     def dict(self): return {"v": self.v}
     def identity_keys(self): return ["UID"]
     def natural_keys(self): return ["v"]
+    def _parse_(self, c): return getattr(self, c)
     def _stamp_(self, by, at=None): pass
 class _RecC_:
     Schema = "Test"
@@ -26,12 +29,20 @@ class _RecC_:
     def dict(self): return {"v": self.v}
     def identity_keys(self): return []
     def natural_keys(self): return ["v"]
+    def _parse_(self, c): return getattr(self, c)
     def _stamp_(self, by, at=None): pass
-def _make_buffer_(batch=10, interval=0.0, types=(_RecA_, _RecB_)):
+def _make_buffer_(batch=10, interval=0.0, workers=1, types=(_RecA_, _RecB_)):
     db_factory = MagicMock()
-    return BufferAPI(types=types, batch=batch, interval=interval, db=db_factory), db_factory
+    return BufferAPI(types=types, batch=batch, interval=interval, workers=workers, db=db_factory), db_factory
 def test_inactive_when_thresholds_zero():
     buf, _ = _make_buffer_(batch=0, interval=0.0)
+    assert buf.Active is False
+def test_inactive_when_workers_zero():
+    buf, _ = _make_buffer_(batch=10, interval=1.0, workers=0)
+    assert buf.Active is False
+def test_default_workers_zero_is_inactive():
+    db_factory = MagicMock()
+    buf = BufferAPI(types=(_RecA_,), batch=10, interval=1.0, db=db_factory)
     assert buf.Active is False
 def test_active_when_batch_positive():
     buf, _ = _make_buffer_(batch=5, interval=0.0)
@@ -150,3 +161,37 @@ def test_run_opens_db_and_drains_until_sentinel():
     buf._signal_.put(None)
     buf.run()
     db.upsert.assert_called_once()
+def test_partition_groups_same_key_into_one_bucket():
+    buf, _ = _make_buffer_(batch=10, interval=0.0, types=(_RecA_,))
+    buf._workers_ = 4
+    records = [_RecA_(v) for v in (1, 2, 3, 1, 2, 1)]
+    buckets = buf._partition_(records)
+    assert sum(len(b) for b in buckets) == len(records)
+    located = {}
+    for index, bucket in enumerate(buckets):
+        for r in bucket: located.setdefault(r.v, index)
+    for index, bucket in enumerate(buckets):
+        for r in bucket: assert located[r.v] == index
+class _RecorderDB_:
+    def __init__(self, log, lock):
+        self._log_, self._lock_ = log, lock
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+    def upsert(self, **kwargs):
+        with self._lock_: self._log_.append(kwargs["table"])
+        return self
+class _ParallelFactory_:
+    def __init__(self):
+        self.log, self.lock = [], threading.Lock()
+    def __call__(self): return _RecorderDB_(self.log, self.lock)
+def test_run_parallel_persists_all_and_preserves_type_barrier():
+    factory = _ParallelFactory_()
+    buf = BufferAPI(types=(_RecC_, _RecB_), batch=100, interval=0.0, workers=4, db=factory)
+    for v in range(20): buf.add(_RecC_(v))
+    for v in range(20): buf.add(_RecB_(v))
+    buf.flush()
+    buf._signal_.put(None)
+    buf.run()
+    assert factory.log.count("C") >= 1
+    assert factory.log.count("B") >= 1
+    assert max(i for i, t in enumerate(factory.log) if t == "C") < min(i for i, t in enumerate(factory.log) if t == "B")

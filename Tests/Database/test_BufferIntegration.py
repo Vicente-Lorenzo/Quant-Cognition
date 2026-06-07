@@ -25,7 +25,7 @@ def test_buffer_fk_chain_ticks_then_bar(db, universe, market):
         _make_tick_(sec, dt - timedelta(seconds=1), 1.1005, 1.1003)
     ]
     bar = _make_bar_(sec, tf, dt, ticks)
-    buf = BufferAPI(types=[TickAPI, BarAPI], batch=10, interval=0.0, db=lambda: db)
+    buf = BufferAPI(types=[TickAPI, BarAPI], batch=10, interval=0.0, workers=1, db=lambda: db)
     for t in ticks: buf.add(t)
     buf.add(bar)
     buf.flush()
@@ -53,7 +53,7 @@ def test_buffer_fk_chain_handles_multiple_bars(db, universe, market):
         ticks = [_make_tick_(sec, dt - timedelta(seconds=5 - j), 1.1 + 0.001 * (j + i), 1.0998 + 0.001 * (j + i)) for j in range(5)]
         bars.append(_make_bar_(sec, tf, dt, ticks))
         all_ticks.extend(ticks)
-    buf = BufferAPI(types=[TickAPI, BarAPI], batch=100, interval=0.0, db=lambda: db)
+    buf = BufferAPI(types=[TickAPI, BarAPI], batch=100, interval=0.0, workers=1, db=lambda: db)
     for t in all_ticks: buf.add(t)
     for b in bars: buf.add(b)
     buf.flush()
