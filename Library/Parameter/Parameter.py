@@ -13,7 +13,7 @@ class ParameterAPI:
     
     def __init__(self, path: Union[Path, None] = None) -> None:
         self.path = ParameterAPI.PATH if not path else path
-        self.path.mkdir(parents=True, exist_ok=True)
+        if not path: self.path.mkdir(parents=True, exist_ok=True)
         self._cache_ = {}
 
     def _resolve_path_(self, *args) -> Path:
