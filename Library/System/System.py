@@ -128,12 +128,13 @@ class SystemAPI(ServiceAPI, ABC):
                  security: SecurityAPI,
                  timeframe: TimeframeAPI,
                  parameters: Parameter,
-                 universe: tuple[int, float] = (0, 0.0),
-                 market: tuple[int, float] = (0, 0.0),
-                 portfolio: tuple[int, float] = (0, 0.0),
+                 universe: tuple[int, float, int, int] = (0, 0.0, 0, 0),
+                 market: tuple[int, float, int, int] = (0, 0.0, 0, 0),
+                 portfolio: tuple[int, float, int, int] = (0, 0.0, 0, 0),
                  report: bool = True,
                  export: bool = True) -> None:
         super().__init__()
+        self._connected_: bool = False
         self._reporting_: bool = report
         self._exporting_: bool = export
         self._strategy_: Type[StrategyAPI] = strategy
@@ -152,12 +153,11 @@ class SystemAPI(ServiceAPI, ABC):
         self.strategy: Union[StrategyAPI, None] = None
         self.statistics = None
 
-        self._universe_: BufferAPI = BufferAPI(types=[SecurityAPI], batch=universe[0], interval=universe[1])
-        self._market_: BufferAPI = BufferAPI(types=[TickAPI, BarAPI], batch=market[0], interval=market[1])
-        self._portfolio_: BufferAPI = BufferAPI(types=[AccountAPI, OrderAPI, PositionAPI, TradeAPI], batch=portfolio[0], interval=portfolio[1])
+        self._universe_: BufferAPI = BufferAPI(types=[SecurityAPI], batch=universe[0], interval=universe[1], workers=universe[2], maxsize=universe[3])
+        self._market_: BufferAPI = BufferAPI(types=[TickAPI, BarAPI], batch=market[0], interval=market[1], workers=market[2], maxsize=market[3])
+        self._portfolio_: BufferAPI = BufferAPI(types=[AccountAPI, OrderAPI, PositionAPI, TradeAPI], batch=portfolio[0], interval=portfolio[1], workers=portfolio[2], maxsize=portfolio[3])
 
         self._session_: Union[SessionAPI, None] = None
-        self._connected_: bool = False
 
         self._log_: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="System Management")
 

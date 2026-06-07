@@ -44,10 +44,16 @@ def _parse_() -> Namespace:
     realtime_parser.add_argument("--database", type=str, required=False, default=None, choices=["Quant", "Tests"])
     realtime_parser.add_argument("--universe-batch", type=int, required=False, default=None)
     realtime_parser.add_argument("--universe-interval", type=float, required=False, default=None)
+    realtime_parser.add_argument("--universe-workers", type=int, required=False, default=None)
+    realtime_parser.add_argument("--universe-maxsize", type=int, required=False, default=None)
     realtime_parser.add_argument("--market-batch", type=int, required=False, default=None)
     realtime_parser.add_argument("--market-interval", type=float, required=False, default=None)
+    realtime_parser.add_argument("--market-workers", type=int, required=False, default=None)
+    realtime_parser.add_argument("--market-maxsize", type=int, required=False, default=None)
     realtime_parser.add_argument("--portfolio-batch", type=int, required=False, default=None)
     realtime_parser.add_argument("--portfolio-interval", type=float, required=False, default=None)
+    realtime_parser.add_argument("--portfolio-workers", type=int, required=False, default=None)
+    realtime_parser.add_argument("--portfolio-maxsize", type=int, required=False, default=None)
 
     fee_parser = ArgumentParser(add_help=False)
     fee_parser.add_argument("--spread-type", type=str, required=True, choices=[_.name for _ in SpreadType])
@@ -80,30 +86,38 @@ def _parse_() -> Namespace:
 
     return parser.parse_args()
 
-def _universe_(system: SystemType, batch: Union[int, None], interval: Union[float, None]) -> tuple[int, float]:
+def _universe_(system: SystemType, batch: Union[int, None], interval: Union[float, None], workers: Union[int, None], maxsize: Union[int, None]) -> tuple[int, float, int, int]:
     match system:
-        case SystemType.Live | SystemType.Simulation: auto_batch, auto_interval = 1, 0.0
-        case _: auto_batch, auto_interval = 0, 0.0
+        case SystemType.Live: auto_batch, auto_interval, auto_workers, auto_maxsize = 1, 0.0, 1, 64
+        case SystemType.Simulation: auto_batch, auto_interval, auto_workers, auto_maxsize = 1, 0.0, 8, 64
+        case _: auto_batch, auto_interval, auto_workers, auto_maxsize = 0, 0.0, 0, 0
     batch = batch if batch is not None else auto_batch
     interval = interval if interval is not None else auto_interval
-    return batch, interval
+    workers = workers if workers is not None else auto_workers
+    maxsize = maxsize if maxsize is not None else auto_maxsize
+    return batch, interval, workers, maxsize
 
-def _market_(system: SystemType, batch: Union[int, None], interval: Union[float, None]) -> tuple[int, float]:
+def _market_(system: SystemType, batch: Union[int, None], interval: Union[float, None], workers: Union[int, None], maxsize: Union[int, None]) -> tuple[int, float, int, int]:
     match system:
-        case SystemType.Live: auto_batch, auto_interval = 100, 60.0
-        case SystemType.Simulation: auto_batch, auto_interval = 5000, 0.0
-        case _: auto_batch, auto_interval = 0, 0.0
+        case SystemType.Live: auto_batch, auto_interval, auto_workers, auto_maxsize = 100, 60.0, 1, 64
+        case SystemType.Simulation: auto_batch, auto_interval, auto_workers, auto_maxsize = 5000, 0.0, 8, 64
+        case _: auto_batch, auto_interval, auto_workers, auto_maxsize = 0, 0.0, 0, 0
     batch = batch if batch is not None else auto_batch
     interval = interval if interval is not None else auto_interval
-    return batch, interval
+    workers = workers if workers is not None else auto_workers
+    maxsize = maxsize if maxsize is not None else auto_maxsize
+    return batch, interval, workers, maxsize
 
-def _portfolio_(system: SystemType, batch: Union[int, None], interval: Union[float, None]) -> tuple[int, float]:
+def _portfolio_(system: SystemType, batch: Union[int, None], interval: Union[float, None], workers: Union[int, None], maxsize: Union[int, None]) -> tuple[int, float, int, int]:
     match system:
-        case SystemType.Live: auto_batch, auto_interval = 100, 60.0
-        case _: auto_batch, auto_interval = 0, 0.0
+        case SystemType.Live: auto_batch, auto_interval, auto_workers, auto_maxsize = 100, 60.0, 1, 64
+        case SystemType.Simulation: auto_batch, auto_interval, auto_workers, auto_maxsize = 0, 0.0, 8, 64
+        case _: auto_batch, auto_interval, auto_workers, auto_maxsize = 0, 0.0, 0, 0
     batch = batch if batch is not None else auto_batch
     interval = interval if interval is not None else auto_interval
-    return batch, interval
+    workers = workers if workers is not None else auto_workers
+    maxsize = maxsize if maxsize is not None else auto_maxsize
+    return batch, interval, workers, maxsize
 
 def _strategy_(args: Namespace) -> Union[Type[StrategyAPI], None]:
     match StrategyType(args.strategy):
@@ -123,9 +137,9 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 parameters=params,
                 iid=args.iid,
                 database=args.database,
-                universe=_universe_(SystemType(args.system), args.universe_batch, args.universe_interval),
-                market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
-                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval),
+                universe=_universe_(SystemType(args.system), args.universe_batch, args.universe_interval, args.universe_workers, args.universe_maxsize),
+                market=_market_(SystemType(args.system), args.market_batch, args.market_interval, args.market_workers, args.market_maxsize),
+                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval, args.portfolio_workers, args.portfolio_maxsize),
                 report=args.report,
                 export=args.export
             )
@@ -139,9 +153,9 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 parameters=params,
                 iid=args.iid,
                 database=args.database,
-                universe=_universe_(SystemType(args.system), args.universe_batch, args.universe_interval),
-                market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
-                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval),
+                universe=_universe_(SystemType(args.system), args.universe_batch, args.universe_interval, args.universe_workers, args.universe_maxsize),
+                market=_market_(SystemType(args.system), args.market_batch, args.market_interval, args.market_workers, args.market_maxsize),
+                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval, args.portfolio_workers, args.portfolio_maxsize),
                 report=args.report,
                 export=args.export
             )
@@ -155,9 +169,9 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 parameters=params,
                 iid=args.iid,
                 database=args.database,
-                universe=_universe_(SystemType(args.system), args.universe_batch, args.universe_interval),
-                market=_market_(SystemType(args.system), args.market_batch, args.market_interval),
-                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval),
+                universe=_universe_(SystemType(args.system), args.universe_batch, args.universe_interval, args.universe_workers, args.universe_maxsize),
+                market=_market_(SystemType(args.system), args.market_batch, args.market_interval, args.market_workers, args.market_maxsize),
+                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval, args.portfolio_workers, args.portfolio_maxsize),
                 report=args.report,
                 export=args.export
             )
