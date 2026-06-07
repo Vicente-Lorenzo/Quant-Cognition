@@ -42,21 +42,21 @@ def _setup_(db):
 def test_session_auto_generates_iid(db):
     _setup_(db)
     s = SessionAPI(Type=SystemType.Backtesting, Strategy="NNFX", db=db)
-    assert s.IID is not None
-    assert s.IID.startswith("Backtesting-")
+    assert s.UID is not None
+    assert s.UID.startswith("Backtesting-")
     s.save()
     assert s.UID is not None
 
 def test_session_preserves_explicit_iid(db):
     _setup_(db)
-    s = SessionAPI(IID="EXPLICIT-001", Type=SystemType.Live, Strategy="NNFX", db=db)
-    assert s.IID == "EXPLICIT-001"
+    s = SessionAPI(UID="EXPLICIT-001", Type=SystemType.Live, Strategy="NNFX", db=db)
+    assert s.UID == "EXPLICIT-001"
     s.save()
     assert s.UID is not None
 
 def test_buffer_chain_session_account_position(db):
     sec = _setup_(db)
-    session = SessionAPI(IID="CHAIN-001", Type=SystemType.Testing, Strategy="NNFX", Security=sec, StartTimestamp=datetime(2025, 1, 1, 12, 0, 0), db=db)
+    session = SessionAPI(UID="CHAIN-001", Type=SystemType.Testing, Strategy="NNFX", Security=sec, StartTimestamp=datetime(2025, 1, 1, 12, 0, 0), db=db)
     session.save()
     account = AccountAPI(Timestamp=datetime(2025, 1, 1, 12, 0, 1), Session=session, Environment=Environment.Demo, AccountType=AccountType.Hedged, MarginMode=MarginMode.Net, Asset="USD", Balance=10000.0, Equity=10000.0, db=db)
     position = PositionAPI(UID=5001, Security=sec, Session=session, Account=account, Type=PositionType.Normal, Direction=Direction.Buy, Volume=100000, Quantity=1.0, EntryTimestamp=datetime(2025, 1, 1, 12, 0, 2), EntryPrice=1.10, EntryBalance=10000.0)

@@ -195,7 +195,7 @@ class SystemAPI(ServiceAPI, ABC):
 
     def _export_(self, tables: dict) -> None:
         try:
-            ident = getattr(self, "_iid_", None) or getattr(self._session_, "IID", None) or self.__class__.__name__
+            ident = getattr(self, "_iid_", None) or getattr(self._session_, "UID", None) or self.__class__.__name__
             folder = Path(__file__).resolve().parents[2] / "Reports" / f"{datetime.now():%Y-%m-%d %H-%M-%S} {ident}"
             folder.mkdir(parents=True, exist_ok=True)
             for name, table in tables.items():

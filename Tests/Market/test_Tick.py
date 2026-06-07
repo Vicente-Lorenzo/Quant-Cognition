@@ -39,7 +39,7 @@ def test_encode_security_isolation():
 def test_encode_frame_matches_scalar():
     base = datetime(2023, 1, 1)
     rows = [{"Security": 5, "Timestamp": base + timedelta(seconds=i), "Ask": 1.1, "Bid": 1.0} for i in range(10)]
-    frame = TickAPI.encode_frame(pl.DataFrame(rows))
+    frame = TickAPI.encode(pl.DataFrame(rows))
     for i, row in enumerate(frame.iter_rows(named=True)):
         assert row["UID"] == TickAPI.encode(5, base + timedelta(seconds=i))
 

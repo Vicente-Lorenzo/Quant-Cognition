@@ -70,7 +70,7 @@ class MarketAPI(DatapointAPI):
     @staticmethod
     def push_ticks(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Market.Tick import TickAPI
-        if isinstance(data, pl.DataFrame): data = TickAPI.encode_frame(data)
+        if isinstance(data, pl.DataFrame): data = TickAPI.encode(data)
         db.upsert(schema=TickAPI.Schema, table=TickAPI.Table, data=data, key=[str(TickAPI.ID.UID)])
 
     @staticmethod

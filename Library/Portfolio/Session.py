@@ -7,7 +7,7 @@ from typing import Union, ClassVar, TYPE_CHECKING
 from dataclasses import dataclass, field, InitVar
 
 from Library.Database.Dataframe import pl
-from Library.Database.Database import IdentityKey, PrimaryKey, ForeignKey, DatabaseAPI
+from Library.Database.Database import PrimaryKey, ForeignKey, DatabaseAPI
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Dataclass import overridefield, coerce
 from Library.Portfolio.Portfolio import PortfolioAPI
@@ -26,8 +26,7 @@ class SessionAPI(DatapointAPI):
     Schema: ClassVar[str] = PortfolioAPI.Schema
     Table: ClassVar[str] = "Session"
 
-    UID: Union[int, None] = None
-    IID: Union[str, None] = None
+    UID: Union[str, None] = None
     Type: InitVar[Union[SystemType, str, None]] = field(default=MISSING)
     Strategy: Union[str, None] = None
     Security: InitVar[Union[int, SecurityAPI, None]] = field(default=MISSING)
@@ -44,8 +43,7 @@ class SessionAPI(DatapointAPI):
     @property
     def Structure(self) -> dict:
         return {
-            self.ID.UID: IdentityKey(pl.Int64),
-            self.ID.IID: PrimaryKey(pl.String),
+            self.ID.UID: PrimaryKey(pl.String),
             self.ID.Type: pl.String(),
             self.ID.Strategy: pl.String(),
             self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
@@ -82,8 +80,8 @@ class SessionAPI(DatapointAPI):
         if isinstance(final_account, AccountAPI): self._final_account_ = final_account
         elif final_account is not MISSING and final_account is not None:
             self._final_account_ = AccountAPI(UID=final_account, db=db, autoload=True)
-        if self.IID is None:
-            self.IID = self._generate_iid_(self._type_)
+        if self.UID is None:
+            self.UID = self._generate_uid_(self._type_)
         if self.StartTimestamp is None:
             self.StartTimestamp = datetime.now()
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
@@ -139,6 +137,6 @@ class SessionAPI(DatapointAPI):
         return (self.StopTimestamp - self.StartTimestamp).total_seconds()
 
     @staticmethod
-    def _generate_iid_(type: Union[SystemType, None]) -> str:
+    def _generate_uid_(type: Union[SystemType, None]) -> str:
         prefix = type.name if type is not None else "Session"
         return f"{prefix}-{uuid.uuid4().hex[:12]}"

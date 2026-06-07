@@ -122,17 +122,21 @@ class TickAPI(DatapointAPI):
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     @classmethod
-    def encode(cls, security: int, timestamp: datetime) -> int:
+    def encode(cls, value: Union[int, pl.DataFrame], timestamp: Union[datetime, None] = None) -> Union[int, pl.DataFrame]:
+        return cls._encode_frame_(value) if isinstance(value, pl.DataFrame) else cls._encode_value_(value, timestamp)
+
+    @classmethod
+    def _encode_value_(cls, security: int, timestamp: datetime) -> int:
         return (security << cls._MS_BITS_) | datetime_to_epoch(timestamp)
 
     @classmethod
-    def encode_frame(cls, frame: pl.DataFrame) -> pl.DataFrame:
+    def _encode_frame_(cls, frame: pl.DataFrame) -> pl.DataFrame:
         if frame.is_empty() or str(cls.ID.UID) in frame.columns: return frame
         return frame.with_columns((pl.col(str(cls.ID.Security)).cast(pl.Int64) * (1 << cls._MS_BITS_) + pl.col(str(cls.ID.Timestamp)).dt.epoch("ms")).alias(str(cls.ID.UID)))
 
     def _encode_uid_(self) -> None:
         if self._security_ is not None and self._security_.UID is not None and self._timestamp_ is not None and self._timestamp_.DateTime is not None:
-            self.UID = self.encode(self._security_.UID, self._timestamp_.DateTime)
+            self.UID = self._encode_value_(self._security_.UID, self._timestamp_.DateTime)
 
     def save(self, by: str = "Autosave") -> None:
         super().save(by=by)

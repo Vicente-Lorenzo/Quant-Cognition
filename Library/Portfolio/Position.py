@@ -38,7 +38,7 @@ class PositionAPI(DatapointAPI):
     Table: ClassVar[str] = "Position"
 
     UID: Union[int, None] = None
-    Session: InitVar[Union[int, SessionAPI, None]] = field(default=MISSING)
+    Session: InitVar[Union[str, SessionAPI, None]] = field(default=MISSING)
     Account: InitVar[Union[int, AccountAPI, None]] = field(default=MISSING)
     Order: InitVar[Union[int, OrderAPI, None]] = field(default=MISSING)
     Security: InitVar[Union[int, SecurityAPI, None]] = field(default=MISSING)
@@ -98,7 +98,7 @@ class PositionAPI(DatapointAPI):
         s = super().Structure
         cols = {
             self.ID.UID: PrimaryKey(pl.Int64),
-            self.ID.Session: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")'),
+            self.ID.Session: ForeignKey(pl.String, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")'),
             self.ID.Account: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{AccountAPI.Table}"("{AccountAPI.ID.UID}")'),
             self.ID.Order: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{OrderAPI.Table}"("{OrderAPI.ID.UID}")'),
             self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
@@ -139,7 +139,7 @@ class PositionAPI(DatapointAPI):
                       autosave: bool,
                       autoload: bool,
                       autooverload: bool,
-                      session: Union[int, SessionAPI, None],
+                      session: Union[str, SessionAPI, None],
                       account: Union[int, AccountAPI, None],
                       order: Union[int, OrderAPI, None],
                       security: Union[int, SecurityAPI, None],
@@ -237,7 +237,7 @@ class PositionAPI(DatapointAPI):
     def Session(self) -> Union[SessionAPI, None]:
         return self._session_
     @Session.setter
-    def Session(self, val: Union[int, SessionAPI, None]) -> None:
+    def Session(self, val: Union[str, SessionAPI, None]) -> None:
         if isinstance(val, SessionAPI): self._session_ = val
         elif val is not None: self._session_ = SessionAPI(UID=val, db=self._db_, autoload=True)
 

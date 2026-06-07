@@ -40,7 +40,7 @@ class AccountAPI(DatapointAPI):
 
     UID: Union[int, None] = None
     Timestamp: Union[datetime, None] = None
-    Session: InitVar[Union[int, SessionAPI, None]] = field(default=MISSING)
+    Session: InitVar[Union[str, SessionAPI, None]] = field(default=MISSING)
     Provider: InitVar[Union[str, ProviderAPI, None]] = field(default=MISSING)
     Number: Union[int, None] = None
     Environment: InitVar[Union[Environment, str, None]] = field(default=MISSING)
@@ -68,7 +68,7 @@ class AccountAPI(DatapointAPI):
         return {
             self.ID.UID: IdentityKey(pl.Int64),
             self.ID.Timestamp: PrimaryKey(pl.Datetime),
-            self.ID.Session: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")', primary=True),
+            self.ID.Session: ForeignKey(pl.String, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")', primary=True),
             self.ID.Provider: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{ProviderAPI.Table}"("{ProviderAPI.ID.UID}")'),
             self.ID.Number: pl.Int64(),
             self.ID.Environment: pl.String(),
@@ -92,7 +92,7 @@ class AccountAPI(DatapointAPI):
                       autosave: bool,
                       autoload: bool,
                       autooverload: bool,
-                      session: Union[int, SessionAPI, None],
+                      session: Union[str, SessionAPI, None],
                       provider: Union[str, ProviderAPI, None],
                       environment: Union[Environment, str, None],
                       account_type: Union[AccountType, str, None],
@@ -127,7 +127,7 @@ class AccountAPI(DatapointAPI):
     def Session(self) -> Union[SessionAPI, None]:
         return self._session_
     @Session.setter
-    def Session(self, val: Union[int, SessionAPI, None]) -> None:
+    def Session(self, val: Union[str, SessionAPI, None]) -> None:
         from Library.Portfolio.Session import SessionAPI
         if isinstance(val, SessionAPI): self._session_ = val
         elif val is not None: self._session_ = SessionAPI(UID=val, db=self._db_, autoload=True)

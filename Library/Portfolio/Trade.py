@@ -41,7 +41,7 @@ class TradeAPI(PositionAPI):
         s = super().Structure
         cols = {
             self.ID.UID: PrimaryKey(pl.Int64),
-            self.ID.Session: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")'),
+            self.ID.Session: ForeignKey(pl.String, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")'),
             self.ID.Account: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{AccountAPI.Table}"("{AccountAPI.ID.UID}")'),
             self.ID.Order: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{OrderAPI.Table}"("{OrderAPI.ID.UID}")'),
             self.ID.Position: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{PositionAPI.Table}"("{PositionAPI.ID.UID}")'),
@@ -84,7 +84,7 @@ class TradeAPI(PositionAPI):
                       autosave: bool,
                       autoload: bool,
                       autooverload: bool,
-                      session: Union[int, SessionAPI, None],
+                      session: Union[str, SessionAPI, None],
                       account: Union[int, AccountAPI, None],
                       order: Union[int, OrderAPI, None],
                       security: Union[int, SecurityAPI, None],

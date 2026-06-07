@@ -119,7 +119,7 @@ class RealtimeAPI(SystemAPI):
             self._stack_.__exit__(None, None, None)
             raise
         if self._portfolio_.Active:
-            self._session_ = SessionAPI(IID=self._iid_, Type=self._system_, Strategy=self._strategy_.__name__, Security=self._security_, StartTimestamp=datetime.now(), db=self._db_)
+            self._session_ = SessionAPI(UID=self._iid_, Type=self._system_, Strategy=self._strategy_.__name__, Security=self._security_, StartTimestamp=datetime.now(), db=self._db_)
             self._session_.save()
         self._warmup_timer_.start()
         super()._connect_()

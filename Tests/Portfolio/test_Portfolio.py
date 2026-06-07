@@ -31,10 +31,10 @@ def test_portfolio_initialization(db):
     ContractAPI(Ticker="EURUSD", Provider="Pepperstone(cTrader)", Type=ContractType.Spot, db=db).save()
     sec = SecurityAPI(Ticker="EURUSD", Provider="Pepperstone(cTrader)", Contract=ContractType.Spot, db=db, autoload=True)
     sec.save()
-    session = SessionAPI(IID="TEST-PORTFOLIO", Type=SystemType.Testing, Strategy="Download", Security=sec, StartTimestamp=datetime(2023, 1, 1, 12, 0, 0), db=db)
+    session = SessionAPI(UID="TEST-PORTFOLIO", Type=SystemType.Testing, Strategy="Download", Security=sec, StartTimestamp=datetime(2023, 1, 1, 12, 0, 0), db=db)
     session.save()
     assert session.UID is not None
-    assert session.IID == "TEST-PORTFOLIO"
+    assert session.UID == "TEST-PORTFOLIO"
     acc = AccountAPI(
         Timestamp=datetime(2023, 1, 1, 12, 0, 0),
         Session=session,
