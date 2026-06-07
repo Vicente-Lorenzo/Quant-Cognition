@@ -193,7 +193,7 @@ def test_receive_update_security_updates_and_returns_security(realtime_system):
         -1.5, -1.2, 0, 3
     )
     from Library.Universe.Contract import CommissionMode, SwapMode
-    from Library.Utility.DateTime import Weekday
+    from Library.Utility.Datetime import Weekday
     from Library.Universe.Ticker import TickerAPI
     from Library.Universe.Contract import ContractAPI
     realtime_system._security_._ticker_ = TickerAPI(UID="EURUSD")

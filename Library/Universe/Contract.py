@@ -11,7 +11,7 @@ from Library.Database import IdentityKey, PrimaryKey, ForeignKey
 from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Ticker import TickerAPI, ContractType
 from Library.Universe.Provider import ProviderAPI
-from Library.Utility.DateTime import Weekday
+from Library.Utility.Datetime import Weekday
 from Library.Utility.Typing import MISSING
 
 if TYPE_CHECKING: from Library.Database import DatabaseAPI

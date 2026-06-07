@@ -1,5 +1,5 @@
 from typing import Union
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta
 from dateutil.relativedelta import relativedelta, weekday
 
 from Library.Utility.Enumeration import EnumerationAPI
@@ -22,6 +22,9 @@ def string_to_datetime(date_str: str, fmt_str: str) -> datetime:
 def datetime_to_timestamp(dt: Union[datetime, date, time], milliseconds: bool = False) -> float:
     ts = dt.timestamp()
     return ts * 1000 if milliseconds else ts
+
+def datetime_to_epoch(dt: datetime, epoch: datetime = datetime(1970, 1, 1), unit: timedelta = timedelta(milliseconds=1)) -> int:
+    return (dt - epoch) // unit
 
 def timestamp_to_datetime(ts: float, milliseconds: bool = False) -> datetime:
     return datetime.fromtimestamp(ts / 1000 if milliseconds else ts)

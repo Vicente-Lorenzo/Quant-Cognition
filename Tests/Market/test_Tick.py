@@ -6,11 +6,9 @@ from Library.Market.Timestamp import TimestampAPI
 from Library.Market.Price import PriceAPI
 from Library.Universe.Security import SecurityAPI
 
-_EPOCH_ = datetime(1970, 1, 1)
-
 def test_encode_matches_bit_layout():
     sec, ts = 100, datetime(2023, 1, 1, 12, 0, 0)
-    ms = int((ts - _EPOCH_).total_seconds() * 1000)
+    ms = int((ts - datetime(1970, 1, 1)).total_seconds() * 1000)
     expected = (sec << 42) | ms
     assert TickAPI.encode(sec, ts) == expected
     assert TickAPI(sec, ts, Ask=1.1, Bid=1.0).UID == expected

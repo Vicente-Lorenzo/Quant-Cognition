@@ -8,7 +8,7 @@ from datetime import datetime
 from time import perf_counter
 from dataclasses import dataclass, field
 
-from Library.Utility.DateTime import datetime_to_string, seconds_to_string
+from Library.Utility.Datetime import datetime_to_string, seconds_to_string
 
 @dataclass(kw_only=True)
 class Timer:
