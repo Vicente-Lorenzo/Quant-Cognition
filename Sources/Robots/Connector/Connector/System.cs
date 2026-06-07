@@ -73,7 +73,7 @@ public class SystemAPI : IDisposable
         ms.Write(BitConverter.GetBytes(symbol.Digits), 0, 4);
         ms.Write(BitConverter.GetBytes(symbol.TickSize), 0, 8);
         ms.Write(BitConverter.GetBytes(symbol.PipSize), 0, 8);
-        ms.Write(BitConverter.GetBytes(symbol.LotSize), 0, 8);
+        ms.Write(BitConverter.GetBytes(symbol.QuantityToVolumeInUnits(1.0)), 0, 8);
         ms.Write(BitConverter.GetBytes(symbol.VolumeInUnitsMin), 0, 8);
         ms.Write(BitConverter.GetBytes(symbol.VolumeInUnitsMax), 0, 8);
         ms.Write(BitConverter.GetBytes(symbol.VolumeInUnitsStep), 0, 8);
