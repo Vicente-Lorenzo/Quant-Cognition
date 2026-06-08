@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from collections.abc import Sequence
 from typing import Callable, Type, Union, TYPE_CHECKING
 
+from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Postgres.Postgres import PostgresAPI
 from Library.Logging import HandlerLoggingAPI
@@ -115,32 +116,39 @@ class BufferAPI(threading.Thread):
             key = records[0].natural_keys()
             structure = getattr(records[0], "Structure", None)
             columns = {str(c) for c in structure.keys()} if structure else None
-            unique, mapping = {}, {}
-            valid_cols = None
-            if columns is not None:
-                valid_cols = [c for c in columns if c not in identity and hasattr(records[0], c)]
-            for r in records:
-                r._stamp_(self._by_, stamp)
-                if valid_cols is not None:
-                    row = {c: r._parse_(c) for c in valid_cols}
-                else:
-                    row = {k: v for k, v in r.dict().items() if k not in identity}
-                k = tuple(str(row.get(c)) for c in key)
-                unique[k] = row
-                mapping.setdefault(k, []).append(r)
-            data = list(unique.values())
+            valid_cols = [c for c in columns if c not in identity and hasattr(records[0], c)] if columns is not None else None
             if identity:
+                unique, mapping = {}, {}
+                for r in records:
+                    r._stamp_(self._by_, stamp)
+                    row = {c: r._parse_(c) for c in valid_cols} if valid_cols is not None else {k: v for k, v in r.dict().items() if k not in identity}
+                    k = tuple(str(row.get(c)) for c in key)
+                    unique[k] = row
+                    mapping.setdefault(k, []).append(r)
+                data = list(unique.values())
                 df = db.upsert(schema=t.Schema, table=t.Table, data=data, key=key, returning=identity)
                 for i, k in enumerate(unique.keys()):
                     if i >= len(df): break
                     for col in identity:
                         val = df[col][i]
                         for r in mapping[k]: setattr(r, col, val)
+                count = len(data)
             else:
+                if valid_cols is not None:
+                    buffers = {c: [] for c in valid_cols}
+                    for r in records:
+                        r._stamp_(self._by_, stamp)
+                        for c in valid_cols: buffers[c].append(r._parse_(c))
+                    frame = pl.DataFrame(buffers, strict=False)
+                else:
+                    for r in records: r._stamp_(self._by_, stamp)
+                    frame = pl.DataFrame([r.dict() for r in records], strict=False)
+                if key: frame = frame.unique(subset=list(key), keep="last")
                 writer = db.merge if self._bulk_ else db.upsert
-                writer(schema=t.Schema, table=t.Table, data=data, key=key)
+                writer(schema=t.Schema, table=t.Table, data=frame, key=key)
+                count = frame.height
             timer.stop()
-            self._log_.debug(lambda: f"Drain {t.Table}: {len(records)} Records · {len(data)} Unique Rows ({timer.result()})")
+            self._log_.debug(lambda: f"Drain {t.Table}: {len(records)} Records · {count} Unique Rows ({timer.result()})")
         except Exception as e:
             self._log_.error(lambda: f"Drain {t.Table}: Failed · {e}")
 

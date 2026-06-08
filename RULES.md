@@ -4,7 +4,7 @@
 This is a **multi-purpose Quant Trading Framework** designed to work with **cTrader**.
 - **Root Folder:** `cAlgo` (located in Documents for cTrader compatibility).
 - **`Library/` (Python):** Core logic, AI models, trading systems, persistence, and Dash-based frontend.
-- **`Sources/` (C#):** cAlgo Robots, Indicators, and Plugins that interface with cTrader and bridge to the Python backend via ZeroMQ.
+- **`Sources/` (C#):** cAlgo Robots, Indicators, and Plugins that interface with cTrader and bridge to the Python backend via shared memory (Windows named shared-memory `mmap` + auto-reset Event signaling, single-slot request/response lockstep).
 - **`Tests/` (Python):** Pytest suite mirroring the `Library/` folder structure.
 - **`Setup/` (Python):** One-shot scripts for database universe population.
 
@@ -82,7 +82,7 @@ If structural changes (new folders or modules) are detected that are not reflect
 - **`Library/Utility`**: Helper library (`PathAPI`, `DateTimeAPI`, `IOAPI`, `HTMLAPI`, `ImageAPI`, `ChartAPI`, `RuntimeAPI`, `ServiceAPI`, `StatisticAPI` (timer/profiling), `TypingAPI`, `FileAPI`, `MemoryAPI`).
 
 ### C# (`Sources/`)
-- **`Sources/Robots`**: cTrader Robots — Connector cBot (Python bridge via ZeroMQ), `Strategy`, `StrategyAPI` base.
+- **`Sources/Robots`**: cTrader Robots — Connector cBot (Python bridge via shared memory), `Strategy`, `StrategyAPI` base.
 - **`Sources/Indicators`**: cTrader Indicators — Connector indicator, `Indicator` implementations, `IndicatorAPI` base.
 - **`Sources/Plugins`**: cTrader Plugins and Extensions — `Plugin`, `PluginAPI` base.
 - **`Sources/Export`**: Build artifacts and deployment exports.
