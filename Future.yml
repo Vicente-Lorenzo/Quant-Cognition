@@ -1,0 +1,17 @@
+name: Future
+channels:
+    - conda-forge
+dependencies:
+    - python=3.14
+    - python-freethreading
+    - pip
+    - wheel
+    - setuptools
+
+    - numpy
+    - pandas
+    - polars
+
+    - psycopg
+
+    - pytest

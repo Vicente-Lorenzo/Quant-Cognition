@@ -21,6 +21,9 @@ public class Connector : Robot
     [Parameter("Database", Group = "System Management", DefaultValue = DatabaseType.Auto)]
     public DatabaseType Database { get; set; }
 
+    [Parameter("Environment", Group = "System Management", DefaultValue = EnvironmentType.Quant)]
+    public EnvironmentType Environment { get; set; }
+
     [Parameter("Verification", Group = "System Management", DefaultValue = 1, MinValue = 1)]
     public int Verification { get; set; }
 
@@ -100,7 +103,7 @@ public class Connector : Robot
 
     protected override void OnStart()
     {
-        _robot_api_ = new RobotAPI(this, Console, File, Strategy, Database, Verification, Accuracy,
+        _robot_api_ = new RobotAPI(this, Console, File, Strategy, Database, Environment, Verification, Accuracy,
             TickStream, BarStream, OrderStream, PositionStream, TradeStream,
             UniverseBuffering, UniverseBatch, UniverseInterval, UniverseWorkers, UniverseMaxsize,
             MarketBuffering, MarketBatch, MarketInterval, MarketWorkers, MarketMaxsize,

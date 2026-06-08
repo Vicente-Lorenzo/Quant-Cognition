@@ -8,6 +8,12 @@ public enum DatabaseType
     Off = 3,
 }
 
+public enum EnvironmentType
+{
+    Quant = 0,
+    Future = 1,
+}
+
 public enum BufferingMode
 {
     Auto = 0,

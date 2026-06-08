@@ -57,6 +57,7 @@ public class RobotAPI : IDisposable
     private readonly StrategyType _strategy_;
 
     private readonly DatabaseType _database_;
+    private readonly EnvironmentType _environment_;
     private readonly int _verification_;
     private readonly AccuracyMode _accuracy_;
     private bool _persist_market_ = true;
@@ -114,7 +115,7 @@ public class RobotAPI : IDisposable
     private long _actions_received_;
 
     public RobotAPI(Robot algo, VerboseLevel console, VerboseLevel file, StrategyType strategy,
-                    DatabaseType database, int verification, AccuracyMode accuracy,
+                    DatabaseType database, EnvironmentType environment, int verification, AccuracyMode accuracy,
                     TickStreamMode tick_stream, BarStreamMode bar_stream, OrderStreamMode order_stream,
                     PositionStreamMode position_stream, TradeStreamMode trade_stream,
                     BufferingMode universe_buffering, int universe_batch, double universe_interval, int universe_workers, int universe_maxsize,
@@ -134,6 +135,7 @@ public class RobotAPI : IDisposable
 
         _system_mode_ = ResolveSystemMode(_robot_.RunningMode);
         _database_ = ResolveDatabase(database);
+        _environment_ = environment;
         _tick_stream_ = ResolveTickStream(strategy, tick_stream);
         _bar_stream_ = bar_stream == BarStreamMode.Auto ? BarStreamMode.All : bar_stream;
         _order_stream_ = order_stream == OrderStreamMode.Auto ? OrderStreamMode.All : order_stream;
@@ -255,8 +257,8 @@ public class RobotAPI : IDisposable
         var export_arg = _export_ ? " --export" : "";
         var profile_arg = _profile_ ? " --profile" : "";
         var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{universe_batch_arg}{universe_interval_arg}{universe_workers_arg}{universe_maxsize_arg}{market_batch_arg}{market_interval_arg}{market_workers_arg}{market_maxsize_arg}{portfolio_batch_arg}{portfolio_interval_arg}{portfolio_workers_arg}{portfolio_maxsize_arg}{report_arg}{export_arg}{profile_arg}";
-        var inner_cmd = $"cd /d \"{base_directory}\" && conda run --no-capture-output -n Quant python -m Library.System.Main {script_args}";
-        _log_.Debug($"Activation Operation: Launching Python · {script_args}");
+        var inner_cmd = $"cd /d \"{base_directory}\" && conda run --no-capture-output -n {_environment_} python -m Library.System.Main {script_args}";
+        _log_.Debug($"Activation Operation: Launching Python · {_environment_} · {script_args}");
         SpawnTerminal(inner_cmd);
         try
         {

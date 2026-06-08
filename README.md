@@ -49,7 +49,8 @@ We use Miniforge to handle the environment creation, as it includes the Mamba so
 4. Create the Project Environment: Navigate to your project directory and run:
    ```powerShell
    cd C:\Users\Admin\OneDrive\Documents\cAlgo
-   mamba env create --file Requirements.yml
+   mamba env create --file Quant.yml
+   mamba env create --file Future.yml
 ## 🗄️ Step 4: Native QuantDB Setup (PostgreSQL 18 + TimescaleDB)
 1. Install PostgreSQL: Download and install the PostgreSQL 18 MSI for Windows.
 2. Install TimescaleDB: Download the TimescaleDB Windows binaries, extract them, and run setup.exe to attach the extension to your native PostgreSQL installation.
