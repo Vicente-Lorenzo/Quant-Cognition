@@ -9,12 +9,16 @@ echo -----------------------------------------------
 
 cd /d "C:\Users\Admin\OneDrive\Documents\cAlgo"
 
-echo [1/2] Quant Environment...
+echo [1/3] Quant Environment...
 call :ensure_env Quant Quant.yml
 if %ERRORLEVEL% NEQ 0 goto :failed
 
-echo [2/2] Future Environment...
+echo [2/3] Future Environment...
 call :ensure_env Future Future.yml
+if %ERRORLEVEL% NEQ 0 goto :failed
+
+echo [3/3] Exotics Environment...
+call :ensure_env Exotics Exotics.yml
 if %ERRORLEVEL% NEQ 0 goto :failed
 
 echo -----------------------------------------------
