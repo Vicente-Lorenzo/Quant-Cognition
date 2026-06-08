@@ -1,0 +1,61 @@
+name: Exotics
+channels:
+    - conda-forge
+    - pytorch
+    - nvidia
+    - bloomberg
+    - defaults
+dependencies:
+    - python=3.10
+    - pip
+
+    - tqdm
+    - wheel
+    - pytest
+    - pythonnet
+    - setuptools
+
+    - pyarrow
+    - numpy
+    - pandas
+    - polars
+    - panel
+    - bokeh
+    - altair
+    - hvplot
+    - seaborn
+    - holoviews
+    - matplotlib
+    - networkx
+
+    - pillow
+    - selenium
+    - jupyter
+    - notebook
+    - ipykernel
+    - ipywidgets
+
+    - pymssql
+    - oracledb
+    - psycopg
+
+    - ta-lib
+    - blpapi
+    - xlwings
+    - yfinance
+
+    - dash
+    - dash-extensions
+    - dash-bootstrap-components
+    - fastapi
+    - flask
+
+    - pytorch
+    - torchaudio
+    - torchvision
+    - pytorch-cuda
+    - gymnasium
+
+    - pip:
+        - ctrader-open-api
+        - pyzmq
