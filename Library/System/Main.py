@@ -71,7 +71,8 @@ def _parse_() -> Namespace:
     system_parser.add_parser(SystemType.Simulation.name, parents=[base_parser, realtime_parser])
     system_parser.add_parser(SystemType.Testing.name, parents=[base_parser, realtime_parser])
 
-    system_parser.add_parser(SystemType.Backtesting.name, parents=[base_parser, period_parser, account_parser, fee_parser])
+    backtesting_parser = system_parser.add_parser(SystemType.Backtesting.name, parents=[base_parser, period_parser, account_parser, fee_parser])
+    backtesting_parser.add_argument("--resolution", type=str, required=False, default=None)
 
     optimization_parser = system_parser.add_parser(SystemType.Optimization.name, parents=[base_parser, period_parser, account_parser, fee_parser])
     optimization_parser.add_argument("--training", type=int, required=True)
@@ -181,6 +182,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 strategy=strategy,
                 security=security,
                 timeframe=timeframe,
+                resolution=args.resolution,
                 parameters=params,
                 start=args.start,
                 stop=args.stop,
@@ -232,6 +234,8 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
         #     )
 
 def main() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"): stream.reconfigure(encoding="utf-8", errors="replace")
     args: Namespace = _parse_()
     parameterise: ParameterAPI = ParameterAPI()
     execution: str = traceback_current_module().name
