@@ -1,17 +1,17 @@
 namespace Connector;
 
+public enum EnvironmentType
+{
+    Quant = 0,
+    Future = 1,
+}
+
 public enum DatabaseType
 {
     Auto = 0,
     Quant = 1,
     Tests = 2,
     Off = 3,
-}
-
-public enum EnvironmentType
-{
-    Quant = 0,
-    Future = 1,
 }
 
 public enum BufferingMode

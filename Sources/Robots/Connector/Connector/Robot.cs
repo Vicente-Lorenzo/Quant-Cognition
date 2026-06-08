@@ -56,8 +56,8 @@ public class RobotAPI : IDisposable
     private readonly VerboseLevel _file_;
     private readonly StrategyType _strategy_;
 
-    private readonly DatabaseType _database_;
     private readonly EnvironmentType _environment_;
+    private readonly DatabaseType _database_;
     private readonly int _verification_;
     private readonly AccuracyMode _accuracy_;
     private bool _persist_market_ = true;
@@ -115,7 +115,7 @@ public class RobotAPI : IDisposable
     private long _actions_received_;
 
     public RobotAPI(Robot algo, VerboseLevel console, VerboseLevel file, StrategyType strategy,
-                    DatabaseType database, EnvironmentType environment, int verification, AccuracyMode accuracy,
+                    EnvironmentType environment, DatabaseType database, int verification, AccuracyMode accuracy,
                     TickStreamMode tick_stream, BarStreamMode bar_stream, OrderStreamMode order_stream,
                     PositionStreamMode position_stream, TradeStreamMode trade_stream,
                     BufferingMode universe_buffering, int universe_batch, double universe_interval, int universe_workers, int universe_maxsize,
@@ -127,15 +127,15 @@ public class RobotAPI : IDisposable
         _console_ = console;
         _file_ = file;
         _strategy_ = strategy;
-        _verification_ = verification;
-        _accuracy_ = accuracy;
 
         _log_ = new Logging(_robot_, "Strategy", console);
         _log_.Info("Start Operation: Starting");
 
         _system_mode_ = ResolveSystemMode(_robot_.RunningMode);
-        _database_ = ResolveDatabase(database);
         _environment_ = environment;
+        _database_ = ResolveDatabase(database);
+        _verification_ = verification;
+        _accuracy_ = accuracy;
         _tick_stream_ = ResolveTickStream(strategy, tick_stream);
         _bar_stream_ = bar_stream == BarStreamMode.Auto ? BarStreamMode.All : bar_stream;
         _order_stream_ = order_stream == OrderStreamMode.Auto ? OrderStreamMode.All : order_stream;
