@@ -818,8 +818,8 @@ def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, acc
     safe_positions = _safe_df_(positions_df)
     safe_trades = _safe_df_(trades_df)
     if not safe_trades.is_empty() and not safe_positions.is_empty():
-        common_cols = set(safe_trades.columns).intersection(set(safe_positions.columns))
-        net_df = pl.concat([safe_trades.select(list(common_cols)), safe_positions.select(list(common_cols))], how="vertical")
+        common_cols = list(set(safe_trades.columns).intersection(safe_positions.columns))
+        net_df = pl.concat([safe_trades.select(common_cols), safe_positions.select(common_cols)], how="vertical_relaxed")
     elif not safe_trades.is_empty():
         net_df = safe_trades
     else:

@@ -10,7 +10,7 @@ from Library.Utility.Typing import contains
 from Library.Utility.Runtime import is_notebook, find_notebook
 
 def inspect_separator(*, builder: type[PurePath] = Path) -> str:
-    return builder(".")._flavour.sep
+    return str(builder("a", "b"))[1]
 
 def inspect_file(file: Union[PurePath, str, None], *, header: bool = None, resolve: bool = False, builder: type[PurePath] = Path) -> Union[PurePath, Path]:
     sep: str = inspect_separator(builder=builder)

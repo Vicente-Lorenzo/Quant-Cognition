@@ -53,7 +53,7 @@ class FileLoggingAPI(BufferLoggingAPI):
 
     @classmethod
     def _open_(cls) -> TextIO:
-        return cls._file_path_.open("w")
+        return cls._file_path_.open("w", encoding="utf-8")
 
     @classmethod
     def _write_(cls, logs: list[str]) -> None:
