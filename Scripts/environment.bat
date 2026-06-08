@@ -1,5 +1,8 @@
 @echo off
 title Environment Updater
+set CONDA_ALWAYS_YES=true
+set "ENVS_DIR=C:\ProgramData\miniforge3\envs"
+
 echo -----------------------------------------------
 echo Updating Conda Environments...
 echo -----------------------------------------------
@@ -17,12 +20,11 @@ if %ERRORLEVEL% NEQ 0 goto :failed
 echo -----------------------------------------------
 echo Update Complete.
 echo -----------------------------------------------
-timeout /t 10 >nul
+timeout /t 10
 goto :eof
 
 :ensure_env
-mamba env list | findstr /B /C:"%~1 " >nul
-if %ERRORLEVEL% EQU 0 (
+if exist "%ENVS_DIR%\%~1\conda-meta\history" (
     echo Updating %~1 ...
     call mamba env update -f %~2 --prune
 ) else (
@@ -35,4 +37,5 @@ exit /b %ERRORLEVEL%
 echo -----------------------------------------------
 echo Update Failed.
 echo -----------------------------------------------
-cmd /k
+timeout /t 10
+goto :eof
