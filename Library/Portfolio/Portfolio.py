@@ -194,18 +194,27 @@ class PortfolioAPI(DatapointAPI):
         if trades:
             self._trades_.extend(trades)
 
+    @staticmethod
+    def _conversion_(ask: Union[PriceAPI, None], bid: Union[PriceAPI, None]) -> float:
+        a = ask.Price if ask else None
+        b = bid.Price if bid else None
+        if a is not None and b is not None: return (a + b) / 2.0
+        return a if a is not None else (b if b is not None else 1.0)
+
     def update_data(self, data: Union[TickAPI, BarAPI]) -> None:
         from Library.Portfolio.Statistic import calculate_pnl_difference, calculate_gross_pnl, calculate_net_pnl
         if isinstance(data, TickAPI):
             bid, ask, timestamp = data.Bid.Price, data.Ask.Price, data.Timestamp.DateTime
             high_bid = low_bid = bid
             high_ask = low_ask = ask
+            conversion = self._conversion_(data.AskQuoteConversion, data.BidQuoteConversion)
         else:
             bid, ask, timestamp = data.CloseTick.Bid.Price, data.CloseTick.Ask.Price, data.Timestamp.DateTime
             high_bid = data.HighTick.Bid.Price if data.HighTick and data.HighTick.Bid else bid
             low_bid = data.LowTick.Bid.Price if data.LowTick and data.LowTick.Bid else bid
             high_ask = data.HighTick.Ask.Price if data.HighTick and data.HighTick.Ask else ask
             low_ask = data.LowTick.Ask.Price if data.LowTick and data.LowTick.Ask else ask
+            conversion = self._conversion_(data.CloseTick.AskQuoteConversion, data.CloseTick.BidQuoteConversion)
         for pos in self._positions_.values():
             if pos.NetPnL is None or pos.EntryPrice is None: continue
             current_price = bid if pos.IsLong else ask
@@ -215,7 +224,7 @@ class PortfolioAPI(DatapointAPI):
             comm = pos.CommissionPnL.PnL if pos.CommissionPnL else 0.0
             swap = pos.SwapPnL.PnL if pos.SwapPnL else 0.0
             pnl_diff = calculate_pnl_difference(current_price, entry_price, pos.IsLong)
-            if pos.GrossPnL: pos.GrossPnL.PnL = calculate_gross_pnl(pnl_diff, pos.Volume)
+            if pos.GrossPnL: pos.GrossPnL.PnL = calculate_gross_pnl(pnl_diff, pos.Volume, conversion)
             pos.NetPnL.PnL = calculate_net_pnl(pos.GrossPnL.PnL if pos.GrossPnL else 0.0, comm, swap)
             if pos.EntryTimestamp:
                 duration_sec = (timestamp - pos.EntryTimestamp.DateTime).total_seconds()
@@ -224,8 +233,8 @@ class PortfolioAPI(DatapointAPI):
             ref_balance = pos.NetPnL.Reference
             duration = pos.NetPnL.Duration
             contract = pos.Security.Contract if pos.Security else None
-            best_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(best_price, entry_price, pos.IsLong), pos.Volume), comm, swap)
-            worst_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(worst_price, entry_price, pos.IsLong), pos.Volume), comm, swap)
+            best_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(best_price, entry_price, pos.IsLong), pos.Volume, conversion), comm, swap)
+            worst_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(worst_price, entry_price, pos.IsLong), pos.Volume, conversion), comm, swap)
             if pos._max_equity_drawdown_price_ is None:
                 pos._max_equity_drawdown_price_ = PriceAPI(Price=worst_price, Reference=entry_price, Contract=contract)
             elif (pos.IsLong and worst_price < pos._max_equity_drawdown_price_.Price) or (pos.IsShort and worst_price > pos._max_equity_drawdown_price_.Price):

@@ -51,8 +51,8 @@ def calculate_annualized_log_return(log_ret: float, duration_seconds: float, tra
 def calculate_pnl_difference(current_price: float, entry_price: float, is_long: bool) -> float:
     return (current_price - entry_price) if is_long else (entry_price - current_price)
 
-def calculate_gross_pnl(pnl_diff: float, volume: float) -> float:
-    return pnl_diff * volume
+def calculate_gross_pnl(pnl_diff: float, volume: float, conversion: float = 1.0) -> float:
+    return pnl_diff * volume * conversion
 
 def calculate_net_pnl(gross_pnl: float, commission_pnl: float, swap_pnl: float) -> float:
     return gross_pnl + commission_pnl + swap_pnl

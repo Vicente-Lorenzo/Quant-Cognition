@@ -57,13 +57,18 @@ def test_timeframe_tick_inference():
     assert tf.IsTick is True
     assert tf.Minutes is None
     assert tf.Seconds is None
-def test_timeframe_finer_or_equal():
+def test_timeframe_comparison():
     tick, tick50, m1, h1, d1 = (TimeframeAPI(UID=u) for u in ("T1", "T50", "M1", "H1", "D1"))
-    assert tick.finer_or_equal(d1) is True
-    assert tick.finer_or_equal(tick50) is True
-    assert tick50.finer_or_equal(tick) is False
-    assert m1.finer_or_equal(h1) is True
-    assert h1.finer_or_equal(m1) is False
-    assert d1.finer_or_equal(d1) is True
-    assert d1.finer_or_equal(h1) is False
-    assert m1.finer_or_equal(d1) is True
+    assert tick < d1
+    assert tick <= d1
+    assert tick < tick50
+    assert tick50 > tick
+    assert m1 < h1
+    assert h1 > m1
+    assert d1 <= d1
+    assert d1 >= h1
+    assert d1 > h1
+    assert m1 <= d1
+    assert (h1 == TimeframeAPI(UID="H1")) is True
+    assert (h1 == d1) is False
+    assert (h1 == "H1") is False

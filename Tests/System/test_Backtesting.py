@@ -2,7 +2,7 @@ import random
 import pytest
 from datetime import datetime
 
-from Library.System.Backtesting import BacktestingAPI
+from Library.System.Backtesting import BacktestingAPI, _eu_summer_
 from Library.Market.Price import Direction
 from Library.Protocol.Update import UpdateID
 from Library.Universe.Contract import CommissionType, CommissionMode, SpreadType, SwapType, SwapMode
@@ -127,6 +127,53 @@ def test_tick_bars_grouping(monkeypatch):
     monkeypatch.setattr(engine, "_period_ticks_", lambda bar: (timestamps, asks, bids))
     out = list(engine._tick_bars_(None, 5))
     assert [bid for _, _, bid in out] == [1.10, 1.09, 1.13]
+
+class _ConvTick_:
+    def __init__(self, ask, bid, abc=None, bbc=None, aqc=None, bqc=None):
+        self.Ask = _Price_(ask)
+        self.Bid = _Price_(bid)
+        self.AskBaseConversion = _Price_(abc) if abc is not None else None
+        self.BidBaseConversion = _Price_(bbc) if bbc is not None else None
+        self.AskQuoteConversion = _Price_(aqc) if aqc is not None else None
+        self.BidQuoteConversion = _Price_(bqc) if bqc is not None else None
+
+def test_eu_summer_dst_boundaries():
+    assert _eu_summer_(datetime(2023, 1, 15)) is False
+    assert _eu_summer_(datetime(2023, 3, 26, 0)) is False
+    assert _eu_summer_(datetime(2023, 3, 26, 1)) is True
+    assert _eu_summer_(datetime(2023, 7, 1)) is True
+    assert _eu_summer_(datetime(2023, 10, 29, 0)) is True
+    assert _eu_summer_(datetime(2023, 10, 29, 1)) is False
+    assert _eu_summer_(datetime(2023, 11, 15)) is False
+    assert _eu_summer_(datetime(2024, 3, 31, 1)) is True
+    assert _eu_summer_(datetime(2024, 10, 27, 1)) is False
+
+def test_conversions_uses_stored_fields():
+    engine = _engine_()
+    tick = _ConvTick_(1.06929, 1.06927, abc=1.0, bbc=1.0, aqc=0.93522, bqc=0.93520)
+    base, quote = engine._conversions_(tick)
+    assert base == pytest.approx(1.0)
+    assert quote == pytest.approx((0.93522 + 0.93520) / 2.0)
+
+def test_conversions_fallback_when_missing():
+    engine = _engine_()
+    base, quote = engine._conversions_(_ConvTick_(1.10, 1.10))
+    assert base == pytest.approx(1.0)
+    assert quote == pytest.approx(1.0 / 1.10)
+
+def test_cents_truncates_toward_zero():
+    assert BacktestingAPI._cents_(0.315) == pytest.approx(0.31)
+    assert BacktestingAPI._cents_(-0.315) == pytest.approx(-0.31)
+    assert BacktestingAPI._cents_(0.36) == pytest.approx(0.36)
+    assert BacktestingAPI._cents_(0.27) == pytest.approx(0.27)
+    assert BacktestingAPI._cents_(-0.629) == pytest.approx(-0.62)
+    assert BacktestingAPI._cents_(0.0) == pytest.approx(0.0)
+
+def test_commission_accurate_is_truncated_per_deal():
+    engine = _engine_()
+    raw = engine._commission_(7000.0, 1.1)
+    assert raw == pytest.approx(7000.0 * (-45.0 / 1_000_000) * 1.0)
+    assert engine._cents_(raw) == pytest.approx(-0.31)
 
 def test_parse_date():
     assert BacktestingAPI._parse_date_("2023-01-01", end=False) == datetime(2023, 1, 1, 0, 0, 0)
