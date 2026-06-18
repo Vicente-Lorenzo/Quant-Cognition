@@ -22,12 +22,14 @@ class SpreadType(EnumerationAPI):
     Random = 2
     Approximate = 3
     Accurate = 4
+    Auto = 5
 
 class CommissionType(EnumerationAPI):
     Points = 0
     Percentage = 1
     Amount = 2
     Accurate = 3
+    Auto = 4
 
 class CommissionMode(EnumerationAPI):
     BaseAssetPerMillionVolume = 0
@@ -40,6 +42,7 @@ class SwapType(EnumerationAPI):
     Percentage = 1
     Amount = 2
     Accurate = 3
+    Auto = 4
 
 class SwapMode(EnumerationAPI):
     Pips = 0

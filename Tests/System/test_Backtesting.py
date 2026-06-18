@@ -7,6 +7,7 @@ from Library.Market.Price import Direction
 from Library.Protocol.Update import UpdateID
 from Library.Universe.Contract import CommissionType, CommissionMode, SpreadType, SwapType, SwapMode
 from Library.Utility.Datetime import Weekday
+from Library.Utility.Typing import MISSING
 
 class _Contract_:
     PointSize = 0.00001
@@ -174,6 +175,90 @@ def test_commission_accurate_is_truncated_per_deal():
     raw = engine._commission_(7000.0, 1.1)
     assert raw == pytest.approx(7000.0 * (-45.0 / 1_000_000) * 1.0)
     assert engine._cents_(raw) == pytest.approx(-0.31)
+
+_BIDS_ = (1.10000, 1.10500, 1.09500, 1.10100)
+_ASKS_ = (1.10002, 1.10502, 1.09502, 1.10102)
+
+def _descend_engine_():
+    engine = _engine_()
+    engine._positions_ = {}
+    engine._ask_above_ = engine._ask_below_ = engine._bid_above_ = engine._bid_below_ = None
+    return engine
+
+def test_spread_ceiling_accurate_is_max_raw_spread():
+    assert _descend_engine_()._spread_ceiling_(_BIDS_, _ASKS_) == pytest.approx(0.00002)
+
+def test_should_descend_skips_when_flat():
+    assert _descend_engine_()._should_descend_(_BIDS_, _ASKS_) is False
+
+def test_should_descend_true_when_buy_stop_reachable():
+    engine = _descend_engine_()
+    engine._positions_ = {1: _Position_(Direction.Buy, stop_loss=1.10000)}
+    assert engine._should_descend_(_BIDS_, _ASKS_) is True
+
+def test_should_descend_false_when_buy_stop_below_bar():
+    engine = _descend_engine_()
+    engine._positions_ = {1: _Position_(Direction.Buy, stop_loss=1.08000)}
+    assert engine._should_descend_(_BIDS_, _ASKS_) is False
+
+def test_should_descend_true_when_target_reachable():
+    engine = _descend_engine_()
+    engine._bid_above_ = 1.10300
+    assert engine._should_descend_(_BIDS_, _ASKS_) is True
+
+def test_should_descend_true_when_sell_stop_below_gapped_bar():
+    engine = _descend_engine_()
+    engine._positions_ = {1: _Position_(Direction.Sell, stop_loss=1.09000)}
+    assert engine._should_descend_(_BIDS_, _ASKS_) is True
+
+def test_should_descend_false_when_sell_stop_above_bar():
+    engine = _descend_engine_()
+    engine._positions_ = {1: _Position_(Direction.Sell, stop_loss=1.12000)}
+    assert engine._should_descend_(_BIDS_, _ASKS_) is False
+
+class _LogStub_:
+    def info(self, fn): pass
+    def debug(self, fn): pass
+
+class _FakeFrame_:
+    height = 7
+
+def _preload_stub_():
+    engine = object.__new__(BacktestingAPI)
+    engine._bars_ = [object()]
+    engine._security_ = type("S", (), {"UID": 1})()
+    engine._timeframe_ = type("T", (), {"UID": "D1"})()
+    engine._start_ = datetime(2023, 1, 1)
+    engine._stop_ = datetime(2024, 1, 1)
+    engine._auto_ = True
+    engine._log_ = _LogStub_()
+    return engine
+
+def test_preload_cache_reuses_across_instances(monkeypatch):
+    BacktestingAPI._PRELOAD_CACHE_.clear()
+    calls = []
+    monkeypatch.setattr(BacktestingAPI, "_load_frames_", lambda self: (calls.append(1), (_FakeFrame_(), {}, [], None))[1])
+    first, second = _preload_stub_(), _preload_stub_()
+    first._preload_()
+    second._preload_()
+    assert len(calls) == 1
+    assert first._tick_frame_ is second._tick_frame_
+    third = _preload_stub_()
+    third._start_ = datetime(2022, 1, 1)
+    third._preload_()
+    assert len(calls) == 2
+    BacktestingAPI._PRELOAD_CACHE_.clear()
+
+def test_auto_fee_types_resolve_to_accurate():
+    engine = BacktestingAPI(
+        strategy=type("Strategy", (), {}), security=object(), timeframe=object(), resolution=MISSING,
+        parameters=object(), start="2023-01-01", stop="2024-01-01", account=("EUR", 10000.0, 30.0),
+        spread=(SpreadType.Auto, MISSING), commission=(CommissionType.Auto, MISSING), swap=(SwapType.Auto, MISSING, MISSING),
+        report=False, export=False)
+    assert engine._spread_type_ == SpreadType.Accurate
+    assert engine._commission_type_ == CommissionType.Accurate
+    assert engine._swap_type_ == SwapType.Accurate
+    assert engine._resolution_arg_ is MISSING
 
 def test_parse_date():
     assert BacktestingAPI._parse_date_("2023-01-01", end=False) == datetime(2023, 1, 1, 0, 0, 0)
