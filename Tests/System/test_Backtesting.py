@@ -1,4 +1,5 @@
 import random
+import numpy as np
 import pytest
 from datetime import datetime
 
@@ -216,12 +217,32 @@ def test_should_descend_false_when_sell_stop_above_bar():
     engine._positions_ = {1: _Position_(Direction.Sell, stop_loss=1.12000)}
     assert engine._should_descend_(_BIDS_, _ASKS_) is False
 
+def test_effective_bounds_accurate_is_raw_ask():
+    engine = _descend_engine_()
+    ask, bid = np.array([1.10002, 1.10502]), np.array([1.10000, 1.10500])
+    eb, ask_low, ask_high = engine._effective_bounds_(ask, bid)
+    assert eb.tolist() == bid.tolist()
+    assert ask_low.tolist() == ask.tolist() and ask_high.tolist() == ask.tolist()
+
+def test_candidate_mask_flat_is_empty():
+    engine = _descend_engine_()
+    bid = np.array([1.10000, 1.10500, 1.09500])
+    eb, ask_low, ask_high = engine._effective_bounds_(bid + 0.00002, bid)
+    assert not engine._candidate_mask_(eb, ask_low, ask_high).any()
+
+def test_candidate_mask_flags_only_reachable_buy_stop():
+    engine = _descend_engine_()
+    engine._positions_ = {1: _Position_(Direction.Buy, stop_loss=1.10000)}
+    bid = np.array([1.10100, 1.10000, 1.10050])
+    eb, ask_low, ask_high = engine._effective_bounds_(bid + 0.00002, bid)
+    assert engine._candidate_mask_(eb, ask_low, ask_high).tolist() == [False, True, False]
+
 class _LogStub_:
     def info(self, fn): pass
     def debug(self, fn): pass
 
-class _FakeFrame_:
-    height = 7
+class _FakeArr_:
+    size = 7
 
 def _preload_stub_():
     engine = object.__new__(BacktestingAPI)
@@ -236,13 +257,14 @@ def _preload_stub_():
 
 def test_preload_cache_reuses_across_instances(monkeypatch):
     BacktestingAPI._PRELOAD_CACHE_.clear()
+    monkeypatch.setattr(BacktestingAPI, "_DISK_CACHE_", False)
     calls = []
-    monkeypatch.setattr(BacktestingAPI, "_load_frames_", lambda self: (calls.append(1), (_FakeFrame_(), {}, [], None))[1])
+    monkeypatch.setattr(BacktestingAPI, "_load_frames_", lambda self: (calls.append(1), (_FakeArr_(), _FakeArr_(), _FakeArr_(), {}, [], None))[1])
     first, second = _preload_stub_(), _preload_stub_()
     first._preload_()
     second._preload_()
     assert len(calls) == 1
-    assert first._tick_frame_ is second._tick_frame_
+    assert first._tick_ts_ is second._tick_ts_
     third = _preload_stub_()
     third._start_ = datetime(2022, 1, 1)
     third._preload_()

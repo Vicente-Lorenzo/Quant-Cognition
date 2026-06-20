@@ -13,6 +13,7 @@ from Library.Strategy.Strategy import StrategyType
 from Library.System import BacktestingAPI, RealtimeAPI, SystemAPI
 from Library.Parameter import Parameter, ParameterAPI
 from Library.Utility.Path import traceback_current_module
+from Library.Utility.Typing import MISSING, Missing
 from Library.Logging import HandlerLoggingAPI, VerboseLevel
 from Library.Database.Postgres.Postgres import PostgresAPI
 from Library.Strategy import DownloadStrategyAPI, NNFXStrategyAPI, StrategyAPI
@@ -42,27 +43,27 @@ def _parse_() -> Namespace:
     realtime_parser = ArgumentParser(add_help=False)
     realtime_parser.add_argument("--iid", type=str, required=True)
     realtime_parser.add_argument("--database", type=str, required=False, default=None, choices=["Quant", "Tests"])
-    realtime_parser.add_argument("--universe-batch", type=int, required=False, default=None)
-    realtime_parser.add_argument("--universe-interval", type=float, required=False, default=None)
-    realtime_parser.add_argument("--universe-workers", type=int, required=False, default=None)
-    realtime_parser.add_argument("--universe-maxsize", type=int, required=False, default=None)
-    realtime_parser.add_argument("--market-batch", type=int, required=False, default=None)
-    realtime_parser.add_argument("--market-interval", type=float, required=False, default=None)
-    realtime_parser.add_argument("--market-workers", type=int, required=False, default=None)
-    realtime_parser.add_argument("--market-maxsize", type=int, required=False, default=None)
-    realtime_parser.add_argument("--portfolio-batch", type=int, required=False, default=None)
-    realtime_parser.add_argument("--portfolio-interval", type=float, required=False, default=None)
-    realtime_parser.add_argument("--portfolio-workers", type=int, required=False, default=None)
-    realtime_parser.add_argument("--portfolio-maxsize", type=int, required=False, default=None)
+    realtime_parser.add_argument("--universe-batch", type=int, required=False, default=MISSING)
+    realtime_parser.add_argument("--universe-interval", type=float, required=False, default=MISSING)
+    realtime_parser.add_argument("--universe-workers", type=int, required=False, default=MISSING)
+    realtime_parser.add_argument("--universe-maxsize", type=int, required=False, default=MISSING)
+    realtime_parser.add_argument("--market-batch", type=int, required=False, default=MISSING)
+    realtime_parser.add_argument("--market-interval", type=float, required=False, default=MISSING)
+    realtime_parser.add_argument("--market-workers", type=int, required=False, default=MISSING)
+    realtime_parser.add_argument("--market-maxsize", type=int, required=False, default=MISSING)
+    realtime_parser.add_argument("--portfolio-batch", type=int, required=False, default=MISSING)
+    realtime_parser.add_argument("--portfolio-interval", type=float, required=False, default=MISSING)
+    realtime_parser.add_argument("--portfolio-workers", type=int, required=False, default=MISSING)
+    realtime_parser.add_argument("--portfolio-maxsize", type=int, required=False, default=MISSING)
 
     fee_parser = ArgumentParser(add_help=False)
-    fee_parser.add_argument("--spread-type", type=str, required=True, choices=[_.name for _ in SpreadType])
-    fee_parser.add_argument("--spread-value", type=float, required=False, default=None)
-    fee_parser.add_argument("--commission-type", type=str, required=True, choices=[_.name for _ in CommissionType])
-    fee_parser.add_argument("--commission-value", type=float, required=False, default=None)
-    fee_parser.add_argument("--swap-type", type=str, required=True, choices=[_.name for _ in SwapType])
-    fee_parser.add_argument("--swap-buy", type=float, required=False, default=None)
-    fee_parser.add_argument("--swap-sell", type=float, required=False, default=None)
+    fee_parser.add_argument("--spread-type", type=str, required=False, default=SpreadType.Auto.name, choices=[_.name for _ in SpreadType])
+    fee_parser.add_argument("--spread-value", type=float, required=False, default=MISSING)
+    fee_parser.add_argument("--commission-type", type=str, required=False, default=CommissionType.Auto.name, choices=[_.name for _ in CommissionType])
+    fee_parser.add_argument("--commission-value", type=float, required=False, default=MISSING)
+    fee_parser.add_argument("--swap-type", type=str, required=False, default=SwapType.Auto.name, choices=[_.name for _ in SwapType])
+    fee_parser.add_argument("--swap-buy", type=float, required=False, default=MISSING)
+    fee_parser.add_argument("--swap-sell", type=float, required=False, default=MISSING)
 
     parser = ArgumentParser()
     system_parser = parser.add_subparsers(dest="system", required=True)
@@ -72,7 +73,7 @@ def _parse_() -> Namespace:
     system_parser.add_parser(SystemType.Testing.name, parents=[base_parser, realtime_parser])
 
     backtesting_parser = system_parser.add_parser(SystemType.Backtesting.name, parents=[base_parser, period_parser, account_parser, fee_parser])
-    backtesting_parser.add_argument("--resolution", type=str, required=False, default=None)
+    backtesting_parser.add_argument("--resolution", type=str, required=False, default=MISSING)
 
     optimization_parser = system_parser.add_parser(SystemType.Optimization.name, parents=[base_parser, period_parser, account_parser, fee_parser])
     optimization_parser.add_argument("--training", type=int, required=True)
@@ -87,40 +88,40 @@ def _parse_() -> Namespace:
 
     return parser.parse_args()
 
-def _universe_(system: SystemType, batch: Union[int, None], interval: Union[float, None], workers: Union[int, None], maxsize: Union[int, None]) -> tuple[int, float, int, int]:
+def _universe_(system: SystemType, batch: Union[int, Missing], interval: Union[float, Missing], workers: Union[int, Missing], maxsize: Union[int, Missing]) -> tuple[int, float, int, int]:
     match system:
         case SystemType.Live: auto_batch, auto_interval, auto_workers, auto_maxsize = 1, 0.0, 1, 64
         case SystemType.Simulation: auto_batch, auto_interval, auto_workers, auto_maxsize = 1, 0.0, 8, 64
         case _: auto_batch, auto_interval, auto_workers, auto_maxsize = 0, 0.0, 0, 0
-    batch = batch if batch is not None else auto_batch
-    interval = interval if interval is not None else auto_interval
-    workers = workers if workers is not None else auto_workers
-    maxsize = maxsize if maxsize is not None else auto_maxsize
+    batch = batch if not isinstance(batch, Missing) else auto_batch
+    interval = interval if not isinstance(interval, Missing) else auto_interval
+    workers = workers if not isinstance(workers, Missing) else auto_workers
+    maxsize = maxsize if not isinstance(maxsize, Missing) else auto_maxsize
     return batch, interval, workers, maxsize
 
-def _market_(system: SystemType, batch: Union[int, None], interval: Union[float, None], workers: Union[int, None], maxsize: Union[int, None]) -> tuple[int, float, int, int]:
+def _market_(system: SystemType, batch: Union[int, Missing], interval: Union[float, Missing], workers: Union[int, Missing], maxsize: Union[int, Missing]) -> tuple[int, float, int, int]:
     match system:
         case SystemType.Live: auto_batch, auto_interval, auto_workers, auto_maxsize = 1000, 60.0, 1, 64
         case SystemType.Simulation: auto_batch, auto_interval, auto_workers, auto_maxsize = 50000, 0.0, 8, 64
         case _: auto_batch, auto_interval, auto_workers, auto_maxsize = 0, 0.0, 0, 0
-    batch = batch if batch is not None else auto_batch
-    interval = interval if interval is not None else auto_interval
-    workers = workers if workers is not None else auto_workers
-    maxsize = maxsize if maxsize is not None else auto_maxsize
+    batch = batch if not isinstance(batch, Missing) else auto_batch
+    interval = interval if not isinstance(interval, Missing) else auto_interval
+    workers = workers if not isinstance(workers, Missing) else auto_workers
+    maxsize = maxsize if not isinstance(maxsize, Missing) else auto_maxsize
     return batch, interval, workers, maxsize
 
-def _portfolio_(system: SystemType, batch: Union[int, None], interval: Union[float, None], workers: Union[int, None], maxsize: Union[int, None]) -> tuple[int, float, int, int]:
+def _portfolio_(system: SystemType, batch: Union[int, Missing], interval: Union[float, Missing], workers: Union[int, Missing], maxsize: Union[int, Missing]) -> tuple[int, float, int, int]:
     match system:
         case SystemType.Live: auto_batch, auto_interval, auto_workers, auto_maxsize = 100, 60.0, 1, 64
         case SystemType.Simulation: auto_batch, auto_interval, auto_workers, auto_maxsize = 0, 0.0, 8, 64
         case _: auto_batch, auto_interval, auto_workers, auto_maxsize = 0, 0.0, 0, 0
-    batch = batch if batch is not None else auto_batch
-    interval = interval if interval is not None else auto_interval
-    workers = workers if workers is not None else auto_workers
-    maxsize = maxsize if maxsize is not None else auto_maxsize
+    batch = batch if not isinstance(batch, Missing) else auto_batch
+    interval = interval if not isinstance(interval, Missing) else auto_interval
+    workers = workers if not isinstance(workers, Missing) else auto_workers
+    maxsize = maxsize if not isinstance(maxsize, Missing) else auto_maxsize
     return batch, interval, workers, maxsize
 
-def _strategy_(args: Namespace) -> Union[Type[StrategyAPI], None]:
+def _strategy_(args: Namespace) -> Type[StrategyAPI]:
     match StrategyType(args.strategy):
         case StrategyType.Download: return DownloadStrategyAPI
         case StrategyType.NNFX: return NNFXStrategyAPI
@@ -249,13 +250,17 @@ def main() -> None:
     @log.guard
     def run() -> None:
         with PostgresAPI(database="Quant") as db:
-            ticker = TickerAPI(UID=TickerAPI.normalize(args.ticker), db=db, autoload=True)
-            provider = ProviderAPI(UID=ProviderAPI.normalize(args.provider), db=db, autoload=True)
+            provider_uid, ticker_uid = ProviderAPI.normalize(args.provider), TickerAPI.normalize(args.ticker)
+            ticker = TickerAPI(UID=ticker_uid, db=db, autoload=True)
+            provider = ProviderAPI(UID=provider_uid, db=db, autoload=True)
             timeframe = TimeframeAPI(UID=TimeframeAPI.normalize(args.timeframe), db=db, autoload=True)
             security = SecurityAPI(Provider=provider, Ticker=ticker, db=db, autoload=True)
-            parameters: Parameter = parameterise[provider.UID][security.Category.UID][ticker.UID][args.timeframe]
+            category = security.Category
+            if category is None: raise ValueError(f"Security {provider_uid} {ticker_uid}: Failed · Due to missing Category")
+            parameters = parameterise[provider_uid][category.UID][ticker_uid][args.timeframe]
             strategy = _strategy_(args)
             system = _system_(args, strategy, security, timeframe, parameters)
+            if system is None: return
             with system:
                 system.run()
     if args.profile: profiler(run)()
