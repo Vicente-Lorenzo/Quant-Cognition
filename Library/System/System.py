@@ -9,6 +9,7 @@ from Library.Database import BufferAPI
 from Library.Database.Dataframe import pl
 from Library.Utility.Enumeration import EnumerationAPI
 from Library.Utility.Service import ServiceAPI
+from Library.Utility.Statistic import Timer
 from Library.Logging import HandlerLoggingAPI
 from Library.Market.Bar import BarAPI
 from Library.Market.Tick import TickAPI
@@ -18,7 +19,6 @@ from Library.Portfolio.Position import PositionAPI, PositionStatus
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Trade import TradeAPI
 from Library.Portfolio.Statistic import generate_net_report, order_view, position_view, trade_view, deal_view
-from Library.Universe.Security import SecurityAPI
 from Library.Protocol.Action import ActionAPI, ActionID, CompleteActionAPI
 from Library.Protocol.Update import (
     UpdateID,
@@ -99,6 +99,7 @@ from Library.Protocol.Update import (
     ExceptionUpdateAPI
 )
 from Library.System.Lifecycle import LifecycleAPI
+from Library.Universe.Security import SecurityAPI
 
 if TYPE_CHECKING:
     from Library.Engine import MachineAPI
@@ -110,7 +111,6 @@ if TYPE_CHECKING:
     from Library.Parameter import Parameter
     from Library.Portfolio.Portfolio import PortfolioAPI
     from Library.Strategy.Strategy import StrategyAPI
-    from Library.Universe.Security import SecurityAPI
     from Library.Universe.Timeframe import TimeframeAPI
 
 class SystemType(EnumerationAPI):
@@ -158,6 +158,9 @@ class SystemAPI(ServiceAPI, ABC):
         self._portfolio_: BufferAPI = BufferAPI(types=[AccountAPI, OrderAPI, PositionAPI, TradeAPI], batch=portfolio[0], interval=portfolio[1], workers=portfolio[2], maxsize=portfolio[3])
 
         self._session_: Union[SessionAPI, None] = None
+        self._initialization_timer_: Timer = Timer()
+        self._execution_timer_: Timer = Timer()
+        self._finalization_timer_: Timer = Timer()
 
         self._log_: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="System Management")
 
@@ -186,6 +189,25 @@ class SystemAPI(ServiceAPI, ABC):
         if self._market_.Active: self._market_.shutdown()
         if self._portfolio_.Active: self._portfolio_.shutdown()
         self._connected_ = False
+
+    def connect(self, **kwargs):
+        if self._initialization_timer_._start_ is None: self._initialization_timer_.start()
+        return super().connect(**kwargs)
+
+    def disconnect(self):
+        result = super().disconnect()
+        if self._transition_(self._finalization_timer_, "Finalization"): self._summary_()
+        return result
+
+    def _transition_(self, timer: Timer, phase: str, start: Union[Timer, None] = None) -> bool:
+        if timer._start_ is None or timer._stop_ is not None: return False
+        timer.stop()
+        self._log_.info(lambda: f"Phase {phase}: Completed · {timer.result()}")
+        if start is not None: start.start()
+        return True
+
+    def _summary_(self) -> None:
+        pass
 
     @staticmethod
     def _stringify_(df: pl.DataFrame) -> pl.DataFrame:
@@ -217,7 +239,7 @@ class SystemAPI(ServiceAPI, ABC):
         if self._reporting_:
             for name, table in tables.items():
                 if table.is_empty(): continue
-                self._log_.info(lambda name=name, table=table: f"Report {name}: {table}")
+                self._log_.info(lambda n=name, t=table: f"Report {n}: {t}")
         if self._exporting_:
             self._export_(tables)
         self.statistics = net
@@ -527,6 +549,7 @@ class SystemAPI(ServiceAPI, ABC):
         self.send_action(CompleteActionAPI())
 
     def deploy(self) -> None:
+        if self.strategy is None: return
         engine = LifecycleAPI(
             system_machine=self.system_management(),
             strategy_machine=self.strategy.strategy_management(),

@@ -30,7 +30,7 @@ from Library.Protocol.Transport import TransportAPI
 from Library.Universe.Contract import CommissionMode, SwapMode
 from Library.Universe.Security import SecurityAPI
 from Library.Utility.Datetime import Weekday, timestamp_to_datetime
-from Library.Utility.Statistic import Timer, timer
+from Library.Utility.Statistic import timer
 
 if TYPE_CHECKING:
     from Library.Parameter import Parameter
@@ -98,9 +98,6 @@ class RealtimeAPI(SystemAPI):
         self._stop_timestamp_: Union[datetime, None] = None
 
         self._metrics_: dict = {"Ticks": 0, "Bars": 0, "Accounts": 0, "Orders": 0, "Positions": 0, "Trades": 0, "Actions": 0}
-        self._warmup_timer_: Timer = Timer()
-        self._execution_timer_: Timer = Timer()
-        self._shutdown_timer_: Timer = Timer()
 
     def _connect_(self) -> None:
         stack = contextlib.ExitStack()
@@ -121,7 +118,6 @@ class RealtimeAPI(SystemAPI):
         if self._portfolio_.Active:
             self._session_ = SessionAPI(UID=self._iid_, Type=self._system_, Strategy=self._strategy_.__name__, Security=self._security_, StartTimestamp=datetime.now(), db=self._db_)
             self._session_.save()
-        self._warmup_timer_.start()
         super()._connect_()
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
@@ -129,9 +125,6 @@ class RealtimeAPI(SystemAPI):
         return super().__exit__(exc_type, exc_value, exc_traceback)
 
     def _disconnect_(self) -> None:
-        if self._execution_timer_._start_ is not None and self._execution_timer_._stop_ is None:
-            self._execution_timer_.stop()
-        self._shutdown_timer_.start()
         if self._portfolio_.Active and self._session_ is not None:
             self._session_.StopTimestamp = datetime.now()
             if not self._portfolio_.Empty: self._portfolio_.flush()
@@ -140,21 +133,14 @@ class RealtimeAPI(SystemAPI):
             self._session_.save()
         super()._disconnect_()
         if self._stack_: self._stack_.__exit__(*self._exc_info_)
-        self._shutdown_timer_.stop()
-        self._log_metrics_()
         self._log_.debug(lambda: f"Disconnect Operation: Closed (iid {self._iid_})")
 
-    def _log_metrics_(self) -> None:
+    def _summary_(self) -> None:
         m = self._metrics_
-        warmup = self._warmup_timer_.result() if self._warmup_timer_._stop_ else "N/A"
-        execution = self._execution_timer_.result() if self._execution_timer_._stop_ else "N/A"
-        shutdown = self._shutdown_timer_.result() if self._shutdown_timer_._stop_ else "N/A"
         exec_delta = self._execution_timer_.delta() if self._execution_timer_._stop_ else 0.0
         bars_per_sec = (m["Bars"] / exec_delta) if exec_delta > 0 else 0.0
         ticks_per_sec = (m["Ticks"] / exec_delta) if exec_delta > 0 else 0.0
-        self._log_.info(lambda: f"Phase Warmup: {warmup}")
-        self._log_.info(lambda: f"Phase Execution: {execution} · {ticks_per_sec:.1f} Ticks/s · {bars_per_sec:.1f} Bars/s")
-        self._log_.info(lambda: f"Phase Shutdown: {shutdown}")
+        self._log_.info(lambda: f"Phase Execution: {ticks_per_sec:.1f} Ticks/s · {bars_per_sec:.1f} Bars/s")
         self._log_.info(lambda: "Summary: " + " · ".join(f"{k} {v}" for k, v in m.items()))
 
     def send_action(self, action: ActionAPI) -> None:
@@ -395,13 +381,10 @@ class RealtimeAPI(SystemAPI):
             updates = len(self._sync_buffer_)
             first = self._sync_buffer_[0].Timestamp.DateTime if self._sync_buffer_ else None
             last = self._sync_buffer_[-1].Timestamp.DateTime if self._sync_buffer_ else None
-            if self._warmup_timer_._start_ is not None:
-                self._warmup_timer_.stop()
-                self._log_.info(lambda: f"Phase Warmup: Completed · {self._warmup_timer_.result()} · {self._metrics_['Ticks']} Ticks · {self._metrics_['Bars']} Bars")
+            self._log_.info(lambda: f"Phase Warmup: Completed · {self._metrics_['Ticks']} Ticks · {self._metrics_['Bars']} Bars")
             self._log_.debug(lambda: f"Phase Warmup: Window {self._warmup_window_} · Database {self._warmup_database_} Bars · Updates {updates} Bars")
             self._log_.debug(lambda: f"Phase Warmup: First Bar {first}")
             self._log_.debug(lambda: f"Phase Warmup: Last Bar {last}")
-            self._execution_timer_.start()
             self._initial_account_ = update.Portfolio.Account
             if self._sync_buffer_:
                 stream = pl.DataFrame([b.dict(flatten=True) for b in self._sync_buffer_], strict=False)
@@ -411,6 +394,7 @@ class RealtimeAPI(SystemAPI):
                     if database.height: combined = pl.concat([database, stream], how="diagonal_relaxed").select(stream.columns)
                 update.Market.init_data(combined)
             self._sync_buffer_.clear()
+            self._transition_(self._initialization_timer_, "Initialization", self._execution_timer_)
 
         def update(update: BarUpdateAPI):
             if self._start_timestamp_ is None: self._start_timestamp_ = update.Bar.Timestamp.DateTime
@@ -418,9 +402,7 @@ class RealtimeAPI(SystemAPI):
             update.Market.update_data(update.Bar)
 
         def report(update: CompleteUpdateAPI):
-            if self._execution_timer_._start_ is not None and self._execution_timer_._stop_ is None:
-                self._execution_timer_.stop()
-                self._log_.info(lambda: f"Phase Execution: Completed · {self._execution_timer_.result()}")
+            self._transition_(self._execution_timer_, "Execution", self._finalization_timer_)
             self._log_.debug(lambda: f"Phase Execution: First Bar {self._start_timestamp_}")
             self._log_.debug(lambda: f"Phase Execution: Last Bar {self._stop_timestamp_}")
             if self._portfolio_.Active and self.portfolio and self.portfolio.Security: self.portfolio.Security.save()
