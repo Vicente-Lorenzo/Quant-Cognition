@@ -813,7 +813,7 @@ def equity_metrics(initial_balance: float, deals: pl.DataFrame) -> dict:
         MEANEQUITYRUNUPPERC: (mean_ru / trough) * 100.0 if trough else 0.0
     }
 
-def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, account: AccountAPI, start: date, stop: date) -> pl.DataFrame:
+def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, account: Union[AccountAPI, None], start: date, stop: date) -> pl.DataFrame:
     initial_balance = (account.Balance if account is not None else 0.0) or 0.0
     safe_positions = _safe_df_(positions_df)
     safe_trades = _safe_df_(trades_df)

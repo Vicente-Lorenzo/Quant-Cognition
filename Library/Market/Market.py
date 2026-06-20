@@ -57,15 +57,24 @@ class MarketAPI(DatapointAPI):
             data.save(by=by)
 
     @staticmethod
-    def pull_ticks(db: DatabaseAPI, security: int, start: datetime, stop: datetime) -> pl.DataFrame:
+    def pull_ticks(db: DatabaseAPI, security: int, start: datetime, stop: datetime, columns: Union[list[str], None] = None) -> pl.DataFrame:
         from Library.Market.Tick import TickAPI
         lo, hi = TickAPI.encode(security, start), TickAPI.encode(security, stop)
+        projection = ", ".join(f'"{column}"' for column in columns) if columns else "*"
         sql = f'''
-        SELECT * FROM "{TickAPI.Schema}"."{TickAPI.Table}"
+        SELECT {projection} FROM "{TickAPI.Schema}"."{TickAPI.Table}"
         WHERE "{TickAPI.ID.UID}" BETWEEN :lo: AND :hi:
         ORDER BY "{TickAPI.ID.UID}"
         '''
         return db.executeone(QueryAPI(sql), lo=lo, hi=hi, schema=TickAPI.Schema, table=TickAPI.Table).fetchall(legacy=False)
+
+    @staticmethod
+    def count_ticks(db: DatabaseAPI, security: int, start: datetime, stop: datetime) -> int:
+        from Library.Market.Tick import TickAPI
+        lo, hi = TickAPI.encode(security, start), TickAPI.encode(security, stop)
+        sql = f'SELECT COUNT(*) AS "Count" FROM "{TickAPI.Schema}"."{TickAPI.Table}" WHERE "{TickAPI.ID.UID}" BETWEEN :lo: AND :hi:'
+        df = db.executeone(QueryAPI(sql), lo=lo, hi=hi, schema=TickAPI.Schema, table=TickAPI.Table).fetchall(legacy=False)
+        return int(df["Count"][0]) if df.height else 0
 
     @staticmethod
     def push_ticks(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
