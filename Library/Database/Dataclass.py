@@ -133,56 +133,57 @@ class DataclassAPI:
         return tuple(fields), tuple(properties)
 
     def data(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, flatten=False):
-        def _yield_(name):
+        result = []
+        def _emit_(name):
             val = self._parse_(name, flatten=flatten)
             if flatten and isinstance(val, DataclassAPI):
-                for sub_k, sub_v in val.data(include_fields, include_initvar_fields, include_hidden_fields, include_override_fields, include_properties, flatten):
-                    yield f"{name}.{sub_k}", sub_v
+                result.extend((f"{name}.{sub_k}", sub_v) for sub_k, sub_v in val.data(include_fields, include_initvar_fields, include_hidden_fields, include_override_fields, include_properties, flatten))
             else:
-                yield name, val
+                result.append((name, val))
         fields, properties = self._plan_(type(self))
         if include_fields:
             for f_name, is_initvar, repr_ in fields:
                 if is_initvar:
-                    if include_initvar_fields: yield from _yield_(f_name)
+                    if include_initvar_fields: _emit_(f_name)
                 elif include_hidden_fields or repr_:
-                    yield from _yield_(f_name)
+                    _emit_(f_name)
         if include_override_fields or include_properties:
             for attr_name, is_override in properties:
                 if is_override:
-                    if include_override_fields: yield from _yield_(attr_name)
+                    if include_override_fields: _emit_(attr_name)
                 elif include_properties:
-                    yield from _yield_(attr_name)
+                    _emit_(attr_name)
+        return result
 
     def tuple(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, flatten=False):
-        return tuple([v for _, v in self.data(
+        return tuple(v for _, v in self.data(
             include_fields=include_fields,
             include_initvar_fields=include_initvar_fields,
             include_hidden_fields=include_hidden_fields,
             include_override_fields=include_override_fields,
             include_properties=include_properties,
             flatten=flatten
-        )])
+        ))
 
     def list(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, flatten=False):
-        return list([v for _, v in self.data(
+        return [v for _, v in self.data(
             include_fields=include_fields,
             include_initvar_fields=include_initvar_fields,
             include_hidden_fields=include_hidden_fields,
             include_override_fields=include_override_fields,
             include_properties=include_properties,
             flatten=flatten
-        )])
+        )]
 
     def dict(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, flatten=False):
-        return dict({k: v for k, v in self.data(
+        return dict(self.data(
             include_fields=include_fields,
             include_initvar_fields=include_initvar_fields,
             include_hidden_fields=include_hidden_fields,
             include_override_fields=include_override_fields,
             include_properties=include_properties,
             flatten=flatten
-        )})
+        ))
 
     def json(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, flatten=False, **extras) -> str:
         d = self.dict(include_fields=include_fields, include_initvar_fields=include_initvar_fields, include_hidden_fields=include_hidden_fields, include_override_fields=include_override_fields, include_properties=include_properties, flatten=flatten)

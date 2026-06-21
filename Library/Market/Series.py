@@ -17,6 +17,7 @@ class SeriesAPI:
         self._mode_ = mode
         self._offset_: int = 1
         self._data_: Union[pl.DataFrame, None] = None
+        self._columns_: Union[list[str], None] = None
         if self._multiple_:
             p = f"{prefix}." if prefix else ""
             self.Ask = SeriesAPI(f"{p}Ask", False, self, mode)
@@ -47,10 +48,14 @@ class SeriesAPI:
         for child in self._children_: child.update_offset(offset)
 
     def _column_(self) -> list[str]:
-        if not self._multiple_: return [self._prefix_]
-        cols = []
-        for c in self._children_: cols.extend(c._column_())
-        return cols
+        if self._columns_ is None:
+            if not self._multiple_:
+                self._columns_ = [self._prefix_]
+            else:
+                cols = []
+                for c in self._children_: cols.extend(c._column_())
+                self._columns_ = cols
+        return self._columns_
 
     def dataframe(self) -> Union[pl.DataFrame, pl.Series]:
         if self._data_ is None: return pl.DataFrame() if self._multiple_ else pl.Series(self._prefix_, dtype=pl.Float64)
