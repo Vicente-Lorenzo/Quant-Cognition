@@ -99,10 +99,12 @@ def _universe_(system: SystemType, batch: Union[int, Missing], interval: Union[f
     maxsize = maxsize if not isinstance(maxsize, Missing) else auto_maxsize
     return batch, interval, workers, maxsize
 
-def _market_(system: SystemType, batch: Union[int, Missing], interval: Union[float, Missing], workers: Union[int, Missing], maxsize: Union[int, Missing]) -> tuple[int, float, int, int]:
+def _market_(system: SystemType, strategy: StrategyType, batch: Union[int, Missing], interval: Union[float, Missing], workers: Union[int, Missing], maxsize: Union[int, Missing]) -> tuple[int, float, int, int]:
+    download = strategy == StrategyType.Download
     match system:
         case SystemType.Live: auto_batch, auto_interval, auto_workers, auto_maxsize = 1000, 60.0, 1, 64
-        case SystemType.Simulation: auto_batch, auto_interval, auto_workers, auto_maxsize = 50000, 0.0, 8, 64
+        case SystemType.Simulation: auto_batch, auto_interval, auto_workers, auto_maxsize = (-1, 0.0, 4, 64) if download else (50000, 0.0, 8, 64)
+        case SystemType.Testing: auto_batch, auto_interval, auto_workers, auto_maxsize = (-1, 0.0, 4, 64) if download else (0, 0.0, 0, 0)
         case _: auto_batch, auto_interval, auto_workers, auto_maxsize = 0, 0.0, 0, 0
     batch = batch if not isinstance(batch, Missing) else auto_batch
     interval = interval if not isinstance(interval, Missing) else auto_interval
@@ -128,52 +130,22 @@ def _strategy_(args: Namespace) -> Type[StrategyAPI]:
         case StrategyType.DDPG: return DDPGStrategyAPI
 
 def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI, timeframe: TimeframeAPI, parameters: Parameter) -> Union[SystemAPI, None]:
-    match SystemType(args.system):
-        case SystemType.Live:
+    system = SystemType(args.system)
+    strategy_type = StrategyType(args.strategy)
+    match system:
+        case SystemType.Live | SystemType.Simulation | SystemType.Testing:
             params: Parameter = parameters.Realtime[args.strategy]
             return RealtimeAPI(
-                system=SystemType.Live,
+                system=system,
                 strategy=strategy,
                 security=security,
                 timeframe=timeframe,
                 parameters=params,
                 iid=args.iid,
                 database=args.database,
-                universe=_universe_(SystemType(args.system), args.universe_batch, args.universe_interval, args.universe_workers, args.universe_maxsize),
-                market=_market_(SystemType(args.system), args.market_batch, args.market_interval, args.market_workers, args.market_maxsize),
-                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval, args.portfolio_workers, args.portfolio_maxsize),
-                report=args.report,
-                export=args.export
-            )
-        case SystemType.Simulation:
-            params: Parameter = parameters.Realtime[args.strategy]
-            return RealtimeAPI(
-                system=SystemType.Simulation,
-                strategy=strategy,
-                security=security,
-                timeframe=timeframe,
-                parameters=params,
-                iid=args.iid,
-                database=args.database,
-                universe=_universe_(SystemType(args.system), args.universe_batch, args.universe_interval, args.universe_workers, args.universe_maxsize),
-                market=_market_(SystemType(args.system), args.market_batch, args.market_interval, args.market_workers, args.market_maxsize),
-                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval, args.portfolio_workers, args.portfolio_maxsize),
-                report=args.report,
-                export=args.export
-            )
-        case SystemType.Testing:
-            params: Parameter = parameters.Realtime[args.strategy]
-            return RealtimeAPI(
-                system=SystemType.Testing,
-                strategy=strategy,
-                security=security,
-                timeframe=timeframe,
-                parameters=params,
-                iid=args.iid,
-                database=args.database,
-                universe=_universe_(SystemType(args.system), args.universe_batch, args.universe_interval, args.universe_workers, args.universe_maxsize),
-                market=_market_(SystemType(args.system), args.market_batch, args.market_interval, args.market_workers, args.market_maxsize),
-                portfolio=_portfolio_(SystemType(args.system), args.portfolio_batch, args.portfolio_interval, args.portfolio_workers, args.portfolio_maxsize),
+                universe=_universe_(system, args.universe_batch, args.universe_interval, args.universe_workers, args.universe_maxsize),
+                market=_market_(system, strategy_type, args.market_batch, args.market_interval, args.market_workers, args.market_maxsize),
+                portfolio=_portfolio_(system, args.portfolio_batch, args.portfolio_interval, args.portfolio_workers, args.portfolio_maxsize),
                 report=args.report,
                 export=args.export
             )
@@ -257,7 +229,7 @@ def main() -> None:
             security = SecurityAPI(Provider=provider, Ticker=ticker, db=db, autoload=True)
             category = security.Category
             if category is None: raise ValueError(f"Security {provider_uid} {ticker_uid}: Failed · Due to missing Category")
-            parameters = parameterise[provider_uid][category.UID][ticker_uid][args.timeframe]
+            parameters = parameterise[provider.UID][category.UID][ticker.UID][args.timeframe]
             strategy = _strategy_(args)
             system = _system_(args, strategy, security, timeframe, parameters)
             if system is None: return
