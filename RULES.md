@@ -23,6 +23,7 @@ For all shell executions, use the following patterns:
     - Solutions should be as simple and optimized as possible.
     - Avoid unnecessary abstraction or complexity.
     - Prefer concise, readable, and performant code.
+3. **Measure, Don't Guess:** For performance work, profile before optimizing (`cProfile` sorted by cumulative + tottime, targeted micro-benchmarks). Validate bottleneck hypotheses with data, not intuition.
 
 ## RESPONSE STYLE
 Keep answers concise and scannable: lead with the conclusion, prefer **bullet points and tables** over prose, and omit filler. Reserve long-form paragraphs for when they are explicitly requested.

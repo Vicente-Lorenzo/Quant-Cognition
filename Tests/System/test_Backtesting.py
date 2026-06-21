@@ -150,18 +150,59 @@ def test_eu_summer_dst_boundaries():
     assert _eu_summer_(datetime(2024, 3, 31, 1)) is True
     assert _eu_summer_(datetime(2024, 10, 27, 1)) is False
 
-def test_conversions_uses_stored_fields():
+def test_conversions_uses_stored_bid_fields():
     engine = _engine_()
     tick = _ConvTick_(1.06929, 1.06927, abc=1.0, bbc=1.0, aqc=0.93522, bqc=0.93520)
     base, quote = engine._conversions_(tick)
     assert base == pytest.approx(1.0)
-    assert quote == pytest.approx((0.93522 + 0.93520) / 2.0)
+    assert quote == pytest.approx(0.93520)
 
-def test_conversions_fallback_when_missing():
+def test_conversions_fallback_is_bid_side():
     engine = _engine_()
-    base, quote = engine._conversions_(_ConvTick_(1.10, 1.10))
+    base, quote = engine._conversions_(_ConvTick_(1.10005, 1.10000))
     assert base == pytest.approx(1.0)
-    assert quote == pytest.approx(1.0 / 1.10)
+    assert quote == pytest.approx(1.0 / 1.10005)
+
+def _conversion_engine_():
+    engine = _engine_()
+    engine._needs_conversion_ = True
+    engine._tick_ts_ = np.array([100, 200, 300], dtype="int64")
+    engine._tick_conversions_array_ = (np.array([0.80, 0.81, 0.82]), np.array([0.79, 0.80, 0.81]),
+                                       np.array([0.90, 0.91, 0.92]), np.array([0.89, 0.90, 0.91]))
+    return engine
+
+def test_conversion_at_none_without_arrays():
+    engine = _engine_()
+    engine._tick_ts_ = np.array([100, 200], dtype="int64")
+    engine._tick_conversions_array_ = None
+    assert engine._conversion_at_(150) == (None, None, None, None)
+
+def test_conversion_at_indexes_latest_at_or_before():
+    engine = _conversion_engine_()
+    assert engine._conversion_at_(200) == pytest.approx((0.81, 0.80, 0.91, 0.90))
+    assert engine._conversion_at_(250) == pytest.approx((0.81, 0.80, 0.91, 0.90))
+    assert engine._conversion_at_(300) == pytest.approx((0.82, 0.81, 0.92, 0.91))
+
+def test_conversion_at_before_first_tick_is_none():
+    engine = _conversion_engine_()
+    assert engine._conversion_at_(50) == (None, None, None, None)
+
+def test_conversion_at_nan_falls_back_to_none():
+    engine = _conversion_engine_()
+    engine._tick_conversions_array_ = (np.array([np.nan, 0.81, 0.82]), np.array([0.79, 0.80, 0.81]),
+                                       np.array([np.nan, 0.91, 0.92]), np.array([0.89, 0.90, 0.91]))
+    assert engine._conversion_at_(100) == (None, 0.79, None, 0.89)
+
+def test_tick_conversions_account_is_base_uses_raw():
+    engine = _engine_()
+    engine._needs_conversion_ = False
+    assert engine._tick_conversions_(0, 1.10005, 1.10000) == pytest.approx((1.0, 1.0, 1.0 / 1.10000, 1.0 / 1.10005))
+
+def test_tick_conversions_account_is_quote_uses_raw():
+    engine = _engine_()
+    engine._account_asset_, engine._base_asset_, engine._quote_asset_ = "USD", "GBP", "USD"
+    engine._needs_conversion_ = False
+    assert engine._tick_conversions_(0, 1.30010, 1.30000) == pytest.approx((1.30010, 1.30000, 1.0, 1.0))
 
 def test_cents_truncates_toward_zero():
     assert BacktestingAPI._cents_(0.315) == pytest.approx(0.31)
@@ -259,7 +300,7 @@ def test_preload_cache_reuses_across_instances(monkeypatch):
     BacktestingAPI._PRELOAD_CACHE_.clear()
     monkeypatch.setattr(BacktestingAPI, "_DISK_CACHE_", False)
     calls = []
-    monkeypatch.setattr(BacktestingAPI, "_load_frames_", lambda self: (calls.append(1), (_FakeArr_(), _FakeArr_(), _FakeArr_(), {}, [], None))[1])
+    monkeypatch.setattr(BacktestingAPI, "_load_frames_", lambda self: (calls.append(1), (_FakeArr_(), _FakeArr_(), _FakeArr_(), None, {}, [], None))[1])
     first, second = _preload_stub_(), _preload_stub_()
     first._preload_()
     second._preload_()

@@ -65,6 +65,20 @@ def test_empty_false_when_interval_elapsed():
     buf._last_flush_ = datetime.now() - timedelta(seconds=1)
     buf.add(_RecA_(1))
     assert buf.Empty is False
+def test_full_mode_is_active():
+    buf, _ = _make_buffer_(batch=-1, interval=0.0)
+    assert buf.Active is True
+def test_full_mode_never_empty_false_before_shutdown():
+    buf, _ = _make_buffer_(batch=-1, interval=0.0)
+    for v in range(50): buf.add(_RecA_(v))
+    assert len(buf._buffer_[_RecA_]) == 50
+    assert buf.Empty is True
+def test_full_mode_flush_moves_records_to_queue():
+    buf, _ = _make_buffer_(batch=-1, interval=0.0)
+    for v in range(50): buf.add(_RecA_(v))
+    buf.flush()
+    assert buf._buffer_[_RecA_] == []
+    assert not buf._queue_[_RecA_].empty()
 def test_add_dispatches_by_type():
     buf, _ = _make_buffer_(batch=10, interval=0.0)
     a, b = _RecA_(1), _RecB_(2)
