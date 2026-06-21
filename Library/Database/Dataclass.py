@@ -112,8 +112,27 @@ class DataclassAPI:
                 setattr(self, k, v)
         return self
 
+    @staticmethod
+    @functools.cache
+    def _plan_(cls):
+        classvar = getattr(dataclasses, "_FIELD_CLASSVAR", None)
+        initvar = getattr(dataclasses, "_FIELD_INITVAR", None)
+        fields = []
+        for f_name, f in cls.__dict__.get("__dataclass_fields__", {}).items():
+            kind = getattr(f, "_field_type", None)
+            if kind == classvar:
+                continue
+            fields.append((f_name, kind == initvar, f.repr))
+        properties = []
+        for base in reversed(cls.mro()):
+            if base is object:
+                continue
+            for attr_name, attr in base.__dict__.items():
+                if isinstance(attr, property):
+                    properties.append((attr_name, getattr(attr.fget, "_overridefield_", False)))
+        return tuple(fields), tuple(properties)
+
     def data(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, flatten=False):
-        attrs = self.__class__.__dict__
         def _yield_(name):
             val = self._parse_(name, flatten=flatten)
             if flatten and isinstance(val, DataclassAPI):
@@ -121,25 +140,19 @@ class DataclassAPI:
                     yield f"{name}.{sub_k}", sub_v
             else:
                 yield name, val
+        fields, properties = self._plan_(type(self))
         if include_fields:
-            for f_name, f in attrs.get("__dataclass_fields__", {}).items():
-                if getattr(f, "_field_type", None) == getattr(dataclasses, "_FIELD_CLASSVAR", None):
-                    continue
-                if include_initvar_fields and getattr(f, "_field_type", None) == getattr(dataclasses, "_FIELD_INITVAR", None):
-                    yield from _yield_(f_name)
-                elif getattr(f, "_field_type", None) != getattr(dataclasses, "_FIELD_INITVAR", None) and (include_hidden_fields or f.repr):
+            for f_name, is_initvar, repr_ in fields:
+                if is_initvar:
+                    if include_initvar_fields: yield from _yield_(f_name)
+                elif include_hidden_fields or repr_:
                     yield from _yield_(f_name)
         if include_override_fields or include_properties:
-            for cls in reversed(type(self).mro()):
-                if cls is object:
-                    continue
-                for attr_name, attr in cls.__dict__.items():
-                    if isinstance(attr, property):
-                        is_field = getattr(attr.fget, "_overridefield_", False)
-                        if include_override_fields and is_field:
-                            yield from _yield_(attr_name)
-                        if include_properties and not is_field:
-                            yield from _yield_(attr_name)
+            for attr_name, is_override in properties:
+                if is_override:
+                    if include_override_fields: yield from _yield_(attr_name)
+                elif include_properties:
+                    yield from _yield_(attr_name)
 
     def tuple(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, flatten=False):
         return tuple([v for _, v in self.data(

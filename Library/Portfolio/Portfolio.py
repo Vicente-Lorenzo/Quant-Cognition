@@ -198,8 +198,8 @@ class PortfolioAPI(DatapointAPI):
     def _conversion_(ask: Union[PriceAPI, None], bid: Union[PriceAPI, None]) -> float:
         a = ask.Price if ask else None
         b = bid.Price if bid else None
-        if a is not None and b is not None: return (a + b) / 2.0
-        return a if a is not None else (b if b is not None else 1.0)
+        if b is not None: return b
+        return a if a is not None else 1.0
 
     def update_data(self, data: Union[TickAPI, BarAPI]) -> None:
         from Library.Portfolio.Statistic import calculate_pnl_difference, calculate_gross_pnl, calculate_net_pnl

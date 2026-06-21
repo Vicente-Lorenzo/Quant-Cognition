@@ -36,7 +36,8 @@ class BufferAPI(threading.Thread):
         self._by_: str = by
         self._bulk_: bool = bulk
         self._workers_: int = max(1, workers)
-        self._active_: bool = workers > 0 and (batch > 0 or interval > 0)
+        self._full_: bool = batch < 0
+        self._active_: bool = workers > 0 and (self._full_ or batch > 0 or interval > 0)
 
         self._buffer_: dict = {t: [] for t in self._types_}
         self._queue_: dict = {t: queue.Queue(maxsize=maxsize) for t in self._types_}
@@ -63,6 +64,7 @@ class BufferAPI(threading.Thread):
         if not self._active_: return True
         total = sum(len(b) for b in self._buffer_.values())
         if total == 0: return True
+        if self._full_: return True
         if 0 < self._batch_ <= total: return False
         if self._interval_ > 0 and (datetime.now() - self._last_flush_) >= timedelta(seconds=self._interval_): return False
         return True
