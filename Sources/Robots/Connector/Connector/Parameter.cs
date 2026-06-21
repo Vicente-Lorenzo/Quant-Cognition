@@ -17,7 +17,9 @@ public enum DatabaseType
 public enum BufferingMode
 {
     Auto = 0,
-    Manual = 1,
+    Full = 1,
+    Manual = 2,
+    Off = 3,
 }
 
 public enum AccuracyMode
