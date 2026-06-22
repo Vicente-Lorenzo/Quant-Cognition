@@ -175,6 +175,19 @@ namespace Connector
         ModifySellPositionTakeProfit = 51,
         CloseBuyPosition = 52,
         CloseSellPosition = 53,
-        Complete = 54,
+        Subscribe = 54,
+        Unsubscribe = 55,
+        Complete = 56,
+    }
+
+    [System.Flags]
+    public enum Stream
+    {
+        Tick = 1,
+        BarOpened = 2,
+        BarClosed = 4,
+        Order = 8,
+        Position = 16,
+        Trade = 32,
     }
 }

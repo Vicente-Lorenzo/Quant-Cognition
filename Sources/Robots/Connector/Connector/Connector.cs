@@ -18,76 +18,79 @@ public class Connector : Robot
     [Parameter("Strategy", Group = "Strategy Management", DefaultValue = StrategyType.Download)]
     public StrategyType Strategy { get; set; }
 
-    [Parameter("Environment", Group = "System Management", DefaultValue = EnvironmentType.Quant)]
+    [Parameter("Environment", Group = "Connection Management", DefaultValue = EnvironmentType.Quant)]
     public EnvironmentType Environment { get; set; }
 
-    [Parameter("Database", Group = "System Management", DefaultValue = DatabaseType.Auto)]
+    [Parameter("Database", Group = "Connection Management", DefaultValue = DatabaseType.Auto)]
     public DatabaseType Database { get; set; }
 
-    [Parameter("Verification", Group = "System Management", DefaultValue = 1, MinValue = 1)]
-    public int Verification { get; set; }
-
-    [Parameter("Accuracy", Group = "System Management", DefaultValue = AccuracyMode.Auto)]
+    [Parameter("Accuracy", Group = "Accuracy Management", DefaultValue = AccuracyMode.Auto)]
     public AccuracyMode Accuracy { get; set; }
 
-    [Parameter("Tick Stream", Group = "System Management", DefaultValue = TickStreamMode.Auto)]
+    [Parameter("Verification", Group = "Accuracy Management", DefaultValue = VerificationMode.Auto)]
+    public VerificationMode Verification { get; set; }
+
+    [Parameter("Verification Count", Group = "Accuracy Management", DefaultValue = 1, MinValue = 1)]
+    public int VerificationCount { get; set; }
+
+    [Parameter("Tick Stream", Group = "Streaming Management", DefaultValue = TickStreamMode.Auto)]
     public TickStreamMode TickStream { get; set; }
 
-    [Parameter("Bar Stream", Group = "System Management", DefaultValue = BarStreamMode.Auto)]
+    [Parameter("Bar Stream", Group = "Streaming Management", DefaultValue = BarStreamMode.Auto)]
     public BarStreamMode BarStream { get; set; }
 
-    [Parameter("Order Stream", Group = "System Management", DefaultValue = OrderStreamMode.Auto)]
+    [Parameter("Order Stream", Group = "Streaming Management", DefaultValue = OrderStreamMode.Auto)]
     public OrderStreamMode OrderStream { get; set; }
 
-    [Parameter("Position Stream", Group = "System Management", DefaultValue = PositionStreamMode.Auto)]
+    [Parameter("Position Stream", Group = "Streaming Management", DefaultValue = PositionStreamMode.Auto)]
     public PositionStreamMode PositionStream { get; set; }
 
-    [Parameter("Trade Stream", Group = "System Management", DefaultValue = TradeStreamMode.Auto)]
+    [Parameter("Trade Stream", Group = "Streaming Management", DefaultValue = TradeStreamMode.Auto)]
     public TradeStreamMode TradeStream { get; set; }
 
-    [Parameter("Universe Buffering", Group = "Buffering Management", DefaultValue = BufferingMode.Auto)]
+    [Parameter("Universe Buffering", Group = "Universe Management", DefaultValue = BufferingMode.Auto)]
     public BufferingMode UniverseBuffering { get; set; }
 
-    [Parameter("Universe Batch", Group = "Buffering Management", DefaultValue = 1, MinValue = 0)]
+    [Parameter("Universe Batch", Group = "Universe Management", DefaultValue = 1, MinValue = 0)]
     public int UniverseBatch { get; set; }
 
-    [Parameter("Universe Interval", Group = "Buffering Management", DefaultValue = 0.0, MinValue = 0.0)]
+    [Parameter("Universe Interval", Group = "Universe Management", DefaultValue = 0.0, MinValue = 0.0)]
     public double UniverseInterval { get; set; }
 
-    [Parameter("Universe Workers", Group = "Buffering Management", DefaultValue = 1, MinValue = 1)]
+    [Parameter("Universe Workers", Group = "Universe Management", DefaultValue = 1, MinValue = 1)]
     public int UniverseWorkers { get; set; }
 
-    [Parameter("Universe Maxsize", Group = "Buffering Management", DefaultValue = 64, MinValue = 0)]
+    [Parameter("Universe Maxsize", Group = "Universe Management", DefaultValue = 64, MinValue = 0)]
     public int UniverseMaxsize { get; set; }
 
-    [Parameter("Market Buffering", Group = "Buffering Management", DefaultValue = BufferingMode.Auto)]
+    [Parameter("Market Buffering", Group = "Market Management", DefaultValue = BufferingMode.Auto)]
     public BufferingMode MarketBuffering { get; set; }
 
-    [Parameter("Market Batch", Group = "Buffering Management", DefaultValue = 100, MinValue = 0)]
+    [Parameter("Market Batch", Group = "Market Management", DefaultValue = 100, MinValue = 0)]
     public int MarketBatch { get; set; }
 
-    [Parameter("Market Interval", Group = "Buffering Management", DefaultValue = 60.0, MinValue = 0.0)]
+    [Parameter("Market Interval", Group = "Market Management", DefaultValue = 60.0, MinValue = 0.0)]
     public double MarketInterval { get; set; }
 
-    [Parameter("Market Workers", Group = "Buffering Management", DefaultValue = 8, MinValue = 1)]
+    [Parameter("Market Workers", Group = "Market Management", DefaultValue = 8, MinValue = 1)]
     public int MarketWorkers { get; set; }
 
-    [Parameter("Market Maxsize", Group = "Buffering Management", DefaultValue = 64, MinValue = 0)]
+    [Parameter("Market Maxsize", Group = "Market Management", DefaultValue = 64, MinValue = 0)]
     public int MarketMaxsize { get; set; }
 
-    [Parameter("Portfolio Buffering", Group = "Buffering Management", DefaultValue = BufferingMode.Auto)]
+    [Parameter("Portfolio Buffering", Group = "Portfolio Management", DefaultValue = BufferingMode.Auto)]
     public BufferingMode PortfolioBuffering { get; set; }
 
-    [Parameter("Portfolio Batch", Group = "Buffering Management", DefaultValue = 100, MinValue = 0)]
+    [Parameter("Portfolio Batch", Group = "Portfolio Management", DefaultValue = 100, MinValue = 0)]
     public int PortfolioBatch { get; set; }
 
-    [Parameter("Portfolio Interval", Group = "Buffering Management", DefaultValue = 60.0, MinValue = 0.0)]
+    [Parameter("Portfolio Interval", Group = "Portfolio Management", DefaultValue = 60.0, MinValue = 0.0)]
     public double PortfolioInterval { get; set; }
 
-    [Parameter("Portfolio Workers", Group = "Buffering Management", DefaultValue = 1, MinValue = 1)]
+    [Parameter("Portfolio Workers", Group = "Portfolio Management", DefaultValue = 1, MinValue = 1)]
     public int PortfolioWorkers { get; set; }
 
-    [Parameter("Portfolio Maxsize", Group = "Buffering Management", DefaultValue = 64, MinValue = 0)]
+    [Parameter("Portfolio Maxsize", Group = "Portfolio Management", DefaultValue = 64, MinValue = 0)]
     public int PortfolioMaxsize { get; set; }
 
     [Parameter("Report", Group = "Reporting Management", DefaultValue = true)]
@@ -103,7 +106,13 @@ public class Connector : Robot
 
     protected override void OnStart()
     {
-        _robot_api_ = new RobotAPI(this, Console, File, Strategy, Environment, Database, Verification, Accuracy,
+        int verification = Verification switch
+        {
+            VerificationMode.Off => 0,
+            VerificationMode.Manual => VerificationCount,
+            _ => 1,
+        };
+        _robot_api_ = new RobotAPI(this, Console, File, Strategy, Environment, Database, verification, Accuracy,
             TickStream, BarStream, OrderStream, PositionStream, TradeStream,
             UniverseBuffering, UniverseBatch, UniverseInterval, UniverseWorkers, UniverseMaxsize,
             MarketBuffering, MarketBatch, MarketInterval, MarketWorkers, MarketMaxsize,

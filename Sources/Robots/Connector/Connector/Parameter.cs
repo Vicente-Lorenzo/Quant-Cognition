@@ -29,6 +29,13 @@ public enum AccuracyMode
     Bar = 2,
 }
 
+public enum VerificationMode
+{
+    Auto = 1,
+    Manual = 2,
+    Off = 3,
+}
+
 public enum TickStreamMode
 {
     Auto = 0,
