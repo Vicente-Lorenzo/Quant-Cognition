@@ -6,7 +6,7 @@ from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Protocol.Update import AccountUpdateAPI, BarUpdateAPI, SecurityUpdateAPI, UpdateID
 from Library.Strategy.Rule.Download import DownloadStrategyAPI
 from Library.Strategy.Rule.NNFX import NNFXStrategyAPI
-from Library.Strategy.Strategy import StrategyAPI, StrategyType
+from Library.Strategy.Strategy import StrategyAPI, StrategyType, Transform
 
 def test_strategy_type_enum():
     assert StrategyType.Download.value == 1
@@ -48,6 +48,7 @@ def test_security_update_sets_portfolio_security_in_initialization():
 def test_execution_transitions_initialization_to_execution():
     p = ParameterAPI()
     strat = DownloadStrategyAPI(p, p, p)
+    strat.Transform = Transform()
     eng = strat.strategy_management()
     portfolio = PortfolioAPI()
     from unittest.mock import MagicMock
@@ -74,6 +75,7 @@ def test_shutdown_transitions_to_termination_from_initialization():
 def test_bar_closed_propagates_to_indicators_and_portfolio():
     p = ParameterAPI()
     strat = DownloadStrategyAPI(p, p, p)
+    strat.Transform = Transform()
     eng = strat.strategy_management()
     portfolio_mock = type("P", (), {"Account": None, "Security": None, "update_data": lambda self, x: None})()
     from unittest.mock import MagicMock
@@ -87,6 +89,29 @@ def test_bar_closed_propagates_to_indicators_and_portfolio():
     fundamental.update_data.assert_called_with(market)
     sentimental.update_data.assert_called_with(market)
     portfolio_mock.update_data.assert_called_with("bar_obj")
+
+def test_download_strategy_skips_indicators_and_portfolio():
+    p = ParameterAPI()
+    strat = DownloadStrategyAPI(p, p, p)
+    eng = strat.strategy_management()
+    from unittest.mock import MagicMock
+    from Library.Protocol.Update import CompleteUpdateAPI
+    market, technical, fundamental, sentimental, portfolio = MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
+    eng.perform(UpdateID.Execution, CompleteUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio))
+    eng.perform(UpdateID.BarClosed, BarUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio, Bar="bar_obj"))
+    technical.update_data.assert_not_called()
+    portfolio.update_data.assert_not_called()
+
+def test_strategy_subscription_defaults_and_download():
+    from Library.Protocol.Action import Stream
+    assert StrategyAPI.Subscription == Stream.All
+    assert DownloadStrategyAPI.Subscription == Stream.BarClosed
+
+def test_subscribe_action_serializes_actionid_and_bitmask():
+    from Library.Protocol.Action import SubscribeActionAPI, ActionID, Stream
+    payload = SubscribeActionAPI(Streams=int(Stream.Tick | Stream.BarClosed)).serialize()
+    assert payload[0] == ActionID.Subscribe.value
+    assert payload[1] == int(Stream.Tick | Stream.BarClosed)
 
 def test_nnfx_strategy_imports():
     assert NNFXStrategyAPI is not None

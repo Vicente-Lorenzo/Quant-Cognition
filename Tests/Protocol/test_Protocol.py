@@ -13,7 +13,9 @@ def test_action_id_enum_values():
     assert ActionID.OpenBuyStopOrder.value == 6
     assert ActionID.OpenBuyLimitOrder.value == 18
     assert ActionID.OpenBuyStopLimitOrder.value == 30
-    assert ActionID.Complete.value == 54
+    assert ActionID.Subscribe.value == 54
+    assert ActionID.Unsubscribe.value == 55
+    assert ActionID.Complete.value == 56
 
 def test_update_id_enum_values():
     assert UpdateID.Init.value == 0
