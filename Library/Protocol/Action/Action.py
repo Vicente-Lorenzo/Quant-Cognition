@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import IntFlag
 from typing import Union, ClassVar
 from dataclasses import dataclass
 
@@ -63,7 +64,9 @@ class ActionID(EnumerationAPI):
     ModifySellPositionTakeProfit = 51
     CloseBuyPosition = 52
     CloseSellPosition = 53
-    Complete = 54
+    Subscribe = 54
+    Unsubscribe = 55
+    Complete = 56
 
 @dataclass(slots=True)
 class ActionAPI(DataclassAPI):
@@ -133,6 +136,31 @@ class BidBelowTargetActionAPI(ActionAPI):
     def serialize(self) -> bytes:
         return self._binary_.pack(self.ActionID.value, self.Bid)
 
+class Stream(IntFlag):
+    Tick = 1
+    BarOpened = 2
+    BarClosed = 4
+    Order = 8
+    Position = 16
+    Trade = 32
+    All = Tick | BarOpened | BarClosed | Order | Position | Trade
+
+@dataclass(slots=True)
+class SubscribeActionAPI(ActionAPI):
+    ActionID: ClassVar[ActionID] = ActionID.Subscribe
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'B')
+    Streams: int
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.Streams)
+
+@dataclass(slots=True)
+class UnsubscribeActionAPI(ActionAPI):
+    ActionID: ClassVar[ActionID] = ActionID.Unsubscribe
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'B')
+    Streams: int
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.Streams)
+
 __all__ = [
     "ActionID",
     "ActionAPI",
@@ -142,5 +170,8 @@ __all__ = [
     "AskAboveTargetActionAPI",
     "AskBelowTargetActionAPI",
     "BidAboveTargetActionAPI",
-    "BidBelowTargetActionAPI"
+    "BidBelowTargetActionAPI",
+    "Stream",
+    "SubscribeActionAPI",
+    "UnsubscribeActionAPI"
 ]

@@ -66,6 +66,7 @@ public class RobotAPI : IDisposable
     private readonly OrderStreamMode _order_stream_;
     private readonly PositionStreamMode _position_stream_;
     private readonly TradeStreamMode _trade_stream_;
+    private Stream _streams_ = Stream.Tick | Stream.BarOpened | Stream.BarClosed | Stream.Order | Stream.Position | Stream.Trade;
     private readonly BufferingMode _universe_buffering_;
     private readonly int _universe_batch_;
     private readonly double _universe_interval_;
@@ -114,6 +115,12 @@ public class RobotAPI : IDisposable
     private long _trades_sent_;
     private long _actions_received_;
 
+    private readonly System.Diagnostics.Stopwatch _prof_sw_ = System.Diagnostics.Stopwatch.StartNew();
+    private double _prof_lockstep_ms_;
+    private double _prof_gap_ms_;
+    private long _prof_bars_;
+    private double _prof_last_exit_ms_ = -1.0;
+
     public RobotAPI(Robot algo, VerboseLevel console, VerboseLevel file, StrategyType strategy,
                     EnvironmentType environment, DatabaseType database, int verification, AccuracyMode accuracy,
                     TickStreamMode tick_stream, BarStreamMode bar_stream, OrderStreamMode order_stream,
@@ -136,11 +143,11 @@ public class RobotAPI : IDisposable
         _database_ = ResolveDatabase(database);
         _verification_ = verification;
         _accuracy_ = accuracy;
-        _tick_stream_ = ResolveTickStream(strategy, tick_stream);
-        _bar_stream_ = bar_stream == BarStreamMode.Auto ? BarStreamMode.All : bar_stream;
-        _order_stream_ = order_stream == OrderStreamMode.Auto ? OrderStreamMode.All : order_stream;
-        _position_stream_ = position_stream == PositionStreamMode.Auto ? PositionStreamMode.All : position_stream;
-        _trade_stream_ = trade_stream == TradeStreamMode.Auto ? TradeStreamMode.All : trade_stream;
+        _tick_stream_ = tick_stream;
+        _bar_stream_ = bar_stream;
+        _order_stream_ = order_stream;
+        _position_stream_ = position_stream;
+        _trade_stream_ = trade_stream;
         _universe_buffering_ = universe_buffering;
         _universe_batch_ = universe_batch;
         _universe_interval_ = universe_interval;
@@ -212,6 +219,18 @@ public class RobotAPI : IDisposable
         _system_?.Dispose();
     }
 
+    private bool EmitTickAll => _tick_stream_ == TickStreamMode.Auto ? (_streams_ & Stream.Tick) != 0 : _tick_stream_ == TickStreamMode.All;
+
+    private bool EmitBarOpened => _bar_stream_ == BarStreamMode.Auto ? (_streams_ & Stream.BarOpened) != 0 : _bar_stream_ == BarStreamMode.All;
+
+    private bool EmitBarClosed => _bar_stream_ == BarStreamMode.Auto ? (_streams_ & Stream.BarClosed) != 0 : _bar_stream_ == BarStreamMode.All;
+
+    private bool EmitOrder => _order_stream_ == OrderStreamMode.Auto ? (_streams_ & Stream.Order) != 0 : _order_stream_ == OrderStreamMode.All;
+
+    private bool EmitPosition => _position_stream_ == PositionStreamMode.Auto ? (_streams_ & Stream.Position) != 0 : _position_stream_ == PositionStreamMode.All;
+
+    private bool EmitTrade => _trade_stream_ == TradeStreamMode.Auto ? (_streams_ & Stream.Trade) != 0 : _trade_stream_ == TradeStreamMode.All;
+
     private static SystemMode ResolveSystemMode(RunningMode mode)
     {
         switch (mode)
@@ -228,13 +247,6 @@ public class RobotAPI : IDisposable
     {
         if (chosen != DatabaseType.Auto) return chosen;
         return DatabaseType.Quant;
-    }
-
-    private static TickStreamMode ResolveTickStream(StrategyType strat, TickStreamMode chosen)
-    {
-        if (chosen != TickStreamMode.Auto) return chosen;
-        if (strat == StrategyType.Download) return TickStreamMode.Off;
-        return TickStreamMode.Target;
     }
 
     private static string BufferingArgs(string group, BufferingMode mode, int batch, double interval, int workers, int maxsize)
@@ -431,7 +443,7 @@ public class RobotAPI : IDisposable
         if (!_verified_) return;
         var order_data = new LastOrderData { LastVolume = args.PendingOrder.VolumeInUnits, LastTargetPrice = args.PendingOrder.TargetPrice, LastStopLoss = args.PendingOrder.StopLoss, LastTakeProfit = args.PendingOrder.TakeProfit };
         _orders_.Add(args.PendingOrder.Id, order_data);
-        if (_order_stream_ == OrderStreamMode.Off) return;
+        if (!EmitOrder) return;
         _system_.SendUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "Opened"), _bar_, args.PendingOrder);
         _system_.SendUpdateComplete();
         _orders_sent_++;
@@ -446,7 +458,7 @@ public class RobotAPI : IDisposable
         if (Math.Abs(args.PendingOrder.VolumeInUnits - order_data.LastVolume) > double.Epsilon)
         {
             order_data.LastVolume = args.PendingOrder.VolumeInUnits;
-            if (_order_stream_ == OrderStreamMode.Off) return;
+            if (!EmitOrder) return;
             _system_.SendUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "ModifiedVolume"), _bar_, args.PendingOrder);
             _system_.SendUpdateComplete();
             _orders_sent_++;
@@ -456,7 +468,7 @@ public class RobotAPI : IDisposable
         if (Math.Abs(args.PendingOrder.TargetPrice - order_data.LastTargetPrice) > double.Epsilon)
         {
             order_data.LastTargetPrice = args.PendingOrder.TargetPrice;
-            if (_order_stream_ == OrderStreamMode.Off) return;
+            if (!EmitOrder) return;
             _system_.SendUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "ModifiedTargetPrice"), _bar_, args.PendingOrder);
             _system_.SendUpdateComplete();
             _orders_sent_++;
@@ -466,7 +478,7 @@ public class RobotAPI : IDisposable
         if ((order_data.LastStopLoss == null && args.PendingOrder.StopLoss != null) || (order_data.LastStopLoss != null && args.PendingOrder.StopLoss == null) || (order_data.LastStopLoss != null && args.PendingOrder.StopLoss != null && Math.Abs((double)args.PendingOrder.StopLoss - (double)order_data.LastStopLoss) > double.Epsilon))
         {
             order_data.LastStopLoss = args.PendingOrder.StopLoss;
-            if (_order_stream_ == OrderStreamMode.Off) return;
+            if (!EmitOrder) return;
             _system_.SendUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "ModifiedStopLoss"), _bar_, args.PendingOrder);
             _system_.SendUpdateComplete();
             _orders_sent_++;
@@ -476,7 +488,7 @@ public class RobotAPI : IDisposable
         if ((order_data.LastTakeProfit == null && args.PendingOrder.TakeProfit != null) || (order_data.LastTakeProfit != null && args.PendingOrder.TakeProfit == null) || (order_data.LastTakeProfit != null && args.PendingOrder.TakeProfit != null && Math.Abs((double)args.PendingOrder.TakeProfit - (double)order_data.LastTakeProfit) > double.Epsilon))
         {
             order_data.LastTakeProfit = args.PendingOrder.TakeProfit;
-            if (_order_stream_ == OrderStreamMode.Off) return;
+            if (!EmitOrder) return;
             _system_.SendUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "ModifiedTakeProfit"), _bar_, args.PendingOrder);
             _system_.SendUpdateComplete();
             _orders_sent_++;
@@ -489,7 +501,7 @@ public class RobotAPI : IDisposable
         if (!IsOrderFromRobot(args.PendingOrder)) return;
         if (!_verified_) return;
         _orders_.Remove(args.PendingOrder.Id);
-        if (_order_stream_ == OrderStreamMode.Off) return;
+        if (!EmitOrder) return;
         _system_.SendUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "Closed"), _bar_, args.PendingOrder);
         _system_.SendUpdateComplete();
         _orders_sent_++;
@@ -501,7 +513,7 @@ public class RobotAPI : IDisposable
         if (!IsOrderFromRobot(args.PendingOrder)) return;
         if (!_verified_) return;
         _orders_.Remove(args.PendingOrder.Id);
-        if (_order_stream_ == OrderStreamMode.Off) return;
+        if (!EmitOrder) return;
         _system_.SendUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "Filled"), _bar_, args.PendingOrder);
         _system_.SendUpdateComplete();
         _orders_sent_++;
@@ -514,7 +526,7 @@ public class RobotAPI : IDisposable
         if (!_verified_) return;
         var position_data = new LastPositionData { LastVolume = args.Position.VolumeInUnits, LastStopLoss = args.Position.StopLoss, LastTakeProfit = args.Position.TakeProfit };
         _positions_.Add(args.Position.Id, position_data);
-        if (_position_stream_ == PositionStreamMode.Off) return;
+        if (!EmitPosition) return;
         UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.OpenedBuyPosition : UpdateID.OpenedSellPosition;
         _system_.SendUpdatePosition(update_id, _bar_, args.Position);
         _system_.SendUpdateComplete();
@@ -530,7 +542,7 @@ public class RobotAPI : IDisposable
         if (Math.Abs(args.Position.VolumeInUnits - position_data.LastVolume) > double.Epsilon)
         {
             position_data.LastVolume = args.Position.VolumeInUnits;
-            if (_trade_stream_ == TradeStreamMode.Off) return;
+            if (!EmitTrade) return;
             var trade = FindTrade(args.Position.Id);
             UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.ModifiedBuyPositionVolume : UpdateID.ModifiedSellPositionVolume;
             _system_.SendUpdatePositionTrade(update_id, _bar_, args.Position, trade);
@@ -542,7 +554,7 @@ public class RobotAPI : IDisposable
         if ((position_data.LastStopLoss == null && args.Position.StopLoss != null) || (position_data.LastStopLoss != null && args.Position.StopLoss == null) || (position_data.LastStopLoss != null && args.Position.StopLoss != null && Math.Abs((double)args.Position.StopLoss - (double)position_data.LastStopLoss) > double.Epsilon))
         {
             position_data.LastStopLoss = args.Position.StopLoss;
-            if (_position_stream_ == PositionStreamMode.Off) return;
+            if (!EmitPosition) return;
             UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.ModifiedBuyPositionStopLoss : UpdateID.ModifiedSellPositionStopLoss;
             _system_.SendUpdatePosition(update_id, _bar_, args.Position);
             _system_.SendUpdateComplete();
@@ -553,7 +565,7 @@ public class RobotAPI : IDisposable
         if ((position_data.LastTakeProfit == null && args.Position.TakeProfit != null) || (position_data.LastTakeProfit != null && args.Position.TakeProfit == null) || (position_data.LastTakeProfit != null && args.Position.TakeProfit != null && Math.Abs((double)args.Position.TakeProfit - (double)position_data.LastTakeProfit) > double.Epsilon))
         {
             position_data.LastTakeProfit = args.Position.TakeProfit;
-            if (_position_stream_ == PositionStreamMode.Off) return;
+            if (!EmitPosition) return;
             UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.ModifiedBuyPositionTakeProfit : UpdateID.ModifiedSellPositionTakeProfit;
             _system_.SendUpdatePosition(update_id, _bar_, args.Position);
             _system_.SendUpdateComplete();
@@ -567,7 +579,7 @@ public class RobotAPI : IDisposable
         if (!IsPositionFromRobot(args.Position)) return;
         if (!_verified_) return;
         _positions_.Remove(args.Position.Id);
-        if (_trade_stream_ == TradeStreamMode.Off) return;
+        if (!EmitTrade) return;
         var trade = FindTrade(args.Position.Id);
         UpdateID update_id = ResolvePositionCloseUpdateID(args.Position, args.Reason);
         _system_.SendUpdatePositionTrade(update_id, _bar_, args.Position, trade);
@@ -583,8 +595,7 @@ public class RobotAPI : IDisposable
         if (tick.Bid < _bar_.LowTick.Bid) _bar_.LowTick = tick;
         _bar_.CloseTick = tick;
         if (!_verified_) return;
-        if (_tick_stream_ == TickStreamMode.Off) return;
-        if (_tick_stream_ == TickStreamMode.All)
+        if (EmitTickAll)
         {
             _system_.SendUpdateTick(UpdateID.Tick, tick);
             _system_.SendUpdateComplete();
@@ -630,7 +641,7 @@ public class RobotAPI : IDisposable
         _bar_.CloseTick = tick;
         _bar_.Volume = 0.0;
         if (!_verified_) return;
-        if (_bar_stream_ == BarStreamMode.Off) return;
+        if (!EmitBarOpened) return;
         _system_.SendUpdateBar(UpdateID.BarOpened, _bar_);
         _system_.SendUpdateComplete();
         _bars_sent_++;
@@ -676,7 +687,7 @@ public class RobotAPI : IDisposable
                 if (!_persist_market_) _log_.Warning($"Activation Operation: Bar Mode ({_degraded_bars_}/{_verification_} non-Tick) · Market Persistence Disabled");
                 _log_.Info($"Activation Operation: Accuracy {(_persist_market_ ? "Tick" : "Bar")} ({_verification_ - _degraded_bars_}/{_verification_}) · Activating");
                 Activate();
-                if (_bar_stream_ != BarStreamMode.Off)
+                if (EmitBarClosed)
                 {
                     foreach (var buffered in _verification_buffer_)
                     {
@@ -691,14 +702,27 @@ public class RobotAPI : IDisposable
                 _verification_buffer_.Clear();
             }
         }
-        else if (_bar_stream_ != BarStreamMode.Off)
+        else if (EmitBarClosed)
         {
+            var entry = _prof_sw_.Elapsed.TotalMilliseconds;
+            if (_prof_last_exit_ms_ >= 0.0) _prof_gap_ms_ += entry - _prof_last_exit_ms_;
             _system_.SendUpdateBar(UpdateID.BarClosed, _bar_);
             _system_.SendUpdateComplete();
             _ticks_sent_ += 5;
             _bars_sent_++;
             if (_bars_sent_ % 100 == 0) _log_.Debug($"Progress: Ticks {_ticks_sent_} · Bars {_bars_sent_} · Orders {_orders_sent_} · Positions {_positions_sent_} · Trades {_trades_sent_} · Actions {_actions_received_}");
             ReceiveAndProcessActions();
+            _prof_lockstep_ms_ += _prof_sw_.Elapsed.TotalMilliseconds - entry;
+            _prof_bars_++;
+            if (_prof_bars_ % 500 == 0)
+            {
+                var perLock = _prof_lockstep_ms_ / _prof_bars_;
+                var perGap = _prof_bars_ > 1 ? _prof_gap_ms_ / (_prof_bars_ - 1) : 0.0;
+                var total = _prof_lockstep_ms_ + _prof_gap_ms_;
+                var share = total > 0.0 ? 100.0 * _prof_lockstep_ms_ / total : 0.0;
+                _log_.Info($"DownloadProfile: Bars {_prof_bars_} · Lockstep {_prof_lockstep_ms_:F0}ms ({perLock:F3}/bar) · cTrader {_prof_gap_ms_:F0}ms ({perGap:F3}/bar) · Lockstep-share {share:F1}%");
+            }
+            _prof_last_exit_ms_ = _prof_sw_.Elapsed.TotalMilliseconds;
         }
         _bar_.Timestamp = last_bar.OpenTime;
         _bar_.GapTick = _bar_.CloseTick;
@@ -876,6 +900,8 @@ public class RobotAPI : IDisposable
             {
                 case ActionID.Complete: break;
                 case ActionID.Execution: go_live = true; break;
+                case ActionID.Subscribe: _streams_ |= (Stream)data[1]; break;
+                case ActionID.Unsubscribe: _streams_ &= ~(Stream)data[1]; break;
                 case ActionID.Init:
                     int python_pid = ReadInt32(data, 1);
                     _log_.Debug($"Handshake Operation: Completed (pid {python_pid})");

@@ -22,7 +22,7 @@ from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.Position import PositionAPI, PositionType
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Trade import TradeAPI
-from Library.Protocol.Action import ActionAPI, ActionID, InitActionAPI, ExecutionActionAPI
+from Library.Protocol.Action import ActionAPI, ActionID, Stream, InitActionAPI, ExecutionActionAPI, SubscribeActionAPI, UnsubscribeActionAPI
 from Library.Protocol.Binary import BinaryAPI
 from Library.Protocol.Update import UpdateID, CompleteUpdateAPI, InitUpdateAPI, BarUpdateAPI
 from Library.System.System import SystemAPI, SystemType
@@ -353,7 +353,12 @@ class RealtimeAPI(SystemAPI):
         def init(update: InitUpdateAPI):
             self._transport_.watchdog(update.ProcessID)
             self._log_.debug(lambda: f"Handshake Operation: Exchanged PIDs (peer {update.ProcessID} · self {os.getpid()})")
-            return [InitActionAPI(ProcessID=os.getpid())]
+            subscribed = int(self.strategy.Subscription)
+            unsubscribed = int(Stream.All) & ~subscribed
+            actions = [InitActionAPI(ProcessID=os.getpid())]
+            if subscribed: actions.append(SubscribeActionAPI(Streams=subscribed))
+            if unsubscribed: actions.append(UnsubscribeActionAPI(Streams=unsubscribed))
+            return actions
 
         def warmup(update: BarUpdateAPI):
             if self._warmup_window_ is None:
@@ -399,7 +404,7 @@ class RealtimeAPI(SystemAPI):
         def update(update: BarUpdateAPI):
             if self._start_timestamp_ is None: self._start_timestamp_ = update.Bar.Timestamp.DateTime
             self._stop_timestamp_ = update.Bar.Timestamp.DateTime
-            update.Market.update_data(update.Bar)
+            if self.strategy.Transform.Market: update.Market.update_data(update.Bar)
 
         def report(update: CompleteUpdateAPI):
             self._transition_(self._execution_timer_, "Execution", self._finalization_timer_)

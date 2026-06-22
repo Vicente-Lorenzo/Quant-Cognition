@@ -2,9 +2,13 @@ from typing import Union
 
 from Library.Engine import MachineAPI
 from Library.Parameter import Parameter
-from Library.Strategy.Strategy import StrategyAPI
+from Library.Protocol.Action import Stream
+from Library.Strategy.Strategy import StrategyAPI, Transform
 
 class DownloadStrategyAPI(StrategyAPI):
+
+    Transform = Transform(Market=False, Indicators=False, Portfolio=False)
+    Subscription = Stream.BarClosed
 
     def __init__(self,
                  money_management: Parameter,
