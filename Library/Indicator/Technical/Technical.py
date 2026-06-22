@@ -60,7 +60,7 @@ class TechnicalAPI:
     def update_data(self, market: MarketAPI) -> None:
         if self._data_ is None: return self.init_data(market)
         df = self.calculate(self._extract_(market), batch=False)
-        self._data_ = self._data_.vstack(df)
+        self._data_.extend(df)
         self.Result.init_data(self._data_)
         for ind in self._indicators_:
             if hasattr(ind, "update_data"): ind.update_data(market)

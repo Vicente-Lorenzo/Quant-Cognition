@@ -109,7 +109,7 @@ class MovingAverageConvergenceDivergenceAPI(TechnicalAPI):
     def update_data(self, market: MarketAPI) -> None:
         if self._data_ is None: return self.init_data(market)
         df = self.calculate(self._extract_(market), batch=False)
-        self._data_ = self._data_.vstack(df)
+        self._data_.extend(df)
         self.MACD.init_data(self._data_)
         self.Signal.init_data(self._data_)
         self.Histogram.init_data(self._data_)
