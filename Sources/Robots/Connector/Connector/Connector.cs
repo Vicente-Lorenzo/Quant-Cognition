@@ -9,12 +9,6 @@ namespace Connector;
 [Robot(AccessRights = AccessRights.FullAccess, AddIndicators = true)]
 public class Connector : Robot
 {
-    [Parameter("Console", Group = "Logging Management", DefaultValue = VerboseLevel.Debug)]
-    public VerboseLevel Console { get; set; }
-
-    [Parameter("File", Group = "Logging Management", DefaultValue = VerboseLevel.Debug)]
-    public VerboseLevel File { get; set; }
-
     [Parameter("Strategy", Group = "Strategy Management", DefaultValue = StrategyType.Download)]
     public StrategyType Strategy { get; set; }
 
@@ -33,74 +27,80 @@ public class Connector : Robot
     [Parameter("Verification Count", Group = "Accuracy Management", DefaultValue = 1, MinValue = 1)]
     public int VerificationCount { get; set; }
 
-    [Parameter("Tick Stream", Group = "Streaming Management", DefaultValue = TickStreamMode.Auto)]
+    [Parameter("Tick", Group = "Streaming Management", DefaultValue = TickStreamMode.Auto)]
     public TickStreamMode TickStream { get; set; }
 
-    [Parameter("Bar Stream", Group = "Streaming Management", DefaultValue = BarStreamMode.Auto)]
+    [Parameter("Bar", Group = "Streaming Management", DefaultValue = BarStreamMode.Auto)]
     public BarStreamMode BarStream { get; set; }
 
-    [Parameter("Order Stream", Group = "Streaming Management", DefaultValue = OrderStreamMode.Auto)]
+    [Parameter("Order", Group = "Streaming Management", DefaultValue = OrderStreamMode.Auto)]
     public OrderStreamMode OrderStream { get; set; }
 
-    [Parameter("Position Stream", Group = "Streaming Management", DefaultValue = PositionStreamMode.Auto)]
+    [Parameter("Position", Group = "Streaming Management", DefaultValue = PositionStreamMode.Auto)]
     public PositionStreamMode PositionStream { get; set; }
 
-    [Parameter("Trade Stream", Group = "Streaming Management", DefaultValue = TradeStreamMode.Auto)]
+    [Parameter("Trade", Group = "Streaming Management", DefaultValue = TradeStreamMode.Auto)]
     public TradeStreamMode TradeStream { get; set; }
 
-    [Parameter("Universe Buffering", Group = "Universe Management", DefaultValue = BufferingMode.Auto)]
+    [Parameter("Buffering", Group = "Universe Management", DefaultValue = BufferingMode.Auto)]
     public BufferingMode UniverseBuffering { get; set; }
 
-    [Parameter("Universe Batch", Group = "Universe Management", DefaultValue = 1, MinValue = 0)]
+    [Parameter("Batch", Group = "Universe Management", DefaultValue = 1, MinValue = 0)]
     public int UniverseBatch { get; set; }
 
-    [Parameter("Universe Interval", Group = "Universe Management", DefaultValue = 0.0, MinValue = 0.0)]
+    [Parameter("Interval", Group = "Universe Management", DefaultValue = 0.0, MinValue = 0.0)]
     public double UniverseInterval { get; set; }
 
-    [Parameter("Universe Workers", Group = "Universe Management", DefaultValue = 1, MinValue = 1)]
+    [Parameter("Workers", Group = "Universe Management", DefaultValue = 1, MinValue = 1)]
     public int UniverseWorkers { get; set; }
 
-    [Parameter("Universe Maxsize", Group = "Universe Management", DefaultValue = 64, MinValue = 0)]
+    [Parameter("Maxsize", Group = "Universe Management", DefaultValue = 64, MinValue = 0)]
     public int UniverseMaxsize { get; set; }
 
-    [Parameter("Market Buffering", Group = "Market Management", DefaultValue = BufferingMode.Auto)]
+    [Parameter("Buffering", Group = "Market Management", DefaultValue = BufferingMode.Auto)]
     public BufferingMode MarketBuffering { get; set; }
 
-    [Parameter("Market Batch", Group = "Market Management", DefaultValue = 100, MinValue = 0)]
+    [Parameter("Batch", Group = "Market Management", DefaultValue = 100, MinValue = 0)]
     public int MarketBatch { get; set; }
 
-    [Parameter("Market Interval", Group = "Market Management", DefaultValue = 60.0, MinValue = 0.0)]
+    [Parameter("Interval", Group = "Market Management", DefaultValue = 60.0, MinValue = 0.0)]
     public double MarketInterval { get; set; }
 
-    [Parameter("Market Workers", Group = "Market Management", DefaultValue = 8, MinValue = 1)]
+    [Parameter("Workers", Group = "Market Management", DefaultValue = 8, MinValue = 1)]
     public int MarketWorkers { get; set; }
 
-    [Parameter("Market Maxsize", Group = "Market Management", DefaultValue = 64, MinValue = 0)]
+    [Parameter("Maxsize", Group = "Market Management", DefaultValue = 64, MinValue = 0)]
     public int MarketMaxsize { get; set; }
 
-    [Parameter("Portfolio Buffering", Group = "Portfolio Management", DefaultValue = BufferingMode.Auto)]
+    [Parameter("Buffering", Group = "Portfolio Management", DefaultValue = BufferingMode.Auto)]
     public BufferingMode PortfolioBuffering { get; set; }
 
-    [Parameter("Portfolio Batch", Group = "Portfolio Management", DefaultValue = 100, MinValue = 0)]
+    [Parameter("Batch", Group = "Portfolio Management", DefaultValue = 100, MinValue = 0)]
     public int PortfolioBatch { get; set; }
 
-    [Parameter("Portfolio Interval", Group = "Portfolio Management", DefaultValue = 60.0, MinValue = 0.0)]
+    [Parameter("Interval", Group = "Portfolio Management", DefaultValue = 60.0, MinValue = 0.0)]
     public double PortfolioInterval { get; set; }
 
-    [Parameter("Portfolio Workers", Group = "Portfolio Management", DefaultValue = 1, MinValue = 1)]
+    [Parameter("Workers", Group = "Portfolio Management", DefaultValue = 1, MinValue = 1)]
     public int PortfolioWorkers { get; set; }
 
-    [Parameter("Portfolio Maxsize", Group = "Portfolio Management", DefaultValue = 64, MinValue = 0)]
+    [Parameter("Maxsize", Group = "Portfolio Management", DefaultValue = 64, MinValue = 0)]
     public int PortfolioMaxsize { get; set; }
+
+    [Parameter("Console", Group = "Logging Management", DefaultValue = VerboseLevel.Debug)]
+    public VerboseLevel Console { get; set; }
+
+    [Parameter("File", Group = "Logging Management", DefaultValue = VerboseLevel.Debug)]
+    public VerboseLevel File { get; set; }
+
+    [Parameter("Profile", Group = "Logging Management", DefaultValue = false)]
+    public bool Profile { get; set; }
 
     [Parameter("Report", Group = "Reporting Management", DefaultValue = true)]
     public bool Report { get; set; }
 
     [Parameter("Export", Group = "Reporting Management", DefaultValue = true)]
     public bool Export { get; set; }
-
-    [Parameter("Profile", Group = "Reporting Management", DefaultValue = false)]
-    public bool Profile { get; set; }
 
     private RobotAPI _robot_api_;
 
