@@ -40,6 +40,7 @@ class BufferAPI(threading.Thread):
         self._active_: bool = workers > 0 and (self._full_ or batch > 0 or interval > 0)
 
         self._buffer_: dict = {t: [] for t in self._types_}
+        self._count_: int = 0
         self._queue_: dict = {t: queue.Queue(maxsize=maxsize) for t in self._types_}
         self._signal_: queue.Queue = queue.Queue()
         self._work_: queue.Queue = queue.Queue()
@@ -62,7 +63,7 @@ class BufferAPI(threading.Thread):
     @property
     def Empty(self) -> bool:
         if not self._active_: return True
-        total = sum(len(b) for b in self._buffer_.values())
+        total = self._count_
         if total == 0: return True
         if self._full_: return True
         if 0 < self._batch_ <= total: return False
@@ -75,6 +76,7 @@ class BufferAPI(threading.Thread):
 
     def add(self, record: DatapointAPI) -> None:
         self._buffer_[type(record)].append(record)
+        self._count_ += 1
 
     def flush(self) -> None:
         pushed = False
@@ -84,6 +86,7 @@ class BufferAPI(threading.Thread):
             self._queue_[t].put(buffer[:])
             buffer.clear()
             pushed = True
+        self._count_ = 0
         self._last_flush_ = datetime.now()
         if pushed: self._signal_.put(True)
 

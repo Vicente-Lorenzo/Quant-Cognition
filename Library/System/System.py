@@ -369,6 +369,9 @@ class SystemAPI(ServiceAPI, ABC):
     def _process_updates_(self, engine: LifecycleAPI) -> list[ActionAPI]:
         actions: list[ActionAPI] = []
         while True:
+            if not self._universe_.Empty: self._universe_.flush()
+            if not self._market_.Empty: self._market_.flush()
+            if not self._portfolio_.Empty: self._portfolio_.flush()
             update_id = self.receive_update_id()
             match update_id:
                 case UpdateID.Init:
@@ -565,6 +568,7 @@ class SystemAPI(ServiceAPI, ABC):
         while not engine.IsTerminated:
             actions = self._process_updates_(engine)
             self._process_actions_(actions, engine.IsTerminated)
+            if not self._universe_.Empty: self._universe_.flush()
             if not self._market_.Empty: self._market_.flush()
             if not self._portfolio_.Empty: self._portfolio_.flush()
 

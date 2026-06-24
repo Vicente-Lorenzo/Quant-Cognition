@@ -282,9 +282,12 @@ class RealtimeAPI(SystemAPI):
     def receive_update_tick(self, offset: int = 1) -> TickAPI:
         ts, ask, bid, ask_base, bid_base, ask_quote, bid_quote, volume = self._binary_tick_.unpack(self._last_update_data_, 1)
         self._metrics_["Ticks"] += 1
+        timestamp = timestamp_to_datetime(ts, milliseconds=True)
+        if not self.strategy.Transform.Market:
+            return TickAPI._ingest_(self._db_, self._security_, timestamp, ask, bid, ask_base, bid_base, ask_quote, bid_quote, volume)
         return TickAPI(
             Security=self._security_,
-            Timestamp=timestamp_to_datetime(ts, milliseconds=True),
+            Timestamp=timestamp,
             Ask=ask, Bid=bid,
             AskBaseConversion=ask_base, BidBaseConversion=bid_base,
             AskQuoteConversion=ask_quote, BidQuoteConversion=bid_quote,
