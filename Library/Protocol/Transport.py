@@ -18,6 +18,9 @@ _K32_.CloseHandle.restype = wt.BOOL
 _K32_.OpenProcess.argtypes = [wt.DWORD, wt.BOOL, wt.DWORD]
 _K32_.OpenProcess.restype = wt.HANDLE
 
+class PeerExit(SystemExit):
+    pass
+
 class TransportAPI:
 
     _INFINITE_ = 0xFFFFFFFF
@@ -65,7 +68,7 @@ class TransportAPI:
             if self._closed_:
                 raise SystemExit("Transport closed")
             if self._peer_dead_.is_set():
-                raise SystemExit("Peer process exited")
+                raise PeerExit("Peer process exited")
             result = _K32_.WaitForSingleObject(handle, self._POLL_MS_)
             if result == 0:
                 return
@@ -110,4 +113,4 @@ class TransportAPI:
             if buf:
                 buf.close()
 
-__all__ = ["TransportAPI"]
+__all__ = ["TransportAPI", "PeerExit"]

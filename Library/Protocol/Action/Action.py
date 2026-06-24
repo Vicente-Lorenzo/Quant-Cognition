@@ -66,7 +66,8 @@ class ActionID(EnumerationAPI):
     CloseSellPosition = 53
     Subscribe = 54
     Unsubscribe = 55
-    Complete = 56
+    Shutdown = 56
+    Complete = 57
 
 @dataclass(slots=True)
 class ActionAPI(DataclassAPI):
@@ -77,6 +78,13 @@ class ActionAPI(DataclassAPI):
 @dataclass(slots=True)
 class CompleteActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.Complete
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B')
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value)
+
+@dataclass(slots=True)
+class ShutdownActionAPI(ActionAPI):
+    ActionID: ClassVar[ActionID] = ActionID.Shutdown
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B')
     def serialize(self) -> bytes:
         return self._binary_.pack(self.ActionID.value)
@@ -165,6 +173,7 @@ __all__ = [
     "ActionID",
     "ActionAPI",
     "CompleteActionAPI",
+    "ShutdownActionAPI",
     "InitActionAPI",
     "ExecutionActionAPI",
     "AskAboveTargetActionAPI",

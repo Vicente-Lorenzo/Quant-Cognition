@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from abc import ABC, abstractmethod
 from pathlib import Path
 from datetime import datetime
@@ -19,7 +21,7 @@ from Library.Portfolio.Position import PositionAPI, PositionStatus
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Trade import TradeAPI
 from Library.Portfolio.Statistic import generate_net_report, order_view, position_view, trade_view, deal_view
-from Library.Protocol.Action import ActionAPI, ActionID, CompleteActionAPI
+from Library.Protocol.Action import ActionAPI, ActionID, CompleteActionAPI, ShutdownActionAPI
 from Library.Protocol.Update import (
     UpdateID,
     CompleteUpdateAPI,
@@ -211,9 +213,10 @@ class SystemAPI(ServiceAPI, ABC):
 
     @staticmethod
     def _stringify_(df: pl.DataFrame) -> pl.DataFrame:
-        if df.is_empty(): return df
-        casts = [pl.col(name).cast(pl.List(pl.Utf8)).list.join(",") for name, dtype in df.schema.items() if isinstance(dtype, pl.List)]
-        return df.with_columns(casts) if casts else df
+        nested = (pl.List, pl.Struct) + ((pl.Array,) if hasattr(pl, "Array") else ())
+        columns = [name for name, dtype in df.schema.items() if isinstance(dtype, nested)]
+        if not columns: return df
+        return df.with_columns([pl.col(name).map_elements(lambda v: json.dumps(v, default=str), return_dtype=pl.Utf8).alias(name) for name in columns])
 
     def _export_(self, tables: dict) -> None:
         try:
@@ -221,7 +224,10 @@ class SystemAPI(ServiceAPI, ABC):
             folder = Path(__file__).resolve().parents[2] / "Reports" / f"{datetime.now():%Y-%m-%d %H-%M-%S} {ident}"
             folder.mkdir(parents=True, exist_ok=True)
             for name, table in tables.items():
-                self._stringify_(table).write_csv(str(folder / f"{name.lower()}.csv"))
+                try:
+                    self._stringify_(table).write_csv(str(folder / f"{name.lower()}.csv"))
+                except Exception as error:
+                    self._log_.error(lambda n=name, e=error: f"Export Operation: Failed · {n} · {e}")
             self._log_.info(lambda: f"Export Operation: Saved · {folder}")
         except Exception as error:
             self._log_.error(lambda: f"Export Operation: Failed · {error}")
@@ -544,9 +550,9 @@ class SystemAPI(ServiceAPI, ABC):
                     reason = self.receive_update_exception()
                     actions += engine.perform(update_id, ExceptionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Reason=reason))
 
-    def _process_actions_(self, actions: list[ActionAPI]) -> None:
+    def _process_actions_(self, actions: list[ActionAPI], terminated: bool = False) -> None:
         for action in actions: self.send_action(action)
-        self.send_action(CompleteActionAPI())
+        self.send_action(ShutdownActionAPI() if terminated else CompleteActionAPI())
 
     def deploy(self) -> None:
         if self.strategy is None: return
@@ -558,7 +564,7 @@ class SystemAPI(ServiceAPI, ABC):
         )
         while not engine.IsTerminated:
             actions = self._process_updates_(engine)
-            self._process_actions_(actions)
+            self._process_actions_(actions, engine.IsTerminated)
             if not self._market_.Empty: self._market_.flush()
             if not self._portfolio_.Empty: self._portfolio_.flush()
 

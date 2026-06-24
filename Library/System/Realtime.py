@@ -4,6 +4,7 @@ import os
 import struct
 import contextlib
 
+from collections import deque
 from datetime import datetime, timedelta
 from typing import Type, Union, TYPE_CHECKING
 
@@ -26,7 +27,7 @@ from Library.Protocol.Action import ActionAPI, ActionID, Stream, InitActionAPI, 
 from Library.Protocol.Binary import BinaryAPI
 from Library.Protocol.Update import UpdateID, CompleteUpdateAPI, InitUpdateAPI, BarUpdateAPI
 from Library.System.System import SystemAPI, SystemType
-from Library.Protocol.Transport import TransportAPI
+from Library.Protocol.Transport import TransportAPI, PeerExit
 from Library.Universe.Contract import CommissionMode, SwapMode
 from Library.Universe.Security import SecurityAPI
 from Library.Utility.Datetime import Weekday, timestamp_to_datetime
@@ -86,6 +87,7 @@ class RealtimeAPI(SystemAPI):
         self._stack_: Union[contextlib.ExitStack, None] = None
         self._transport_: Union[TransportAPI, None] = None
         self._last_update_data_: bytes = b""
+        self._batch_queue_: deque = deque()
         self._exc_info_: tuple = (None, None, None)
 
         self._sync_buffer_: list[BarAPI] = []
@@ -151,7 +153,16 @@ class RealtimeAPI(SystemAPI):
         return self._transport_.receive()
 
     def receive_update_id(self) -> UpdateID:
-        self._last_update_data_ = self._receive_()
+        while not self._batch_queue_:
+            data = self._receive_()
+            if data[0] != UpdateID.Batch.value:
+                self._last_update_data_ = data
+                return UpdateID(data[0])
+            offset = 1
+            while offset < len(data):
+                length = int.from_bytes(data[offset:offset + 2], "little"); offset += 2
+                self._batch_queue_.append(data[offset:offset + length]); offset += length
+        self._last_update_data_ = self._batch_queue_.popleft()
         return UpdateID(self._last_update_data_[0])
 
     def _receive_update_init_(self, offset: int = 1) -> InitUpdateAPI:
@@ -282,9 +293,12 @@ class RealtimeAPI(SystemAPI):
 
     def _deserialize_tick_(self, data: bytes, offset: int) -> TickAPI:
         ts, ask, bid, ask_base, bid_base, ask_quote, bid_quote, volume = self._binary_tick_.unpack(data, offset)
+        timestamp = timestamp_to_datetime(ts, milliseconds=True)
+        if not self.strategy.Transform.Market:
+            return TickAPI._ingest_(self._db_, self._security_, timestamp, ask, bid, ask_base, bid_base, ask_quote, bid_quote, volume)
         return TickAPI(
             Security=self._security_,
-            Timestamp=timestamp_to_datetime(ts, milliseconds=True),
+            Timestamp=timestamp,
             Ask=ask, Bid=bid,
             AskBaseConversion=ask_base, BidBaseConversion=bid_base,
             AskQuoteConversion=ask_quote, BidQuoteConversion=bid_quote,
@@ -428,4 +442,7 @@ class RealtimeAPI(SystemAPI):
 
     @timer
     def run(self) -> None:
-        self.deploy()
+        try:
+            self.deploy()
+        except PeerExit:
+            self._log_.info(lambda: "Shutdown Operation: Peer Stopped · Draining and Terminating")

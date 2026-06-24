@@ -138,6 +138,30 @@ class TickAPI(DatapointAPI):
         if self._security_ is not None and self._security_.UID is not None and self._timestamp_ is not None and self._timestamp_.DateTime is not None:
             self.UID = self._encode_value_(self._security_.UID, self._timestamp_.DateTime)
 
+    @classmethod
+    def _ingest_(cls, db, security, timestamp, ask, bid, ask_base, bid_base, ask_quote, bid_quote, volume) -> "TickAPI":
+        self = cls.__new__(cls)
+        s = object.__setattr__
+        s(self, "_db_", db)
+        s(self, "_migrate_", False)
+        s(self, "_autosave_", False)
+        s(self, "_autoload_", False)
+        s(self, "_autooverload_", False)
+        s(self, "_security_", security)
+        s(self, "_timestamp_", timestamp)
+        s(self, "_ask_", ask)
+        s(self, "_bid_", bid)
+        s(self, "_mid_", (ask + bid) / 2 if ask is not None and bid is not None else None)
+        s(self, "_ask_base_conversion_", ask_base)
+        s(self, "_bid_base_conversion_", bid_base)
+        s(self, "_ask_quote_conversion_", ask_quote)
+        s(self, "_bid_quote_conversion_", bid_quote)
+        s(self, "Volume", volume)
+        s(self, "UpdatedAt", None)
+        s(self, "UpdatedBy", None)
+        s(self, "UID", (security.UID << cls._MS_BITS_) | datetime_to_epoch(timestamp) if security is not None and security.UID is not None and timestamp is not None else None)
+        return self
+
     def save(self, by: str = "Autosave") -> None:
         super().save(by=by)
 

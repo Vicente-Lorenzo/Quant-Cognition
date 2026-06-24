@@ -105,7 +105,8 @@ class BufferAPI(threading.Thread):
         key = records[0].natural_keys()
         buckets: list = [[] for _ in range(self._workers_)]
         for r in records:
-            bucket = hash(tuple(str(r._parse_(c)) for c in key)) % self._workers_ if key else 0
+            uid = getattr(r, "UID", None)
+            bucket = (hash(uid) % self._workers_) if isinstance(uid, int) else (hash(tuple(str(r._parse_(c)) for c in key)) % self._workers_ if key else 0)
             buckets[bucket].append(r)
         return buckets
 
