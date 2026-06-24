@@ -37,6 +37,19 @@ def _make_system_(market: tuple = (100, 60.0, 1, 64), portfolio: tuple = (100, 6
 def realtime_system():
     return _make_system_()
 
+def test_receive_update_id_unpacks_batch(realtime_system):
+    from Library.Protocol.Update import UpdateID
+    rec1 = bytes([UpdateID.Tick.value, 1, 2, 3])
+    rec2 = bytes([UpdateID.BarClosed.value, 4, 5])
+    batch = bytes([UpdateID.Batch.value]) + len(rec1).to_bytes(2, "little") + rec1 + len(rec2).to_bytes(2, "little") + rec2
+    realtime_system._receive_ = MagicMock(side_effect=[batch, bytes([UpdateID.Complete.value])])
+    assert realtime_system.receive_update_id() == UpdateID.Tick
+    assert realtime_system._last_update_data_ == rec1
+    assert realtime_system.receive_update_id() == UpdateID.BarClosed
+    assert realtime_system._last_update_data_ == rec2
+    assert realtime_system.receive_update_id() == UpdateID.Complete
+    assert realtime_system._receive_.call_count == 2
+
 def test_realtime_system_initialization(realtime_system):
     assert realtime_system._iid_ == "12345"
 

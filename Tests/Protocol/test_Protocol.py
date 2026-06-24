@@ -15,7 +15,8 @@ def test_action_id_enum_values():
     assert ActionID.OpenBuyStopLimitOrder.value == 30
     assert ActionID.Subscribe.value == 54
     assert ActionID.Unsubscribe.value == 55
-    assert ActionID.Complete.value == 56
+    assert ActionID.Shutdown.value == 56
+    assert ActionID.Complete.value == 57
 
 def test_update_id_enum_values():
     assert UpdateID.Init.value == 0
@@ -28,10 +29,11 @@ def test_update_id_enum_values():
     assert UpdateID.OpenedBuyStopOrder.value == 11
     assert UpdateID.OpenedBuyPosition.value == 61
     assert UpdateID.StopLossBuyPosition.value == 71
-    assert UpdateID.Complete.value == 77
-    assert UpdateID.Denied.value == 78
-    assert UpdateID.Exception.value == 79
-    assert UpdateID.Shutdown.value == 80
+    assert UpdateID.Denied.value == 77
+    assert UpdateID.Exception.value == 78
+    assert UpdateID.Shutdown.value == 79
+    assert UpdateID.Batch.value == 80
+    assert UpdateID.Complete.value == 81
 
 def test_open_buy_position_action_serialization():
     action = OpenBuyPositionActionAPI(PositionType=PositionType.Normal, Volume=1000.0, StopLoss=1.0500, TakeProfit=1.0600)
