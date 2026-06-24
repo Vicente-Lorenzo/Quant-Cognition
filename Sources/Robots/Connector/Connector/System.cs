@@ -199,56 +199,57 @@ public class SystemAPI : IDisposable
         Send(ms.ToArray());
     }
 
-    public void SendUpdateTick(UpdateID update_id, RobotAPI.xTick tick)
+    public byte[] BuildUpdateTick(UpdateID update_id, RobotAPI.xTick tick)
     {
         using var ms = new MemoryStream();
         ms.WriteByte((byte)update_id);
         WriteTick(ms, tick);
-        Send(ms.ToArray());
+        return ms.ToArray();
     }
 
-    public void SendUpdateBar(UpdateID update_id, RobotAPI.xBar bar)
+    public byte[] BuildUpdateBar(UpdateID update_id, RobotAPI.xBar bar)
     {
         using var ms = new MemoryStream();
         ms.WriteByte((byte)update_id);
         WriteBar(ms, bar);
-        Send(ms.ToArray());
+        return ms.ToArray();
     }
 
-    public void SendUpdateOrder(UpdateID update_id, RobotAPI.xBar bar, PendingOrder order)
+    public byte[] BuildUpdateOrder(UpdateID update_id, RobotAPI.xBar bar, PendingOrder order)
     {
         using var ms = new MemoryStream();
         ms.WriteByte((byte)update_id);
         WriteBar(ms, bar);
         WriteOrder(ms, order);
-        Send(ms.ToArray());
+        return ms.ToArray();
     }
 
-    public void SendUpdatePosition(UpdateID update_id, RobotAPI.xBar bar, Position position)
+    public byte[] BuildUpdatePosition(UpdateID update_id, RobotAPI.xBar bar, Position position)
     {
         using var ms = new MemoryStream();
         ms.WriteByte((byte)update_id);
         WriteBar(ms, bar);
         WritePosition(ms, position);
-        Send(ms.ToArray());
+        return ms.ToArray();
     }
 
-    public void SendUpdateTrade(UpdateID update_id, RobotAPI.xBar bar, HistoricalTrade trade)
-    {
-        using var ms = new MemoryStream();
-        ms.WriteByte((byte)update_id);
-        WriteBar(ms, bar);
-        WriteTrade(ms, trade);
-        Send(ms.ToArray());
-    }
-
-    public void SendUpdatePositionTrade(UpdateID update_id, RobotAPI.xBar bar, Position position, HistoricalTrade trade)
+    public byte[] BuildUpdatePositionTrade(UpdateID update_id, RobotAPI.xBar bar, Position position, HistoricalTrade trade)
     {
         using var ms = new MemoryStream();
         ms.WriteByte((byte)update_id);
         WriteBar(ms, bar);
         WritePosition(ms, position);
         WriteTrade(ms, trade);
-        Send(ms.ToArray());
+        return ms.ToArray();
+    }
+
+    public void SendRecord(byte[] record)
+    {
+        Send(record);
+    }
+
+    public void SendBatch(byte[] payload)
+    {
+        Send(payload);
     }
 }

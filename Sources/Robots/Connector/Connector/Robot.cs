@@ -66,6 +66,26 @@ public class RobotAPI : IDisposable
     private readonly OrderStreamMode _order_stream_;
     private readonly PositionStreamMode _position_stream_;
     private readonly TradeStreamMode _trade_stream_;
+    private readonly DelayMode _tick_delay_mode_;
+    private readonly int _tick_delay_count_;
+    private readonly DelayMode _bar_delay_mode_;
+    private readonly int _bar_delay_count_;
+    private readonly DelayMode _order_delay_mode_;
+    private readonly int _order_delay_count_;
+    private readonly DelayMode _position_delay_mode_;
+    private readonly int _position_delay_count_;
+    private readonly DelayMode _trade_delay_mode_;
+    private readonly int _trade_delay_count_;
+    private DelayMode _tick_delay_;
+    private DelayMode _bar_delay_;
+    private DelayMode _order_delay_;
+    private DelayMode _position_delay_;
+    private DelayMode _trade_delay_;
+    private readonly Queue<byte[]> _tick_queue_ = new Queue<byte[]>();
+    private readonly Queue<byte[]> _bar_queue_ = new Queue<byte[]>();
+    private readonly Queue<byte[]> _order_queue_ = new Queue<byte[]>();
+    private readonly Queue<byte[]> _position_queue_ = new Queue<byte[]>();
+    private readonly Queue<byte[]> _trade_queue_ = new Queue<byte[]>();
     private Stream _streams_ = Stream.Tick | Stream.BarOpened | Stream.BarClosed | Stream.Order | Stream.Position | Stream.Trade;
     private readonly BufferingMode _universe_buffering_;
     private readonly int _universe_batch_;
@@ -115,16 +135,13 @@ public class RobotAPI : IDisposable
     private long _trades_sent_;
     private long _actions_received_;
 
-    private readonly System.Diagnostics.Stopwatch _prof_sw_ = System.Diagnostics.Stopwatch.StartNew();
-    private double _prof_lockstep_ms_;
-    private double _prof_gap_ms_;
-    private long _prof_bars_;
-    private double _prof_last_exit_ms_ = -1.0;
-
     public RobotAPI(Robot algo, VerboseLevel console, VerboseLevel file, StrategyType strategy,
                     EnvironmentType environment, DatabaseType database, int verification, AccuracyMode accuracy,
                     TickStreamMode tick_stream, BarStreamMode bar_stream, OrderStreamMode order_stream,
                     PositionStreamMode position_stream, TradeStreamMode trade_stream,
+                    DelayMode tick_delay_mode, int tick_delay_count, DelayMode bar_delay_mode, int bar_delay_count,
+                    DelayMode order_delay_mode, int order_delay_count, DelayMode position_delay_mode, int position_delay_count,
+                    DelayMode trade_delay_mode, int trade_delay_count,
                     BufferingMode universe_buffering, int universe_batch, double universe_interval, int universe_workers, int universe_maxsize,
                     BufferingMode market_buffering, int market_batch, double market_interval, int market_workers, int market_maxsize,
                     BufferingMode portfolio_buffering, int portfolio_batch, double portfolio_interval, int portfolio_workers, int portfolio_maxsize,
@@ -148,6 +165,16 @@ public class RobotAPI : IDisposable
         _order_stream_ = order_stream;
         _position_stream_ = position_stream;
         _trade_stream_ = trade_stream;
+        _tick_delay_mode_ = tick_delay_mode;
+        _tick_delay_count_ = tick_delay_count;
+        _bar_delay_mode_ = bar_delay_mode;
+        _bar_delay_count_ = bar_delay_count;
+        _order_delay_mode_ = order_delay_mode;
+        _order_delay_count_ = order_delay_count;
+        _position_delay_mode_ = position_delay_mode;
+        _position_delay_count_ = position_delay_count;
+        _trade_delay_mode_ = trade_delay_mode;
+        _trade_delay_count_ = trade_delay_count;
         _universe_buffering_ = universe_buffering;
         _universe_batch_ = universe_batch;
         _universe_interval_ = universe_interval;
@@ -249,6 +276,22 @@ public class RobotAPI : IDisposable
         return DatabaseType.Quant;
     }
 
+    private DelayMode Resolve(DelayMode mode)
+    {
+        bool isDownload = _strategy_ == StrategyType.Download;
+        return mode == DelayMode.Auto ? (isDownload ? DelayMode.Full : DelayMode.Off) : mode;
+    }
+
+    private void ResolveDelays()
+    {
+        _tick_delay_ = Resolve(_tick_delay_mode_);
+        _bar_delay_ = Resolve(_bar_delay_mode_);
+        _order_delay_ = Resolve(_order_delay_mode_);
+        _position_delay_ = Resolve(_position_delay_mode_);
+        _trade_delay_ = Resolve(_trade_delay_mode_);
+        _log_.Debug($"Delay: Tick {_tick_delay_}/{_tick_delay_count_} · Bar {_bar_delay_}/{_bar_delay_count_} · Order {_order_delay_}/{_order_delay_count_} · Position {_position_delay_}/{_position_delay_count_} · Trade {_trade_delay_}/{_trade_delay_count_}");
+    }
+
     private static string BufferingArgs(string group, BufferingMode mode, int batch, double interval, int workers, int maxsize)
     {
         switch (mode)
@@ -282,6 +325,7 @@ public class RobotAPI : IDisposable
             _system_.SendUpdateComplete();
             _log_.Debug("Handshake Operation: Sent · Awaiting Python Actions");
             ReceiveAndProcessActions();
+            ResolveDelays();
             _log_.Info("Activation Operation: Activated · Python Ready");
         }
         catch (Exception e)
@@ -289,6 +333,64 @@ public class RobotAPI : IDisposable
             _log_.Exception($"Activation Operation: Failed · {e.Message}");
             _robot_.Stop();
         }
+    }
+
+    private const int BatchCapacity = 4092;
+    private const int FlushThreshold = 16;
+
+    private void ReleaseSingle(byte[] record)
+    {
+        _system_.SendRecord(record);
+        _system_.SendUpdateComplete();
+        ReceiveAndProcessActions();
+    }
+
+    private void FlushBatch(Queue<byte[]> queue)
+    {
+        using var ms = new MemoryStream();
+        ms.WriteByte((byte)UpdateID.Batch);
+        while (queue.Count > 0)
+        {
+            var record = queue.Peek();
+            if (3 + record.Length > BatchCapacity) { queue.Dequeue(); ReleaseSingle(record); continue; }
+            if (ms.Length + 2 + record.Length > BatchCapacity) break;
+            ms.Write(BitConverter.GetBytes((ushort)record.Length), 0, 2);
+            ms.Write(record, 0, record.Length);
+            queue.Dequeue();
+        }
+        if (ms.Length > 1) _system_.SendBatch(ms.ToArray());
+    }
+
+    private void Emit(Queue<byte[]> queue, DelayMode mode, int count, byte[] record)
+    {
+        try
+        {
+            if (mode == DelayMode.Off) { ReleaseSingle(record); return; }
+            queue.Enqueue(record);
+            if (mode == DelayMode.Manual)
+            {
+                while (queue.Count > count) ReleaseSingle(queue.Dequeue());
+            }
+            else if (mode == DelayMode.Full && queue.Count >= FlushThreshold)
+            {
+                FlushBatch(queue);
+            }
+        }
+        catch (PeerExitException) { _robot_.Stop(); }
+    }
+
+    private void DrainQueue(Queue<byte[]> queue)
+    {
+        while (queue.Count > 0) FlushBatch(queue);
+    }
+
+    private void DrainBatched()
+    {
+        DrainQueue(_tick_queue_);
+        DrainQueue(_bar_queue_);
+        DrainQueue(_order_queue_);
+        DrainQueue(_position_queue_);
+        DrainQueue(_trade_queue_);
     }
 
     private void SpawnTerminal(string inner_cmd)
@@ -444,10 +546,8 @@ public class RobotAPI : IDisposable
         var order_data = new LastOrderData { LastVolume = args.PendingOrder.VolumeInUnits, LastTargetPrice = args.PendingOrder.TargetPrice, LastStopLoss = args.PendingOrder.StopLoss, LastTakeProfit = args.PendingOrder.TakeProfit };
         _orders_.Add(args.PendingOrder.Id, order_data);
         if (!EmitOrder) return;
-        _system_.SendUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "Opened"), _bar_, args.PendingOrder);
-        _system_.SendUpdateComplete();
         _orders_sent_++;
-        ReceiveAndProcessActions();
+        Emit(_order_queue_, _order_delay_, _order_delay_count_, _system_.BuildUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "Opened"), _bar_, args.PendingOrder));
     }
 
     private void OnOrderModified(PendingOrderModifiedEventArgs args)
@@ -459,40 +559,32 @@ public class RobotAPI : IDisposable
         {
             order_data.LastVolume = args.PendingOrder.VolumeInUnits;
             if (!EmitOrder) return;
-            _system_.SendUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "ModifiedVolume"), _bar_, args.PendingOrder);
-            _system_.SendUpdateComplete();
             _orders_sent_++;
-            ReceiveAndProcessActions();
+            Emit(_order_queue_, _order_delay_, _order_delay_count_, _system_.BuildUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "ModifiedVolume"), _bar_, args.PendingOrder));
             return;
         }
         if (Math.Abs(args.PendingOrder.TargetPrice - order_data.LastTargetPrice) > double.Epsilon)
         {
             order_data.LastTargetPrice = args.PendingOrder.TargetPrice;
             if (!EmitOrder) return;
-            _system_.SendUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "ModifiedTargetPrice"), _bar_, args.PendingOrder);
-            _system_.SendUpdateComplete();
             _orders_sent_++;
-            ReceiveAndProcessActions();
+            Emit(_order_queue_, _order_delay_, _order_delay_count_, _system_.BuildUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "ModifiedTargetPrice"), _bar_, args.PendingOrder));
             return;
         }
         if ((order_data.LastStopLoss == null && args.PendingOrder.StopLoss != null) || (order_data.LastStopLoss != null && args.PendingOrder.StopLoss == null) || (order_data.LastStopLoss != null && args.PendingOrder.StopLoss != null && Math.Abs((double)args.PendingOrder.StopLoss - (double)order_data.LastStopLoss) > double.Epsilon))
         {
             order_data.LastStopLoss = args.PendingOrder.StopLoss;
             if (!EmitOrder) return;
-            _system_.SendUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "ModifiedStopLoss"), _bar_, args.PendingOrder);
-            _system_.SendUpdateComplete();
             _orders_sent_++;
-            ReceiveAndProcessActions();
+            Emit(_order_queue_, _order_delay_, _order_delay_count_, _system_.BuildUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "ModifiedStopLoss"), _bar_, args.PendingOrder));
             return;
         }
         if ((order_data.LastTakeProfit == null && args.PendingOrder.TakeProfit != null) || (order_data.LastTakeProfit != null && args.PendingOrder.TakeProfit == null) || (order_data.LastTakeProfit != null && args.PendingOrder.TakeProfit != null && Math.Abs((double)args.PendingOrder.TakeProfit - (double)order_data.LastTakeProfit) > double.Epsilon))
         {
             order_data.LastTakeProfit = args.PendingOrder.TakeProfit;
             if (!EmitOrder) return;
-            _system_.SendUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "ModifiedTakeProfit"), _bar_, args.PendingOrder);
-            _system_.SendUpdateComplete();
             _orders_sent_++;
-            ReceiveAndProcessActions();
+            Emit(_order_queue_, _order_delay_, _order_delay_count_, _system_.BuildUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "ModifiedTakeProfit"), _bar_, args.PendingOrder));
         }
     }
 
@@ -502,10 +594,8 @@ public class RobotAPI : IDisposable
         if (!_verified_) return;
         _orders_.Remove(args.PendingOrder.Id);
         if (!EmitOrder) return;
-        _system_.SendUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "Closed"), _bar_, args.PendingOrder);
-        _system_.SendUpdateComplete();
         _orders_sent_++;
-        ReceiveAndProcessActions();
+        Emit(_order_queue_, _order_delay_, _order_delay_count_, _system_.BuildUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "Closed"), _bar_, args.PendingOrder));
     }
 
     private void OnOrderFilled(PendingOrderFilledEventArgs args)
@@ -514,10 +604,8 @@ public class RobotAPI : IDisposable
         if (!_verified_) return;
         _orders_.Remove(args.PendingOrder.Id);
         if (!EmitOrder) return;
-        _system_.SendUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "Filled"), _bar_, args.PendingOrder);
-        _system_.SendUpdateComplete();
         _orders_sent_++;
-        ReceiveAndProcessActions();
+        Emit(_order_queue_, _order_delay_, _order_delay_count_, _system_.BuildUpdateOrder(ResolveOrderUpdateID(args.PendingOrder, "Filled"), _bar_, args.PendingOrder));
     }
 
     private void OnPositionOpened(PositionOpenedEventArgs args)
@@ -528,10 +616,8 @@ public class RobotAPI : IDisposable
         _positions_.Add(args.Position.Id, position_data);
         if (!EmitPosition) return;
         UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.OpenedBuyPosition : UpdateID.OpenedSellPosition;
-        _system_.SendUpdatePosition(update_id, _bar_, args.Position);
-        _system_.SendUpdateComplete();
         _positions_sent_++;
-        ReceiveAndProcessActions();
+        Emit(_position_queue_, _position_delay_, _position_delay_count_, _system_.BuildUpdatePosition(update_id, _bar_, args.Position));
     }
 
     private void OnPositionModified(PositionModifiedEventArgs args)
@@ -545,10 +631,8 @@ public class RobotAPI : IDisposable
             if (!EmitTrade) return;
             var trade = FindTrade(args.Position.Id);
             UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.ModifiedBuyPositionVolume : UpdateID.ModifiedSellPositionVolume;
-            _system_.SendUpdatePositionTrade(update_id, _bar_, args.Position, trade);
-            _system_.SendUpdateComplete();
             _trades_sent_++;
-            ReceiveAndProcessActions();
+            Emit(_trade_queue_, _trade_delay_, _trade_delay_count_, _system_.BuildUpdatePositionTrade(update_id, _bar_, args.Position, trade));
             return;
         }
         if ((position_data.LastStopLoss == null && args.Position.StopLoss != null) || (position_data.LastStopLoss != null && args.Position.StopLoss == null) || (position_data.LastStopLoss != null && args.Position.StopLoss != null && Math.Abs((double)args.Position.StopLoss - (double)position_data.LastStopLoss) > double.Epsilon))
@@ -556,10 +640,8 @@ public class RobotAPI : IDisposable
             position_data.LastStopLoss = args.Position.StopLoss;
             if (!EmitPosition) return;
             UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.ModifiedBuyPositionStopLoss : UpdateID.ModifiedSellPositionStopLoss;
-            _system_.SendUpdatePosition(update_id, _bar_, args.Position);
-            _system_.SendUpdateComplete();
             _positions_sent_++;
-            ReceiveAndProcessActions();
+            Emit(_position_queue_, _position_delay_, _position_delay_count_, _system_.BuildUpdatePosition(update_id, _bar_, args.Position));
             return;
         }
         if ((position_data.LastTakeProfit == null && args.Position.TakeProfit != null) || (position_data.LastTakeProfit != null && args.Position.TakeProfit == null) || (position_data.LastTakeProfit != null && args.Position.TakeProfit != null && Math.Abs((double)args.Position.TakeProfit - (double)position_data.LastTakeProfit) > double.Epsilon))
@@ -567,10 +649,8 @@ public class RobotAPI : IDisposable
             position_data.LastTakeProfit = args.Position.TakeProfit;
             if (!EmitPosition) return;
             UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.ModifiedBuyPositionTakeProfit : UpdateID.ModifiedSellPositionTakeProfit;
-            _system_.SendUpdatePosition(update_id, _bar_, args.Position);
-            _system_.SendUpdateComplete();
             _positions_sent_++;
-            ReceiveAndProcessActions();
+            Emit(_position_queue_, _position_delay_, _position_delay_count_, _system_.BuildUpdatePosition(update_id, _bar_, args.Position));
         }
     }
 
@@ -582,10 +662,8 @@ public class RobotAPI : IDisposable
         if (!EmitTrade) return;
         var trade = FindTrade(args.Position.Id);
         UpdateID update_id = ResolvePositionCloseUpdateID(args.Position, args.Reason);
-        _system_.SendUpdatePositionTrade(update_id, _bar_, args.Position, trade);
-        _system_.SendUpdateComplete();
         _trades_sent_++;
-        ReceiveAndProcessActions();
+        Emit(_trade_queue_, _trade_delay_, _trade_delay_count_, _system_.BuildUpdatePositionTrade(update_id, _bar_, args.Position, trade));
     }
 
     private void OnTick(SymbolTickEventArgs args)
@@ -597,38 +675,28 @@ public class RobotAPI : IDisposable
         if (!_verified_) return;
         if (EmitTickAll)
         {
-            _system_.SendUpdateTick(UpdateID.Tick, tick);
-            _system_.SendUpdateComplete();
             _ticks_sent_++;
-            ReceiveAndProcessActions();
+            Emit(_tick_queue_, _tick_delay_, _tick_delay_count_, _system_.BuildUpdateTick(UpdateID.Tick, tick));
         }
         if (_ask_above_target_ != null && tick.Ask >= _ask_above_target_)
         {
-            _system_.SendUpdateTick(UpdateID.AskAboveTarget, tick);
-            _system_.SendUpdateComplete();
             _ticks_sent_++;
-            ReceiveAndProcessActions();
+            Emit(_tick_queue_, _tick_delay_, _tick_delay_count_, _system_.BuildUpdateTick(UpdateID.AskAboveTarget, tick));
         }
         if (_ask_below_target_ != null && tick.Ask <= _ask_below_target_)
         {
-            _system_.SendUpdateTick(UpdateID.AskBelowTarget, tick);
-            _system_.SendUpdateComplete();
             _ticks_sent_++;
-            ReceiveAndProcessActions();
+            Emit(_tick_queue_, _tick_delay_, _tick_delay_count_, _system_.BuildUpdateTick(UpdateID.AskBelowTarget, tick));
         }
         if (_bid_above_target_ != null && tick.Bid >= _bid_above_target_)
         {
-            _system_.SendUpdateTick(UpdateID.BidAboveTarget, tick);
-            _system_.SendUpdateComplete();
             _ticks_sent_++;
-            ReceiveAndProcessActions();
+            Emit(_tick_queue_, _tick_delay_, _tick_delay_count_, _system_.BuildUpdateTick(UpdateID.BidAboveTarget, tick));
         }
         if (_bid_below_target_ != null && tick.Bid <= _bid_below_target_)
         {
-            _system_.SendUpdateTick(UpdateID.BidBelowTarget, tick);
-            _system_.SendUpdateComplete();
             _ticks_sent_++;
-            ReceiveAndProcessActions();
+            Emit(_tick_queue_, _tick_delay_, _tick_delay_count_, _system_.BuildUpdateTick(UpdateID.BidBelowTarget, tick));
         }
     }
 
@@ -642,10 +710,8 @@ public class RobotAPI : IDisposable
         _bar_.Volume = 0.0;
         if (!_verified_) return;
         if (!EmitBarOpened) return;
-        _system_.SendUpdateBar(UpdateID.BarOpened, _bar_);
-        _system_.SendUpdateComplete();
         _bars_sent_++;
-        ReceiveAndProcessActions();
+        Emit(_bar_queue_, _bar_delay_, _bar_delay_count_, _system_.BuildUpdateBar(UpdateID.BarOpened, _bar_));
     }
 
     private void OnBarClosed(BarClosedEventArgs args)
@@ -691,11 +757,9 @@ public class RobotAPI : IDisposable
                 {
                     foreach (var buffered in _verification_buffer_)
                     {
-                        _system_.SendUpdateBar(UpdateID.BarClosed, buffered);
-                        _system_.SendUpdateComplete();
                         _ticks_sent_ += 5;
                         _bars_sent_++;
-                        ReceiveAndProcessActions();
+                        ReleaseSingle(_system_.BuildUpdateBar(UpdateID.BarClosed, buffered));
                     }
                     _log_.Debug($"Warmup Operation: Replayed Buffer ({_verification_buffer_.Count} Bars) · Total Sent {_bars_sent_} Bars");
                 }
@@ -704,25 +768,9 @@ public class RobotAPI : IDisposable
         }
         else if (EmitBarClosed)
         {
-            var entry = _prof_sw_.Elapsed.TotalMilliseconds;
-            if (_prof_last_exit_ms_ >= 0.0) _prof_gap_ms_ += entry - _prof_last_exit_ms_;
-            _system_.SendUpdateBar(UpdateID.BarClosed, _bar_);
-            _system_.SendUpdateComplete();
             _ticks_sent_ += 5;
             _bars_sent_++;
-            if (_bars_sent_ % 100 == 0) _log_.Debug($"Progress: Ticks {_ticks_sent_} · Bars {_bars_sent_} · Orders {_orders_sent_} · Positions {_positions_sent_} · Trades {_trades_sent_} · Actions {_actions_received_}");
-            ReceiveAndProcessActions();
-            _prof_lockstep_ms_ += _prof_sw_.Elapsed.TotalMilliseconds - entry;
-            _prof_bars_++;
-            if (_prof_bars_ % 500 == 0)
-            {
-                var perLock = _prof_lockstep_ms_ / _prof_bars_;
-                var perGap = _prof_bars_ > 1 ? _prof_gap_ms_ / (_prof_bars_ - 1) : 0.0;
-                var total = _prof_lockstep_ms_ + _prof_gap_ms_;
-                var share = total > 0.0 ? 100.0 * _prof_lockstep_ms_ / total : 0.0;
-                _log_.Info($"DownloadProfile: Bars {_prof_bars_} · Lockstep {_prof_lockstep_ms_:F0}ms ({perLock:F3}/bar) · cTrader {_prof_gap_ms_:F0}ms ({perGap:F3}/bar) · Lockstep-share {share:F1}%");
-            }
-            _prof_last_exit_ms_ = _prof_sw_.Elapsed.TotalMilliseconds;
+            Emit(_bar_queue_, _bar_delay_, _bar_delay_count_, _system_.BuildUpdateBar(UpdateID.BarClosed, _bar_));
         }
         _bar_.Timestamp = last_bar.OpenTime;
         _bar_.GapTick = _bar_.CloseTick;
@@ -748,6 +796,9 @@ public class RobotAPI : IDisposable
         {
             if (_verified_)
             {
+                bool pending = _tick_queue_.Count > 0 || _bar_queue_.Count > 0 || _order_queue_.Count > 0 || _position_queue_.Count > 0 || _trade_queue_.Count > 0;
+                DrainBatched();
+                if (pending) { _system_.SendUpdateComplete(); ReceiveAndProcessActions(); }
                 _system_.SendUpdateShutdown();
                 ReceiveAndProcessActions();
             }
@@ -888,6 +939,11 @@ public class RobotAPI : IDisposable
         {
             byte[] data;
             try { data = _system_.Receive(); }
+            catch (PeerExitException)
+            {
+                _robot_.Stop();
+                return;
+            }
             catch (Exception e)
             {
                 _log_.Exception($"Receive Operation: Failed · {e.Message}");
@@ -899,6 +955,7 @@ public class RobotAPI : IDisposable
             switch (action_id)
             {
                 case ActionID.Complete: break;
+                case ActionID.Shutdown: _robot_.Stop(); break;
                 case ActionID.Execution: go_live = true; break;
                 case ActionID.Subscribe: _streams_ |= (Stream)data[1]; break;
                 case ActionID.Unsubscribe: _streams_ &= ~(Stream)data[1]; break;
@@ -996,7 +1053,7 @@ public class RobotAPI : IDisposable
                 case ActionID.BidBelowTarget: _bid_below_target_ = NullIfNan(ReadDouble(data, 1)); break;
                 default: _log_.Exception($"Receive Operation: Failed · Invalid Action ID {action_id}"); throw new ArgumentOutOfRangeException();
             }
-        } while (action_id != ActionID.Complete);
+        } while (action_id != ActionID.Complete && action_id != ActionID.Shutdown);
         if (go_live)
         {
             _system_.SendUpdateExecution();

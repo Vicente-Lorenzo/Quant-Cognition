@@ -7,6 +7,11 @@ using cAlgo.API;
 
 namespace Connector;
 
+public class PeerExitException : Exception
+{
+    public PeerExitException(string message) : base(message) { }
+}
+
 public class TransportAPI : IDisposable
 {
     private readonly Robot _robot_;
@@ -83,14 +88,14 @@ public class TransportAPI : IDisposable
     {
         while (true)
         {
-            if (_peer_dead_) throw new InvalidOperationException("Python process exited");
+            if (_peer_dead_) throw new PeerExitException("Python process exited");
             if (handle.WaitOne(POLL_MS)) return;
         }
     }
 
     public void Send(byte[] data)
     {
-        if (_peer_dead_) throw new InvalidOperationException("Python process exited; cannot send");
+        if (_peer_dead_) throw new PeerExitException("Python process exited");
         WriteBuffer(data);
         _ur_.Set();
         WaitFor(_uc_);

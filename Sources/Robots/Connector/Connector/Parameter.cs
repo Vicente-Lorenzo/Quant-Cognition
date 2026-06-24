@@ -71,3 +71,11 @@ public enum TradeStreamMode
     All = 1,
     Off = 2,
 }
+
+public enum DelayMode
+{
+    Auto = 0,
+    Full = 1,
+    Manual = 2,
+    Off = 3,
+}

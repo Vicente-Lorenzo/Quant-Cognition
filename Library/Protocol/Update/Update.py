@@ -95,10 +95,11 @@ class UpdateID(EnumerationAPI):
     TakeProfitSellPosition = 74
     MarginCallBuyPosition = 75
     MarginCallSellPosition = 76
-    Complete = 77
-    Denied = 78
-    Exception = 79
-    Shutdown = 80
+    Denied = 77
+    Exception = 78
+    Shutdown = 79
+    Batch = 80
+    Complete = 81
 
 @dataclass(slots=True)
 class UpdateAPI(DataclassAPI):

@@ -113,10 +113,11 @@ namespace Connector
         TakeProfitSellPosition = 74,
         MarginCallBuyPosition = 75,
         MarginCallSellPosition = 76,
-        Complete = 77,
-        Denied = 78,
-        Exception = 79,
-        Shutdown = 80,
+        Denied = 77,
+        Exception = 78,
+        Shutdown = 79,
+        Batch = 80,
+        Complete = 81,
     }
 
     public enum ActionID
@@ -177,7 +178,8 @@ namespace Connector
         CloseSellPosition = 53,
         Subscribe = 54,
         Unsubscribe = 55,
-        Complete = 56,
+        Shutdown = 56,
+        Complete = 57,
     }
 
     [System.Flags]
