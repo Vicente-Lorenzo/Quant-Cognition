@@ -423,19 +423,20 @@ public class RobotAPI : IDisposable
         var primary = _robot_.Symbol;
         if (primary.BaseAsset == from_asset && primary.QuoteAsset == to_asset) return (Ask: () => primary.Ask, Bid: () => primary.Bid);
         if (primary.QuoteAsset == from_asset && primary.BaseAsset == to_asset) return (Ask: () => 1.0 / primary.Bid, Bid: () => 1.0 / primary.Ask);
-        foreach (var symbol_name in _robot_.Symbols)
+        foreach (var name in new[] { $"{from_asset.Name}{to_asset.Name}", $"{to_asset.Name}{from_asset.Name}" })
         {
+            if (!_robot_.Symbols.Exists(name)) continue;
             try
             {
-                if (!_robot_.Symbols.Exists(symbol_name)) continue;
-                var symbol = _robot_.Symbols.GetSymbol(symbol_name);
-                if (symbol.BaseAsset == null || symbol.QuoteAsset == null) continue;
+                var symbol = _robot_.Symbols.GetSymbol(name);
+                if (symbol?.BaseAsset == null || symbol.QuoteAsset == null) continue;
+                _robot_.MarketData.GetBars(_robot_.TimeFrame, name);
                 if (symbol.BaseAsset == from_asset && symbol.QuoteAsset == to_asset) return (Ask: () => symbol.Ask, Bid: () => symbol.Bid);
                 if (symbol.QuoteAsset == from_asset && symbol.BaseAsset == to_asset) return (Ask: () => 1.0 / symbol.Bid, Bid: () => 1.0 / symbol.Ask);
             }
             catch (Exception e) { _log_.Warning($"Conversion Operation: Failed · {e.Message}"); }
         }
-        throw new Exception($"No conversion symbol found for {from_asset} → {to_asset}");
+        throw new Exception($"No conversion symbol found for {from_asset.Name} → {to_asset.Name}");
     }
 
     private xTick CurrentTick()
