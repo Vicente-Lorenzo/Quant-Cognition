@@ -77,6 +77,14 @@ class MarketAPI(DatapointAPI):
         return int(df["Count"][0]) if df.height else 0
 
     @staticmethod
+    def last_tick_uid(db: DatabaseAPI, security: int, start: datetime, stop: datetime) -> int:
+        from Library.Market.Tick import TickAPI
+        lo, hi = TickAPI.encode(security, start), TickAPI.encode(security, stop)
+        sql = f'SELECT MAX("{TickAPI.ID.UID}") AS "Token" FROM "{TickAPI.Schema}"."{TickAPI.Table}" WHERE "{TickAPI.ID.UID}" BETWEEN :lo: AND :hi:'
+        df = db.executeone(QueryAPI(sql), lo=lo, hi=hi, schema=TickAPI.Schema, table=TickAPI.Table).fetchall(legacy=False)
+        return int(df["Token"][0]) if df.height and df["Token"][0] is not None else 0
+
+    @staticmethod
     def push_ticks(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Market.Tick import TickAPI
         if isinstance(data, pl.DataFrame): data = TickAPI.encode(data)
