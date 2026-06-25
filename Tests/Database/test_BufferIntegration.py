@@ -66,6 +66,50 @@ def test_buffer_fk_chain_handles_multiple_bars(db, universe, market):
         assert persisted["GapTick"] == all_ticks[offset].UID
         assert persisted["CloseTick"] == all_ticks[offset + 4].UID
 
+class _RaceInjector_:
+
+    def __init__(self, inner, buf, ticks, bar):
+        self._inner_ = inner
+        self._buf_ = buf
+        self._ticks_ = ticks
+        self._bar_ = bar
+        self._injected_ = False
+
+    def __getattr__(self, name):
+        return getattr(self._inner_, name)
+
+    def merge(self, **kwargs):
+        result = self._inner_.merge(**kwargs)
+        if not self._injected_ and kwargs.get("table") == TickAPI.Table:
+            self._injected_ = True
+            self._buf_._queue_[TickAPI].put(list(self._ticks_))
+            self._buf_._queue_[BarAPI].put([self._bar_])
+        return result
+
+def test_buffer_fk_race_bar_not_drained_before_its_ticks(db, universe, market):
+    sec = universe["security"]
+    tf = universe["timeframe"]
+    db.executeone(QueryAPI(f'DELETE FROM "{BarAPI.Schema}"."{BarAPI.Table}"')).commit()
+    db.executeone(QueryAPI(f'DELETE FROM "{TickAPI.Schema}"."{TickAPI.Table}"')).commit()
+    a = datetime(2025, 4, 1, 12, 0, 0)
+    b = datetime(2025, 4, 1, 12, 1, 0)
+    ticks_a = [_make_tick_(sec, a - timedelta(seconds=5 - j), 1.10 + 0.001 * j, 1.0998 + 0.001 * j) for j in range(5)]
+    ticks_b = [_make_tick_(sec, b - timedelta(seconds=5 - j), 1.20 + 0.001 * j, 1.1998 + 0.001 * j) for j in range(5)]
+    bar_a = _make_bar_(sec, tf, a, ticks_a)
+    bar_b = _make_bar_(sec, tf, b, ticks_b)
+    buf = BufferAPI(types=[TickAPI, BarAPI], batch=1000, interval=0.0, workers=1, bulk=True, db=lambda: db)
+    for t in ticks_a: buf.add(t)
+    buf.add(bar_a)
+    buf.flush()
+    race = _RaceInjector_(db, buf, ticks_b, bar_b)
+    buf._consume_(race)
+    buf._consume_(race)
+    count = db.executeone(QueryAPI(f'SELECT count(*) AS n FROM "{BarAPI.Schema}"."{BarAPI.Table}"')).fetchall(legacy=False)
+    assert count.row(0, named=True)["n"] == 2
+    for dt in (a, b):
+        row = db.select(schema=BarAPI.Schema, table=BarAPI.Table, condition='"Timestamp" = :dt:', parameters={"dt": dt}, limit=1, legacy=False)
+        assert not row.is_empty()
+
 def test_buffer_merge_bulk_fk_chain_idempotent(db, universe, market):
     sec = universe["security"]
     tf = universe["timeframe"]

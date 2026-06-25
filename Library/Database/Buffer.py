@@ -160,13 +160,15 @@ class BufferAPI(threading.Thread):
             self._log_.error(lambda: f"Drain {t.Table}: Failed · {e}")
 
     def _consume_(self, db: DatabaseAPI) -> None:
+        snapshot = {t: self._collect_(t) for t in reversed(self._types_)}
         for t in self._types_:
-            records = self._collect_(t)
+            records = snapshot.get(t)
             if records: self._write_(db, t, records)
 
     def _dispatch_(self) -> None:
+        snapshot = {t: self._collect_(t) for t in reversed(self._types_)}
         for t in self._types_:
-            records = self._collect_(t)
+            records = snapshot.get(t)
             if not records: continue
             parts = [part for part in self._partition_(records) if part]
             latch = threading.Semaphore(0)
