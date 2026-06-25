@@ -75,6 +75,7 @@ class BufferAPI(threading.Thread):
         pass
 
     def add(self, record: DatapointAPI) -> None:
+        if not self._active_: return
         self._buffer_[type(record)].append(record)
         self._count_ += 1
 

@@ -103,7 +103,7 @@ def _market_(system: SystemType, strategy: StrategyType, batch: Union[int, Missi
     download = strategy == StrategyType.Download
     match system:
         case SystemType.Live: auto_batch, auto_interval, auto_workers, auto_maxsize = 1000, 60.0, 1, 64
-        case SystemType.Simulation: auto_batch, auto_interval, auto_workers, auto_maxsize = (500000, 0.0, 8, 16) if download else (50000, 0.0, 8, 64)
+        case SystemType.Simulation: auto_batch, auto_interval, auto_workers, auto_maxsize = (500000, 0.0, 8, 16) if download else (0, 0.0, 0, 0)
         case SystemType.Testing: auto_batch, auto_interval, auto_workers, auto_maxsize = (500000, 0.0, 8, 16) if download else (0, 0.0, 0, 0)
         case _: auto_batch, auto_interval, auto_workers, auto_maxsize = 0, 0.0, 0, 0
     batch = batch if not isinstance(batch, Missing) else auto_batch

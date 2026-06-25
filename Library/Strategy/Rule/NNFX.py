@@ -17,7 +17,8 @@ from Library.Protocol.Action import (
     ModifySellPositionStopLossActionAPI,
     ModifySellPositionVolumeActionAPI,
     OpenBuyPositionActionAPI,
-    OpenSellPositionActionAPI
+    OpenSellPositionActionAPI,
+    Stream
 )
 from Library.Protocol.Update import (
     UpdateID,
@@ -36,6 +37,8 @@ if TYPE_CHECKING:
     from Library.Parameter import Parameter
 
 class NNFXStrategyAPI(StrategyAPI):
+
+    Subscription = Stream.All & ~Stream.Tick
 
     def __init__(self,
                  money_management: Parameter,
