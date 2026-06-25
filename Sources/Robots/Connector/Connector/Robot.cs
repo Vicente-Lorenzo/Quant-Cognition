@@ -430,6 +430,7 @@ public class RobotAPI : IDisposable
             {
                 var symbol = _robot_.Symbols.GetSymbol(name);
                 if (symbol?.BaseAsset == null || symbol.QuoteAsset == null) continue;
+                _robot_.MarketData.GetTicks(name);
                 _robot_.MarketData.GetBars(_robot_.TimeFrame, name);
                 if (symbol.BaseAsset == from_asset && symbol.QuoteAsset == to_asset) return (Ask: () => symbol.Ask, Bid: () => symbol.Bid);
                 if (symbol.QuoteAsset == from_asset && symbol.BaseAsset == to_asset) return (Ask: () => 1.0 / symbol.Bid, Bid: () => 1.0 / symbol.Ask);
