@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from datetime import datetime
 
-from Library.System.Backtesting import BacktestingAPI, _eu_summer_
+from Library.System.Backtesting import BacktestingAPI, DatasetAPI, _eu_summer_
 from Library.Market.Price import Direction
 from Library.Protocol.Update import UpdateID
 from Library.Universe.Contract import CommissionType, CommissionMode, SpreadType, SwapType, SwapMode
@@ -287,7 +287,9 @@ class _FakeArr_:
 
 def _preload_stub_():
     engine = object.__new__(BacktestingAPI)
+    engine._dataset_ = None
     engine._bars_ = [object()]
+    engine._warmup_frame_ = None
     engine._security_ = type("S", (), {"UID": 1})()
     engine._timeframe_ = type("T", (), {"UID": "D1"})()
     engine._start_ = datetime(2023, 1, 1)
@@ -299,6 +301,7 @@ def _preload_stub_():
 def test_preload_cache_reuses_across_instances(monkeypatch):
     BacktestingAPI._PRELOAD_CACHE_.clear()
     monkeypatch.setattr(BacktestingAPI, "_DISK_CACHE_", False)
+    monkeypatch.setattr(BacktestingAPI, "_load_bars_", lambda self: None)
     calls = []
     monkeypatch.setattr(BacktestingAPI, "_load_frames_", lambda self: (calls.append(1), (_FakeArr_(), _FakeArr_(), _FakeArr_(), None, {}, [], None))[1])
     first, second = _preload_stub_(), _preload_stub_()
@@ -306,11 +309,38 @@ def test_preload_cache_reuses_across_instances(monkeypatch):
     second._preload_()
     assert len(calls) == 1
     assert first._tick_ts_ is second._tick_ts_
+    assert first._bars_ is second._bars_
     third = _preload_stub_()
     third._start_ = datetime(2022, 1, 1)
     third._preload_()
     assert len(calls) == 2
     BacktestingAPI._PRELOAD_CACHE_.clear()
+
+def test_preload_injects_dataset_without_loading(monkeypatch):
+    BacktestingAPI._PRELOAD_CACHE_.clear()
+    calls = []
+    monkeypatch.setattr(BacktestingAPI, "_load_bars_", lambda self: calls.append("bars"))
+    monkeypatch.setattr(BacktestingAPI, "_acquire_frames_", lambda self: calls.append("frames"))
+    arr = _FakeArr_()
+    bars = [object()]
+    dataset = DatasetAPI(Bars=bars, WarmupFrame=None, TickTimestamps=arr, TickAsks=arr, TickBids=arr, TickConversions=None, RungFrames={}, Ladder=[], FinerFrame=None)
+    engine = _preload_stub_()
+    engine._dataset_ = dataset
+    engine._preload_()
+    assert calls == []
+    assert engine._bars_ is bars
+    assert engine._tick_ts_ is arr and engine._tick_ask_ is arr and engine._tick_bid_ is arr
+
+def test_dataset_property_round_trips_state():
+    arr = _FakeArr_()
+    source = _preload_stub_()
+    source._tick_ts_, source._tick_ask_, source._tick_bid_ = arr, arr, arr
+    source._tick_conversions_array_, source._rung_frames_, source._ladder_, source._finer_frame_ = None, {}, [], None
+    target = _preload_stub_()
+    target._dataset_ = source.Dataset
+    target._preload_()
+    assert target._bars_ is source._bars_
+    assert target._tick_ts_ is arr
 
 def test_auto_fee_types_resolve_to_accurate():
     engine = BacktestingAPI(

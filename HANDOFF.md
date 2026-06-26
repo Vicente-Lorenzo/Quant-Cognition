@@ -22,9 +22,10 @@ Both the **realtime path** (Live/Simulation/Testing, `RealtimeAPI`) and the **of
 
 ## 2. Where we are now (2026-06-26)
 
-The **download + realtime optimization track is DONE**; focus moves to the **offline backtesting engine** (§4) for the Optimization/Learning tracks.
+The **download + realtime tracks AND the offline backtesting engine are DONE** (engine validated + optimized + closed, §4). **Focus moves to the Optimization & Learning systems** (§6) — both build on the now-validated `BacktestingAPI` + its `dataset=` injection seam.
 
 **Landed this arc (all validated):**
+- **Offline engine validated + optimized + closed (§4).** Reproduces all 6 fresh goldens at the data-bound floor (counts bit-exact, USDJPY "neither" path Daily ≈ bit-exact). OPT-A caches `_load_bars_` across runs (repeat-run init 1.1s → 0.02s); `dataset=` injection hook (`DatasetAPI`) added as the load-once / inject-across-N-runs seam. Measured 10y per-pass: D1 3.2s, H1 25.4s. Suite 363 green.
 - **Download throughput** — batch/delay protocol (sliding-FIFO + `UpdateID.Batch` + enlarged slot), Full buffering, Subscription trimming. Download is no longer the gate.
 - **NNFX online streaming fix** — `NNFXStrategyAPI.Subscription = Stream.All & ~Stream.Tick` (=62). NNFX reactivity is 100% target-driven (armed `Ask/Bid Above/Below` targets + native SL/TP), so dropping the raw tick stream is bit-exact on trades while collapsing ~21.3M per-tick round-trips → daily bar closes + a few target crossings (≈55 min → ~1.5 min for a D1 year). **DDPG `Subscription` NOT yet reviewed** — an RL agent may genuinely need `Stream.Tick`; decide deliberately, don't copy NNFX.
 - **Buffer FK-race fix** — the async market buffer (`Library/Database/Buffer.py`) drained bars before their anchor ticks under a fresh (truncated) table → `Bar_GapTick_fkey` violations + silently dropped bars. Fixed by snapshotting all types up front in reverse dependency order then writing forward (`_consume_`/`_dispatch_`), so ticks are always committed before any referencing bar. Regression test `Tests/Database/test_BufferIntegration.py::test_buffer_fk_race_bar_not_drained_before_its_ticks` reproduces the exact error on old code, passes on the fix.
@@ -84,55 +85,64 @@ Profiled with logging silenced (`LoggingAPI.set_verbose_level(Silent)`; default 
 
 ---
 
-## 4. CURRENT FOCUS — Offline engine optimization (prioritized)
+## 4. Offline Backtesting Engine — VALIDATED, OPTIMIZED, CLOSED (2026-06-26)
 
-Goal: drive down per-run cost for the Optimization/Learning tracks (many runs over the same data) while staying byte-identical to the goldens. **Every item MUST be golden-validated before commit.** Profile first (cProfile cumulative+tottime, targeted micro-benchmarks) — measure, don't guess.
+The engine is **closed**: validated against the 6 fresh goldens and optimized for the Optimization/Learning multi-run path. Full suite **363 green**. Library edits unstaged for user commit.
 
-**Tier 1 — biggest engine wins (per-bar hot path):**
-- **A · Numpy-ize the per-bar feed + indicators.** Dominant remaining cost is per-bar **Polars churn**: every bar builds 1-row `pl.DataFrame`s for the feed and for each indicator (`ATR`/`KAMA`/`MACD`/`HMA`/`SMA` wrap a *scalar* in a 1-row frame and `vstack`). Replace `SeriesAPI` per-bar storage + indicators' `stream()` with numpy/scalar incremental; keep Polars for warmup/IO/batch. Expected **2–4× walk** + fixes the chunk-accumulation pathology at 10y-Hourly (per-bar `vstack`/`extend` accrues ~60k Polars chunks). Risk: touches accuracy-critical math → validate bit-for-bit. **Biggest win; do early.**
-- **Bar/Tick construction at load (`_row_to_bar_`).** `_load_bars_` builds a `BarAPI` + 5 `TickAPI` dataclasses per execution bar — ~500k object builds for 10y-Hourly (the "construction machinery is the real target" from prior profiling). Move the feed onto array-backed bar access (the walk mostly needs prices+timestamps, not full dataclasses); keep dataclasses only where the protocol/reporting needs them.
+**Validation (Auto resolution; all 6 goldens reproduced at the data-bound floor; trade counts bit-exact):**
 
-**Tier 2 — multi-run / scale enabler:**
-- **B · Pull-once shared injectable dataset.** Freeze everything `_load_bars_`+`_preload_` produce into a `BacktestDataset` (`bars`/`warmup_frame`/`tick_ts/ask/bid`/`tick_conversions`/`rung_frames`/`ladder`/`finer_frame`). Add optional `dataset=` to `BacktestingAPI`; in `_connect_`, if injected → assign + skip the DB load, else load as today and expose `.Dataset`. Optimization loads once, injects across N runs (and once per `ProcessPoolExecutor` worker). Default (no-dataset) path stays byte-identical → golden-safe by construction. Market data is read-only during a run (only `_bars_.pop(0)` mutates, at load — moves into dataset construction). The class-level `_PRELOAD_CACHE_` already caches the FRAMES across runs; B extends this to the `BarAPI` list + warmup frame and makes it explicitly injectable + cross-process.
+| Run | count | NET off / gold | dev | note |
+|---|---|---|---|---|
+| EURUSD D1 2023 | 25/25 | 75.28 / 75.55 | −0.35% | floor |
+| EURUSD D1 2022-25 | 76/76 | −136.54 / −127.33 | +7.24% | all swap (ΔGross −0.22) |
+| EURUSD H1 2023 | 696/696 | −2837.11 / −2936.65 | −3.39% | hi-freq sub-pip TSL + cent-round |
+| USDJPY D1 2023 | 14/14 | 47.07 / 47.13 | −0.12% | "neither" path ≈ bit-exact |
+| USDJPY H1 2023 | 709/709 | −57.42 / −61.04 | −5.92% | small denominator |
+| USDJPY D1 2022-25 | 58/58 | 76.84 / 76.74 | +0.13% | "neither" 3y ≈ bit-exact |
 
-**Tier 3 — startup / smaller / fallback:**
-- **DB connection startup (~0.6 s).** `_connect_` + universe/contract/market loads open ~10 PG connections at startup. Pool/reuse one connection; subsumes `_load_bars_` re-pulling per run for multi-run.
-- **Conversion `_conversion_at_` per-tick `searchsorted` ("neither" path only, e.g. USDJPY).** Batch/vectorize conversions over a bar's tick slice instead of per-synth-tick searchsorted.
-- **C · Targeted Polars de-churn (fallback if A is too risky).** Periodic `rechunk` to bound chunk growth + avoid the worst 1-row frames in `_sub_rows_`/`_finer_bars_` `iter_rows`. Partial walk win + scaling fix.
+Residuals are the documented data-bound floor (swap historical-rate/DST, commission cent-rounding, sub-pip intrabar exits), NOT engine error. The USDJPY "neither" cross-pair conversion path is now golden-validated (Daily ≈ bit-exact). Frozen offline exports double as a bit-exact guard for future changes.
+
+**Measured 10y performance (EURUSD, Auto, dense 2015-2025, 209M ticks):**
+
+| | bars | one-time cold setup | **warm per-pass** (DRL multiplier) |
+|---|---|---|---|
+| D1 | 2,634 | ~12 min (preload 675s + cache-write 36s) | **3.2s** (init 0.02 + exec 3.03 + final 0.22) |
+| H1 | 61,940 | ~15.5 min (preload 856s + cache-write 49s) | **25.4s** (init 0.02 + exec 23.5 + final 1.9) |
+
+DRL total = setup(once) + N × per-pass. At 1000 passes/fold: D1 ~53 min, H1 ~7.1 h (× walk-forward folds). Skip the full report during training → `final` ≈ 0.
+
+**Optimizations LANDED (bit-exact, suite green):**
+- **OPT-A — `_load_bars_` cached across runs.** Routed the bar pull + BarAPI/TickAPI construction through the in-memory `_PRELOAD_CACHE_` (now keyed value = `(bars, warmup_frame, frames)`). Repeat-run **init 1.1s → 0.02s** (~50-75×); at 10y H1 it ~halves per-pass (~52s → 25s). Read-only data → golden-safe; all 6 outputs byte-identical.
+- **Tier2-B — `dataset=` injection hook (`DatasetAPI`).** `BacktestingAPI(..., dataset=...)`; `_preload_` → if injected calls `_inject_` + skips the DB load, else loads as today; `.Dataset` property exposes the assembled bundle. Default (no-dataset) path byte-identical. Demonstrated: build once → inject (in-memory cache cleared) → preload 0.81s → 0.00s, deals.csv byte-identical. This is the seam Optimization/Learning use to load once + inject across N runs/folds (and per `ProcessPoolExecutor` worker).
+
+**FUTURE work (NOT needed to proceed to Learning; do only if H1/intraday throughput demands it):**
+- **(b) Precompute + inject the fixed market/indicator dataset (in the Learning system).** In DRL the market + indicators are identical every episode (only the agent's actions change) — compute them once (the already-validated *batch* path) and replay. Eliminates ~45% of per-pass exec (the per-bar indicator recompute) with **zero changes to the streaming `MarketAPI`/`IndicatorAPI` that RealtimeAPI shares**. Biggest, safest H1 lever; belongs in Learning, plugs into the `dataset=` hook. Est. H1 per-pass 25.4s → ~12-14s.
+- **(a) Numpy-ize the streaming per-bar feed + indicators (engine-level, DEFERRED — risky).** Replace `SeriesAPI` per-bar storage + indicators' `stream()` with numpy/scalar incremental; keep Polars for warmup/IO/batch. Expected ~2-4× on the walk + fixes the chunk-accumulation pathology at 10y-Hourly (per-bar `extend` accrues ~60k Polars chunks). **Touches accuracy-critical math SHARED with RealtimeAPI → must keep realtime bit-identical; validate bit-for-bit.** Smaller + riskier than (b) for the DRL use case → do as its own deliberate pass, not a close-out. Also: array-backed bar access at load (`_row_to_bar_` builds BarAPI + 5 TickAPI/bar — ~370k objects at 10y-Hourly).
+- **(c) Lean cold pull.** Rung/finer bars via a 12-col / 4-join query (vs the 60-col / 5-join `pull_bars`) → trims the one-time cold setup + shrinks the cache write (the cold "final" writeback). One-time-per-window only; low value unless walk-forward re-preloads many windows.
+- **Other:** DB connection pooling (per-run ~0.02s after OPT-A); batch the "neither" `_conversion_at_` searchsorted.
 
 **Accuracy (optional, data-bound):** tick-resolution exact exits (closes the sub-pip residual); historical swap-rate schedule capture (closes the swap residual). See §3.4.
 
 ---
 
-## 5. Fresh golden reports to produce (user runs these)
+## 5. Golden reports — CAPTURED & VALIDATED (2026-06-26)
 
-The old goldens are stale — swap rates drifted during the download work. Re-run NNFX as **online cTrader Backtests** (Simulation through the Connector cBot) to mint fresh ground-truth fingerprints, then the offline engine is brute-forced apples-to-apples against them.
+The 6 fresh NNFX online cTrader goldens were minted (EUR 10k, conversion option ON, tick data) and the offline engine reproduced ALL 6 at the data-bound floor (§4). Folders under `Reports/`, all iid `f9e14feb-7c74-44ba-856a-2f2ff0e04e28` (CSV exports only — no `report.html`). These are the **pinned goldens** (replacing the stale 2026-06-07/08 set); any engine change must keep reproducing all 6.
 
-**Common settings for every run:** Strategy **NNFX** · Account **EUR**, balance **10,000** · cTrader conversion option **ON (ticked)** · cBot **Report = ON** and **Export = ON** · cTrader data = **Tick data from server (most accurate)** so the golden is ground truth. Each run writes `Reports/<timestamp> <iid>/` (`report.html` + deals/net/orders/positions/trades.csv).
-
-**EURUSD — essential (re-pins the 3 existing oracles):**
-
-| # | Symbol | Timeframe | Window | Validates |
-|---|---|---|---|---|
-| 1 | EURUSD | Daily (D1) | 2023-01-01 → 2024-01-01 | primary golden (1y) |
-| 2 | EURUSD | Daily (D1) | 2022-01-01 → 2025-01-01 | 3y (swap-DST + gap exits) |
-| 3 | EURUSD | Hour (H1) | 2023-01-01 → 2024-01-01 | intraday density |
-
-**USDJPY — recommended (first validation of the "neither" cross-pair conversion path):**
-
-| # | Symbol | Timeframe | Window | Validates |
-|---|---|---|---|---|
-| 4 | USDJPY | Daily (D1) | 2023-01-01 → 2024-01-01 | JPY + USD legs, JPY pip scaling |
-| 5 | USDJPY | Hour (H1) | 2023-01-01 → 2024-01-01 | intraday "neither" path |
-| 6 | USDJPY | Daily (D1) | 2022-01-01 → 2025-01-01 | 3y cross-account |
-
-Minimum to proceed: #1–#3 (EURUSD) + #4 (USDJPY). Once the reports exist, hand over the folder names and the new fingerprints become the pinned goldens (replacing the 2026-06-07/08 set); the engine validation must reproduce all of them.
+| # | Symbol | TF | Window | Folder (timestamp) | golden Net |
+|---|---|---|---|---|---|
+| 1 | EURUSD | D1 | 2023 → 24 | `2026-06-26 00-47-01` | 75.55 |
+| 2 | EURUSD | D1 | 2022 → 25 | `2026-06-26 00-48-48` | −127.33 |
+| 3 | EURUSD | H1 | 2023 → 24 | `2026-06-26 00-53-28` | −2936.65 |
+| 4 | USDJPY | D1 | 2023 → 24 | `2026-06-26 00-56-52` | 47.13 |
+| 5 | USDJPY | H1 | 2023 → 24 | `2026-06-26 01-03-54` | −61.04 |
+| 6 | USDJPY | D1 | 2022 → 25 | `2026-06-26 01-01-56` | 76.74 |
 
 ---
 
 ## 6. Backlog
-- **Optimization** — uncomment `OptimizationAPI` in `Main.py` + export; depends on §4-B (shared dataset) for throughput.
-- **Learning** — uncomment `LearningAPI` in `Main.py` + export; depends on `BacktestingAPI` + §4-B. Review DDPG `Subscription` (may need `Stream.Tick`).
+- **Optimization** — uncomment `OptimizationAPI` in `Main.py` + export; build once via `BacktestingAPI(...).Dataset`, inject `dataset=` across the N param runs (and per `ProcessPoolExecutor` worker). Throughput seam is DONE (§4 Tier2-B).
+- **Learning** — uncomment `LearningAPI` in `Main.py` + export; build the dataset once, inject `dataset=` per episode, and **skip the full report during training** (compute only the reward). For H1/intraday scale, add **(b)** — precompute the fixed market+indicator series once and reuse across episodes (the batch path; no streaming-API changes) — see §4 FUTURE. Review DDPG `Subscription` (may need `Stream.Tick`).
 - **Phase G — Strategy state recovery:** persist Signal/Risk machine state on Live restart. *Sketch:* `State: Union[bytes, None]` on `SessionAPI` (`pl.Binary()`); `EngineAPI.State` maps machine→state name as JSON bytes; loaded at `deploy()` start, saved on `UpdateID.Shutdown`.
 - **Wire up `receive_update_security`** — parse C# security data to enrich `SecurityAPI` (pip size, commission). Sent but codec not consumed.
 - **Timeout watchdog** — configurable hung-peer timeout (e.g. 30 s → teardown). Current watchdog only detects peer-death via PID.
