@@ -1,6 +1,6 @@
 # Quant Trading Framework — Handoff
 
-Forward-looking brief for the `cAlgo` repo. Read this for orientation and the active roadmap, then `RULES.md` for conventions.
+Single source of truth for the `cAlgo` repo: orientation, current state, and the active roadmap. Read this first, then `RULES.md` for conventions. (Old `plans/master-plan.md` and `SCHEDULE.md` were merged in here and removed.)
 
 ---
 
@@ -8,111 +8,140 @@ Forward-looking brief for the `cAlgo` repo. Read this for orientation and the ac
 
 - **Root:** `C:\Users\Admin\OneDrive\Documents\cAlgo`
 - **`Library/`** Python core (engine, persistence, AI, Dash UI).
-- **`Sources/`** C# cTrader Robots/Indicators/Plugins. Connector cBot bridges to Python via Shared Memory (Windows named `mmap` + auto-reset Event signaling, single-slot request/response lockstep) + Binary Protocol.
-- **`Tests/`** pytest, mirrors `Library/` layout. Exclude `Tests/Spotware`. Full suite is **355 green**.
-- **`Setup/`** unified workspace + DB setup. `conda run -n Quant python -m Setup.Main --all`. `Setup.Main --enums` regenerates `Connector/Enum.cs` (the **protocol/common** enums: `PositionTypeID`, `StrategyType`, `VerboseLevel`, `SystemMode`, `UpdateID`, `ActionID`) from their Python sources. `Connector/Parameter.cs` enums (`BufferingMode`, `AccuracyMode`, stream modes…) are **hand-authored cBot config**, NOT generated.
-- **Env:** `conda run --no-capture-output -n Quant ...` (`--no-capture-output` avoids a charmap crash on log `·`/`→` glyphs; also set `PYTHONIOENCODING=utf-8`).
-- **Test command:** `conda run -n Quant python -m pytest Tests/ --ignore=Tests/Spotware`.
-- **Build C#:** `dotnet build Sources/Robots/Connector/Connector.sln` (the user builds the Connector; **do not** build it for them).
-- **Git:** stage with `git add`, **never commit**.
+- **`Sources/`** C# cTrader Robots/Indicators/Plugins. The Connector cBot bridges to Python via Shared Memory (Windows named `mmap` + auto-reset Event signaling, single-slot request/response lockstep) + a binary protocol.
+- **`Tests/`** pytest, mirrors `Library/` layout. Exclude `Tests/Spotware`. Suite is green (355+; the buffer suite including the new FK-race regression is green).
+- **`Setup/`** unified workspace + DB setup. `conda run -n Quant python -m Setup.Main --all`. `Setup.Main --enums` regenerates `Connector/Enum.cs` (protocol/common enums) from their Python sources. `Connector/Parameter.cs` enums (stream/buffer modes…) are hand-authored cBot config, NOT generated.
+- **Env:** `conda run --no-capture-output -n Quant ...` (`--no-capture-output` avoids a charmap crash on log `·`/`→` glyphs; also `PYTHONIOENCODING=utf-8`).
+- **Test:** `conda run -n Quant python -m pytest Tests/ --ignore=Tests/Spotware`.
+- **Build C#:** `dotnet build Sources/Robots/Connector/Connector.sln` (**the user builds/runs the Connector — the agent cannot**).
+- **Git:** stage with `git add`, **never commit** (the user commits).
 
-Both the **realtime path** (Live/Simulation/Testing) and the **offline backtesting engine** are built and validated: the cBot streams updates over shared memory, Python (`RealtimeAPI` / `BacktestingAPI`) runs the strategy through the shared `SystemAPI.deploy()` lifecycle, and reports reconcile with cTrader. The NNFX golden (EURUSD Daily, 2023-01-01 → 2024-01-01) is the reference: **Gross 195.56 · Commission −18.24 · Swap −101.773 · Net 75.55 · 37 trades / 25 deals.**
+Both the **realtime path** (Live/Simulation/Testing, `RealtimeAPI`) and the **offline backtesting engine** (`BacktestingAPI`) are built and validated. The cBot streams updates over shared memory; Python runs the strategy through the shared `SystemAPI.deploy()` lifecycle and produces reports that reconcile with cTrader. Strategy / engine / indicators / portfolio / reporting code is byte-for-byte shared between the two paths — which is why a cTrader online report is a valid oracle for the offline engine.
 
 ---
 
-## 2. Offline Backtesting Engine — BUILT & VALIDATED
+## 2. Where we are now (2026-06-26)
 
-`Library/System/Backtesting.py` → `BacktestingAPI(SystemAPI)`, a second in-process broker simulator that emits the **same `UpdateID` protocol** into the **same `deploy()` loop** as realtime, driven by DB market data instead of cTrader. Strategy / engine / indicators / portfolio / reporting code is byte-for-byte shared — which is why the realtime golden is a valid oracle. Wired in `Main.py` (`_system_` constructs `BacktestingAPI`); exported in `Library/System/__init__.py`; `Tests/System/test_Backtesting.py` = 41 mocked unit tests (data-independent, ~0.1s).
+The **download + realtime optimization track is DONE**; focus moves to the **offline backtesting engine** (§4) for the Optimization/Learning tracks.
 
-### 2.1 What's implemented
-- **Fidelity:** bar mode + **auto-resolution** — when `--resolution` is omitted it builds an intrabar tick ladder (H1→M1) from finer bars in the DB (`_acquire_frames_`/`_load_frames_`), cached in-memory (`_PRELOAD_CACHE_`, class-level) **and** on disk (Parquet at `~/.cache/cAlgo/preload`, keyed by `_cache_signature_` + a `_data_token_` = tick count so stale data invalidates).
-- **Feed:** `_generate_` walks `_bars_`; per boundary emits `BarClosed → Tick(open)`; `_intrabar_source_`/`_descend_`/`_walk_` reconstruct the intrabar path and run SL/TP + ask/bid-target checks. Vectorized leaf event-search + `_arm_version_` gating; int64-µs timestamps; deque queues; NumPy/Polars only (no Pandas).
-- **Fees:** `Accurate` spread/commission/swap (contract-driven, matches cTrader). Swap uses the current `Contract` values as source of truth (no reliable historical swap source).
-- **No look-ahead** is structural (the strategy only sees a bar's indicators at its `BarClosed`; fills happen on the next open tick).
-- **Validation:** reproduces the golden tables; the only residual is a documented **sub-pip exit-price difference** on intrabar SL/TP exits (bar/target data can't recover ms-precise exits — tick mode would). Gross ≈ 195.68 vs golden 195.56 (+0.12) is this residual, not a conversion error.
+**Landed this arc (all validated):**
+- **Download throughput** — batch/delay protocol (sliding-FIFO + `UpdateID.Batch` + enlarged slot), Full buffering, Subscription trimming. Download is no longer the gate.
+- **NNFX online streaming fix** — `NNFXStrategyAPI.Subscription = Stream.All & ~Stream.Tick` (=62). NNFX reactivity is 100% target-driven (armed `Ask/Bid Above/Below` targets + native SL/TP), so dropping the raw tick stream is bit-exact on trades while collapsing ~21.3M per-tick round-trips → daily bar closes + a few target crossings (≈55 min → ~1.5 min for a D1 year). **DDPG `Subscription` NOT yet reviewed** — an RL agent may genuinely need `Stream.Tick`; decide deliberately, don't copy NNFX.
+- **Buffer FK-race fix** — the async market buffer (`Library/Database/Buffer.py`) drained bars before their anchor ticks under a fresh (truncated) table → `Bar_GapTick_fkey` violations + silently dropped bars. Fixed by snapshotting all types up front in reverse dependency order then writing forward (`_consume_`/`_dispatch_`), so ticks are always committed before any referencing bar. Regression test `Tests/Database/test_BufferIntegration.py::test_buffer_fk_race_bar_not_drained_before_its_ticks` reproduces the exact error on old code, passes on the fix.
+- **Conversion policy = cTrader option ON, always.** The cTrader backtest option "Download historical data for additional symbols…" is the single source of conversion accuracy (required for the live online path; redundant under ON elsewhere). `FindConversions` (`Robot.cs`) was reverted to a clean targeted 2-candidate lookup (no `GetBars`/`GetTicks` force-load, no `StrategyType` special-case). The offline engine reads the 4 stored per-tick conversion fields, so it is option-independent and accurate.
 
-### 2.2 Conversion rates — the 4-rate bid-side rule (validated this session)
-Each tick stores **4** conversion rates: `AskBaseConversion`, `BidBaseConversion`, `AskQuoteConversion`, `BidQuoteConversion`, computed at **download time** by the cBot's `FindConversions` (`Robot.cs:304`) and snapshotted into `CurrentTick()`. The ask/bid rates genuinely differ (~1e-5–5e-4).
+**Data state:** `Market.Tick`/`Market.Bar` were truncated and fully re-downloaded with the option ON. Validated complete 2012-11 → 2026-06 for the two essential symbols:
 
-- **Rule (proven):** cTrader expresses any foreign amount (gross PnL, commission, swap) in the deposit currency at the **BID side** of the foreign→deposit conversion. Logic: converting foreign→deposit you SELL foreign / BUY deposit → land on the conversion pair's bid. Sign-independent. Empirically decisive on the aggregate (Σ golden_points·conv): **BidQuote 195.58 (Δ+0.02)** vs mid 195.49 vs AskQuote 195.40.
-- **Engine (`_conversions_`, `_tick_conversions_`, `_synth_tick_`, `_conversion_at_`):** all 4 rates are carried on synth ticks. `_needs_conversion_ = account ∉ {base, quote}` gates IO: account-related symbols (e.g. EURUSD/EUR) compute conversions from the tick's **raw** ask/bid (zero array IO); the "neither" case loads the 4 stored per-tick arrays. Portfolio `_conversion_` also uses bid for unrealized gross.
-- **Symbol test matrix (EUR account)** — needs each symbol's conversion pairs present in the broker universe; each needs a fresh cTrader Simulation golden:
+| Symbol | MN1 | D1 | H1 | M1 | Ticks |
+|---|---:|---:|---:|---:|---:|
+| EURUSD (sec 1) | 162 | 3,638 | 84,332 | 5,003,724 | 259,137,457 |
+| USDJPY (sec 6) | 162 | 3,632 | 84,188 | 4,998,555 | 300,184,910 |
 
-  | Symbol | Account vs pair | base→EUR via | quote→EUR via | Validates |
+- EURJPY (sec 41) Ticks still finishing (only needed as a denser conversion-validation reference; the engine reads stored USDJPY conversions).
+- **Known minor gap:** MN1 (Monthly) stops at 2026-03 (missing Apr/May closed bars) — Monthly isn't used by the D1/H1/Tick goldens, non-blocking.
+- **Preload disk cache** (`~/.cache/cAlgo/preload`) was **cleared** after the re-download (was 4 files / 139 MB) — backtests will cold-rebuild it from fresh DB data.
+
+---
+
+## 3. Offline Backtesting Engine — BUILT & VALIDATED
+
+`Library/System/Backtesting.py` → `BacktestingAPI(SystemAPI)`: an in-process broker simulator that emits the **same `UpdateID` protocol** into the **same `deploy()` loop** as realtime, driven by DB market data instead of cTrader. Wired in `Main.py` (`_system_`); exported in `Library/System/__init__.py`; `Tests/System/test_Backtesting.py` = 41 mocked unit tests (data-independent, ~0.1s).
+
+### 3.1 What's implemented
+- **Fidelity / resolution (`--resolution`):** omit → **auto-resolution** (builds an intrabar tick ladder, descending H1→M1→Tick only on bars that can touch an armed level — `_should_descend_`/`_descend_`); or pin a finer bar/tick resolution. `_intrabar_source_` dispatches: same-tf bar extremes, tick-stream, N-tick bars, or finer bars.
+- **Preload + cache:** `_load_bars_` pulls warmup+execution bars; `_preload_`/`_acquire_frames_` build the numpy tick arrays (`_tick_ts_/ask/bid` int64-µs + `float64`), conversion arrays, rung/finer frames. Two-level cache: class-level in-memory `_PRELOAD_CACHE_` **and** on-disk Parquet (`_read_cache_`/`_write_cache_` at `~/.cache/cAlgo/preload`), keyed by `_cache_signature_` with a `_data_token_` = `MarketAPI.last_tick_uid` (MAX(UID) over the bar span, O(log n) PK-index lookup) so re-downloads invalidate.
+- **Feed (`_generate_`):** per boundary emits `BarClosed → Tick(open)`; intrabar path reconstructed by `_intrabar_source_`/`_descend_`/`_walk_` running SL/TP + ask/bid-target checks. Vectorized leaf event-search (`_ticks_`/`_candidate_mask_`) with `_arm_version_` gating; deque queues; NumPy/Polars only (no Pandas).
+- **Fees:** `Accurate` spread/commission/swap, contract-driven (matches cTrader). Swap uses the contract's current values (no reliable historical swap-rate source — see §3.4).
+- **No look-ahead** is structural (strategy only sees a bar's indicators at its `BarClosed`; fills happen on the next open tick).
+
+### 3.2 Conversion — the 4-rate bid-side rule (validated)
+Each tick stores 4 rates: `AskBaseConversion`, `BidBaseConversion`, `AskQuoteConversion`, `BidQuoteConversion`, computed at download time by the cBot's `FindConversions` and snapshotted into `CurrentTick()`.
+- **Rule (proven):** cTrader expresses any foreign amount (gross/commission/swap) in the deposit currency at the **BID side** of the foreign→deposit conversion (you sell foreign / buy deposit). Engine `_conversions_`/`_tick_conversions_`/`_conversion_at_` carry all 4 rates on synth ticks.
+- **`_needs_conversion_ = account ∉ {base, quote}`** gates IO: account-related symbols (e.g. EURUSD/EUR) compute from the tick's raw ask/bid (zero array IO); the **"neither" case** (e.g. USDJPY/EUR) loads the 4 stored per-tick arrays and `np.searchsorted`es them (`_conversion_at_`).
+- **Symbol test matrix (EUR account)** — each needs its conversion pairs in the universe + a fresh cTrader golden:
+
+  | Symbol | Account vs pair | base→EUR | quote→EUR | Validates |
   |---|---|---|---|---|
   | EURUSD ✅ | base | 1.0 | 1/Ask (own) | baseline (golden) |
+  | USDJPY | **neither** | EURUSD | EURJPY | USD + JPY legs (data now present) |
   | EURJPY | base | 1.0 | 1/Ask (own, JPY) | JPY pip scaling |
-  | GBPUSD | **neither** | EURGBP | EURUSD | both legs via majors |
   | GBPJPY | **neither** (purest) | EURGBP | EURJPY | no EUR-direct leg |
-  | USDJPY | neither | EURUSD | EURJPY | USD + JPY legs |
-  | AUDUSD | neither | EURAUD | EURUSD | AUD + USD legs |
 
-  The "neither" path (`_conversion_at_` over stored arrays) is **implemented but unvalidated** — no cross-symbol data downloaded yet. **GBPJPY is the most stringent single test.**
+  The "neither" path is **implemented but not yet golden-validated** — USDJPY data is now downloaded, so a USDJPY golden (§5) is the next validation.
 
-### 2.3 Performance work landed this session (all 355-green, byte-identical output)
-- **Dataclass serialization** (`Library/Database/Dataclass.py`): cached per-class emit-plan `_plan_` (kills the per-record MRO walk), `data()` rewritten as a **non-generator** list build, `dict()`/`tuple()`/`list()` de-wrapped (`dict(self.data(...))` direct). → engine ~**11% + ~5%**, `data()` tottime −62%, total calls −33%.
-- `Datapoint.__setattr__` uses `__dict__.get` instead of `getattr` (195k calls/run).
-- `SeriesAPI._column_()` caches its static column list.
-- These help **every** path (backtest walk, buffer flush, reports).
+### 3.3 Performance — current numbers
+Profiled with logging silenced (`LoggingAPI.set_verbose_level(Silent)`; default class level is `Silent`). After the `last_tick_uid` token (warm-run DB token check 1.9s → O(log n)): **warm engine ~1.09s** for a D1 year; FINAL TIMINGS D1-2023 Auto ~0.142s exec. Extrapolation: 10y Daily ≈ 1–2 s exec, 10y Hourly ≈ 1.5–3 min exec (data local); cold preload ~7–10 min one-time, warm Parquet ~10–25 s. Whole-process wall-clock for a 1y run is ~3 s dominated by conda+Python startup (negligible at 10y).
 
-### 2.4 Engine mechanics reference (still accurate — mirror `Robot.cs`)
-- **Event order:** `OnBarClosed → OnTick(open) → OnBarOpened`. cBot keeps one accumulating `xBar`; on `OnBarClosed` sets volume, sends `BarClosed`, then `GapTick = CloseTick` (next bar's gap = prior close), `Timestamp = lastBar.OpenTime`.
-- **Stream modes** (`Robot.cs`): `TickStreamMode = Off | Target | All | Auto` (Download→Off; golden used Target). `BarStreamMode = Off | All | Auto`.
-- **Pop order:** `SystemAPI._process_updates_()` pops sub-objects in a fixed order (e.g. `OpenedBuyPosition` pops **bar then position**; closes pop a position+trade pair). `receive_update_*` must match exactly.
-- **UID collisions:** simulated `_pids`/`_tids` use negative space (`count(start=-1, step=-1)`).
-- **Reference files:** `Realtime.py` (sibling SystemAPI), `System.py` (`deploy`/`_process_updates_`), `Robot.cs` (broker behavior), `Market/Series.py` + `Market/Market.py` (`init_data`/`update_data`, no-look-ahead), `Market/Bar.py`+`Tick.py`, `Portfolio/*`, `Universe/*`.
+### 3.4 Accuracy floor (documented, data-bound — NOT engine bugs)
+- **Sub-pip intrabar exit residual:** bar/target data can't recover ms-precise SL/TP exit prices; tick-resolution mode closes it. D1-2023 Gross ≈195.68 vs golden 195.56 (+0.12) is this, not a conversion error.
+- **Swap residual (~0.5% on 1y):** per-deal diagnosis showed overnight counts/DST correct; the gap is time-varying historical swap **rates** (we apply the contract's current SwapLong/SwapShort). Closing it needs a cTrader historical swap-rate schedule (a data capture).
+
+### 3.5 Engine mechanics reference (mirror `Robot.cs`)
+- **Event order:** `OnBarClosed → OnTick(open) → OnBarOpened`. cBot keeps one accumulating `xBar`; on `OnBarClosed` sets volume, sends `BarClosed`, then `GapTick = CloseTick`, `Timestamp = lastBar.OpenTime`.
+- **Pop order:** `SystemAPI._process_updates_` pops sub-objects in a fixed order (e.g. `OpenedBuyPosition` pops bar then position; closes pop a position+trade pair). `receive_update_*` must match exactly. Bars carry 5 anchor ticks (Gap/Open/High/Low/Close); `System._receive_update_bar_` queues the 5 ticks then the bar.
+- **UID collisions:** simulated `_pids_`/`_tids_` use negative space (`count(start=-1, step=-1)`).
+- **Reference files:** `Realtime.py` (sibling SystemAPI), `System.py` (`deploy`/`_process_updates_`), `Robot.cs` (broker behavior), `Market/Series.py`+`Market/Market.py` (`init_data`/`update_data`, no-look-ahead), `Market/Bar.py`+`Tick.py`, `Portfolio/*`, `Universe/*`.
 
 ---
 
-## 3. Performance Roadmap — finalize the engine (A / B / C)
+## 4. CURRENT FOCUS — Offline engine optimization (prioritized)
 
-Profiled (golden, logging silenced via `LoggingAPI.set_verbose_level(Silent)`): warm walk ~**335 ms** for 1y Daily (~260 executed bars, ~1.1–1.5 ms/bar). Extrapolated: **10y Daily ≈ 5–10 s**, **10y Hourly ≈ 1.5–3 min** (engine-only, data already local). Remaining cost is **structural** — these three are queued (user approved all three; do **B first**, then evaluate A/C). Each MUST be golden-validated before commit.
+Goal: drive down per-run cost for the Optimization/Learning tracks (many runs over the same data) while staying byte-identical to the goldens. **Every item MUST be golden-validated before commit.** Profile first (cProfile cumulative+tottime, targeted micro-benchmarks) — measure, don't guess.
 
-- **B — Pull-once shared injectable dataset** *(start here; Optimization/Learning enabler).* Bundle everything `_load_bars_`+`_preload_` produce into a frozen `BacktestDataset` (`bars`, `warmup_frame`, `tick_ts/ask/bid`, `tick_conversions`, `rung_frames`, `ladder`, `finer_frame`). Add optional `dataset=` to `BacktestingAPI`; in `_connect_`, if injected → assign + skip the DB load, else load as today and expose `.Dataset`. Optimization loads **once**, injects across N runs (and once per `ProcessPoolExecutor` worker). **Default (no-dataset) path stays byte-identical → golden safe by construction.** Verified safe: market data is **read-only** during a run (only `_bars_.pop(0)` mutates, and that's during load). The `pop(0)` warmup-split moves into dataset construction.
-- **A — Numpy-ize the per-bar hot path** *(biggest engine win; deep refactor).* The dominant remaining cost is **per-bar Polars churn**: every bar builds 1-row `pl.DataFrame`s (`from_dicts`, `dict_to_pydf`, `collect`, `row_tuples`, `iter_rows`) for the feed AND each indicator (`ATR`/`KAMA`/`MACD`/`HMA`/`SMA` wrap a *scalar* in a 1-row frame and `vstack`). Polars overhead ≫ the actual arithmetic. Replace `SeriesAPI` per-bar storage + indicators' `stream()` with numpy/scalar incremental; keep Polars for warmup/IO/batch. Expected **2–4× walk** + **fixes chunk-accumulation scaling** (per-bar `vstack`/`extend` accrues Polars chunks → pathological at 10y-Hourly, ~60k chunks). Risk: touches accuracy-critical math → validate bit-for-bit.
-- **C — Targeted Polars de-churn** *(medium; partial).* Without full numpy: periodic `rechunk` to bound chunk growth + avoid the worst 1-row frames. Partial walk win + scaling fix.
+**Tier 1 — biggest engine wins (per-bar hot path):**
+- **A · Numpy-ize the per-bar feed + indicators.** Dominant remaining cost is per-bar **Polars churn**: every bar builds 1-row `pl.DataFrame`s for the feed and for each indicator (`ATR`/`KAMA`/`MACD`/`HMA`/`SMA` wrap a *scalar* in a 1-row frame and `vstack`). Replace `SeriesAPI` per-bar storage + indicators' `stream()` with numpy/scalar incremental; keep Polars for warmup/IO/batch. Expected **2–4× walk** + fixes the chunk-accumulation pathology at 10y-Hourly (per-bar `vstack`/`extend` accrues ~60k Polars chunks). Risk: touches accuracy-critical math → validate bit-for-bit. **Biggest win; do early.**
+- **Bar/Tick construction at load (`_row_to_bar_`).** `_load_bars_` builds a `BarAPI` + 5 `TickAPI` dataclasses per execution bar — ~500k object builds for 10y-Hourly (the "construction machinery is the real target" from prior profiling). Move the feed onto array-backed bar access (the walk mostly needs prices+timestamps, not full dataclasses); keep dataclasses only where the protocol/reporting needs them.
 
-Also surfaced: `_load_bars_` re-pulls from the DB **every run** (`select.select` ~0.05/run) — subsumed by B for multi-run/Optimization.
+**Tier 2 — multi-run / scale enabler:**
+- **B · Pull-once shared injectable dataset.** Freeze everything `_load_bars_`+`_preload_` produce into a `BacktestDataset` (`bars`/`warmup_frame`/`tick_ts/ask/bid`/`tick_conversions`/`rung_frames`/`ladder`/`finer_frame`). Add optional `dataset=` to `BacktestingAPI`; in `_connect_`, if injected → assign + skip the DB load, else load as today and expose `.Dataset`. Optimization loads once, injects across N runs (and once per `ProcessPoolExecutor` worker). Default (no-dataset) path stays byte-identical → golden-safe by construction. Market data is read-only during a run (only `_bars_.pop(0)` mutates, at load — moves into dataset construction). The class-level `_PRELOAD_CACHE_` already caches the FRAMES across runs; B extends this to the `BarAPI` list + warmup frame and makes it explicitly injectable + cross-process.
 
----
+**Tier 3 — startup / smaller / fallback:**
+- **DB connection startup (~0.6 s).** `_connect_` + universe/contract/market loads open ~10 PG connections at startup. Pool/reuse one connection; subsumes `_load_bars_` re-pulling per run for multi-run.
+- **Conversion `_conversion_at_` per-tick `searchsorted` ("neither" path only, e.g. USDJPY).** Batch/vectorize conversions over a bar's tick slice instead of per-synth-tick searchsorted.
+- **C · Targeted Polars de-churn (fallback if A is too risky).** Periodic `rechunk` to bound chunk growth + avoid the worst 1-row frames in `_sub_rows_`/`_finer_bars_` `iter_rows`. Partial walk win + scaling fix.
 
-## 4. CURRENT FOCUS — Connector cBot Download Optimization
-
-**Why now:** can't finalize/validate the engine without data, and the Download itself is the gate (D1/H1 downloadable; **M1 takes "days", ticks ~4h** — see §7). Measured facts: the shared-memory **bridge is fast** (~89k round-trips/s, 11 µs each, ping-pong over the real `TransportAPI`); Python's per-bar work in the Download path is ~0.5 ms/bar; the multi-year M1/tick cost is dominated by **cTrader's own "tick data from server" loading** (documented platform limit — a 2016→now tick backtest is ~2 days on cTrader). So the Python-side **Full buffering** already shipped (`BufferAPI` accumulate mode; `Main` Download+Auto→Full; `BufferingMode {Auto, Full, Manual, Off}` in `Parameter.cs` + `BufferingArgs` in `Robot.cs`) removed the per-flush GIL stalls — user reports "slightly better but not a lot," consistent with cTrader dominating.
-
-**The remaining waste (user's insight, correct):** the cBot still **blocks per bar/tick** on Python's `Complete` action (`SendUpdateBar → SendUpdateComplete → ReceiveAndProcessActions` in `Robot.cs` `OnBarClosed`/`OnTick`). For Download the strategy only extends a dataframe and replies "done", so the per-item lockstep is pointless — and it keeps cTrader's replay on Python's critical path. Goal: **keep the Python connection but detach C# execution from per-item Python acks.**
-
-**Proposed design (user):** a **Delay** parameter for bars + one for ticks, with `Auto | Full | Manual | Off`. `Full` = buffer ALL bars/ticks on the C# side and send in batch at the end; `Auto` (Download) → `Full`; `Manual` = explicit delay-by-N per bars/ticks; `Off` = current per-item lockstep. Requires C#-side `xBar`/`xTick` buffering + a **batch wire format**.
-
-**Open design decisions (next session):**
-- **Batch wire format** — the slot is 4096 B (`Transport._BUF_SIZE_`), ~12 bars or ~63 ticks per slot. Either send chunked batches (≤slot) or **enlarge the slot** (e.g. 256 KB–1 MB → thousands/slot). Need a `BarBatch`/`TickBatch` `UpdateID` carrying `count + items`; Python deserializes the batch, processes all, sends **one** `Complete`.
-- **Delay-by-N vs Full** — `Full` (all-at-end) is simplest but holds the whole series in C# RAM and risks total loss on mid-run failure; **bounded N** (periodic batch) gives incremental persistence + bounded memory. A **double-buffer** (accumulate batch K+1 in C# while Python digests batch K, only block if Python is behind) fully overlaps cTrader replay with Python work.
-- **Honest caveat to re-confirm:** if cTrader's per-bar *production* (tick-precision replay + server fetch) dominates, decoupling removes the ~0.5 ms/bar Python wait but not cTrader's time. Cheap decisive measurement first: instrument `Robot.cs` to log Δ-time between consecutive `OnBarClosed` (cTrader feed rate) vs time spent in `SendUpdate*+ReceiveActions` (the Python lockstep). If the lockstep is a large fraction → batching is a big win; if cTrader dominates → bounded. *(User builds/runs the cBot; agent cannot.)*
-
-**Alternative considered:** a shared-memory **ring buffer / queue** (lock-free producer/consumer, no per-item ack) — most decoupled, but more complex than batch buffering. Batch-with-bounded-N + double-buffer is the recommended balance.
+**Accuracy (optional, data-bound):** tick-resolution exact exits (closes the sub-pip residual); historical swap-rate schedule capture (closes the swap residual). See §3.4.
 
 ---
 
-## 5. Backlog
+## 5. Fresh golden reports to produce (user runs these)
 
-- **Optimization** — uncomment `OptimizationAPI` in `Main.py` + export; depends on B (shared dataset) for throughput.
-- **Learning** — uncomment `LearningAPI` in `Main.py` + export; depends on `BacktestingAPI` + B.
-- **Phase G — Strategy state recovery (B-G-1):** persist Signal/Risk machine state on Live restart. *Sketch:* `State: Union[bytes, None]` on `SessionAPI` (`pl.Binary()`); `EngineAPI.State` maps machine→state name as JSON bytes; `SystemAPI` loads at `deploy()` start, saves on `UpdateID.Shutdown`.
+The old goldens are stale — swap rates drifted during the download work. Re-run NNFX as **online cTrader Backtests** (Simulation through the Connector cBot) to mint fresh ground-truth fingerprints, then the offline engine is brute-forced apples-to-apples against them.
+
+**Common settings for every run:** Strategy **NNFX** · Account **EUR**, balance **10,000** · cTrader conversion option **ON (ticked)** · cBot **Report = ON** and **Export = ON** · cTrader data = **Tick data from server (most accurate)** so the golden is ground truth. Each run writes `Reports/<timestamp> <iid>/` (`report.html` + deals/net/orders/positions/trades.csv).
+
+**EURUSD — essential (re-pins the 3 existing oracles):**
+
+| # | Symbol | Timeframe | Window | Validates |
+|---|---|---|---|---|
+| 1 | EURUSD | Daily (D1) | 2023-01-01 → 2024-01-01 | primary golden (1y) |
+| 2 | EURUSD | Daily (D1) | 2022-01-01 → 2025-01-01 | 3y (swap-DST + gap exits) |
+| 3 | EURUSD | Hour (H1) | 2023-01-01 → 2024-01-01 | intraday density |
+
+**USDJPY — recommended (first validation of the "neither" cross-pair conversion path):**
+
+| # | Symbol | Timeframe | Window | Validates |
+|---|---|---|---|---|
+| 4 | USDJPY | Daily (D1) | 2023-01-01 → 2024-01-01 | JPY + USD legs, JPY pip scaling |
+| 5 | USDJPY | Hour (H1) | 2023-01-01 → 2024-01-01 | intraday "neither" path |
+| 6 | USDJPY | Daily (D1) | 2022-01-01 → 2025-01-01 | 3y cross-account |
+
+Minimum to proceed: #1–#3 (EURUSD) + #4 (USDJPY). Once the reports exist, hand over the folder names and the new fingerprints become the pinned goldens (replacing the 2026-06-07/08 set); the engine validation must reproduce all of them.
+
+---
+
+## 6. Backlog
+- **Optimization** — uncomment `OptimizationAPI` in `Main.py` + export; depends on §4-B (shared dataset) for throughput.
+- **Learning** — uncomment `LearningAPI` in `Main.py` + export; depends on `BacktestingAPI` + §4-B. Review DDPG `Subscription` (may need `Stream.Tick`).
+- **Phase G — Strategy state recovery:** persist Signal/Risk machine state on Live restart. *Sketch:* `State: Union[bytes, None]` on `SessionAPI` (`pl.Binary()`); `EngineAPI.State` maps machine→state name as JSON bytes; loaded at `deploy()` start, saved on `UpdateID.Shutdown`.
 - **Wire up `receive_update_security`** — parse C# security data to enrich `SecurityAPI` (pip size, commission). Sent but codec not consumed.
-- **Timeout watchdog (B-D.5-4)** — configurable hung-peer timeout (e.g. 30s → teardown). Current watchdog only detects peer-death via PID.
-- **Backtesting CLI param-folder** — RESOLVED: `Main.py` now keys the param tree on `provider.UID` (`Spotware(cTrader)`) not the normalized `args.provider` (`Spotware`).
+- **Timeout watchdog** — configurable hung-peer timeout (e.g. 30 s → teardown). Current watchdog only detects peer-death via PID.
+- **`Schedule` orchestrator (future project, was `SCHEDULE.md`):** a Prefect-style task orchestrator integrated into the framework. New `Schedule` DB schema — `Workflow`, `Task` (Python script + cron), `Run` (status: Resting→Waiting→Approving→Running→Reviewing→Success/Failure, with duration/memory/message), plus `WorkflowTask` (sequence + auto-approve), `Dependency` (Finish-to-Start / Success-to-Start task graph), `Parameter` (per-run JSONB payload). Phases: (1) `Schedule` schema + `ScheduleDatabaseAPI`; (2) `SchedulerService` (cron monitor) + `WorkerService` (subprocess runner); (3) dependency-tree transition engine; (4) Dash dashboard with manual Approve/Review gates.
+- **Completed refactors (was `plans/master-plan.md`):** Market (DB-aligned `TickAPI`/`BarAPI` + recursive `SeriesAPI`), Indicators (TA-lib dropped, modular `Technical/Fundamental/Sentimental`, O(1) incremental SMA/MACD, dual-mode batch/stream tests), Portfolio (`SizingAPI`/`StatisticAPI` extracted, symmetric Account/Order/Position/Trade, unified `.dict()`).
 
 ---
 
-## 6. Known issues (non-blocking)
-- **`--profile` not wired to cBot UI.** Invoke the Python CLI with `--profile` to dump `.pstat`.
-- **C# platform warnings** — 2× `CA1416` (`MemoryMappedFile.CreateOrOpen`, Windows-only). Expected.
-- **C# deprecated order API** — 3× `CS0618` (`PlaceStopOrder`/`PlaceLimitOrder`/`PlaceStopLimitOrder`). Non-breaking.
-- **Logging is custom (not stdlib):** `logging.disable()` does nothing; silence via `LoggingAPI` (e.g. `HandlerLoggingAPI().console.set_verbose_level(VerboseLevel.Silent)`). Default class level is `Silent`.
-
----
-
-## 7. Current data/DB state (2026-06-21)
-- `Market.Bar`/`Market.Tick` were **truncated** (cleared 87,666 bars + 72,399,337 ticks from a prior botched M1 download). Re-download in progress: **D1 + H1 bars done; M1 bars and Ticks NOT yet downloaded.**
-- **Preload disk cache** (`~/.cache/cAlgo/preload`) still holds OLD EURUSD Daily frames — clear it after re-download so backtests don't serve stale data (token check catches tick-count changes but clear to be safe).
-- Engine validation (golden + A/B/C) is **blocked until EURUSD Daily is back** in the DB.
+## 7. Known issues (non-blocking)
+- **`--profile` not wired to the cBot UI** — invoke the Python CLI with `--profile` to dump `.pstat`. It wraps only the Python `run` (blind to the C#/cTrader side).
+- **C# platform warnings** — 2× `CA1416` (`MemoryMappedFile.CreateOrOpen`, Windows-only); 3× `CS0618` (deprecated `PlaceStopOrder`/`PlaceLimitOrder`/`PlaceStopLimitOrder`). Non-breaking.
+- **Logging is custom (not stdlib):** `logging.disable()` does nothing; silence via `LoggingAPI` (e.g. `HandlerLoggingAPI().console.set_verbose_level(VerboseLevel.Silent)`).
