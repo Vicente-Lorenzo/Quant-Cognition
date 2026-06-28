@@ -177,9 +177,6 @@ def cast(cast_value, cast_type: type, cast_default):
     except (TypeError, ValueError):
         return cast_default
 
-def equals(a: float, b: float, rel: float = 1e-12, abs_: float = 1e-12) -> bool:
-    return abs(a - b) <= max(rel * max(1.0, abs(a), abs(b)), abs_)
-
 def contains(text: str, substrings: Union[str, tuple, list], case_sensitive: bool = False) -> bool:
     if isinstance(substrings, str):
         subs: list[str] = [substrings]

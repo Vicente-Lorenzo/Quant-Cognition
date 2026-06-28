@@ -26,6 +26,9 @@ def datetime_to_timestamp(dt: Union[datetime, date, time], milliseconds: bool = 
 def datetime_to_epoch(dt: datetime, epoch: datetime = datetime(1970, 1, 1), unit: timedelta = timedelta(milliseconds=1)) -> int:
     return (dt - epoch) // unit
 
+def epoch_to_datetime(value: int, epoch: datetime = datetime(1970, 1, 1), unit: timedelta = timedelta(milliseconds=1)) -> datetime:
+    return epoch + value * unit
+
 def timestamp_to_datetime(ts: float, milliseconds: bool = False) -> datetime:
     return datetime.fromtimestamp(ts / 1000 if milliseconds else ts)
 
@@ -34,6 +37,17 @@ def datetime_to_iso(dt: datetime) -> str:
 
 def iso_to_datetime(iso_str: str) -> datetime:
     return datetime.fromisoformat(iso_str)
+
+def parse_datetime(value: Union[str, date, datetime], end_of_day: bool = False) -> datetime:
+    if isinstance(value, datetime): return value
+    if isinstance(value, date): base = datetime(value.year, value.month, value.day)
+    else:
+        base = None
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%d/%m/%Y"):
+            try: base = datetime.strptime(value, fmt); break
+            except ValueError: continue
+        if base is None: base = datetime.fromisoformat(value)
+    return base.replace(hour=23, minute=59, second=59, microsecond=999999) if end_of_day else base
 
 def seconds_to_string(seconds: float) -> str:
     seconds, milliseconds = divmod(seconds, 1)
@@ -83,3 +97,26 @@ def saturday_shift_datetime(shift: int, today: datetime = datetime.today()) -> d
 
 def sunday_shift_datetime(shift: int, today: datetime = datetime.today()) -> datetime:
     return weekday_shift_datetime(wd=Weekday.Sunday, shift=shift, today=today)
+
+def _last_weekday_(year: int, month: int, weekday: int) -> datetime:
+    last = datetime(year, 12, 31) if month == 12 else datetime(year, month + 1, 1) - timedelta(days=1)
+    return last - timedelta(days=(last.weekday() - weekday) % 7)
+
+def _nth_weekday_(year: int, month: int, weekday: int, n: int) -> datetime:
+    first = datetime(year, month, 1)
+    return first + timedelta(days=(weekday - first.weekday()) % 7 + (n - 1) * 7)
+
+def is_summer_time(timestamp: datetime, region: str = "EU") -> bool:
+    year = timestamp.year
+    if region == "EU":
+        spring = _last_weekday_(year, 3, Weekday.Sunday.value).replace(hour=1)
+        autumn = _last_weekday_(year, 10, Weekday.Sunday.value).replace(hour=1)
+    elif region == "US":
+        spring = _nth_weekday_(year, 3, Weekday.Sunday.value, 2).replace(hour=2)
+        autumn = _nth_weekday_(year, 11, Weekday.Sunday.value, 1).replace(hour=2)
+    else:
+        raise ValueError(f"Region {region}: Failed · Due to unsupported daylight-saving region")
+    return spring <= timestamp < autumn
+
+def is_winter_time(timestamp: datetime, region: str = "EU") -> bool:
+    return not is_summer_time(timestamp, region)

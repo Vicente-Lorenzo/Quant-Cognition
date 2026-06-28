@@ -80,7 +80,7 @@ If structural changes (new folders or modules) are detected that are not reflect
 - **`Library/Strategy`**: Strategy framework (`StrategyAPI`, `StrategyType`). Strategy implementations split into `Rule/` (e.g., `Download`, `NNFX`), `Model/` (e.g., `DDPG`), and `Hybrid/` subpackages.
 - **`Library/System`**: Python Trading Engine (`SystemAPI`, `SystemType`, `LifecycleAPI`, `RealtimeAPI`, plus legacy `BacktestingAPI`/`OptimizationAPI`/`LearningAPI` placeholders pending refactor). `Main.py` is the CLI entry point.
 - **`Library/Universe`**: Tradable universe definitions (`UniverseAPI`, `ProviderAPI`, `CategoryAPI`, `TickerAPI`, `ContractAPI`, `SecurityAPI`, `TimeframeAPI`).
-- **`Library/Utility`**: Helper library (`PathAPI`, `DateTimeAPI`, `IOAPI`, `HTMLAPI`, `ImageAPI`, `ChartAPI`, `RuntimeAPI`, `ServiceAPI`, `StatisticAPI` (timer/profiling), `TypingAPI`, `FileAPI`, `MemoryAPI`).
+- **`Library/Utility`**: Helper library (`PathAPI`, `DateTimeAPI`, `IOAPI`, `HTMLAPI`, `ImageAPI`, `ChartAPI`, `RuntimeAPI`, `ServiceAPI`, `StatisticAPI` (timer/profiling), `Math` (truncation/precision helpers), `TypingAPI`, `FileAPI`, `MemoryAPI`).
 
 ### C# (`Sources/`)
 - **`Sources/Robots`**: cTrader Robots — Connector cBot (Python bridge via shared memory), `Strategy`, `StrategyAPI` base.

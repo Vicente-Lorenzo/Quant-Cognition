@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from Library.Utility.Typing import (
     cast,
-    equals,
     contains,
     hasmember,
     hasmethod,
@@ -156,10 +155,6 @@ def test_cast():
     assert cast(123, int, 0) == 123
     assert cast("nope", int, 0) == 0
     assert cast(None, int, 0) == 0
-def test_equals():
-    assert equals(1.0, 1.0) is True
-    assert equals(1.0, 1.0 + 1e-13) is True
-    assert equals(1.0, 1.0 + 1e-6) is False
 def test_contains():
     assert contains("Hello World", "world") is True
     assert contains("Hello World", "WORLD") is True

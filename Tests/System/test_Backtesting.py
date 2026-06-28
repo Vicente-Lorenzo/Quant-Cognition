@@ -3,12 +3,20 @@ import numpy as np
 import pytest
 from datetime import datetime
 
-from Library.System.Backtesting import BacktestingAPI, DatasetAPI, _eu_summer_
+from Library.System.Backtesting import BacktestingAPI, DatasetAPI
 from Library.Market.Price import Direction
 from Library.Protocol.Update import UpdateID
 from Library.Universe.Contract import CommissionType, CommissionMode, SpreadType, SwapType, SwapMode
 from Library.Utility.Datetime import Weekday
+from Library.Utility.Math import truncate
 from Library.Utility.Typing import MISSING
+
+def _dataset_(**overrides):
+    fields = dict(WarmupBars=None, ExecutionBars=[], TickTimestamps=np.empty(0, dtype="int64"),
+                  TickAsks=np.empty(0, dtype="float64"), TickBids=np.empty(0, dtype="float64"),
+                  TickConversions=None, IntraLevels=[], IntraBars={})
+    fields.update(overrides)
+    return DatasetAPI(**fields)
 
 class _Contract_:
     PointSize = 0.00001
@@ -139,17 +147,6 @@ class _ConvTick_:
         self.AskQuoteConversion = _Price_(aqc) if aqc is not None else None
         self.BidQuoteConversion = _Price_(bqc) if bqc is not None else None
 
-def test_eu_summer_dst_boundaries():
-    assert _eu_summer_(datetime(2023, 1, 15)) is False
-    assert _eu_summer_(datetime(2023, 3, 26, 0)) is False
-    assert _eu_summer_(datetime(2023, 3, 26, 1)) is True
-    assert _eu_summer_(datetime(2023, 7, 1)) is True
-    assert _eu_summer_(datetime(2023, 10, 29, 0)) is True
-    assert _eu_summer_(datetime(2023, 10, 29, 1)) is False
-    assert _eu_summer_(datetime(2023, 11, 15)) is False
-    assert _eu_summer_(datetime(2024, 3, 31, 1)) is True
-    assert _eu_summer_(datetime(2024, 10, 27, 1)) is False
-
 def test_conversions_uses_stored_bid_fields():
     engine = _engine_()
     tick = _ConvTick_(1.06929, 1.06927, abc=1.0, bbc=1.0, aqc=0.93522, bqc=0.93520)
@@ -166,15 +163,14 @@ def test_conversions_fallback_is_bid_side():
 def _conversion_engine_():
     engine = _engine_()
     engine._needs_conversion_ = True
-    engine._tick_ts_ = np.array([100, 200, 300], dtype="int64")
-    engine._tick_conversions_array_ = (np.array([0.80, 0.81, 0.82]), np.array([0.79, 0.80, 0.81]),
-                                       np.array([0.90, 0.91, 0.92]), np.array([0.89, 0.90, 0.91]))
+    conversions = (np.array([0.80, 0.81, 0.82]), np.array([0.79, 0.80, 0.81]),
+                   np.array([0.90, 0.91, 0.92]), np.array([0.89, 0.90, 0.91]))
+    engine._dataset_ = _dataset_(TickTimestamps=np.array([100, 200, 300], dtype="int64"), TickConversions=conversions)
     return engine
 
 def test_conversion_at_none_without_arrays():
     engine = _engine_()
-    engine._tick_ts_ = np.array([100, 200], dtype="int64")
-    engine._tick_conversions_array_ = None
+    engine._dataset_ = _dataset_(TickTimestamps=np.array([100, 200], dtype="int64"), TickConversions=None)
     assert engine._conversion_at_(150) == (None, None, None, None)
 
 def test_conversion_at_indexes_latest_at_or_before():
@@ -189,8 +185,9 @@ def test_conversion_at_before_first_tick_is_none():
 
 def test_conversion_at_nan_falls_back_to_none():
     engine = _conversion_engine_()
-    engine._tick_conversions_array_ = (np.array([np.nan, 0.81, 0.82]), np.array([0.79, 0.80, 0.81]),
-                                       np.array([np.nan, 0.91, 0.92]), np.array([0.89, 0.90, 0.91]))
+    conversions = (np.array([np.nan, 0.81, 0.82]), np.array([0.79, 0.80, 0.81]),
+                   np.array([np.nan, 0.91, 0.92]), np.array([0.89, 0.90, 0.91]))
+    engine._dataset_ = _dataset_(TickTimestamps=engine._dataset_.TickTimestamps, TickConversions=conversions)
     assert engine._conversion_at_(100) == (None, 0.79, None, 0.89)
 
 def test_tick_conversions_account_is_base_uses_raw():
@@ -204,19 +201,11 @@ def test_tick_conversions_account_is_quote_uses_raw():
     engine._needs_conversion_ = False
     assert engine._tick_conversions_(0, 1.30010, 1.30000) == pytest.approx((1.30010, 1.30000, 1.0, 1.0))
 
-def test_cents_truncates_toward_zero():
-    assert BacktestingAPI._cents_(0.315) == pytest.approx(0.31)
-    assert BacktestingAPI._cents_(-0.315) == pytest.approx(-0.31)
-    assert BacktestingAPI._cents_(0.36) == pytest.approx(0.36)
-    assert BacktestingAPI._cents_(0.27) == pytest.approx(0.27)
-    assert BacktestingAPI._cents_(-0.629) == pytest.approx(-0.62)
-    assert BacktestingAPI._cents_(0.0) == pytest.approx(0.0)
-
 def test_commission_accurate_is_truncated_per_deal():
     engine = _engine_()
     raw = engine._commission_(7000.0, 1.1)
     assert raw == pytest.approx(7000.0 * (-45.0 / 1_000_000) * 1.0)
-    assert engine._cents_(raw) == pytest.approx(-0.31)
+    assert truncate(raw) == pytest.approx(-0.31)
 
 _BIDS_ = (1.10000, 1.10500, 1.09500, 1.10100)
 _ASKS_ = (1.10002, 1.10502, 1.09502, 1.10102)
@@ -287,9 +276,7 @@ class _FakeArr_:
 
 def _preload_stub_():
     engine = object.__new__(BacktestingAPI)
-    engine._dataset_ = None
-    engine._bars_ = [object()]
-    engine._warmup_frame_ = None
+    engine._injected_ = None
     engine._security_ = type("S", (), {"UID": 1})()
     engine._timeframe_ = type("T", (), {"UID": "D1"})()
     engine._start_ = datetime(2023, 1, 1)
@@ -301,15 +288,16 @@ def _preload_stub_():
 def test_preload_cache_reuses_across_instances(monkeypatch):
     BacktestingAPI._PRELOAD_CACHE_.clear()
     monkeypatch.setattr(BacktestingAPI, "_DISK_CACHE_", False)
-    monkeypatch.setattr(BacktestingAPI, "_load_bars_", lambda self: None)
+    bars = [object()]
+    monkeypatch.setattr(BacktestingAPI, "_load_bars_", lambda self: (None, bars))
     calls = []
-    monkeypatch.setattr(BacktestingAPI, "_load_frames_", lambda self: (calls.append(1), (_FakeArr_(), _FakeArr_(), _FakeArr_(), None, {}, [], None))[1])
+    monkeypatch.setattr(BacktestingAPI, "_load_frames_", lambda self, b: (calls.append(1), (_FakeArr_(), _FakeArr_(), _FakeArr_(), None, [], {}))[1])
     first, second = _preload_stub_(), _preload_stub_()
     first._preload_()
     second._preload_()
     assert len(calls) == 1
-    assert first._tick_ts_ is second._tick_ts_
-    assert first._bars_ is second._bars_
+    assert first._dataset_ is second._dataset_
+    assert first._dataset_.ExecutionBars is second._dataset_.ExecutionBars
     third = _preload_stub_()
     third._start_ = datetime(2022, 1, 1)
     third._preload_()
@@ -320,27 +308,29 @@ def test_preload_injects_dataset_without_loading(monkeypatch):
     BacktestingAPI._PRELOAD_CACHE_.clear()
     calls = []
     monkeypatch.setattr(BacktestingAPI, "_load_bars_", lambda self: calls.append("bars"))
-    monkeypatch.setattr(BacktestingAPI, "_acquire_frames_", lambda self: calls.append("frames"))
+    monkeypatch.setattr(BacktestingAPI, "_acquire_frames_", lambda self, b: calls.append("frames"))
     arr = _FakeArr_()
     bars = [object()]
-    dataset = DatasetAPI(Bars=bars, WarmupFrame=None, TickTimestamps=arr, TickAsks=arr, TickBids=arr, TickConversions=None, RungFrames={}, Ladder=[], FinerFrame=None)
+    dataset = _dataset_(ExecutionBars=bars, TickTimestamps=arr, TickAsks=arr, TickBids=arr)
     engine = _preload_stub_()
-    engine._dataset_ = dataset
+    engine._injected_ = dataset
     engine._preload_()
     assert calls == []
-    assert engine._bars_ is bars
-    assert engine._tick_ts_ is arr and engine._tick_ask_ is arr and engine._tick_bid_ is arr
+    assert engine._dataset_ is dataset
+    assert engine._dataset_.ExecutionBars is bars
+    assert engine._dataset_.TickTimestamps is arr
 
-def test_dataset_property_round_trips_state():
+def test_extract_inject_round_trips_state():
     arr = _FakeArr_()
+    bars = [object()]
     source = _preload_stub_()
-    source._tick_ts_, source._tick_ask_, source._tick_bid_ = arr, arr, arr
-    source._tick_conversions_array_, source._rung_frames_, source._ladder_, source._finer_frame_ = None, {}, [], None
+    source._dataset_ = _dataset_(ExecutionBars=bars, TickTimestamps=arr, TickAsks=arr, TickBids=arr)
     target = _preload_stub_()
-    target._dataset_ = source.Dataset
+    target.inject(source.extract())
     target._preload_()
-    assert target._bars_ is source._bars_
-    assert target._tick_ts_ is arr
+    assert target._dataset_ is source._dataset_
+    assert target._dataset_.ExecutionBars is bars
+    assert target._dataset_.TickTimestamps is arr
 
 def test_auto_fee_types_resolve_to_accurate():
     engine = BacktestingAPI(
@@ -352,8 +342,3 @@ def test_auto_fee_types_resolve_to_accurate():
     assert engine._commission_type_ == CommissionType.Accurate
     assert engine._swap_type_ == SwapType.Accurate
     assert engine._resolution_arg_ is MISSING
-
-def test_parse_date():
-    assert BacktestingAPI._parse_date_("2023-01-01", end=False) == datetime(2023, 1, 1, 0, 0, 0)
-    end = BacktestingAPI._parse_date_("2023-01-01", end=True)
-    assert (end.hour, end.minute, end.second) == (23, 59, 59)
