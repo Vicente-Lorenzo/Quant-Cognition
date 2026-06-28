@@ -41,7 +41,7 @@ from Library.Protocol.Action import (
 from Library.Protocol.Update import UpdateID, BarUpdateAPI, CompleteUpdateAPI, InitUpdateAPI
 from Library.Universe.Contract import CommissionMode, CommissionType, SpreadType, SwapMode, SwapType
 from Library.Universe.Timeframe import TimeframeAPI
-from Library.Utility.Datetime import Weekday, datetime_to_epoch, epoch_to_datetime, is_summer_time, parse_datetime
+from Library.Utility.Datetime import MICROSECOND, Weekday, datetime_to_epoch, epoch_to_datetime, is_summer_time, parse_datetime
 from Library.Utility.IO import mkdir, read_json, write_json
 from Library.Utility.Math import equals, truncate
 from Library.Utility.Statistic import Timer, timer
@@ -651,12 +651,12 @@ class BacktestingAPI(SystemAPI):
         self._emit_close_(position, fill, update_id)
 
     def _datetime_(self, timestamp: Union[int, datetime]) -> datetime:
-        return epoch_to_datetime(timestamp, unit=timedelta(microseconds=1)) if isinstance(timestamp, int) else timestamp
+        return epoch_to_datetime(timestamp, unit=MICROSECOND) if isinstance(timestamp, int) else timestamp
 
     def _conversion_at_(self, timestamp: Union[int, datetime]) -> tuple:
         arrays, ts = self._dataset_.TickConversions, self._dataset_.TickTimestamps
         if arrays is None or ts.size == 0: return None, None, None, None
-        us = timestamp if isinstance(timestamp, int) else datetime_to_epoch(timestamp, unit=timedelta(microseconds=1))
+        us = timestamp if isinstance(timestamp, int) else datetime_to_epoch(timestamp, unit=MICROSECOND)
         index = int(np.searchsorted(ts, us, side="right")) - 1
         if index < 0: return None, None, None, None
         return tuple(None if math.isnan(array[index]) else float(array[index]) for array in arrays)
@@ -696,8 +696,8 @@ class BacktestingAPI(SystemAPI):
     def _bounds_(self, open_ts: datetime, close_ts: datetime) -> tuple[int, int]:
         ts = self._dataset_.TickTimestamps
         if ts.size == 0: return 0, 0
-        return (int(np.searchsorted(ts, datetime_to_epoch(open_ts, unit=timedelta(microseconds=1)), side="left")),
-                int(np.searchsorted(ts, datetime_to_epoch(close_ts, unit=timedelta(microseconds=1)), side="right")))
+        return (int(np.searchsorted(ts, datetime_to_epoch(open_ts, unit=MICROSECOND), side="left")),
+                int(np.searchsorted(ts, datetime_to_epoch(close_ts, unit=MICROSECOND), side="right")))
 
     def _slice_ticks_(self, open_ts: datetime, close_ts: datetime) -> tuple[list, list, list]:
         start, stop = self._bounds_(open_ts, close_ts)
