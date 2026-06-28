@@ -14,6 +14,7 @@ from itertools import count
 from datetime import date, datetime, timedelta
 from typing import Any, Type, Union, Iterator, TYPE_CHECKING
 
+from Library.Database.Database import DatabaseAPI
 from Library.Database.Dataframe import pl
 from Library.Database.Postgres.Postgres import PostgresAPI
 from Library.Engine import MachineAPI
@@ -51,12 +52,6 @@ if TYPE_CHECKING:
     from Library.Strategy.Strategy import StrategyAPI
     from Library.Universe.Security import SecurityAPI
 
-_EPSILON_ = 1e-9
-_EPOCH_ = datetime(1970, 1, 1)
-_MICROSECOND_ = timedelta(microseconds=1)
-_CACHE_DIR_ = Path.home() / ".cache" / "cAlgo" / "preload"
-_CONVERSION_COLUMNS_ = (TickAPI.ID.AskBaseConversion, TickAPI.ID.BidBaseConversion, TickAPI.ID.AskQuoteConversion, TickAPI.ID.BidQuoteConversion)
-
 def _eu_summer_(timestamp: datetime) -> bool:
     march = datetime(timestamp.year, 3, 31)
     spring = (march - timedelta(days=(march.weekday() + 1) % 7)).replace(hour=1)
@@ -78,9 +73,23 @@ class DatasetAPI:
 
 class BacktestingAPI(SystemAPI):
 
+    _EPSILON_: float = 1e-9
+    _EPOCH_: datetime = datetime(1970, 1, 1)
+    _CACHE_DIR_: Path = Path.home() / ".cache" / "cAlgo" / "preload"
+    _MICROSECOND_: timedelta = timedelta(microseconds=1)
+    _CONVERSION_COLUMNS_: tuple = (TickAPI.ID.AskBaseConversion, TickAPI.ID.BidBaseConversion, TickAPI.ID.AskQuoteConversion, TickAPI.ID.BidQuoteConversion)
+
     _PRELOAD_CACHE_: dict = {}
     _PRELOAD_LOCK_ = threading.Lock()
     _DISK_CACHE_: bool = True
+
+    _db_: DatabaseAPI
+    _feed_: Iterator
+    _resolution_: TimeframeAPI
+    _uid_queue_: deque
+    _arg_queue_: deque
+    _bar_: BarAPI
+    _tick_: TickAPI
 
     def __init__(self,
                  strategy: Type[StrategyAPI],
@@ -103,22 +112,24 @@ class BacktestingAPI(SystemAPI):
         self._stop_: datetime = self._parse_date_(stop, end=True)
 
         self._account_asset_, self._account_balance_, self._account_leverage_ = account
-        self._spread_type_, self._spread_value_, *spread_seed = spread
-        self._commission_type_, self._commission_value_ = commission
-        self._swap_type_, self._swap_long_, self._swap_short_ = swap
+        self._spread_type_, spread_value, *spread_seed = spread
+        self._commission_type_, commission_value = commission
+        self._swap_type_, swap_long, swap_short = swap
         if self._spread_type_ == SpreadType.Auto: self._spread_type_ = SpreadType.Accurate
         if self._commission_type_ == CommissionType.Auto: self._commission_type_ = CommissionType.Accurate
         if self._swap_type_ == SwapType.Auto: self._swap_type_ = SwapType.Accurate
+        self._spread_value_: Union[float, None] = spread_value if spread_value is not MISSING else None
+        self._commission_value_: Union[float, None] = commission_value if commission_value is not MISSING else None
+        self._swap_long_: Union[float, None] = swap_long if swap_long is not MISSING else None
+        self._swap_short_: Union[float, None] = swap_short if swap_short is not MISSING else None
 
         self._resolution_arg_: Union[str, TimeframeAPI, Missing, None] = resolution
-        self._resolution_: Union[TimeframeAPI, None] = None
         self._auto_: bool = False
         self._skipped_bars_: int = 0
         self._descended_bars_: int = 0
         self._arm_version_: int = 0
         self._rng_: np.random.Generator = np.random.default_rng(spread_seed[0] if spread_seed and isinstance(spread_seed[0], int) else None)
 
-        self._db_: Union[PostgresAPI, None] = None
         self._stack_: Union[contextlib.ExitStack, None] = None
         self._contract_: Any = None
         self._base_asset_: Union[str, None] = None
@@ -129,19 +140,13 @@ class BacktestingAPI(SystemAPI):
         self._window_: int = 0
         self._warmup_frame_: Union[pl.DataFrame, None] = None
         self._bars_: list[BarAPI] = []
-        self._bar_: Union[BarAPI, None] = None
-        self._tick_: Union[TickAPI, None] = None
-        self._tick_ts_: Union[np.ndarray, None] = None
-        self._tick_ask_: Union[np.ndarray, None] = None
-        self._tick_bid_: Union[np.ndarray, None] = None
+        self._tick_ts_: np.ndarray = np.empty(0, dtype="int64")
+        self._tick_ask_: np.ndarray = np.empty(0, dtype="float64")
+        self._tick_bid_: np.ndarray = np.empty(0, dtype="float64")
         self._tick_conversions_array_: Union[tuple[np.ndarray, ...], None] = None
         self._finer_frame_: Union[pl.DataFrame, None] = None
         self._ladder_: list[str] = []
         self._rung_frames_: dict[str, pl.DataFrame] = {}
-
-        self._feed_: Union[Iterator, None] = None
-        self._uid_queue_: Union[deque, None] = None
-        self._arg_queue_: Union[deque, None] = None
 
         self._pids_: count = count(start=-1, step=-1)
         self._tids_: count = count(start=-1, step=-1)
@@ -166,30 +171,30 @@ class BacktestingAPI(SystemAPI):
             if base is None: base = datetime.fromisoformat(value)
         return base.replace(hour=23, minute=59, second=59, microsecond=999999) if end else base
 
-    @staticmethod
-    def _eq_(a: Union[float, None], b: Union[float, None]) -> bool:
+    def _eq_(self, a: Union[float, None], b: Union[float, None]) -> bool:
         if a is None or b is None: return a is b
-        return abs(a - b) < _EPSILON_
+        return abs(a - b) < self._EPSILON_
 
     def _connect_(self) -> None:
         stack = contextlib.ExitStack()
         stack.__enter__()
         self._stack_ = stack
         try:
-            self._db_ = self._stack_.enter_context(PostgresAPI(database="Quant"))
+            self._db_ = stack.enter_context(PostgresAPI(database="Quant"))
             self.strategy = self._strategy_(money_management=self._parameters_.MoneyManagement, risk_management=self._parameters_.RiskManagement, signal_management=self._parameters_.SignalManagement)
             self.market = MarketAPI()
             self.indicator = IndicatorAPI(technical=self._parameters_.TechnicalManagement, fundamental=self._parameters_.FundamentalManagement, sentimental=self._parameters_.SentimentalManagement)
             self.portfolio = PortfolioAPI(Parameter=self._parameters_.PortfolioManagement)
             self._contract_ = self._security_.Contract
             self._digits_ = int(self._contract_.Digits) if getattr(self._contract_, "Digits", None) else 5
-            self._base_asset_ = self._security_.Ticker.BaseAsset if self._security_.Ticker else None
-            self._quote_asset_ = self._security_.Ticker.QuoteAsset if self._security_.Ticker else None
+            ticker = self._security_.Ticker
+            self._base_asset_ = ticker.BaseAsset if ticker else None
+            self._quote_asset_ = ticker.QuoteAsset if ticker else None
             self._needs_conversion_ = self._account_asset_ not in (self._base_asset_, self._quote_asset_)
             self._window_ = self._indicator_window_()
             if isinstance(self._resolution_arg_, TimeframeAPI):
                 self._resolution_ = self._resolution_arg_
-            elif self._resolution_arg_:
+            elif isinstance(self._resolution_arg_, str) and self._resolution_arg_:
                 self._resolution_ = TimeframeAPI(UID=self._resolution_arg_, db=self._db_)
             else:
                 self._auto_ = True
@@ -199,15 +204,12 @@ class BacktestingAPI(SystemAPI):
             self.account = self._build_account_()
             self._preload_()
         except Exception:
-            self._stack_.__exit__(None, None, None)
+            stack.__exit__(None, None, None)
             raise
         self._uid_queue_ = deque()
         self._arg_queue_ = deque()
         self._feed_ = self._generate_()
         super()._connect_()
-
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        return super().__exit__(exc_type, exc_value, exc_traceback)
 
     def _disconnect_(self) -> None:
         super()._disconnect_()
@@ -292,7 +294,7 @@ class BacktestingAPI(SystemAPI):
         stop = self._bars_[-1].CloseTick.Timestamp.DateTime
         columns = [str(TickAPI.ID.Timestamp), str(TickAPI.ID.Ask), str(TickAPI.ID.Bid)]
         if self._needs_conversion_:
-            columns += [str(column) for column in _CONVERSION_COLUMNS_]
+            columns += [str(column) for column in self._CONVERSION_COLUMNS_]
         tick_frame = MarketAPI.pull_ticks(self._db_, self._security_.UID, start, stop, columns=columns)
         if tick_frame.height:
             tick_ts = tick_frame["Timestamp"].dt.epoch("us").to_numpy()
@@ -301,7 +303,7 @@ class BacktestingAPI(SystemAPI):
         else:
             tick_ts, tick_ask, tick_bid = np.empty(0, dtype="int64"), np.empty(0, dtype="float64"), np.empty(0, dtype="float64")
         if self._needs_conversion_ and tick_frame.height:
-            tick_conversions = tuple(tick_frame[str(column)].to_numpy().astype("float64") for column in _CONVERSION_COLUMNS_)
+            tick_conversions = tuple(tick_frame[str(column)].to_numpy().astype("float64") for column in self._CONVERSION_COLUMNS_)
         else:
             tick_conversions = None
         rung_frames, ladder, finer_frame = {}, [], None
@@ -322,8 +324,7 @@ class BacktestingAPI(SystemAPI):
     def _data_token_(self) -> int:
         return MarketAPI.last_tick_uid(self._db_, self._security_.UID, self._bars_[0].OpenTick.Timestamp.DateTime, self._bars_[-1].CloseTick.Timestamp.DateTime)
 
-    @staticmethod
-    def _read_cache_(folder: Path, token: int) -> Union[tuple, None]:
+    def _read_cache_(self, folder: Path, token: int) -> Union[tuple, None]:
         meta = folder / "meta.json"
         if not meta.exists(): return None
         info = json.loads(meta.read_text())
@@ -333,17 +334,16 @@ class BacktestingAPI(SystemAPI):
         rung_frames = {uid: pl.read_parquet(folder / f"rung_{uid}.parquet") for uid in ladder}
         finer = folder / "finer.parquet"
         finer_frame = pl.read_parquet(finer) if finer.exists() else None
-        names = [str(column) for column in _CONVERSION_COLUMNS_]
+        names = [str(column) for column in self._CONVERSION_COLUMNS_]
         tick_conversions = tuple(ticks[name].to_numpy() for name in names) if all(name in ticks.columns for name in names) else None
         return ticks["ts"].to_numpy(), ticks["ask"].to_numpy(), ticks["bid"].to_numpy(), tick_conversions, rung_frames, ladder, finer_frame
 
-    @staticmethod
-    def _write_cache_(folder: Path, frames: tuple, token: int) -> None:
+    def _write_cache_(self, folder: Path, frames: tuple, token: int) -> None:
         tick_ts, tick_ask, tick_bid, tick_conversions, rung_frames, ladder, finer_frame = frames
         folder.mkdir(parents=True, exist_ok=True)
         columns = {"ts": tick_ts, "ask": tick_ask, "bid": tick_bid}
         if tick_conversions is not None:
-            for name, array in zip((str(column) for column in _CONVERSION_COLUMNS_), tick_conversions): columns[name] = array
+            for name, array in zip((str(column) for column in self._CONVERSION_COLUMNS_), tick_conversions): columns[name] = array
         pl.DataFrame(columns).write_parquet(folder / "ticks.parquet")
         for uid, frame in rung_frames.items(): frame.write_parquet(folder / f"rung_{uid}.parquet")
         if finer_frame is not None: finer_frame.write_parquet(folder / "finer.parquet")
@@ -351,7 +351,7 @@ class BacktestingAPI(SystemAPI):
 
     def _acquire_frames_(self) -> tuple:
         if not self._DISK_CACHE_: return self._load_frames_()
-        folder, token = _CACHE_DIR_ / self._cache_signature_(), self._data_token_()
+        folder, token = self._CACHE_DIR_ / self._cache_signature_(), self._data_token_()
         cached = self._read_cache_(folder, token)
         if cached is not None and not (self._needs_conversion_ and cached[3] is None): return cached
         frames = self._load_frames_()
@@ -368,14 +368,14 @@ class BacktestingAPI(SystemAPI):
         self._rung_frames_, self._ladder_, self._finer_frame_ = dataset.RungFrames, dataset.Ladder, dataset.FinerFrame
 
     def _preload_(self) -> None:
-        timer = Timer(); timer.start()
+        watch = Timer(); watch.start()
         if self._dataset_ is not None:
             self._inject_(self._dataset_)
-            timer.stop()
-            self._preload_seconds_ = timer.delta()
-            ticks = self._tick_ts_.size if self._tick_ts_ is not None else 0
+            watch.stop()
+            self._preload_seconds_ = watch.delta()
+            ticks = self._tick_ts_.size
             ladder = " · ".join(f"{uid}:{self._rung_frames_[uid].height}" for uid in self._ladder_) or "Tick"
-            self._log_.info(lambda: f"Phase Preload: Injected · {timer.result()} · {ticks} Ticks · Ladder {ladder}")
+            self._log_.info(lambda: f"Phase Preload: Injected · {watch.result()} · {ticks} Ticks · Ladder {ladder}")
             return
         key = (self._security_.UID, self._start_, self._stop_, self._timeframe_.UID, self._auto_, None if self._auto_ else self._resolution_.UID)
         with self._PRELOAD_LOCK_:
@@ -388,20 +388,19 @@ class BacktestingAPI(SystemAPI):
             self._bars_, self._warmup_frame_, frames = self._PRELOAD_CACHE_[key]
         if frames is not None:
             self._tick_ts_, self._tick_ask_, self._tick_bid_, self._tick_conversions_array_, self._rung_frames_, self._ladder_, self._finer_frame_ = frames
-        timer.stop()
-        self._preload_seconds_ = timer.delta()
-        ticks = self._tick_ts_.size if self._tick_ts_ is not None else 0
+        watch.stop()
+        self._preload_seconds_ = watch.delta()
+        ticks = self._tick_ts_.size
         ladder = " · ".join(f"{uid}:{self._rung_frames_[uid].height}" for uid in self._ladder_) or "Tick"
         outcome = "Reused" if reused else "Completed"
-        self._log_.info(lambda: f"Phase Preload: {outcome} · {timer.result()} · {ticks} Ticks · Ladder {ladder}")
+        self._log_.info(lambda: f"Phase Preload: {outcome} · {watch.result()} · {ticks} Ticks · Ladder {ladder}")
 
-    def _symbol_rate_(self, tick: TickAPI) -> float:
+    @staticmethod
+    def _symbol_rate_(tick: TickAPI) -> float:
         return (tick.Ask.Price + tick.Bid.Price) / 2.0
 
     def _base_conversion_(self, rate: float) -> float:
-        if self._account_asset_ == self._quote_asset_: return rate
-        if self._account_asset_ == self._base_asset_: return 1.0
-        return 1.0
+        return rate if self._account_asset_ == self._quote_asset_ else 1.0
 
     def _quote_conversion_(self, rate: float) -> float:
         if self._account_asset_ == self._base_asset_: return 1.0 / rate
@@ -467,15 +466,13 @@ class BacktestingAPI(SystemAPI):
     def _overnights_(self, entry: datetime, exit: datetime) -> int:
         if exit <= entry: return 0
         period = timedelta(hours=self._contract_.SwapPeriod)
-        def isdst(timestamp: datetime) -> bool:
-            return _eu_summer_(timestamp)
         def rollover(at: datetime, at_isdst: bool) -> tuple[datetime, bool]:
             to = at + period
-            to_isdst = isdst(to)
+            to_isdst = _eu_summer_(to)
             if at_isdst and not to_isdst: return to.replace(hour=self._contract_.SwapWinterTime), to_isdst
             if not at_isdst and to_isdst: return to.replace(hour=self._contract_.SwapSummerTime), to_isdst
             return to, to_isdst
-        rollover_isdst = isdst(entry)
+        rollover_isdst = _eu_summer_(entry)
         rollover_at = datetime(year=entry.year, month=entry.month, day=entry.day, hour=self._contract_.SwapSummerTime if rollover_isdst else self._contract_.SwapWinterTime)
         while rollover_at < entry: rollover_at, rollover_isdst = rollover(rollover_at, rollover_isdst)
         overnights = 0
@@ -589,7 +586,7 @@ class BacktestingAPI(SystemAPI):
     def _emit_open_(self, action: Union[OpenBuyPositionActionAPI, OpenSellPositionActionAPI], direction: Direction) -> None:
         volume = action.Volume
         if volume > self._contract_.VolumeMax or volume < self._contract_.VolumeMin or not self._eq_(volume % self._contract_.VolumeStep, 0.0):
-            return self._log_.error(lambda: f"Action Open: Failed · Due to invalid Volume ({volume})")
+            self._log_.error(lambda: f"Action Open: Failed · Due to invalid Volume ({volume})"); return
         ask, bid = self._ask_bid_(self._tick_)
         entry = ask if direction == Direction.Buy else bid
         sl_distance = action.StopLoss * self._contract_.PipSize if action.StopLoss else None
@@ -614,11 +611,11 @@ class BacktestingAPI(SystemAPI):
 
     def _emit_modify_volume_(self, action: Union[ModifyBuyPositionVolumeActionAPI, ModifySellPositionVolumeActionAPI], direction: Direction) -> None:
         position = self._positions_.get(action.PositionID)
-        if position is None: return self._log_.error(lambda: "Action Modify Volume: Failed · Due to Position not found")
+        if position is None: self._log_.error(lambda: "Action Modify Volume: Failed · Due to Position not found"); return
         if self._eq_(action.Volume, 0.0):
-            return self._emit_close_(position, self._tick_, UpdateID.ClosedBuyPosition if direction == Direction.Buy else UpdateID.ClosedSellPosition)
+            self._emit_close_(position, self._tick_, UpdateID.ClosedBuyPosition if direction == Direction.Buy else UpdateID.ClosedSellPosition); return
         closing = position.Volume - action.Volume
-        if closing <= 0.0: return self._log_.error(lambda: f"Action Modify Volume: Failed · Due to invalid Volume ({action.Volume})")
+        if closing <= 0.0: self._log_.error(lambda: f"Action Modify Volume: Failed · Due to invalid Volume ({action.Volume})"); return
         initial_commission = position.CommissionPnL.PnL if position.CommissionPnL else 0.0
         trade = self._build_trade_(position, closing, self._tick_, self._exit_price_(position, self._tick_))
         position.Volume = action.Volume
@@ -629,7 +626,7 @@ class BacktestingAPI(SystemAPI):
 
     def _emit_modify_stop_loss_(self, action: Union[ModifyBuyPositionStopLossActionAPI, ModifySellPositionStopLossActionAPI], direction: Direction) -> None:
         position = self._positions_.get(action.PositionID)
-        if position is None: return self._log_.error(lambda: "Action Modify Stop-Loss: Failed · Due to Position not found")
+        if position is None: self._log_.error(lambda: "Action Modify Stop-Loss: Failed · Due to Position not found"); return
         position.StopLossPrice = self._round_(action.StopLoss) if action.StopLoss is not None else None
         self._arm_version_ += 1
         update_id = UpdateID.ModifiedBuyPositionStopLoss if direction == Direction.Buy else UpdateID.ModifiedSellPositionStopLoss
@@ -637,7 +634,7 @@ class BacktestingAPI(SystemAPI):
 
     def _emit_modify_take_profit_(self, action: Union[ModifyBuyPositionTakeProfitActionAPI, ModifySellPositionTakeProfitActionAPI], direction: Direction) -> None:
         position = self._positions_.get(action.PositionID)
-        if position is None: return self._log_.error(lambda: "Action Modify Take-Profit: Failed · Due to Position not found")
+        if position is None: self._log_.error(lambda: "Action Modify Take-Profit: Failed · Due to Position not found"); return
         position.TakeProfitPrice = self._round_(action.TakeProfit) if action.TakeProfit is not None else None
         self._arm_version_ += 1
         update_id = UpdateID.ModifiedBuyPositionTakeProfit if direction == Direction.Buy else UpdateID.ModifiedSellPositionTakeProfit
@@ -651,11 +648,11 @@ class BacktestingAPI(SystemAPI):
             case ActionID.OpenSellPosition: self._emit_open_(action, Direction.Sell)
             case ActionID.CloseBuyPosition:
                 position = self._positions_.get(action.PositionID)
-                if position is None: return self._log_.error(lambda: "Action Close: Failed · Due to Position not found")
+                if position is None: self._log_.error(lambda: "Action Close: Failed · Due to Position not found"); return
                 self._emit_close_(position, self._tick_, UpdateID.ClosedBuyPosition)
             case ActionID.CloseSellPosition:
                 position = self._positions_.get(action.PositionID)
-                if position is None: return self._log_.error(lambda: "Action Close: Failed · Due to Position not found")
+                if position is None: self._log_.error(lambda: "Action Close: Failed · Due to Position not found"); return
                 self._emit_close_(position, self._tick_, UpdateID.ClosedSellPosition)
             case ActionID.ModifyBuyPositionVolume: self._emit_modify_volume_(action, Direction.Buy)
             case ActionID.ModifySellPositionVolume: self._emit_modify_volume_(action, Direction.Sell)
@@ -674,7 +671,8 @@ class BacktestingAPI(SystemAPI):
         extremes = [high, low] if high.Timestamp.DateTime <= low.Timestamp.DateTime else [low, high]
         return [bar.OpenTick, *extremes, bar.CloseTick]
 
-    def _stop_level_(self, position: PositionAPI, ask: float, bid: float) -> tuple[Union[float, None], Union[UpdateID, None]]:
+    @staticmethod
+    def _stop_level_(position: PositionAPI, ask: float, bid: float) -> tuple[Union[float, None], Union[UpdateID, None]]:
         sl = position.StopLossPrice.Price if position.StopLossPrice else None
         tp = position.TakeProfitPrice.Price if position.TakeProfitPrice else None
         if position.Direction == Direction.Buy:
@@ -696,14 +694,13 @@ class BacktestingAPI(SystemAPI):
         self._tick_ = fill
         self._emit_close_(position, fill, update_id)
 
-    @staticmethod
-    def _datetime_(timestamp: Union[int, datetime]) -> datetime:
-        return _EPOCH_ + timestamp * _MICROSECOND_ if isinstance(timestamp, int) else timestamp
+    def _datetime_(self, timestamp: Union[int, datetime]) -> datetime:
+        return self._EPOCH_ + timestamp * self._MICROSECOND_ if isinstance(timestamp, int) else timestamp
 
     def _conversion_at_(self, timestamp: Union[int, datetime]) -> tuple:
         arrays, ts = self._tick_conversions_array_, self._tick_ts_
-        if arrays is None or ts is None or ts.size == 0: return None, None, None, None
-        us = timestamp if isinstance(timestamp, int) else (timestamp - _EPOCH_) // _MICROSECOND_
+        if arrays is None or ts.size == 0: return None, None, None, None
+        us = timestamp if isinstance(timestamp, int) else (timestamp - self._EPOCH_) // self._MICROSECOND_
         index = int(np.searchsorted(ts, us, side="right")) - 1
         if index < 0: return None, None, None, None
         return tuple(None if math.isnan(array[index]) else float(array[index]) for array in arrays)
@@ -718,9 +715,6 @@ class BacktestingAPI(SystemAPI):
         ask_base, bid_base, ask_quote, bid_quote = self._tick_conversions_(timestamp, raw_ask, raw_bid)
         return TickAPI(Security=self._security_, Timestamp=self._datetime_(timestamp), Ask=ask, Bid=bid, AskBaseConversion=ask_base, BidBaseConversion=bid_base, AskQuoteConversion=ask_quote, BidQuoteConversion=bid_quote, Volume=1.0)
 
-    def _target_tick_(self, timestamp: Union[int, datetime], ask: float, bid: float, raw_ask: float, raw_bid: float) -> TickAPI:
-        return self._synth_tick_(timestamp, ask, bid, raw_ask, raw_bid)
-
     def _walk_(self, timestamp: Union[int, datetime], raw_ask: float, raw_bid: float) -> Iterator:
         ask, bid = self._effective_ask_bid_(raw_ask, raw_bid)
         spread = (raw_ask - raw_bid) if self._spread_type_ in (SpreadType.Accurate, SpreadType.Approximate) else self._spread_value_amount_(raw_ask, raw_bid)
@@ -731,23 +725,23 @@ class BacktestingAPI(SystemAPI):
                 self._fill_stop_(position, timestamp, level, raw_ask, raw_bid, ask, bid, spread, update_id)
                 yield
         if self._ask_above_ is not None and ask >= self._ask_above_:
-            self._tick_ = self._target_tick_(timestamp, ask, bid, raw_ask, raw_bid)
+            self._tick_ = self._synth_tick_(timestamp, ask, bid, raw_ask, raw_bid)
             self._enqueue_(UpdateID.AskAboveTarget, self._tick_); yield
         if self._ask_below_ is not None and ask <= self._ask_below_:
-            self._tick_ = self._target_tick_(timestamp, ask, bid, raw_ask, raw_bid)
+            self._tick_ = self._synth_tick_(timestamp, ask, bid, raw_ask, raw_bid)
             self._enqueue_(UpdateID.AskBelowTarget, self._tick_); yield
         if self._bid_above_ is not None and bid >= self._bid_above_:
-            self._tick_ = self._target_tick_(timestamp, ask, bid, raw_ask, raw_bid)
+            self._tick_ = self._synth_tick_(timestamp, ask, bid, raw_ask, raw_bid)
             self._enqueue_(UpdateID.BidAboveTarget, self._tick_); yield
         if self._bid_below_ is not None and bid <= self._bid_below_:
-            self._tick_ = self._target_tick_(timestamp, ask, bid, raw_ask, raw_bid)
+            self._tick_ = self._synth_tick_(timestamp, ask, bid, raw_ask, raw_bid)
             self._enqueue_(UpdateID.BidBelowTarget, self._tick_); yield
 
     def _bounds_(self, open_ts: datetime, close_ts: datetime) -> tuple[int, int]:
         ts = self._tick_ts_
-        if ts is None or ts.size == 0: return 0, 0
-        return (int(np.searchsorted(ts, (open_ts - _EPOCH_) // _MICROSECOND_, side="left")),
-                int(np.searchsorted(ts, (close_ts - _EPOCH_) // _MICROSECOND_, side="right")))
+        if ts.size == 0: return 0, 0
+        return (int(np.searchsorted(ts, (open_ts - self._EPOCH_) // self._MICROSECOND_, side="left")),
+                int(np.searchsorted(ts, (close_ts - self._EPOCH_) // self._MICROSECOND_, side="right")))
 
     def _slice_ticks_(self, open_ts: datetime, close_ts: datetime) -> tuple[list, list, list]:
         start, stop = self._bounds_(open_ts, close_ts)
@@ -804,22 +798,22 @@ class BacktestingAPI(SystemAPI):
             yield int(times[index]), float(asks[index]), float(bids[index])
             cursor = index + 1
 
-    def _tick_stream_(self, bar: BarAPI) -> Iterator[tuple[datetime, float, float]]:
+    def _tick_stream_(self, bar: BarAPI) -> Iterator[tuple[int, float, float]]:
         yield from self._ticks_(bar.OpenTick.Timestamp.DateTime, bar.CloseTick.Timestamp.DateTime)
 
-    def _tick_bars_(self, bar: BarAPI, n: int) -> Iterator[tuple[datetime, float, float]]:
+    def _tick_bars_(self, bar: BarAPI, n: int) -> Iterator[tuple[Union[int, datetime], float, float]]:
         timestamps, asks, bids = self._period_ticks_(bar)
         for start in range(0, len(timestamps), n):
             ts, ak, bd = timestamps[start:start + n], asks[start:start + n], bids[start:start + n]
             if not bd: continue
             last = len(bd) - 1
-            high, low = max(range(len(bd)), key=bd.__getitem__), min(range(len(bd)), key=bd.__getitem__)
+            high, low = max(range(len(bd)), key=lambda i: bd[i]), min(range(len(bd)), key=lambda i: bd[i])
             order, seen = [], set()
             for i in (0, min(high, low), max(high, low), last):
                 if i not in seen: seen.add(i); order.append(i)
             for i in order: yield ts[i], ak[i], bd[i]
 
-    def _finer_bars_(self, bar: BarAPI, resolution: TimeframeAPI) -> Iterator[tuple[datetime, float, float]]:
+    def _finer_bars_(self, bar: BarAPI) -> Iterator[tuple[datetime, float, float]]:
         frame = self._finer_frame_
         if frame is None or frame.is_empty(): return
         opens = frame["OpenTick.Timestamp"]
@@ -869,7 +863,7 @@ class BacktestingAPI(SystemAPI):
         stop = opens.search_sorted(close_ts, side="right")
         yield from frame.slice(start, max(stop - start, 0)).iter_rows(named=True)
 
-    def _descend_(self, open_ts: datetime, close_ts: datetime, ladder: list) -> Iterator[tuple[datetime, float, float]]:
+    def _descend_(self, open_ts: datetime, close_ts: datetime, ladder: list) -> Iterator[tuple[int, float, float]]:
         if not ladder:
             yield from self._ticks_(open_ts, close_ts)
             return
@@ -880,7 +874,7 @@ class BacktestingAPI(SystemAPI):
             if self._should_descend_(bids, asks):
                 yield from self._descend_(row["OpenTick.Timestamp"], row["CloseTick.Timestamp"], rest)
 
-    def _intrabar_source_(self, bar: BarAPI) -> Iterator[tuple[datetime, float, float]]:
+    def _intrabar_source_(self, bar: BarAPI) -> Iterator[tuple[Union[int, datetime], float, float]]:
         if self._auto_:
             bids = (bar.OpenTick.Bid.Price, bar.HighTick.Bid.Price, bar.LowTick.Bid.Price, bar.CloseTick.Bid.Price)
             asks = (bar.OpenTick.Ask.Price, bar.HighTick.Ask.Price, bar.LowTick.Ask.Price, bar.CloseTick.Ask.Price)
@@ -898,7 +892,7 @@ class BacktestingAPI(SystemAPI):
         elif resolution.IsTick:
             yield from self._tick_bars_(bar, resolution.Value or 1)
         else:
-            yield from self._finer_bars_(bar, resolution)
+            yield from self._finer_bars_(bar)
 
     def _generate_(self) -> Iterator:
         self._enqueue_(UpdateID.Account, self.account)
@@ -972,7 +966,7 @@ class BacktestingAPI(SystemAPI):
                 update.Market.init_data(self._warmup_frame_)
             self._transition_(self._initialization_timer_, "Initialization", self._execution_timer_)
 
-        def update(update: BarUpdateAPI):
+        def advance(update: BarUpdateAPI):
             if self.strategy.Transform.Market: update.Market.update_data(update.Bar)
 
         def report(update: CompleteUpdateAPI):
@@ -984,7 +978,7 @@ class BacktestingAPI(SystemAPI):
         initialization.on(event=UpdateID.Execution, to=execution, action=execute, reason="Market Initialized")
         initialization.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Abruptly Terminated")
 
-        execution.on(event=UpdateID.BarClosed, to=execution, action=update, reason=None)
+        execution.on(event=UpdateID.BarClosed, to=execution, action=advance, reason=None)
         execution.on(event=UpdateID.Shutdown, to=termination, action=report, reason="Safely Terminated")
 
         return system_engine
