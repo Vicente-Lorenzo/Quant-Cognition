@@ -2,7 +2,7 @@ import pytest
 
 from datetime import date, datetime, timedelta
 
-from Library.Utility.Datetime import datetime_to_epoch, epoch_to_datetime, is_summer_time, is_winter_time, parse_datetime
+from Library.Utility.Datetime import EPOCH, MICROSECOND, MILLISECOND, datetime_to_epoch, epoch_to_datetime, is_summer_time, is_winter_time, parse_datetime
 
 def test_parse_datetime_formats():
     assert parse_datetime("2023-01-01") == datetime(2023, 1, 1)
@@ -17,9 +17,13 @@ def test_parse_datetime_end_of_day():
 
 def test_epoch_to_datetime_inverts_datetime_to_epoch():
     assert epoch_to_datetime(0) == datetime(1970, 1, 1)
-    unit = timedelta(microseconds=1)
     dt = datetime(2023, 6, 15, 9, 30, 0, 123456)
-    assert epoch_to_datetime(datetime_to_epoch(dt, unit=unit), unit=unit) == dt
+    assert epoch_to_datetime(datetime_to_epoch(dt, unit=MICROSECOND), unit=MICROSECOND) == dt
+
+def test_datetime_constants():
+    assert EPOCH == datetime(1970, 1, 1)
+    assert MILLISECOND == timedelta(milliseconds=1)
+    assert MICROSECOND == timedelta(microseconds=1)
 
 def test_is_summer_time_eu_boundaries():
     assert is_summer_time(datetime(2023, 1, 15)) is False

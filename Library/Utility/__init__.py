@@ -31,6 +31,9 @@ from Library.Utility.Typing import (
     format
 )
 from Library.Utility.Datetime import (
+    EPOCH,
+    MILLISECOND,
+    MICROSECOND,
     datetime_to_string,
     string_to_datetime,
     datetime_to_timestamp,
@@ -141,7 +144,7 @@ __all__ = [
     "hasmember", "getmember", "hasattribute", "getattribute", "hasmethod", "getmethod", "hasproperty", "getproperty",
     "getvariable", "findvariable",
     "cast", "contains", "format",
-    "datetime_to_string", "string_to_datetime", "datetime_to_timestamp", "datetime_to_epoch", "epoch_to_datetime", "timestamp_to_datetime", "datetime_to_iso", "iso_to_datetime", "parse_datetime", "seconds_to_string", "is_summer_time", "is_winter_time",
+    "EPOCH", "MILLISECOND", "MICROSECOND", "datetime_to_string", "string_to_datetime", "datetime_to_timestamp", "datetime_to_epoch", "epoch_to_datetime", "timestamp_to_datetime", "datetime_to_iso", "iso_to_datetime", "parse_datetime", "seconds_to_string", "is_summer_time", "is_winter_time",
     "equals", "truncate",
     "memory_to_string",
     "find_user", "is_windows", "is_linux", "is_mac", "is_local", "is_remote", "is_service",

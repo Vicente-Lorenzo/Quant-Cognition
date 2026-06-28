@@ -4,7 +4,7 @@ class Missing:
     def __repr__(self) -> str: return "Missing"
     def __bool__(self) -> bool: return False
 
-MISSING: Final = Missing()
+MISSING: Final[Missing] = Missing()
 
 def isclass(obj: object) -> bool:
     return isinstance(obj, type)

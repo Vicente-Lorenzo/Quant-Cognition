@@ -1,8 +1,12 @@
-from typing import Union
+from typing import Final, Union
 from datetime import datetime, date, time, timedelta
 from dateutil.relativedelta import relativedelta, weekday
 
 from Library.Utility.Enumeration import EnumerationAPI
+
+EPOCH: Final[datetime] = datetime(1970, 1, 1)
+MILLISECOND: Final[timedelta] = timedelta(milliseconds=1)
+MICROSECOND: Final[timedelta] = timedelta(microseconds=1)
 
 class Weekday(EnumerationAPI):
     Monday = 0
@@ -23,10 +27,10 @@ def datetime_to_timestamp(dt: Union[datetime, date, time], milliseconds: bool = 
     ts = dt.timestamp()
     return ts * 1000 if milliseconds else ts
 
-def datetime_to_epoch(dt: datetime, epoch: datetime = datetime(1970, 1, 1), unit: timedelta = timedelta(milliseconds=1)) -> int:
+def datetime_to_epoch(dt: datetime, epoch: datetime = EPOCH, unit: timedelta = MILLISECOND) -> int:
     return (dt - epoch) // unit
 
-def epoch_to_datetime(value: int, epoch: datetime = datetime(1970, 1, 1), unit: timedelta = timedelta(milliseconds=1)) -> datetime:
+def epoch_to_datetime(value: int, epoch: datetime = EPOCH, unit: timedelta = MILLISECOND) -> datetime:
     return epoch + value * unit
 
 def timestamp_to_datetime(ts: float, milliseconds: bool = False) -> datetime:
