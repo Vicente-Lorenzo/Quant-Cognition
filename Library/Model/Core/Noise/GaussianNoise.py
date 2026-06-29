@@ -1,6 +1,7 @@
 from typing import Union
-import numpy as np
-from Library.Model.Noise import NoiseAPI
+
+from Library.Database.Dataframe import np
+from Library.Model.Core.Noise import NoiseAPI
 
 class GaussianNoiseAPI(NoiseAPI):
     """

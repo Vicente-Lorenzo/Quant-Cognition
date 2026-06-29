@@ -1,9 +1,8 @@
-import numpy as np
-
 from typing import Union
 from pathlib import Path
 from abc import ABC, abstractmethod
 
+from Library.Database.Dataframe import np
 from Library.Logging import HandlerLoggingAPI
 
 class AgentAPI(ABC):

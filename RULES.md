@@ -72,7 +72,7 @@ If structural changes (new folders or modules) are detected that are not reflect
 - **`Library/Indicator`**: Trading indicators split into `Technical`, `Fundamental`, `Sentimental` subpackages, plus the umbrella `IndicatorAPI`.
 - **`Library/Logging`**: Python logging handlers (`HandlerLoggingAPI`, `ConsoleLoggingAPI`, `FileLoggingAPI`, `BufferLoggingAPI`, `ReportLoggingAPI`, `BucketLoggingAPI`, `WebLoggingAPI`, `EmailLoggingAPI`, `TelegramAPI`, `VerboseLevel`).
 - **`Library/Market`**: Market data structures (`MarketAPI`, `BarAPI`, `TickAPI`, `PriceAPI`, `SeriesAPI`, `TimestampAPI`).
-- **`Library/Model`**: AI/ML components (`AgentAPI`, `DDPG`, `Network`, `Noise`, `Memory`).
+- **`Library/Model`**: AI/ML components split into `Core/` (framework primitives — `AgentAPI`, `NetworkAPI`, `MemoryAPI`, `Noise` processes) and `Method/` (DRL algorithms — `DDPG`, `SAC`).
 - **`Library/Parameters`**: Configuration management (`ParametersAPI`, `Parameters`) backed by YAML files; broker-specific subfolders for strategy/system parameter trees.
 - **`Library/Portfolio`**: Trading portfolio entities (`PortfolioAPI`, `AccountAPI`, `OrderAPI`, `PositionAPI`, `TradeAPI`, `PnL`, `SizingAPI`, `StatisticAPI`).
 - **`Library/Protocol`**: Wire protocol shared with the C# Connector. `Action/` (commands sent to cTrader) and `Update/` (events received from cTrader); `ActionID` / `UpdateID` enumerations.

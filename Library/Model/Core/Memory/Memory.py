@@ -1,5 +1,6 @@
-import numpy as np
 from typing import Union
+
+from Library.Database.Dataframe import np
 
 class MemoryAPI:
 

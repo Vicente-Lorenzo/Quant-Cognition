@@ -1,13 +1,13 @@
-import numpy as np
 import torch as T
 import torch.nn.functional as F
 from typing import Union
 from pathlib import Path
 
-from Library.Model.Agent import AgentAPI
-from Library.Model.DDPG import ActorNetworkAPI, CriticNetworkAPI
-from Library.Model.Memory import MemoryAPI
-from Library.Model.Noise import OrnsteinUhlenbeckNoiseAPI
+from Library.Database.Dataframe import np
+from Library.Model.Core.Agent import AgentAPI
+from Library.Model.Core.Memory import MemoryAPI
+from Library.Model.Core.Noise import OrnsteinUhlenbeckNoiseAPI
+from Library.Model.Method.DDPG import ActorNetworkAPI, CriticNetworkAPI
 
 class DDPGAgentAPI(AgentAPI):
 

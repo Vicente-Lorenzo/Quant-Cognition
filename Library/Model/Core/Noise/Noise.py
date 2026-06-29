@@ -1,7 +1,7 @@
 from typing import Union
-import numpy as np
-
 from abc import ABC, abstractmethod
+
+from Library.Database.Dataframe import np
 
 class NoiseAPI(ABC):
 

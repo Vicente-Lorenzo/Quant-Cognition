@@ -1,2 +1,2 @@
-class LearningSystemAPI:
+class LearningAPI:
     pass
