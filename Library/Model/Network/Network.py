@@ -16,18 +16,20 @@ class NetworkAPI(nn.Module, ABC):
         self._file = path / model / role
         self._log: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="Network Management")
 
-        self.init()
-        self.device = T.device("cuda:0" if T.cuda.is_available() else "cuda:1")
-        self.to(self.device)
-
     @abstractmethod
     def init(self) -> None:
         raise NotImplementedError
 
+    def build(self) -> None:
+        self.init()
+        self.device = T.device("cuda:0" if T.cuda.is_available() else "cpu")
+        self.to(self.device)
+
     def save(self) -> None:
+        self._file.parent.mkdir(parents=True, exist_ok=True)
         T.save(self.state_dict(), str(self._file))
         self._log.debug(lambda: f"Saved network state for {self._model} {self._role}")
 
     def load(self) -> None:
-        self.load_state_dict(T.load(str(self._file)))
+        self.load_state_dict(T.load(str(self._file), weights_only=True))
         self._log.debug(lambda: f"Loaded network state for {self._model} {self._role}")

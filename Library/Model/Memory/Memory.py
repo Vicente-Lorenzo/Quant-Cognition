@@ -1,18 +1,21 @@
 import numpy as np
+from typing import Union
 
 class MemoryAPI:
 
     def __init__(self,
                  size: int,
                  input_shape: tuple,
-                 action_shape: int):
+                 action_shape: int,
+                 seed: Union[int, None] = None):
         self.size = size
         self.counter = 0
+        self._rng = np.random.default_rng(seed)
         self.state_memory: np.ndarray = np.zeros((self.size, *input_shape))
         self.action_memory: np.ndarray = np.zeros((self.size, action_shape))
         self.reward_memory: np.ndarray = np.zeros(self.size)
         self.next_state_memory: np.ndarray = np.zeros((self.size, *input_shape))
-        self.terminal_memory: np.ndarray = np.zeros(self.size, dtype=np.bool)
+        self.terminal_memory: np.ndarray = np.zeros(self.size, dtype=np.bool_)
 
     def memorise(self, state, action, reward, next_state, done) -> None:
         index = self.counter % self.size
@@ -25,7 +28,7 @@ class MemoryAPI:
 
     def remember(self, batch_size) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
         max_mem = min(self.counter, self.size)
-        batch = np.random.choice(max_mem, batch_size)
+        batch = self._rng.choice(max_mem, batch_size)
         states = self.state_memory[batch]
         actions = self.action_memory[batch]
         rewards = self.reward_memory[batch]

@@ -19,6 +19,8 @@ class CriticNetworkAPI(NetworkAPI):
                  fc2_shape: int,
                  beta: float):
 
+        super().__init__(model=model, role=role, path=path)
+
         self.input_shape = input_shape
         self.action_shape = action_shape
         self.fc1_shape = fc1_shape
@@ -35,14 +37,14 @@ class CriticNetworkAPI(NetworkAPI):
 
         self.optimizer = optim.Adam(self.parameters(), lr=beta, weight_decay=0.01)
 
-        super().__init__(model=model, role=role, path=path)
+        self.build()
 
     def init(self) -> None:
-        f1 = 1. / np.sqrt(self.fc1.weight.data.size()[0])
+        f1 = 1. / np.sqrt(self.fc1.weight.data.size()[1])
         self.fc1.weight.data.uniform_(-f1, f1)
         self.fc1.bias.data.uniform_(-f1, f1)
 
-        f2 = 1. / np.sqrt(self.fc2.weight.data.size()[0])
+        f2 = 1. / np.sqrt(self.fc2.weight.data.size()[1])
         self.fc2.weight.data.uniform_(-f2, f2)
         self.fc2.bias.data.uniform_(-f2, f2)
 
@@ -50,7 +52,7 @@ class CriticNetworkAPI(NetworkAPI):
         self.q.weight.data.uniform_(-f3, f3)
         self.q.bias.data.uniform_(-f3, f3)
 
-        f4 = 1. / np.sqrt(self.action_value.weight.data.size()[0])
+        f4 = 1. / np.sqrt(self.action_value.weight.data.size()[1])
         self.action_value.weight.data.uniform_(-f4, f4)
         self.action_value.bias.data.uniform_(-f4, f4)
 

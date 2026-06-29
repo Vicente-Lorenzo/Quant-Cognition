@@ -19,6 +19,8 @@ class ActorNetworkAPI(NetworkAPI):
                  fc2_shape: int,
                  alpha: float):
 
+        super().__init__(model=model, role=role, path=path)
+
         self.input_shape = input_shape
         self.action_shape = action_shape
         self.fc1_shape = fc1_shape
@@ -34,14 +36,14 @@ class ActorNetworkAPI(NetworkAPI):
 
         self.optimizer = optim.Adam(self.parameters(), lr=alpha)
 
-        super().__init__(model=model, role=role, path=path)
+        self.build()
 
     def init(self) -> None:
-        f1 = 1. / np.sqrt(self.fc1.weight.data.size()[0])
+        f1 = 1. / np.sqrt(self.fc1.weight.data.size()[1])
         self.fc1.weight.data.uniform_(-f1, f1)
         self.fc1.bias.data.uniform_(-f1, f1)
 
-        f2 = 1. / np.sqrt(self.fc2.weight.data.size()[0])
+        f2 = 1. / np.sqrt(self.fc2.weight.data.size()[1])
         self.fc2.weight.data.uniform_(-f2, f2)
         self.fc2.bias.data.uniform_(-f2, f2)
 

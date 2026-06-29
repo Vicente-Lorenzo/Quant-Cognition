@@ -1,6 +1,7 @@
 import numpy as np
 import torch as T
 import torch.nn.functional as F
+from typing import Union
 from pathlib import Path
 
 from Library.Model.Agent import AgentAPI
@@ -21,17 +22,21 @@ class DDPGAgentAPI(AgentAPI):
                  fc2_shape: int = 300,
                  memory_size: int = 1000000,
                  batch_size: int = 64,
-                 gamma: float = 0.99):
+                 gamma: float = 0.99,
+                 seed: Union[int, None] = None):
 
         super().__init__(model="DDPG", path=path)
+
+        if seed is not None:
+            T.manual_seed(seed)
 
         self.batch_size = batch_size
         self.gamma = gamma
         self.tau = tau
 
-        self.memory = MemoryAPI(size=memory_size, input_shape=input_shape, action_shape=action_shape)
+        self.memory = MemoryAPI(size=memory_size, input_shape=input_shape, action_shape=action_shape, seed=seed)
 
-        self.noise = OrnsteinUhlenbeckNoiseAPI(mu=np.zeros(action_shape))
+        self.noise = OrnsteinUhlenbeckNoiseAPI(mu=np.zeros(action_shape), seed=seed)
 
         self.actor = ActorNetworkAPI(
             model=self._model,
@@ -102,13 +107,16 @@ class DDPGAgentAPI(AgentAPI):
     def remember(self, batch_size) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
         return self.memory.remember(batch_size)
 
-    def decide(self, state):
+    def decide(self, state, explore: bool = True):
         self.actor.eval()
-        state = T.tensor([state], dtype=T.float).to(self.actor.device)
-        mu = self.actor.forward(state).to(self.actor.device)
-        mu_prime = mu + T.tensor(self.noise(),dtype=T.float).to(self.actor.device)
+        with T.no_grad():
+            state = T.as_tensor(np.asarray(state, dtype=np.float32), device=self.actor.device).unsqueeze(0)
+            mu = self.actor.forward(state)
+            if explore:
+                mu = mu + T.tensor(self.noise(), dtype=T.float).to(self.actor.device)
+            mu = T.clamp(mu, -1.0, 1.0)
         self.actor.train()
-        return mu_prime.cpu().detach().numpy()[0]
+        return mu.cpu().numpy()[0]
 
     def update(self, force_tau=None):
         tau = force_tau or self.tau
@@ -133,7 +141,7 @@ class DDPGAgentAPI(AgentAPI):
         self.target_actor.load_state_dict(actor_state_dict)
 
     def learn(self) -> None:
-        if self.memory.size < self.batch_size:
+        if self.memory.counter < self.batch_size:
             return
 
         states, actions, rewards, next_states, dones = self.remember(self.batch_size)
@@ -144,15 +152,15 @@ class DDPGAgentAPI(AgentAPI):
         next_states = T.tensor(next_states, dtype=T.float).to(self.actor.device)
         dones = T.tensor(dones).to(self.actor.device)
 
-        target_next_actions = self.target_actor.forward(next_states)
-        target_next_state_action_value = self.target_critic.forward(next_states, target_next_actions)
+        with T.no_grad():
+            target_next_actions = self.target_actor.forward(next_states)
+            target_next_state_action_value = self.target_critic.forward(next_states, target_next_actions)
+            target_next_state_action_value[dones] = 0.0
+            target_next_state_action_value = target_next_state_action_value.view(-1)
+            target_state_action_value = rewards + self.gamma*target_next_state_action_value
+            target_state_action_value = target_state_action_value.view(self.batch_size, 1)
+
         state_action_value = self.critic.forward(states, actions)
-
-        target_next_state_action_value[dones] = 0.0
-        target_next_state_action_value = target_next_state_action_value.view(-1)
-
-        target_state_action_value = rewards + self.gamma*target_next_state_action_value
-        target_state_action_value = target_state_action_value.view(self.batch_size, 1)
 
         self.critic.optimizer.zero_grad()
         critic_loss = F.mse_loss(target_state_action_value, state_action_value)

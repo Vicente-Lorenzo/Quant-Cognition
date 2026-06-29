@@ -1,7 +1,8 @@
-from typing import Union
 import numpy as np
-from abc import ABC, abstractmethod
+
+from typing import Union
 from pathlib import Path
+from abc import ABC, abstractmethod
 
 from Library.Logging import HandlerLoggingAPI
 
@@ -34,7 +35,7 @@ class AgentAPI(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def decide(self, state) -> Union[np.ndarray, float, int]:
+    def decide(self, state, explore: bool = True) -> Union[np.ndarray, float, int]:
         raise NotImplementedError
 
     @abstractmethod
