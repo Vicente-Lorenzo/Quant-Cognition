@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import numpy as np
 from typing import TYPE_CHECKING, Union
 
-from Library.Database.Dataframe import pl
+from Library.Database.Dataframe import np, pl
 from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
 
 if TYPE_CHECKING:

@@ -20,9 +20,9 @@ Both the **realtime path** (Live/Simulation/Testing, `RealtimeAPI`) and the **of
 
 ---
 
-## 2. Where we are now (2026-06-26)
+## 2. Where we are now (2026-06-29)
 
-The **download + realtime tracks AND the offline backtesting engine are DONE** (engine validated + optimized + closed, §4). **Focus moves to the Optimization & Learning systems** (§6) — both build on the now-validated `BacktestingAPI` + its `dataset=` injection seam.
+The **download + realtime tracks AND the offline backtesting engine are DONE** (engine validated + optimized + closed, §4) and committed; a round of `Library/Utility` consolidation also landed (shared `Math`/`Datetime` helpers + named `EPOCH`/`MILLISECOND`/`MICROSECOND` constants, suite 370 green). **Focus moves to the offline Learning system** — a DRL trainer for model-based / hybrid strategies, designed in §6 — built on the validated `BacktestingAPI` + its `dataset=` tape.
 
 **Landed this arc (all validated):**
 - **Offline engine validated + optimized + closed (§4).** Reproduces all 6 fresh goldens at the data-bound floor (counts bit-exact, USDJPY "neither" path Daily ≈ bit-exact). OPT-A caches `_load_bars_` across runs (repeat-run init 1.1s → 0.02s); the preloaded market is one frozen `DatasetAPI` tape with `extract()`/`inject()` (`dataset=`) as the load-once / inject-across-N-runs seam. Measured 10y per-pass: D1 3.2s, H1 25.4s. Suite 363 green.
@@ -140,9 +140,75 @@ The 6 fresh NNFX online cTrader goldens were minted (EUR 10k, conversion option 
 
 ---
 
-## 6. Backlog
+## 6. Offline Learning System — DESIGN (next build, 2026-06-29)
+
+The next system is an **offline DRL trainer** (`LearningAPI`) for **model-based / hybrid trend-following** strategies, built on the validated `BacktestingAPI` + `dataset=` tape. First deliverables: **two signal-only strategies — DDPG-Only and SAC-Only** (signal management = the agent; **no risk management**), evaluated on **10y walk-forward, EURUSD D1**. (DDPG + SAC are the chosen state-of-the-art continuous-action models; trend-following is the first strategy family — breakout/reversal/scalping come later.)
+
+### 6.1 Architecture — agent-in-strategy (zero engine surgery)
+The engine is event-driven (UpdateID → strategy state machines); RL assumes a step loop. Bridge by hosting the agent **inside the strategy** (the natural policy host the engine already calls per bar) — NOT by inverting `deploy()` into a gym `step()` (that would touch the realtime-shared lifecycle). Responsibility split:
+- **`ModelStrategyAPI` (new base) + `DDPGStrategyAPI` / `SACStrategyAPI` = the MDP.** Builds the observation, maps action→orders, computes reward, records transitions (`agent.memorise`), exposes a `training` flag (explore + record on/off). Inference-capable standalone (a trained agent later deploys through the same strategy in backtest/live).
+- **`LearningAPI(BacktestingAPI)` = the trainer** (sibling of `OptimizationAPI`: Optimization = derivative-free param search for rule strategies; Learning = gradient policy training for model strategies — both WF trainers on the same engine). Owns the agent's training lifecycle, episode/WF loop, gradient cadence, exploration schedule, validation + early-stopping, checkpointing, seeding, logging.
+- **Decisions per `BarClosed`** → `Subscription = Stream.All & ~Stream.Tick` (like NNFX; fills next open). Revisit tick-level only if research demands it.
+- **Loop:** `tape = extract()` once per WF fold; per episode `inject(tape)` → `run()` (strategy collects transitions + learns) → periodic greedy validation → checkpoint best.
+
+### 6.2 MDP specification (locked decisions)
+- **Observation (start simple; normalize on train-only stats — no look-ahead):** cyclical time encoding (sin/cos of date AND time-of-day), current position state (signed size, unrealized PnL, …), market OHLC, a few indicators (SMA, …).
+- **Action — "intended volume" controller (continuous):** model output → signed intended volume; scale to `[-VolumeMax, +VolumeMax]`, **floor-normalize to the volume step**, clamp to `[VolumeMin, VolumeMax]` (below min → 0 = flat). The engine does **not net/aggregate positions**, so the controller maintains an invariant of **≤ 1 open position**:
+
+  | Current `p` (signed) | Target `v` (signed) | Action |
+  |---|---|---|
+  | 0 | 0 | nothing (flat) |
+  | 0 | ≠ 0 | open `\|v\|` in `sign(v)` |
+  | same sign, `\|v\| < \|p\|` | | **scale out** (partial close to `\|v\|`) |
+  | same sign, `\|v\| ≥ \|p\|` | | **hold** (NO scale-in) |
+  | opposite sign, `v ≠ 0` | | **reverse** (close `p`, open `\|v\|`) |
+  | ≠ 0 | 0 | close `p` (flat) |
+
+  Intent: orient the agent toward **few, long-lasting trend trades** — scale-out + reversal allowed, scale-in forbidden.
+- **Reward (simple for now): per-bar Δ(net equity)** — change in realized+unrealized account equity, net of cost (the "net PnL" interpretation; **configurable**). Differential Sharpe / drawdown-penalized = later refinement.
+- **Episode:** whole training window per pass (replay buffer persists across passes); `done` at window end or bankruptcy. N-bar chunking = later.
+
+### 6.3 Model layer audit (`Library/Model/`) — DDPG + SAC built + tested (2026-06-29)
+DDPG is a faithful Lillicrap-2016 implementation (400/300 + LayerNorm, fan-in + ±3e-3 init, twin target soft-update τ=1e-3, critic L2 1e-2, OU noise). **DDPG fixes LANDED + unit-tested** (`Tests/Model/test_DDPG.py`, 8 green); **SAC BUILT + unit-tested** (`Tests/Model/test_SAC.py`, 10 green). **Env:** torch upgraded 2.2.2 → **2.5.1+cu121** (NumPy-2 compat — torch <2.3 can't use NumPy 2.x; full suite 388 green; unused `torchvision`/`torchaudio` 2.2.2 still pin old torch — harmless, align/remove later).
+- **DDPG fixes applied:** `np.bool`→`np.bool_`; warmup guard now on `memory.counter` (was capacity `memory.size`); `Network.device` falls back to `cpu` (was `cuda:1`); `decide()` clips action to `[-1,1]` + runs under `no_grad` with fast `as_tensor`; `learn()` target under `no_grad` + warmup guard; fan-in init `size()[1]`; per-agent **seeding** (torch + `Memory` sampler RNG + OU noise); **+ a latent crash fixed** — `nn.Module.__init__` was called *after* layer assignment (the layer never instantiated) → reordered via a `build()` finalizer; `save()` now mkdirs; `load(weights_only=True)`.
+- **SAC built** (Haarnoja 2018; `Library/Model/SAC/`): `GaussianActorNetworkAPI` (squashed-Gaussian — mean+log_std, log_std clamp [-20,2], reparameterized `rsample` → `tanh` + log-prob correction), twin `SoftCriticNetworkAPI` (clipped double-Q, concat-input Q(s,a)) + two targets, **automatic entropy temperature α** (learnable `log_alpha`, target entropy = −action_dim, separate Adam); **no OU noise** (intrinsic exploration; eval = `tanh(mu)`). Reuses `MemoryAPI`/`NetworkAPI`; same `[-1,1]` interface; defaults 256/256 + Adam 3e-4 (all) + τ=0.005 + γ=0.99 + batch 256; seeded; save/load persists all 5 nets + `log_alpha`.
+- **Import convention enforced (2026-06-29):** all `np`/`pd`/`pl` now imported from `Library.Database.Dataframe` (shared print/display config) — audited Library-wide, 16 files converted (Model + Noise + Indicator Baseline + System); codified in RULES.md §Imports. Exceptions = `Dataframe.py` + its closure (`Database.Dataclass`, `Utility.Typing`). Tests still use direct `numpy`/`torch` (no table display in tests).
+
+### 6.4 Persistence — weights (binary) + recipe (YAML)
+Mirror standard ML practice (HF `config.json`+`model.bin`; SB3 zip): **config in YAML, weights in binary.**
+- **Weights** = PyTorch `state_dict` checkpoints (binary; `NetworkAPI.save/load` already writes `path/model/role`) — one per network (actor / critic(s) / targets / α).
+- **Recipe/config** = **YAML** — strictly **"how it learns"** + rule params (consistent with rule-param YAML): seed, noise type, feature set, action type, reward type, network sizes, γ/τ/lr/batch/buffer. Agent = `(YAML recipe + weights checkpoint)`.
+- **"When it learns" = CLI args** (like `OptimizationAPI`), NOT YAML: symbol, timeframe, start, stop, and the walk-forward split (training / validation / testing). The YAML stays purely "how it learns"; the CLI owns the data window + WF schedule.
+- **Hybrid** = one parameter tree carrying BOTH a model sub-config (SignalManagement) AND rule sub-config (RiskManagement) — fits the existing `*Management` YAML layout.
+- Save a **training manifest** (seed, git commit, data window, hyperparameters, final validation metric) beside the checkpoint for reproducibility/audit.
+
+### 6.5 Reproducibility, train/validation/test, throughput
+- **Seeding:** one configured seed → torch + numpy + `Memory` sampler RNG + noise RNG; engine is already bit-exact. Report **mean±std over multiple seeds** (RL variance is high — one run is not signal).
+- **Train / Validation / Test:** yes — train (agent learns) + validation (greedy early-stopping & checkpoint selection) + held-out **OOS test** (never seen in training); reuse `OptimizationAPI`'s WF splitter; **fit observation normalization on train only**.
+- **Throughput:** skip the full report during training (reward only); add precompute **(b)** (fixed market+indicator series reused across episodes) for scale; single-env first, ProcessPool parallel collection (per-worker `dataset=`) later.
+
+### 6.6 Phased build
+1. **Model fixes + SAC** — fix the 4 DDPG bugs + hygiene; build `SACAgentAPI` (twin critic + gaussian policy + temperature); unit-test agents in isolation (seeded, tiny shapes).
+2. **MDP layer** — `ModelStrategyAPI` base + `DDPGStrategyAPI`/`SACStrategyAPI`: observation builder, action→order controller, reward, `memorise`, `training` flag, greedy/eval path; unit-test vs a frozen tiny tape.
+3. **Trainer core** — `LearningAPI(BacktestingAPI)`: single-window episode loop, inline learning, seeding, checkpoint, reward/fitness, logging; overfit a tiny window to prove signal flows.
+4. **WF + validation** — port WF splitter, greedy validation, early-stopping, multi-seed; 10y EURUSD D1.
+5. **Scale** — precompute (b); optional parallel collection.
+
+### 6.7 Performance & hardware (i9-14900F · RTX 3060 Ti, 8 GB)
+Per-episode cost = engine rollout + per-bar `decide` (forward) + `learn` (backprop). **Measure the breakdown first** (rollout vs decide vs learn) and optimize the real bottleneck — for D1 + small MLP the **engine walk dominates** the NN math; backprop becomes the bottleneck for **SAC** (twin critics + entropy ≈ 2-3× DDPG), H1/tick scale, larger nets, or high gradient-step counts.
+- **GPU = batched backprop, not batch-1 inference:** per-bar batch-1 forwards are often *faster on CPU* (kernel-launch + PCIe latency > the tiny matmul) — keep training on GPU, profile `decide` CPU-vs-GPU, expose a device knob. Replay buffer stays on CPU (numpy); move only the sampled batch to GPU per `learn`.
+- **Ampere accelerators (near-free):** TF32 matmuls (`allow_tf32=True`), AMP (`autocast`+`GradScaler`, ~1.5-2× + half VRAM, scales with net size/SAC), `cudnn.benchmark=True` (fixed RL batch shapes). Use **batch 256-512** to saturate the GPU (64 underutilizes it).
+- **CPU = 32 threads → parallel experience:** N parallel rollout workers (ProcessPool), each injected with the tape (`dataset=`), feeding one GPU learner (Ape-X / multi-actor pattern). Processes not threads (GIL); `set_num_threads(1)` per worker; reserve cores for the learner. The per-worker `dataset=` seam (§4) is built for this — design the single-env v1 so it drops in.
+- **Engine-side = the biggest D1 lever:** precompute **(b)** (fixed market+indicators replayed across episodes) removes ~45% of per-pass exec — more impactful than NN micro-opts for D1. Skip the report during training (reward only).
+- **Algorithm-level:** `update_every` / `gradient_steps` knobs (don't backprop every bar if it's the cost; off-policy decouples); warmup random steps; allocation-free obs/action/reward Python path.
+- **Determinism vs speed:** TF32/AMP/benchmark perturb determinism → a **"deterministic" mode** (TF32 off, `cudnn.deterministic`) for validation/repro + a **"fast" mode** for bulk training; seeds set in both.
+- **Build a trainer-level profiler from day one** (rollout / decide / learn timing per episode) so we optimize the measured bottleneck, not the assumed one (RULES: measure don't guess).
+
+---
+
+## 7. Backlog
 - **Optimization** — uncomment `OptimizationAPI` in `Main.py` + export; `tape = BacktestingAPI(...).extract()` once, then `inject(tape)` (or `dataset=tape`) across the N param runs (and per `ProcessPoolExecutor` worker). Throughput seam is DONE (§4 Tier2-B).
-- **Learning** — uncomment `LearningAPI` in `Main.py` + export; `extract()` the tape once, `inject()` (or `dataset=`) per episode, and **skip the full report during training** (compute only the reward). For H1/intraday scale, add **(b)** — precompute the fixed market+indicator series once and reuse across episodes (the batch path; no streaming-API changes) — see §4 FUTURE. Review DDPG `Subscription` (may need `Stream.Tick`).
+- **Learning** — the offline DRL trainer; full design + phased build in §6.
 - **Phase G — Strategy state recovery:** persist Signal/Risk machine state on Live restart. *Sketch:* `State: Union[bytes, None]` on `SessionAPI` (`pl.Binary()`); `EngineAPI.State` maps machine→state name as JSON bytes; loaded at `deploy()` start, saved on `UpdateID.Shutdown`.
 - **Wire up `receive_update_security`** — parse C# security data to enrich `SecurityAPI` (pip size, commission). Sent but codec not consumed.
 - **Timeout watchdog** — configurable hung-peer timeout (e.g. 30 s → teardown). Current watchdog only detects peer-death via PID.
@@ -151,7 +217,7 @@ The 6 fresh NNFX online cTrader goldens were minted (EUR 10k, conversion option 
 
 ---
 
-## 7. Known issues (non-blocking)
+## 8. Known issues (non-blocking)
 - **`--profile` not wired to the cBot UI** — invoke the Python CLI with `--profile` to dump `.pstat`. It wraps only the Python `run` (blind to the C#/cTrader side).
 - **C# platform warnings** — 2× `CA1416` (`MemoryMappedFile.CreateOrOpen`, Windows-only); 3× `CS0618` (deprecated `PlaceStopOrder`/`PlaceLimitOrder`/`PlaceStopLimitOrder`). Non-breaking.
 - **Logging is custom (not stdlib):** `logging.disable()` does nothing; silence via `LoggingAPI` (e.g. `HandlerLoggingAPI().console.set_verbose_level(VerboseLevel.Silent)`).

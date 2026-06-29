@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import math
-import numpy as np
 import threading
 
 from pathlib import Path
@@ -14,7 +13,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Type, Union, Iterator, TYPE_CHECKING
 
 from Library.Database.Database import DatabaseAPI
-from Library.Database.Dataframe import pl
+from Library.Database.Dataframe import np, pl
 from Library.Database.Postgres.Postgres import PostgresAPI
 from Library.Engine import MachineAPI
 from Library.Indicator.Indicator import IndicatorAPI
