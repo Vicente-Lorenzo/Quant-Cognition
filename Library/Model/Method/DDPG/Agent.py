@@ -1,3 +1,30 @@
+"""
+DDPG agent — Deep Deterministic Policy Gradient (off-policy, actor-critic).
+
+Reference: Lillicrap, Hunt, Pritzel, Heess, Erez, Tassa, Silver, Wierstra (2016),
+"Continuous control with deep reinforcement learning", arXiv:1509.02971.
+This module implements Algorithm 1 ("DDPG algorithm") with the Section 7
+hyperparameters. Notation below mirrors the paper.
+
+Components: an online actor mu(s|theta_mu) and critic Q(s,a|theta_Q), their target
+networks mu' and Q', a replay buffer R (MemoryAPI), and an Ornstein-Uhlenbeck
+exploration process N (OrnsteinUhlenbeckNoiseAPI).
+
+Default hyperparameters (Section 7, low-dimensional case):
+  - alpha (actor lr) = 1e-4 · beta (critic lr) = 1e-3 (Adam).
+  - tau = 1e-3 (soft target update) · gamma = 0.99.
+  - replay buffer = 1e6 · minibatch N = 64.
+  - fc1 = 400 · fc2 = 300.
+  - L2 weight decay 1e-2 on Q only (set in CriticNetworkAPI).
+  - OU exploration: theta = 0.15, sigma = 0.2, mu = 0 (passed below).
+
+Reference-implementation conventions (not specified by the paper):
+  - The OU process discretization step dt = 1e-2 (the paper gives only the
+    continuous process); this is the OrnsteinUhlenbeckNoiseAPI default.
+  - Terminal masking V(terminal) = 0 in the critic target (standard episodic
+    handling; Algorithm 1 is written for the continuing case).
+"""
+
 import torch as T
 import torch.nn.functional as F
 from typing import Union
@@ -36,7 +63,9 @@ class DDPGAgentAPI(AgentAPI):
 
         self.memory = MemoryAPI(size=memory_size, input_shape=input_shape, action_shape=action_shape, seed=seed)
 
-        self.noise = OrnsteinUhlenbeckNoiseAPI(mu=np.zeros(action_shape), seed=seed)
+        # Ornstein-Uhlenbeck exploration N (Section 7): theta = 0.15 (mean
+        # reversion), sigma = 0.2 (volatility), mu = 0 ("centered around 0").
+        self.noise = OrnsteinUhlenbeckNoiseAPI(mu=np.zeros(action_shape), sigma=0.2, theta=0.15, seed=seed)
 
         self.actor = ActorNetworkAPI(
             model=self._model,
@@ -82,6 +111,8 @@ class DDPGAgentAPI(AgentAPI):
             beta=beta
         )
 
+        # Initialize the targets equal to the online networks (Algorithm 1):
+        # theta_Q' <- theta_Q and theta_mu' <- theta_mu (a hard copy, tau = 1).
         self.update(force_tau=1)
 
     def save(self) -> None:
@@ -99,6 +130,7 @@ class DDPGAgentAPI(AgentAPI):
         super().load()
 
     def reset(self) -> None:
+        # Reset the OU process state between episodes (it is temporally correlated).
         self.noise.reset()
 
     def memorise(self, state, action, reward, next_state, done) -> None:
@@ -108,6 +140,9 @@ class DDPGAgentAPI(AgentAPI):
         return self.memory.remember(batch_size)
 
     def decide(self, state, explore: bool = True):
+        # Algorithm 1: a_t = mu(s_t | theta_mu) + N_t, then bound to [-1, 1].
+        # eval()/train() bracket the forward pass; with LayerNorm this is a no-op
+        # (no batch statistics) but is kept so a BatchNorm swap stays correct.
         self.actor.eval()
         with T.no_grad():
             state = T.as_tensor(np.asarray(state, dtype=np.float32), device=self.actor.device).unsqueeze(0)
@@ -119,6 +154,8 @@ class DDPGAgentAPI(AgentAPI):
         return mu.cpu().numpy()[0]
 
     def update(self, force_tau=None):
+        # Soft target update (Algorithm 1): theta' <- tau*theta + (1-tau)*theta'.
+        # force_tau=1 performs the hard copy used to initialize the targets.
         tau = force_tau or self.tau
 
         actor_params = self.actor.named_parameters()
@@ -141,9 +178,11 @@ class DDPGAgentAPI(AgentAPI):
         self.target_actor.load_state_dict(actor_state_dict)
 
     def learn(self) -> None:
+        # Wait until the replay buffer holds at least one full minibatch.
         if self.memory.counter < self.batch_size:
             return
 
+        # Sample a random minibatch of N transitions from R (Algorithm 1).
         states, actions, rewards, next_states, dones = self.remember(self.batch_size)
 
         states = T.tensor(states, dtype=T.float).to(self.actor.device)
@@ -152,6 +191,9 @@ class DDPGAgentAPI(AgentAPI):
         next_states = T.tensor(next_states, dtype=T.float).to(self.actor.device)
         dones = T.tensor(dones).to(self.actor.device)
 
+        # Critic target using the TARGET actor and TARGET critic (no gradient):
+        #   y_i = r_i + gamma * Q'(s_{i+1}, mu'(s_{i+1})).
+        # Terminal next-states contribute 0 (V(terminal) = 0).
         with T.no_grad():
             target_next_actions = self.target_actor.forward(next_states)
             target_next_state_action_value = self.target_critic.forward(next_states, target_next_actions)
@@ -160,6 +202,7 @@ class DDPGAgentAPI(AgentAPI):
             target_state_action_value = rewards + self.gamma*target_next_state_action_value
             target_state_action_value = target_state_action_value.view(self.batch_size, 1)
 
+        # Critic update: minimize L = (1/N) sum_i (y_i - Q(s_i, a_i))^2 (Algorithm 1).
         state_action_value = self.critic.forward(states, actions)
 
         self.critic.optimizer.zero_grad()
@@ -167,10 +210,14 @@ class DDPGAgentAPI(AgentAPI):
         critic_loss.backward()
         self.critic.optimizer.step()
 
+        # Actor update via the deterministic policy gradient (Algorithm 1):
+        #   grad_theta_mu J ~= (1/N) sum_i grad_a Q(s,a)|_{a=mu(s_i)} grad_theta_mu mu(s_i).
+        # Realized as ascent on Q(s, mu(s)), i.e. descent on -mean Q(s, mu(s)).
         self.actor.optimizer.zero_grad()
         actor_loss = -self.critic.forward(states, self.actor.forward(states))
         actor_loss = T.mean(actor_loss)
         actor_loss.backward()
         self.actor.optimizer.step()
 
+        # Soft-update both target networks (Algorithm 1).
         self.update()

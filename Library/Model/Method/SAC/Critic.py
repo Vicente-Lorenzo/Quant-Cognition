@@ -1,3 +1,21 @@
+"""
+SAC soft critic network — a soft action-value function Q(s, a | theta).
+
+Reference: Haarnoja et al. (2018), "Soft Actor-Critic Algorithms and
+Applications", arXiv:1812.05905 (v2). SAC v2 uses TWO independent soft Q-networks
+(clipped double-Q) plus their targets to mitigate positive bias; this class
+defines a single soft Q-network and the SACAgentAPI instantiates it four times
+(critic_1, critic_2, target_critic_1, target_critic_2).
+
+Architecture (v2 Appendix D, Table 1): the state and action are concatenated at
+the input (unlike DDPG, which injects the action at the 2nd layer), followed by
+two hidden layers of 256 units with ReLU and a scalar Q head.
+
+Reference-implementation convention (NOT specified by the paper):
+  - Weight initialization: PyTorch default nn.Linear init (Kaiming-uniform),
+    matching SpinningUp / CleanRL.
+"""
+
 import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
@@ -26,6 +44,7 @@ class SoftCriticNetworkAPI(NetworkAPI):
         self.fc1_shape = fc1_shape
         self.fc2_shape = fc2_shape
 
+        # Q(s, a): state and action concatenated at the input layer.
         self.fc1 = nn.Linear(self.input_shape[0] + self.action_shape, self.fc1_shape)
         self.fc2 = nn.Linear(self.fc1_shape, self.fc2_shape)
 
@@ -36,17 +55,10 @@ class SoftCriticNetworkAPI(NetworkAPI):
         self.build()
 
     def init(self) -> None:
-        f1 = 1. / np.sqrt(self.fc1.weight.data.size()[1])
-        self.fc1.weight.data.uniform_(-f1, f1)
-        self.fc1.bias.data.uniform_(-f1, f1)
-
-        f2 = 1. / np.sqrt(self.fc2.weight.data.size()[1])
-        self.fc2.weight.data.uniform_(-f2, f2)
-        self.fc2.bias.data.uniform_(-f2, f2)
-
-        f3 = 0.003
-        self.q.weight.data.uniform_(-f3, f3)
-        self.q.bias.data.uniform_(-f3, f3)
+        # The SAC papers do not prescribe a weight initialization. We keep
+        # PyTorch's default nn.Linear init (Kaiming-uniform), matching the
+        # SpinningUp / CleanRL SAC references. This hook is intentionally a no-op.
+        pass
 
     def forward(self, state, action):
         action_value = T.cat([state, action], dim=-1)
