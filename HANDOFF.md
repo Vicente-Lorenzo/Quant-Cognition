@@ -152,8 +152,8 @@ The engine is event-driven (UpdateID → strategy state machines); RL assumes a 
 - **Loop:** `tape = extract()` once per WF fold; per episode `inject(tape)` → `run()` (strategy collects transitions + learns) → periodic greedy validation → checkpoint best.
 
 ### 6.2 MDP specification (locked decisions)
-- **Observation (start simple; normalize on train-only stats — no look-ahead):** cyclical time encoding (sin/cos of date AND time-of-day), current position state (signed size, unrealized PnL, …), market OHLC, a few indicators (SMA, …).
-- **Action — "intended volume" controller (continuous):** model output → signed intended volume; scale to `[-VolumeMax, +VolumeMax]`, **floor-normalize to the volume step**, clamp to `[VolumeMin, VolumeMax]` (below min → 0 = flat). The engine does **not net/aggregate positions**, so the controller maintains an invariant of **≤ 1 open position**:
+- **Observation (confirmed 2026-06-29; raw values z-scored on train-only stats — no look-ahead; single bar, no lookback for v1):** cyclical time encoding (sin/cos of day-of-week AND time-of-day), current signed-normalized position, **raw OHLC + Volume** (volume added for volatility/liquidity awareness), and **two indicators: SMA + ATR** (ATR essential for volatility). SMA and ATR periods are **YAML-configurable**.
+- **Action — "intended volume" controller (continuous):** model output `a∈[-1,1]` → signed intended volume = `a × MaxVolume`, **floor-normalized to the volume step** via `calculate_normalized_volume`, clamped to `[VolumeMin, VolumeMax]` (below min → 0 = flat). **`MaxVolume` from a YAML sizing config (confirmed 2026-06-29): `mode=fixed` (value = volume cap) or `mode=percentage` (value = % of account → notional ÷ price → volume).** The engine does **not net/aggregate positions**, so the controller maintains an invariant of **≤ 1 open position**:
 
   | Current `p` (signed) | Target `v` (signed) | Action |
   |---|---|---|
