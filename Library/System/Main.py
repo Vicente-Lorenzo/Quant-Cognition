@@ -8,9 +8,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from Library.Utility.Statistic import profiler, timer
 from Library.System.System import SystemType
-from Library.Strategy.Model import DDPGStrategyAPI
+from Library.Strategy.Model import DDPGStrategyAPI, SACStrategyAPI
+from Library.Strategy.Model.Reward import RewardType
 from Library.Strategy.Strategy import StrategyType
-from Library.System import BacktestingAPI, RealtimeAPI, SystemAPI
+from Library.System import BacktestingAPI, LearningAPI, RealtimeAPI, SystemAPI
 from Library.Parameter import Parameter, ParameterAPI
 from Library.Utility.Path import traceback_current_module
 from Library.Utility.Typing import MISSING, Missing
@@ -83,8 +84,18 @@ def _parse_() -> Namespace:
     optimization_parser.add_argument("--threads", type=int, required=False, default=os.cpu_count())
 
     learning_parser = system_parser.add_parser(SystemType.Learning.name, parents=[base_parser, period_parser, account_parser, fee_parser])
-    learning_parser.add_argument("--reward", type=str, required=True)
+    learning_parser.add_argument("--reward", type=str, required=True, choices=[_.name for _ in RewardType])
     learning_parser.add_argument("--episodes", type=int, required=True)
+    learning_parser.add_argument("--epochs", type=int, required=False, default=1)
+    learning_parser.add_argument("--training", type=int, required=False, default=0)
+    learning_parser.add_argument("--validation", type=int, required=False, default=0)
+    learning_parser.add_argument("--testing", type=int, required=False, default=0)
+    learning_parser.add_argument("--rolling", action="store_true", default=False)
+    learning_parser.add_argument("--fitness", type=str, required=False, default="Net Return (%)")
+    learning_parser.add_argument("--patience", type=int, required=False, default=0)
+    learning_parser.add_argument("--seed", type=int, required=False, default=None)
+    learning_parser.add_argument("--seeds", type=int, required=False, default=1)
+    learning_parser.add_argument("--workers", type=int, required=False, default=1)
 
     return parser.parse_args()
 
@@ -128,6 +139,7 @@ def _strategy_(args: Namespace) -> Type[StrategyAPI]:
         case StrategyType.Download: return DownloadStrategyAPI
         case StrategyType.NNFX: return NNFXStrategyAPI
         case StrategyType.DDPG: return DDPGStrategyAPI
+        case StrategyType.SAC: return SACStrategyAPI
 
 def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI, timeframe: TimeframeAPI, parameters: Parameter) -> Union[SystemAPI, None]:
     system = SystemType(args.system)
@@ -189,22 +201,33 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
         #         threads=args.threads
         #     )
         case SystemType.Learning:
-            return None
-        #     params: Parameter = parameters.Learning[args.strategy]
-        #     return LearningAPI(
-        #         strategy=strategy,
-        #         security=security,
-        #         timeframe=timeframe,
-        #         parameters=params,
-        #         start=args.start,
-        #         stop=args.stop,
-        #         account=(args.account_asset, args.account_balance, args.account_leverage),
-        #         spread=(SpreadType(args.spread_type), args.spread_value),
-        #         commission=(CommissionType(args.commission_type), args.commission_value),
-        #         swap=(SwapType(args.swap_type), args.swap_buy, args.swap_sell),
-        #         reward=args.reward,
-        #         episodes=args.episodes
-        #     )
+            params: Parameter = parameters.Learning[args.strategy]
+            return LearningAPI(
+                strategy=strategy,
+                security=security,
+                timeframe=timeframe,
+                parameters=params,
+                start=args.start,
+                stop=args.stop,
+                account=(args.account_asset, args.account_balance, args.account_leverage),
+                spread=(SpreadType(args.spread_type), args.spread_value),
+                commission=(CommissionType(args.commission_type), args.commission_value),
+                swap=(SwapType(args.swap_type), args.swap_buy, args.swap_sell),
+                reward=args.reward,
+                episodes=args.episodes,
+                epochs=args.epochs,
+                training=args.training,
+                validation=args.validation,
+                testing=args.testing,
+                rolling=args.rolling,
+                fitness=args.fitness,
+                patience=args.patience,
+                seed=args.seed,
+                seeds=args.seeds,
+                workers=args.workers,
+                report=args.report,
+                export=args.export
+            )
 
 def main() -> None:
     for stream in (sys.stdout, sys.stderr):
