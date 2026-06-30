@@ -142,6 +142,11 @@ def parse_technical(parameters: Union[dict, None]) -> TechnicalAPI:
                 ma_type = MovingAverageType.parse(config[3]) if len(config) > 3 else MovingAverageType.Exponential
                 mode_val = config[4] if len(config) > 4 else IndicatorMode.Off
                 indicators[name] = TripleMovingAverageCrossAPI(name=name, fast_window=fast, slow_window=slow, type=ma_type, mode=IndicatorMode.parse(mode_val))
+            case "RV":
+                from Library.Indicator.Technical.Volatility.RV import RealizedVolatilityAPI
+                window = config[1] if len(config) > 1 else 16
+                mode_val = config[2] if len(config) > 2 else IndicatorMode.Off
+                indicators[name] = RealizedVolatilityAPI(name=name, window=window, mode=IndicatorMode.parse(mode_val))
             case "ATR":
                 from Library.Indicator.Technical.Volatility.ATR import AverageTrueRangeAPI
                 window = config[1] if len(config) > 1 else 14
