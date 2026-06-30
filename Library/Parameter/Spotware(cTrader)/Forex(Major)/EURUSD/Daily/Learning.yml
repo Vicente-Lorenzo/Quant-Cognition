@@ -1,34 +1,3 @@
-Download:
-  MoneyManagement: null
-  RiskManagement: null
-  SignalManagement: null
-  TechnicalManagement: null
-  FundamentalManagement: null
-  SentimentalManagement: null
-  PortfolioManagement: null
-NNFX:
-  MoneyManagement:
-    RiskPercentage: [1.0]
-  RiskManagement:
-    StopLossScale: [1.5]
-    ScalingOutScale: [1.0]
-    ScalingOutPercentage: [50.0]
-    TrailingStopLossScale: [1.5]
-    TrailingStopLossStep: [0.25]
-  SignalManagement:
-    BaselineMode: [Signal, Off, Signal]
-    Filter1Mode: [Filter, Off, Off]
-    Filter2Mode: [Filter, Off, Off]
-    VolumeMode: [Filter, Off, Off]
-  TechnicalManagement:
-    Baseline: [SMA, 20]
-    Filter1: [TT]
-    Filter2: [TT]
-    Volume: [TT]
-    Volatility: [ATR, 14]
-  FundamentalManagement: null
-  SentimentalManagement: null
-  PortfolioManagement: null
 DDPG:
   MoneyManagement:
     SizingMode: [Percentage]
@@ -36,7 +5,6 @@ DDPG:
     SizingDeadzone: [0.1]
   RiskManagement: null
   SignalManagement:
-    Weights: [null]
     ActorLearningRate: [0.0001]
     CriticLearningRate: [0.001]
     SoftUpdate: [0.001]
@@ -58,7 +26,6 @@ SAC:
     SizingDeadzone: [0.1]
   RiskManagement: null
   SignalManagement:
-    Weights: [null]
     ActorLearningRate: [0.0003]
     CriticLearningRate: [0.0003]
     TemperatureLearningRate: [0.0003]
