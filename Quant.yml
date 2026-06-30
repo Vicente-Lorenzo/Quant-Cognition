@@ -1,8 +1,6 @@
 name: Quant
 channels:
     - conda-forge
-    - pytorch
-    - nvidia
     - bloomberg
     - defaults
 dependencies:
@@ -50,12 +48,11 @@ dependencies:
     - fastapi
     - flask
 
-    - pytorch
-    - torchaudio
-    - torchvision
-    - pytorch-cuda
     - gymnasium
 
     - pip:
+        - --extra-index-url https://download.pytorch.org/whl/cu121
+        - torch
+        - torchvision
+        - torchaudio
         - ctrader-open-api
-        - pyzmq
