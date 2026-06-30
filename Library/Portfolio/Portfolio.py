@@ -38,6 +38,10 @@ class PortfolioAPI(DatapointAPI):
     _positions_: dict[int, PositionAPI] = field(default_factory=dict, init=False)
     _trades_: list[TradeAPI] = field(default_factory=list, init=False)
 
+    _initial_balance_: Union[float, None] = field(default=None, init=False)
+    _equity_peak_: Union[float, None] = field(default=None, init=False)
+    _equity_trough_: Union[float, None] = field(default=None, init=False)
+
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],
                       migrate: bool,
@@ -193,6 +197,14 @@ class PortfolioAPI(DatapointAPI):
             for p in positions: self._positions_[p.UID] = p
         if trades:
             self._trades_.extend(trades)
+        self._initial_balance_ = account.Balance if account and account.Balance is not None else 0.0
+        self._equity_peak_ = self.Equity
+        self._equity_trough_ = self.Equity
+
+    def _track_equity_(self) -> None:
+        equity = self.Equity
+        if self._equity_peak_ is None or equity > self._equity_peak_: self._equity_peak_ = equity
+        if self._equity_trough_ is None or equity < self._equity_trough_: self._equity_trough_ = equity
 
     @staticmethod
     def _conversion_(ask: Union[PriceAPI, None], bid: Union[PriceAPI, None]) -> float:
@@ -255,6 +267,7 @@ class PortfolioAPI(DatapointAPI):
                 pos._max_equity_runup_pnl_.PnL = best_pnl
                 pos._max_equity_runup_pnl_.Reference = ref_balance
                 pos._max_equity_runup_pnl_.Duration = duration
+        self._track_equity_()
 
     def open_order(self, order: OrderAPI) -> None:
         self._orders_[order.UID] = order
@@ -368,6 +381,7 @@ class PortfolioAPI(DatapointAPI):
             else:
                 del self._positions_[position_uid]
         self._trades_.append(trade)
+        self._track_equity_()
 
     def calculate_statistics(self, start: datetime, stop: datetime) -> pl.DataFrame:
         from Library.Portfolio.Statistic import generate_net_report
@@ -434,6 +448,31 @@ class PortfolioAPI(DatapointAPI):
     @property
     def NetPnL(self) -> float:
         return self.RealizedPnL + self.UnrealizedPnL
+
+    @property
+    def Equity(self) -> float:
+        balance = self._account_.Balance if self._account_ and self._account_.Balance is not None else 0.0
+        return balance + self.UnrealizedPnL
+
+    @property
+    def InitialBalance(self) -> Union[float, None]:
+        return self._initial_balance_
+
+    @property
+    def EquityPeak(self) -> Union[float, None]:
+        return self._equity_peak_
+
+    @property
+    def EquityTrough(self) -> Union[float, None]:
+        return self._equity_trough_
+
+    @property
+    def EquityDrawdown(self) -> float:
+        return self.Equity / self._equity_peak_ - 1.0 if self._equity_peak_ else 0.0
+
+    @property
+    def EquityRunup(self) -> float:
+        return self.Equity / self._equity_trough_ - 1.0 if self._equity_trough_ else 0.0
 
     @property
     def Direction(self) -> Direction:
