@@ -1,5 +1,6 @@
 @echo off
-title Environment Updater
+setlocal
+title Conda Environment Updater
 set CONDA_ALWAYS_YES=true
 set "ENVS_DIR=C:\ProgramData\miniforge3\envs"
 
@@ -25,7 +26,7 @@ echo -----------------------------------------------
 echo Update Complete.
 echo -----------------------------------------------
 timeout /t 10
-goto :eof
+exit /b 0
 
 :ensure_env
 if exist "%ENVS_DIR%\%~1\conda-meta\history" (
@@ -42,4 +43,4 @@ echo -----------------------------------------------
 echo Update Failed.
 echo -----------------------------------------------
 timeout /t 10
-goto :eof
+exit /b 1
