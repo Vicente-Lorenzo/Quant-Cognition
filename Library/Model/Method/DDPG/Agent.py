@@ -50,6 +50,7 @@ class DDPGAgentAPI(AgentAPI):
                  memory_size: int = 1000000,
                  batch_size: int = 64,
                  gamma: float = 0.99,
+                 grad_clip: float = 1.0,
                  seed: Union[int, None] = None):
 
         super().__init__(model="DDPG", path=path)
@@ -60,6 +61,7 @@ class DDPGAgentAPI(AgentAPI):
         self.batch_size = batch_size
         self.gamma = gamma
         self.tau = tau
+        self.grad_clip = grad_clip
 
         self.memory = MemoryAPI(size=memory_size, input_shape=input_shape, action_shape=action_shape, seed=seed)
 
@@ -156,26 +158,17 @@ class DDPGAgentAPI(AgentAPI):
     def update(self, force_tau=None):
         # Soft target update (Algorithm 1): theta' <- tau*theta + (1-tau)*theta'.
         # force_tau=1 performs the hard copy used to initialize the targets.
+        # Applied in place (no clone/state-dict round-trip) for speed; the
+        # arithmetic is identical to tau*theta + (1-tau)*theta'.
         tau = force_tau or self.tau
+        self._soft_update_(self.critic, self.target_critic, tau)
+        self._soft_update_(self.actor, self.target_actor, tau)
 
-        actor_params = self.actor.named_parameters()
-        critic_params = self.critic.named_parameters()
-        target_actor_params = self.target_actor.named_parameters()
-        target_critic_params = self.target_critic.named_parameters()
-
-        critic_state_dict = dict(critic_params)
-        actor_state_dict = dict(actor_params)
-        target_critic_state_dict = dict(target_critic_params)
-        target_actor_state_dict = dict(target_actor_params)
-
-        for name in critic_state_dict:
-            critic_state_dict[name] = tau * critic_state_dict[name].clone() + (1 - tau) * target_critic_state_dict[name].clone()
-
-        for name in actor_state_dict:
-            actor_state_dict[name] = tau * actor_state_dict[name].clone() + (1 - tau) * target_actor_state_dict[name].clone()
-
-        self.target_critic.load_state_dict(critic_state_dict)
-        self.target_actor.load_state_dict(actor_state_dict)
+    @staticmethod
+    def _soft_update_(source, target, tau) -> None:
+        with T.no_grad():
+            for online, target_param in zip(source.parameters(), target.parameters()):
+                target_param.copy_(tau * online + (1.0 - tau) * target_param)
 
     def learn(self) -> None:
         # Wait until the replay buffer holds at least one full minibatch.
@@ -208,6 +201,12 @@ class DDPGAgentAPI(AgentAPI):
         self.critic.optimizer.zero_grad()
         critic_loss = F.mse_loss(target_state_action_value, state_action_value)
         critic_loss.backward()
+        # Gradient-norm clipping (not in the paper): a standard optimization
+        # stabilizer that bounds the per-step update. It does not alter the DDPG
+        # objective or Algorithm 1; it prevents the actor's final layer from being
+        # slammed into tanh saturation (dead gradient -> constant-action collapse).
+        if self.grad_clip > 0.0:
+            T.nn.utils.clip_grad_norm_(self.critic.parameters(), self.grad_clip)
         self.critic.optimizer.step()
 
         # Actor update via the deterministic policy gradient (Algorithm 1):
@@ -217,6 +216,8 @@ class DDPGAgentAPI(AgentAPI):
         actor_loss = -self.critic.forward(states, self.actor.forward(states))
         actor_loss = T.mean(actor_loss)
         actor_loss.backward()
+        if self.grad_clip > 0.0:
+            T.nn.utils.clip_grad_norm_(self.actor.parameters(), self.grad_clip)
         self.actor.optimizer.step()
 
         # Soft-update both target networks (Algorithm 1).

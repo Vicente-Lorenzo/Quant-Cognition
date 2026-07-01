@@ -259,20 +259,24 @@ class BacktestingAPI(SystemAPI):
     def _load_frames_(self, bars: list[BarAPI]) -> tuple:
         start = bars[0].OpenTick.Timestamp.DateTime
         stop = bars[-1].CloseTick.Timestamp.DateTime
-        columns = [str(TickAPI.ID.Timestamp), str(TickAPI.ID.Ask), str(TickAPI.ID.Bid)]
-        if self._needs_conversion_:
-            columns += [str(column) for column in self._CONVERSION_COLUMNS_]
-        tick_frame = MarketAPI.pull_ticks(self._db_, self._security_.UID, start, stop, columns=columns)
-        if tick_frame.height:
-            tick_ts = tick_frame["Timestamp"].dt.epoch("us").to_numpy()
-            tick_ask = tick_frame["Ask"].to_numpy()
-            tick_bid = tick_frame["Bid"].to_numpy()
+        bar_level = not self._auto_ and not self._resolution_.IsTick and self._resolution_.Seconds == self._timeframe_.Seconds
+        if bar_level and not self._needs_conversion_:
+            tick_ts, tick_ask, tick_bid, tick_conversions = np.empty(0, dtype="int64"), np.empty(0, dtype="float64"), np.empty(0, dtype="float64"), None
         else:
-            tick_ts, tick_ask, tick_bid = np.empty(0, dtype="int64"), np.empty(0, dtype="float64"), np.empty(0, dtype="float64")
-        if self._needs_conversion_ and tick_frame.height:
-            tick_conversions = tuple(tick_frame[str(column)].to_numpy().astype("float64") for column in self._CONVERSION_COLUMNS_)
-        else:
-            tick_conversions = None
+            columns = [str(TickAPI.ID.Timestamp), str(TickAPI.ID.Ask), str(TickAPI.ID.Bid)]
+            if self._needs_conversion_:
+                columns += [str(column) for column in self._CONVERSION_COLUMNS_]
+            tick_frame = MarketAPI.pull_ticks(self._db_, self._security_.UID, start, stop, columns=columns)
+            if tick_frame.height:
+                tick_ts = tick_frame["Timestamp"].dt.epoch("us").to_numpy()
+                tick_ask = tick_frame["Ask"].to_numpy()
+                tick_bid = tick_frame["Bid"].to_numpy()
+            else:
+                tick_ts, tick_ask, tick_bid = np.empty(0, dtype="int64"), np.empty(0, dtype="float64"), np.empty(0, dtype="float64")
+            if self._needs_conversion_ and tick_frame.height:
+                tick_conversions = tuple(tick_frame[str(column)].to_numpy().astype("float64") for column in self._CONVERSION_COLUMNS_)
+            else:
+                tick_conversions = None
         intra_levels, intra_bars = [], {}
         if self._auto_:
             for rung in self._candidate_rungs_():

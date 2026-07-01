@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from Library.Database.Dataframe import pl
+from Library.Model.Split import SplitAPI
 from Library.Parameter import Parameter
 from Library.Portfolio.Statistic import NET_TOTAL_AGGREGATED, STATISTICS_METRICS_LABEL
 from Library.Strategy.Model.Reward import RewardType
@@ -90,32 +91,32 @@ def _make_(**kwargs) -> _Harness_:
     )
 
 def test_walk_forward_single_window():
-    folds, test = LearningAPI._walk_forward_(datetime(2020, 1, 1), datetime(2024, 1, 1), 0, 0, 0, False)
+    folds, test = SplitAPI.walk_forward_folds(datetime(2020, 1, 1), datetime(2024, 1, 1), 0, 0, 0, False)
     assert len(folds) == 1 and folds[0][1] is None and test is None
 
 def test_walk_forward_train_test_only():
-    folds, test = LearningAPI._walk_forward_(datetime(2020, 1, 1), datetime(2024, 1, 1), 0, 0, 12, False)
+    folds, test = SplitAPI.walk_forward_folds(datetime(2020, 1, 1), datetime(2024, 1, 1), 0, 0, 12, False)
     assert len(folds) == 1 and folds[0][1] is None
     assert test is not None and test[1] == datetime(2024, 1, 1) and folds[0][0][1] == test[0]
 
 def test_walk_forward_single_train_validation():
-    folds, test = LearningAPI._walk_forward_(datetime(2020, 1, 1), datetime(2024, 1, 1), 0, 6, 0, False)
+    folds, test = SplitAPI.walk_forward_folds(datetime(2020, 1, 1), datetime(2024, 1, 1), 0, 6, 0, False)
     assert len(folds) == 1 and folds[0][1] is not None and test is None
     assert folds[0][1][1] == datetime(2024, 1, 1)
 
 def test_walk_forward_rolling_folds():
-    folds, _ = LearningAPI._walk_forward_(datetime(2020, 1, 1), datetime(2024, 1, 1), 12, 6, 0, True)
+    folds, _ = SplitAPI.walk_forward_folds(datetime(2020, 1, 1), datetime(2024, 1, 1), 12, 6, 0, True)
     assert len(folds) > 1
     assert folds[0][0] == (datetime(2020, 1, 1), datetime(2021, 1, 1))
     assert folds[0][1] == (datetime(2021, 1, 1), datetime(2021, 7, 1))
     assert folds[1][0][0] == datetime(2020, 7, 1)
 
 def test_walk_forward_anchored_fixes_train_start():
-    folds, _ = LearningAPI._walk_forward_(datetime(2020, 1, 1), datetime(2024, 1, 1), 12, 6, 0, False)
+    folds, _ = SplitAPI.walk_forward_folds(datetime(2020, 1, 1), datetime(2024, 1, 1), 12, 6, 0, False)
     assert len(folds) > 1 and all(train[0] == datetime(2020, 1, 1) for train, _ in folds)
 
 def test_walk_forward_short_range_falls_back():
-    folds, _ = LearningAPI._walk_forward_(datetime(2020, 1, 1), datetime(2020, 3, 1), 12, 6, 0, False)
+    folds, _ = SplitAPI.walk_forward_folds(datetime(2020, 1, 1), datetime(2020, 3, 1), 12, 6, 0, False)
     assert len(folds) == 1 and folds[0][1] is None
 
 def test_single_window_checkpoints_on_train(tmp_path):
@@ -162,11 +163,12 @@ def test_epochs_plumbed_as_noop(tmp_path):
 
 def test_manifest_records_configuration(tmp_path):
     _reset_(tmp_path)
-    harness = _make_(episodes=2, epochs=3, training=24, validation=0, testing=0, seeds=1, fitness="Calmar Ratio")
+    harness = _make_(episodes=2, epochs=3, train_frequency=2, gradient_steps=3, training=24, validation=0, testing=0, seeds=1, fitness="Calmar Ratio")
     harness._script_ = [0.01, 0.05]
     harness.run()
     manifest = read_json(tmp_path / "_FakeStrategy_ Manifest.json")
     assert manifest["Episodes"] == 2 and manifest["Epochs"] == 3 and manifest["Training"] == 24
+    assert manifest["TrainFrequency"] == 2 and manifest["GradientSteps"] == 3
     assert manifest["Validation"] == 0 and manifest["Testing"] == 0 and manifest["Seeds"] == 1
     assert manifest["Fitness"] == "Calmar Ratio" and manifest["Best"] == 0.05 and len(manifest["Results"]) == 1
 
@@ -189,7 +191,7 @@ def test_fitness_reads_metric_then_falls_back(tmp_path):
 def test_parallel_payload_is_picklable(tmp_path):
     _reset_(tmp_path)
     harness = _make_(episodes=2, training=12, validation=6, testing=12, seeds=4, workers=4, rolling=True)
-    folds, test = LearningAPI._walk_forward_(harness._range_start_, harness._range_stop_, 12, 6, 12, True)
+    folds, test = SplitAPI.walk_forward_folds(harness._range_start_, harness._range_stop_, 12, 6, 12, True)
     payload = harness._payload_(43, tmp_path / "Seed 43", folds, test)
     restored = pickle.loads(pickle.dumps(payload))
     assert restored["strategy"] is _FakeStrategy_ and restored["reward"] is RewardType.LogReturn

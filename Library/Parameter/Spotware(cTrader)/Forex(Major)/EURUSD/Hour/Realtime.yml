@@ -29,3 +29,58 @@ NNFX:
   FundamentalManagement: null
   SentimentalManagement: null
   PortfolioManagement: null
+DDPG:
+  MoneyManagement:
+    SizingMode: [Percentage]
+    SizingMax: [100.0]
+    SizingDeadzone: [0.1]
+  RiskManagement: null
+  SignalManagement:
+    Weights: [null]
+    ActorLearningRate: [0.0001]
+    CriticLearningRate: [0.001]
+    SoftUpdate: [0.001]
+    HiddenShape1: [400]
+    HiddenShape2: [300]
+    MemorySize: [1000000]
+    BatchSize: [64]
+    DiscountFactor: [0.99]
+    GradientClip: [1.0]
+    MovingAverages: [MAFast, MAMedium, MASlow]
+  TechnicalManagement:
+    RV: [RV, 16]
+    ATR: [ATR, 14]
+    MAFast: [SMA, 24]
+    MAMedium: [SMA, 120]
+    MASlow: [SMA, 480]
+  FundamentalManagement: null
+  SentimentalManagement: null
+  PortfolioManagement: null
+SAC:
+  MoneyManagement:
+    SizingMode: [Percentage]
+    SizingMax: [100.0]
+    SizingDeadzone: [0.1]
+  RiskManagement: null
+  SignalManagement:
+    Weights: [null]
+    ActorLearningRate: [0.0003]
+    CriticLearningRate: [0.0003]
+    TemperatureLearningRate: [0.0003]
+    SoftUpdate: [0.005]
+    HiddenShape1: [256]
+    HiddenShape2: [256]
+    MemorySize: [1000000]
+    BatchSize: [256]
+    DiscountFactor: [0.99]
+    TargetEntropy: [null]
+    MovingAverages: [MAFast, MAMedium, MASlow]
+  TechnicalManagement:
+    RV: [RV, 16]
+    ATR: [ATR, 14]
+    MAFast: [SMA, 24]
+    MAMedium: [SMA, 120]
+    MASlow: [SMA, 480]
+  FundamentalManagement: null
+  SentimentalManagement: null
+  PortfolioManagement: null

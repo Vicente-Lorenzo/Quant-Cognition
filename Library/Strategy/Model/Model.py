@@ -36,6 +36,9 @@ class ModelStrategyAPI(StrategyAPI):
     Seed: Union[int, None] = None
     Reward: RewardType = RewardType.LogReturn
     RewardScale: float = 1.0
+    RewardClip: float = 1.0
+    TrainFrequency: int = 1
+    GradientSteps: int = 1
 
     _ACTION_SHAPE_: int = 1
     _RV_: str = "RV"
@@ -53,15 +56,17 @@ class ModelStrategyAPI(StrategyAPI):
         self._sizing_max_ = self._value_(self.MoneyManagement, "SizingMax", 1.0)
         self._sizing_deadzone_ = self._value_(self.MoneyManagement, "SizingDeadzone", 0.0)
         self._configured_weights_ = self._value_(self.SignalManagement, "Weights", None)
-        self._observation_ = ObservationAPI(sizing_max=self._sizing_max_, realized_volatility=self._RV_, atr=self._ATR_, moving_averages=self._MOVING_AVERAGES_, normalize_window=self._NORMALIZE_WINDOW_)
+        self._moving_averages_ = self._values_(self.SignalManagement, "MovingAverages", self._MOVING_AVERAGES_)
+        self._observation_ = ObservationAPI(sizing_max=self._sizing_max_, realized_volatility=self._RV_, atr=self._ATR_, moving_averages=self._moving_averages_, normalize_window=self._NORMALIZE_WINDOW_)
         self._action_ = ActionAPI(mode=self._sizing_mode_, maximum=self._sizing_max_, deadzone=self._sizing_deadzone_)
-        self._reward_ = RewardAPI(kind=self.Reward, scale=self.RewardScale)
+        self._reward_ = RewardAPI(kind=self.Reward, scale=self.RewardScale, clip=self.RewardClip)
         self._agent_: AgentAPI = self.Agent if self.Agent is not None else self._create_agent_((self._observation_.shape(),), self._ACTION_SHAPE_)
         if self.Agent is None and not self.Training and (self.Weights is not None or self._configured_weights_ is not None):
             self._agent_.load()
         self._previous_observation_ = None
         self._previous_action_ = None
         self._previous_equity_: Union[float, None] = None
+        self._step_index_: int = 0
 
     @abstractmethod
     def _create_agent_(self, observation_shape: tuple, action_shape: int) -> AgentAPI:
@@ -72,6 +77,12 @@ class ModelStrategyAPI(StrategyAPI):
         value = getattr(section, key, None)
         if value is None: return default
         return value[0] if isinstance(value, (list, tuple)) else value
+
+    @staticmethod
+    def _values_(section: Union[Parameter, None], key: str, default: tuple) -> tuple:
+        value = getattr(section, key, None)
+        if not value: return tuple(default)
+        return tuple(value) if isinstance(value, (list, tuple)) else (value,)
 
     def _weights_path_(self) -> Path:
         if self.Weights is not None: return self.Weights
@@ -129,7 +140,9 @@ class ModelStrategyAPI(StrategyAPI):
         if self.Training and self._previous_observation_ is not None:
             reward = self._reward_.reward(equity, self._previous_equity_, update.Portfolio.EquityDrawdown)
             self._agent_.memorise(self._previous_observation_, self._previous_action_, reward, observation, False)
-            self._agent_.learn()
+            self._step_index_ += 1
+            if self._step_index_ % self.TrainFrequency == 0:
+                for _ in range(self.GradientSteps): self._agent_.learn()
         action = self._agent_.decide(observation, explore=self.Training)
         self._previous_observation_ = observation
         self._previous_action_ = action
@@ -143,6 +156,7 @@ class ModelStrategyAPI(StrategyAPI):
         self._previous_observation_ = None
         self._previous_action_ = None
         self._previous_equity_ = None
+        self._step_index_ = 0
 
     def signal_management(self) -> MachineAPI:
         signal_engine = MachineAPI(Name="Signal Management", Events=len(UpdateID))

@@ -235,6 +235,8 @@ class SystemAPI(ServiceAPI, ABC):
     def _report_(self, portfolio: PortfolioAPI, account: Union[AccountAPI, None], start, stop) -> None:
         if portfolio is None: return
         net = generate_net_report(portfolio.Positions, portfolio.Trades, account, start, stop)
+        self.statistics = net
+        if not (self._reporting_ or self._exporting_): return
         tables = {
             "Orders": order_view(portfolio.Orders),
             "Positions": position_view(portfolio.Positions),
@@ -248,7 +250,6 @@ class SystemAPI(ServiceAPI, ABC):
                 self._log_.info(lambda n=name, t=table: f"Report {n}: {t}")
         if self._exporting_:
             self._export_(tables)
-        self.statistics = net
 
     @abstractmethod
     def send_action(self, action: ActionAPI) -> None:

@@ -11,7 +11,7 @@ This is a **multi-purpose Quant Trading Framework** designed to work with **cTra
 ## TOOL-SPECIFIC COMMANDS
 For all shell executions, use the following patterns:
 - **Environment:** Use the `Quant` conda environment for all Python scripts (`conda run -n Quant <command>`).
-- **Testing:** `conda run -n Quant python -m pytest Tests/ --ignore=Tests/Spotware`.
+- **Testing:** `conda run -n Quant python -m pytest Tests/ --ignore=Tests/Spotware --ignore=Tests/Bloomberg`.
 - **C# Build:** `dotnet build Sources/`.
 - **Git Repository:** The project root (`cAlgo`) is a dedicated Git repository.
 - **File Staging:** Any tool-driven operation that creates a new file must be immediately followed by `git add <file_path>` to automate the staging process.
@@ -92,7 +92,7 @@ If structural changes (new folders or modules) are detected that are not reflect
 - **Layout:** Mirrors `Library/` (`Tests/Database`, `Tests/Engine`, `Tests/Market`, `Tests/Portfolio`, `Tests/Protocol`, `Tests/Strategy`, `Tests/System`, `Tests/Universe`, `Tests/Utility`, `Tests/App`, `Tests/Indicator`).
 - **Naming:** `test_<Subject>.py` (e.g., `test_Realtime.py`, `test_Database.py`).
 - **Style:** Apply the same coding rules and density as the main codebase. Do not use docstrings. Keep methods dense.
-- **Exclusions:** `Tests/Spotware/` requires live broker credentials and is excluded from the standard test run (`--ignore=Tests/Spotware`).
+- **Exclusions:** `Tests/Spotware/` (live broker credentials) and `Tests/Bloomberg/` (live Bloomberg Terminal connection) are excluded from the standard test run (`--ignore=Tests/Spotware --ignore=Tests/Bloomberg`).
 
 ### Setup (`Setup/`)
 - One-shot scripts that populate the `Quant` database `Universe` schema (categories, providers, tickers, timeframes, contracts, securities).

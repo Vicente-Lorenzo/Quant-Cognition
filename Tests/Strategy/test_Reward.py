@@ -7,8 +7,15 @@ def test_log_return_is_exact():
     assert abs(reward.reward(10100.0, 10000.0, 0.0) - math.log(10100.0 / 10000.0)) < 1e-12
 
 def test_scale_is_applied():
-    reward = RewardAPI(kind=RewardType.LogReturn, scale=10000.0)
+    reward = RewardAPI(kind=RewardType.LogReturn, scale=10000.0, clip=0.0)
     assert abs(reward.reward(10100.0, 10000.0, 0.0) - 10000.0 * math.log(1.01)) < 1e-9
+
+def test_clip_bounds_reward():
+    reward = RewardAPI(kind=RewardType.LogReturn, scale=10000.0, clip=1.0)
+    assert reward.reward(10100.0, 10000.0, 0.0) == 1.0
+    assert reward.reward(9900.0, 10000.0, 0.0) == -1.0
+    unclipped = RewardAPI(kind=RewardType.LogReturn, scale=10000.0, clip=0.0)
+    assert abs(unclipped.reward(10100.0, 10000.0, 0.0)) > 1.0
 
 def test_zero_when_no_previous_equity():
     reward = RewardAPI(kind=RewardType.LogReturn)

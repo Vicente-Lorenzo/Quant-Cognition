@@ -23,5 +23,6 @@ class DDPGStrategyAPI(ModelStrategyAPI):
             memory_size=self._value_(self.SignalManagement, "MemorySize", 1000000),
             batch_size=self._value_(self.SignalManagement, "BatchSize", 64),
             gamma=self._value_(self.SignalManagement, "DiscountFactor", 0.99),
+            grad_clip=self._value_(self.SignalManagement, "GradientClip", 1.0),
             seed=self.Seed
         )

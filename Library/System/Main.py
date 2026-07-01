@@ -87,6 +87,8 @@ def _parse_() -> Namespace:
     learning_parser.add_argument("--reward", type=str, required=True, choices=[_.name for _ in RewardType])
     learning_parser.add_argument("--episodes", type=int, required=True)
     learning_parser.add_argument("--epochs", type=int, required=False, default=1)
+    learning_parser.add_argument("--train-frequency", type=int, required=False, default=1)
+    learning_parser.add_argument("--gradient-steps", type=int, required=False, default=1)
     learning_parser.add_argument("--training", type=int, required=False, default=0)
     learning_parser.add_argument("--validation", type=int, required=False, default=0)
     learning_parser.add_argument("--testing", type=int, required=False, default=0)
@@ -216,6 +218,8 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 reward=args.reward,
                 episodes=args.episodes,
                 epochs=args.epochs,
+                train_frequency=args.train_frequency,
+                gradient_steps=args.gradient_steps,
                 training=args.training,
                 validation=args.validation,
                 testing=args.testing,

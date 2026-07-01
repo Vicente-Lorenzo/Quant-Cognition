@@ -43,9 +43,10 @@ class RewardAPI:
 
     _EPSILON_ = 1e-8
 
-    def __init__(self, kind: RewardType = RewardType.LogReturn, scale: float = 1.0, decay: float = 0.01, volatility_decay: float = 0.06) -> None:
+    def __init__(self, kind: RewardType = RewardType.LogReturn, scale: float = 1.0, clip: float = 1.0, decay: float = 0.01, volatility_decay: float = 0.06) -> None:
         self._kind_ = kind
         self._scale_ = scale
+        self._clip_ = clip
         self._decay_ = decay
         self._volatility_decay_ = volatility_decay
         self.reset()
@@ -65,7 +66,16 @@ class RewardAPI:
             log_return = 0.0
         else:
             log_return = math.log(equity / previous_equity)
-        return self._scale_ * self._encode_(log_return, drawdown)
+        value = self._scale_ * self._encode_(log_return, drawdown)
+        # Reward clipping (Mnih et al. 2015) — a numerical safeguard on the learning
+        # signal, applied AFTER the (bit-exact) reward encoding: the differential
+        # ratios have a near-zero-risk singularity (a sustained winning streak decays
+        # the downside/variance EWMA toward 0, so the cubic denominator turns a tiny
+        # loss into a huge spike that diverges the critic). This does not alter the
+        # Moody & Saffell formulas above nor the DDPG/SAC algorithms. clip <= 0 disables.
+        if self._clip_ > 0.0:
+            value = self._clip_ if value > self._clip_ else -self._clip_ if value < -self._clip_ else value
+        return value
 
     def _encode_(self, log_return: float, drawdown: float) -> float:
         if self._kind_ == RewardType.LogReturn: return log_return
