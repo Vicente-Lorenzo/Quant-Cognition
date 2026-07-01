@@ -41,6 +41,7 @@ dependencies:
     - blpapi
     - xlwings
     - yfinance
+    - xbbg
 
     - dash
     - dash-extensions

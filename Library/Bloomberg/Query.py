@@ -1,35 +1,25 @@
-import blpapi
-from typing_extensions import Self
+"""Bloomberg Query Language (BQL) interface backed by xbbg."""
+from xbbg import blp
 
+from Library.Database.Dataframe import pd, pl
 from Library.Utility.Service import ServiceAPI
+from Library.Utility.Typing import MISSING, Missing
 
 class QueryAPI(ServiceAPI):
-    """Bloomberg Query Language (BQL) interface."""
-
-    _SERVICE_URI_  = "//blp/bql"
-    _REQUEST_TYPE_ = "BqlRequest"
+    """Bloomberg Query Language (BQL) interface (xbbg blp.bql)."""
 
     def execute(self,
                 query: str,
-                timeout: int = 0) -> Self:
+                legacy: bool | Missing = MISSING) -> pd.DataFrame | pl.DataFrame:
         """
-        Executes a BQL query.
-        :param query: BQL query string.
-        :param timeout: Wait time in milliseconds (0 for indefinite).
+        Executes a BQL query and returns the result as a frame.
+        :param query: BQL query string (e.g. "get(px_last) for(['AAPL US Equity'])").
+        :param legacy: If True, returns a Pandas DataFrame; if False, Polars. Defaults to the API setting.
+        :returns: A frame whose columns follow the BQL query's own output schema.
         """
         def _execute_():
-            service = self._api_._service_(self._SERVICE_URI_)
-            request = service.createRequest(self._REQUEST_TYPE_)
-            request.set("query", query)
-            self._api_._session_.sendRequest(request)
-            while True:
-                event = self._api_._session_.nextEvent(timeout)
-                if event.eventType() == blpapi.Event.RESPONSE:
-                    break
-                if event.eventType() == blpapi.Event.TIMEOUT:
-                    self._log_.warning(lambda: "Execute Operation: Timeout reached while waiting for response")
-                    break
-            raise NotImplementedError("QueryAPI.execute: BQL response parsing is not yet implemented.")
-        timer = super()._execute_(callback=_execute_)
-        self._log_.info(lambda: f"Execute Operation: Executed ({timer.result()})")
-        return self
+            # VERIFY: xbbg 1.4.1 blp.bql backend support
+            return blp.bql(query, backend=self._api_._backend_(legacy))
+        timer, df = super()._fetch_(callback=_execute_)
+        self._log_.info(lambda: f"Execute Operation: Executed · {len(df)} Rows ({timer.result()})")
+        return df
