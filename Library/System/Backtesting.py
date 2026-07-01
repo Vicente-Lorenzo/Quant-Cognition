@@ -62,6 +62,7 @@ class DatasetAPI:
     TickConversions: Union[tuple[np.ndarray, ...], None]
     IntraLevels: list[str]
     IntraBars: dict[str, pl.DataFrame]
+    IndicatorResults: Union[dict, None] = None
 
 class BacktestingAPI(SystemAPI):
 
@@ -929,7 +930,7 @@ class BacktestingAPI(SystemAPI):
             self._transition_(self._initialization_timer_, "Initialization", self._execution_timer_)
 
         def advance(update: BarUpdateAPI):
-            if self.strategy.Transform.Market: update.Market.update_data(update.Bar)
+            if self.strategy.Transform.Market and self._dataset_.IndicatorResults is None: update.Market.update_data(update.Bar)
 
         def report(update: CompleteUpdateAPI):
             self._transition_(self._execution_timer_, "Execution", self._finalization_timer_)

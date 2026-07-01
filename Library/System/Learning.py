@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import math
 import os
 import shutil
 
 from concurrent.futures import ProcessPoolExecutor
+from dataclasses import replace
 from datetime import date, datetime
 from pathlib import Path
 from typing import Type, Union, TYPE_CHECKING
 
-from Library.Database.Dataframe import pl
+from Library.Database.Dataframe import np, pl
 from Library.Model.Split import SplitAPI
 from Library.Portfolio.Statistic import NET_TOTAL_AGGREGATED, STATISTICS_METRICS_LABEL
 from Library.Strategy.Model import ModelStrategyAPI
@@ -24,6 +26,43 @@ if TYPE_CHECKING:
     from Library.Strategy.Strategy import StrategyAPI
     from Library.Universe.Security import SecurityAPI
     from Library.Universe.Timeframe import TimeframeAPI
+
+class _FrozenResultAPI_:
+
+    def __init__(self, values: np.ndarray, cursor: list) -> None:
+        self._values_ = values
+        self._cursor_ = cursor
+
+    def last(self, shift: int = 0, dataframe: bool = False):
+        index = self._cursor_[0] - shift
+        if index < 0 or index >= self._values_.size: return None
+        value = self._values_[index]
+        return None if value is None or (isinstance(value, float) and math.isnan(value)) else float(value)
+
+class _FrozenIndicatorAPI_:
+
+    def __init__(self, name: str, values: np.ndarray, cursor: list) -> None:
+        self.Name = name
+        self.Result = _FrozenResultAPI_(values, cursor)
+
+class _FrozenTechnicalAPI_:
+
+    def __init__(self, results: dict) -> None:
+        self._cursor_ = [-1]
+        self._indicators_ = []
+        for name, values in results.items():
+            indicator = _FrozenIndicatorAPI_(name, values, self._cursor_)
+            self._indicators_.append(indicator)
+            setattr(self, name, indicator)
+
+    def init_data(self, market=None) -> None:
+        self._cursor_[0] = -1
+
+    def update_data(self, market=None) -> None:
+        self._cursor_[0] += 1
+
+    def update_offset(self, offset: int = 1) -> None:
+        pass
 
 class LearningAPI(BacktestingAPI):
 
@@ -74,6 +113,14 @@ class LearningAPI(BacktestingAPI):
         self._weights_: Path = self._weights_directory_()
         self._tapes_: dict = {}
 
+    def _connect_(self) -> None:
+        super()._connect_()
+        dataset = getattr(self, "_dataset_", None)
+        if dataset is not None and dataset.IndicatorResults:
+            frozen = _FrozenTechnicalAPI_(dataset.IndicatorResults)
+            self.indicator.Technical = frozen
+            self.technical = frozen
+
     def _weights_directory_(self) -> Path:
         directory = ModelStrategyAPI._DEFAULT_WEIGHTS_ / f"{self._security_.UID} {self._timeframe_.UID} {self._strategy_.__name__}"
         mkdir(directory)
@@ -97,8 +144,18 @@ class LearningAPI(BacktestingAPI):
         self.inject(self._tapes_.get(key))
         self._connect_()
         self.deploy()
-        if key not in self._tapes_: self._tapes_[key] = self.extract()
+        if key not in self._tapes_: self._tapes_[key] = replace(self.extract(), IndicatorResults=self._capture_())
         return self._fitness_()
+
+    def _capture_(self) -> Union[dict, None]:
+        indicators = getattr(self.technical, "_indicators_", None)
+        if not indicators: return None
+        total = len(self._dataset_.ExecutionBars)
+        results = {}
+        for indicator in indicators:
+            values = indicator.Result.dataframe().to_numpy()
+            results[indicator.Name] = values[-total:] if total and values.size >= total else values
+        return results or None
 
     def _configure_(self, seed: Union[int, None], weights: Path) -> None:
         self._strategy_.Training = True
