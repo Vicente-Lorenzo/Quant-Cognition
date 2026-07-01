@@ -1,19 +1,18 @@
 @echo off
 setlocal
-title System Environment Updater
+title UV Environment Updater
+set "PROJECT_DIR=C:\Users\Admin\OneDrive\Documents\cAlgo"
+set "UV_DIR=%USERPROFILE%\.local\bin"
+set "REQUIREMENTS=%PROJECT_DIR%\Requirements.txt"
 
 echo -----------------------------------------------
-echo Updating System Python Environment...
+echo Updating System Python Environment (UV)...
 echo -----------------------------------------------
 
-cd /d "C:\Users\Admin\OneDrive\Documents\cAlgo"
+cd /d "%UV_DIR%"
 
-echo [1/2] Upgrading pip...
-python -m pip install --upgrade pip
-if %ERRORLEVEL% NEQ 0 goto :failed
-
-echo [2/2] Updating Requirements...
-python -m pip install --upgrade -r Requirements.txt
+echo [1/1] Updating Requirements...
+uv pip install --system --upgrade -r "%REQUIREMENTS%"
 if %ERRORLEVEL% NEQ 0 goto :failed
 
 echo -----------------------------------------------
