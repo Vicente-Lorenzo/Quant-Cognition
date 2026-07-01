@@ -28,7 +28,7 @@ SAC:
   MoneyManagement:
     SizingMode: [Percentage]
     SizingMax: [100.0]
-    SizingDeadzone: [0.1]
+    SizingDeadzone: [0.4]
   RiskManagement: null
   SignalManagement:
     ActorLearningRate: [0.0003]
