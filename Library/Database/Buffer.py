@@ -11,7 +11,7 @@ from typing import Callable, Type, Union, TYPE_CHECKING
 from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Postgres.Postgres import PostgresAPI
-from Library.Logging import HandlerLoggingAPI
+from Library.Logging.Handler import HandlerLoggingAPI
 from Library.Utility.Statistic import Timer
 
 if TYPE_CHECKING:

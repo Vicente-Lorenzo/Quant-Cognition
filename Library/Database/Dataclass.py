@@ -5,7 +5,8 @@ import functools
 import dataclasses
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import Union, Type, Any, ClassVar, Self
+from typing import Union, Type, Any, ClassVar
+from typing_extensions import Self
 
 from Library.Utility.Typing import MISSING
 

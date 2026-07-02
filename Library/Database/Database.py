@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 import datetime
 import threading
 from dataclasses import dataclass
@@ -956,7 +957,6 @@ class DatabaseAPI(ServiceAPI, ABC):
                     self.executeone(self._CREATE_TABLE_QUERY_, definitions=definitions, **kwargs, admin=False).commit()
                     self._log_.alert(lambda: f"Migrate Operation: Recreated {table} Table")
                 else:
-                    import uuid
                     temp_table = f"{table}_{uuid.uuid4().hex[:8]}"
                     original_table = self._table_
                     self.refactor(database=database, schema=schema, table=table, name=temp_table)
