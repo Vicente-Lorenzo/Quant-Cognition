@@ -62,11 +62,11 @@ class EmailLoggingAPI(WebLoggingAPI, ReportLoggingAPI):
     @classmethod
     def _exit_(cls):
         if cls.is_success_report():
-            result_tag = cls._FAILURE_TAG_
-            result_color = "red"
-        elif cls.is_failure_report():
             result_tag = cls._SUCCESS_TAG_
             result_color = "green"
+        elif cls.is_failure_report():
+            result_tag = cls._FAILURE_TAG_
+            result_color = "red"
         else: return
 
         if not cls._email_title_: return
