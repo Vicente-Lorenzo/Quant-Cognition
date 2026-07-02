@@ -31,5 +31,5 @@ class NetworkAPI(nn.Module, ABC):
         self._log.debug(lambda: f"Saved network state for {self._model} {self._role}")
 
     def load(self) -> None:
-        self.load_state_dict(T.load(str(self._file), weights_only=True))
+        self.load_state_dict(T.load(str(self._file), map_location=self.device, weights_only=True))
         self._log.debug(lambda: f"Loaded network state for {self._model} {self._role}")

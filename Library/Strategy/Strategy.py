@@ -3,9 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, NamedTuple, Union, TYPE_CHECKING
 
-from Library.Logging import HandlerLoggingAPI
-from Library.Utility.Enumeration import EnumerationAPI
 from Library.Engine import MachineAPI
+from Library.Logging import HandlerLoggingAPI
 from Library.Protocol.Action import Stream
 from Library.Protocol.Update import (
     UpdateID,
@@ -33,6 +32,7 @@ from Library.Protocol.Update import (
     DeniedUpdateAPI,
     ExceptionUpdateAPI
 )
+from Library.Utility.Enumeration import EnumerationAPI
 
 if TYPE_CHECKING:
     from Library.Parameter import Parameter

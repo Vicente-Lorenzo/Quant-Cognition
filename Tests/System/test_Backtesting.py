@@ -1,10 +1,10 @@
-import random
-import numpy as np
 import pytest
+import random
 from datetime import datetime
 
-from Library.System.Backtesting import BacktestingAPI, DatasetAPI
+from Library.Database.Dataframe import np
 from Library.Market.Price import Direction
+from Library.System.Backtesting import BacktestingAPI, DatasetAPI
 from Library.Protocol.Update import UpdateID
 from Library.Universe.Contract import CommissionType, CommissionMode, SpreadType, SwapType, SwapMode
 from Library.Utility.Datetime import Weekday

@@ -9,7 +9,7 @@ def _agent_(path, seed=42, state_dim=4, action_dim=1, batch_size=8, memory_size=
 def _fill_(agent, n, state_dim=4, action_dim=1):
     rng = np.random.default_rng(0)
     for _ in range(n):
-        agent.memorise(rng.normal(size=state_dim), rng.uniform(-1.0, 1.0, size=action_dim), rng.normal(), rng.normal(size=state_dim), False)
+        agent.memorize(rng.normal(size=state_dim), rng.uniform(-1.0, 1.0, size=action_dim), rng.normal(), rng.normal(size=state_dim), False)
 
 def test_decide_is_bounded(tmp_path):
     agent = _agent_(tmp_path)
@@ -65,7 +65,7 @@ def test_target_critics_track_online(tmp_path):
         agent.learn()
     assert not T.allclose(target_before, agent.target_critic_1.fc1.weight.detach())
 
-def test_memorise_and_remember_shapes(tmp_path):
+def test_memorize_and_remember_shapes(tmp_path):
     agent = _agent_(tmp_path, batch_size=8, memory_size=200)
     _fill_(agent, 20)
     states, actions, rewards, next_states, dones = agent.remember(8)

@@ -201,7 +201,7 @@ class PathAPI:
     path: InitVar[Union[str, Path]] = field(init=True, repr=True)
     module: InitVar[Union[str, Path]] = field(default=None, init=True, repr=True)
 
-    _path_ : Path = field(default=None, init=False, repr=False)
+    _path_: Path = field(default=None, init=False, repr=False)
     _module_: Path = field(default=None, init=False, repr=False)
 
     def __post_init__(self, path: Union[str, Path], module: Union[str, Path] = None):

@@ -26,7 +26,7 @@ class AgentAPI(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def memorise(self, state, action, reward, next_state, done) -> None:
+    def memorize(self, state, action, reward, next_state, done) -> None:
         raise NotImplementedError
 
     @abstractmethod

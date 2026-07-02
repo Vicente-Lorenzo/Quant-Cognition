@@ -24,8 +24,8 @@ class OrnsteinUhlenbeckNoiseAPI(NoiseAPI):
 
     def __init__(self,
                  mu: Union[np.ndarray, float],
-                 sigma: float = 0.15,
-                 theta: float = 0.2,
+                 sigma: float = 0.2,
+                 theta: float = 0.15,
                  dt: float = 1e-2,
                  x0: Union[np.ndarray, float, None] = None,
                  seed: Union[float, None] = None):

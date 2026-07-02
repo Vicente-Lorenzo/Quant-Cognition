@@ -72,13 +72,13 @@ If structural changes (new folders or modules) are detected that are not reflect
 - **`Library/Indicator`**: Trading indicators split into `Technical`, `Fundamental`, `Sentimental` subpackages, plus the umbrella `IndicatorAPI`.
 - **`Library/Logging`**: Python logging handlers (`HandlerLoggingAPI`, `ConsoleLoggingAPI`, `FileLoggingAPI`, `BufferLoggingAPI`, `ReportLoggingAPI`, `BucketLoggingAPI`, `WebLoggingAPI`, `EmailLoggingAPI`, `TelegramAPI`, `VerboseLevel`).
 - **`Library/Market`**: Market data structures (`MarketAPI`, `BarAPI`, `TickAPI`, `PriceAPI`, `SeriesAPI`, `TimestampAPI`).
-- **`Library/Model`**: AI/ML components split into `Core/` (framework primitives — `AgentAPI`, `NetworkAPI`, `MemoryAPI`, `Noise` processes) and `Method/` (DRL algorithms — `DDPG`, `SAC`).
-- **`Library/Parameters`**: Configuration management (`ParametersAPI`, `Parameters`) backed by YAML files; broker-specific subfolders for strategy/system parameter trees.
+- **`Library/Model`**: AI/ML components split into `Core/` (framework primitives — `AgentAPI`, `NetworkAPI`, `MemoryAPI`, `Noise` processes) and `Method/` (DRL algorithms — `DDPG`, `SAC`), plus `Split.py` (`SplitAPI` walk-forward splitter).
+- **`Library/Parameter`**: Configuration management (`ParameterAPI`, `Parameter`) backed by YAML files; broker-specific subfolders for strategy/system parameter trees.
 - **`Library/Portfolio`**: Trading portfolio entities (`PortfolioAPI`, `AccountAPI`, `OrderAPI`, `PositionAPI`, `TradeAPI`, `PnL`, `SizingAPI`, `StatisticAPI`).
 - **`Library/Protocol`**: Wire protocol shared with the C# Connector. `Action/` (commands sent to cTrader) and `Update/` (events received from cTrader); `ActionID` / `UpdateID` enumerations.
 - **`Library/Spotware`**: Spotware/cTrader API helpers (`SpotwareAPI`, `MarketAPI`, `PortfolioAPI`, `ExecutionAPI`, `UniverseAPI`, `StreamingAPI`). Largely a research/integration scratchpad.
 - **`Library/Strategy`**: Strategy framework (`StrategyAPI`, `StrategyType`). Strategy implementations split into `Rule/` (e.g., `Download`, `NNFX`), `Model/` (e.g., `DDPG`), and `Hybrid/` subpackages.
-- **`Library/System`**: Python Trading Engine (`SystemAPI`, `SystemType`, `LifecycleAPI`, `RealtimeAPI`, plus legacy `BacktestingAPI`/`OptimizationAPI`/`LearningAPI` placeholders pending refactor). `Main.py` is the CLI entry point.
+- **`Library/System`**: Python Trading Engine (`SystemAPI`, `SystemType`, `LifecycleAPI`, `RealtimeAPI`, `BacktestingAPI` (offline engine + `DatasetAPI` tape), `LearningAPI` (DRL trainer), plus the legacy `OptimizationAPI` placeholder pending refactor). `Main.py` is the CLI entry point.
 - **`Library/Universe`**: Tradable universe definitions (`UniverseAPI`, `ProviderAPI`, `CategoryAPI`, `TickerAPI`, `ContractAPI`, `SecurityAPI`, `TimeframeAPI`).
 - **`Library/Utility`**: Helper library (`PathAPI`, `DateTimeAPI`, `IOAPI`, `HTMLAPI`, `ImageAPI`, `ChartAPI`, `RuntimeAPI`, `ServiceAPI`, `StatisticAPI` (timer/profiling), `Math` (truncation/precision helpers), `TypingAPI`, `FileAPI`, `MemoryAPI`).
 

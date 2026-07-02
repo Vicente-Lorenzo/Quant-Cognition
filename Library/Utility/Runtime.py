@@ -95,11 +95,11 @@ def match_env_vars(*, keyword: str, case_sensitive: bool = True) -> dict[str, st
 def find_host_port(*, host: str = "localhost", port_min: int = 1024, port_max: int = 65535) -> Union[int, tuple[str, int]]:
     import socket
     if not (0 <= port_min <= 65535):
-        raise ValueError(f"Invalid min port range: [0, 65535]")
+        raise ValueError("Invalid min port range: [0, 65535]")
     if not (0 <= port_max <= 65535):
-        raise ValueError(f"Invalid max port range: [0, 65535]")
+        raise ValueError("Invalid max port range: [0, 65535]")
     if port_min > port_max:
-        raise ValueError(f"Invalid port range: min port cannot be larger than max port")
+        raise ValueError("Invalid port range: min port cannot be larger than max port")
     for port in range(port_min, port_max + 1):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
             rc = probe.connect_ex((host, port))

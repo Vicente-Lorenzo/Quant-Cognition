@@ -211,7 +211,7 @@ def test_receive_update_security_updates_and_returns_security(realtime_system):
     from Library.Universe.Contract import ContractAPI
     realtime_system._security_._ticker_ = TickerAPI(UID="EURUSD")
     realtime_system._security_._contract_ = ContractAPI(UID=1)
-    
+
     sec = realtime_system.receive_update_security()
     assert sec is realtime_system._security_
     assert sec.Ticker.BaseAsset == "EUR"

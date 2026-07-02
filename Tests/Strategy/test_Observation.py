@@ -3,7 +3,11 @@ from datetime import datetime
 from types import SimpleNamespace
 
 from Library.Database.Dataframe import np
+from Library.Strategy.Model.Action import ActionAPI, SizingMode
 from Library.Strategy.Model.Observation import ObservationAPI
+
+def _action_(maximum=10000.0, mode=SizingMode.Fixed):
+    return ActionAPI(mode=mode, maximum=maximum)
 
 def _indicator_(value):
     return SimpleNamespace(Result=SimpleNamespace(last=lambda: value))
@@ -40,43 +44,53 @@ def test_shape_essential_and_with_moving_averages():
     assert ObservationAPI(moving_averages=("MA1", "MA2", "MA3")).shape() == 26
 
 def test_encode_shape_and_dtype():
-    observation = ObservationAPI(sizing_max=10000.0).encode(_update_())
+    observation = ObservationAPI(action=_action_()).encode(_update_())
     assert observation.shape == (23,)
     assert observation.dtype == np.float32
 
 def test_timestamp_is_raw_sin_cos():
     when = datetime(2020, 6, 15, 13, 30, 0)
-    observation = ObservationAPI(sizing_max=10000.0).encode(_update_(when=when))
+    observation = ObservationAPI(action=_action_()).encode(_update_(when=when))
     assert abs(observation[0] - math.sin(2.0 * math.pi * (when.month - 1) / 12)) < 1e-6
     assert abs(observation[1] - math.cos(2.0 * math.pi * (when.month - 1) / 12)) < 1e-6
     assert abs(observation[2] - math.sin(2.0 * math.pi * when.weekday() / 7)) < 1e-6
 
 def test_drawdown_and_exposure_are_raw():
-    observation = ObservationAPI(sizing_max=10000.0).encode(_update_(drawdown=-0.05, buys=[_position_(5000.0, True)]))
+    observation = ObservationAPI(action=_action_()).encode(_update_(drawdown=-0.05, buys=[_position_(5000.0, True)]))
     assert abs(observation[10] - (-0.05)) < 1e-6
     assert abs(observation[12] - 0.5) < 1e-6
 
 def test_flagged_features_zero_on_first_encode():
-    observation = ObservationAPI(sizing_max=10000.0).encode(_update_(volume=5000.0))
+    observation = ObservationAPI(action=_action_()).encode(_update_(volume=5000.0))
     assert observation[20] == 0.0
     assert observation[8] == 0.0
 
 def test_market_features_are_vol_scaled_log_moves():
-    encoder = ObservationAPI(sizing_max=10000.0)
+    encoder = ObservationAPI(action=_action_())
     encoder.encode(_update_(close=1.10))
     observation = encoder.encode(_update_(open=1.105, close=1.11, rv=0.008))
     assert abs(observation[19] - math.log(1.11 / 1.10) / 0.008) < 1e-4
     assert abs(observation[16] - math.log(1.105 / 1.10) / 0.008) < 1e-4
 
 def test_reset_clears_previous_close():
-    encoder = ObservationAPI(sizing_max=10000.0)
+    encoder = ObservationAPI(action=_action_())
     encoder.encode(_update_(close=1.10))
     encoder.reset()
     observation = encoder.encode(_update_(open=1.105, close=1.11))
     assert observation[16] == 0.0 and observation[19] == 0.0
 
 def test_moving_average_extends_vector():
-    encoder = ObservationAPI(sizing_max=10000.0, moving_averages=("MA1",))
+    encoder = ObservationAPI(action=_action_(), moving_averages=("MA1",))
     observation = encoder.encode(_update_(close=1.11, atr=0.01, extra={"MA1": 1.09}))
     assert observation.shape == (24,)
     assert math.isfinite(float(observation[23]))
+
+def test_exposure_bounded_in_percentage_mode():
+    action = _action_(maximum=100.0, mode=SizingMode.Percentage)
+    observation = ObservationAPI(action=action).encode(_update_(buys=[_position_(5000.0, True)], balance=10000.0, close=1.11))
+    assert -1.0 <= observation[12] <= 1.0
+    assert abs(observation[12] - 5000.0 / 9000.0) < 1e-6
+
+def test_nan_indicators_encode_finite():
+    observation = ObservationAPI(action=_action_(), moving_averages=("MA1",)).encode(_update_(volume=float("nan"), atr=float("nan"), rv=float("nan"), extra={"MA1": float("nan")}))
+    assert np.isfinite(observation).all()

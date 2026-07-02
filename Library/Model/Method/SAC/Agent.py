@@ -118,8 +118,8 @@ class SACAgentAPI(AgentAPI):
         # external noise process to reset between episodes.
         pass
 
-    def memorise(self, state, action, reward, next_state, done) -> None:
-        self.memory.memorise(state, action, reward, next_state, done)
+    def memorize(self, state, action, reward, next_state, done) -> None:
+        self.memory.memorize(state, action, reward, next_state, done)
 
     def remember(self, batch_size) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
         return self.memory.remember(batch_size)
@@ -141,7 +141,7 @@ class SACAgentAPI(AgentAPI):
     def update(self, force_tau=None) -> None:
         # Soft target update: theta_target_i <- tau*theta_i + (1-tau)*theta_target_i.
         # force_tau=1 performs the hard copy used to initialize the targets.
-        tau = force_tau or self.tau
+        tau = force_tau if force_tau is not None else self.tau
         self._soft_update_(self.critic_1, self.target_critic_1, tau)
         self._soft_update_(self.critic_2, self.target_critic_2, tau)
 
@@ -184,12 +184,20 @@ class SACAgentAPI(AgentAPI):
 
         # Actor update (reparameterized): minimize alpha*log pi(a|s) - min_i Q_i(s, a)
         # with a ~ pi(.|s). alpha is detached so the actor does not move it.
+        # Both critics' parameters are frozen for this backward pass (gradients
+        # still flow THROUGH them to the actor); this only skips accumulating
+        # critic parameter gradients that the next zero_grad would discard, so the
+        # actor update is numerically identical (standard reference-impl practice).
+        for parameter in self.critic_1.parameters(): parameter.requires_grad_(False)
+        for parameter in self.critic_2.parameters(): parameter.requires_grad_(False)
         new_actions, log_probabilities = self.actor.sample(states)
         value = T.min(self.critic_1.forward(states, new_actions), self.critic_2.forward(states, new_actions))
         actor_loss = (self.alpha.detach() * log_probabilities - value).mean()
         self.actor.optimizer.zero_grad()
         actor_loss.backward()
         self.actor.optimizer.step()
+        for parameter in self.critic_1.parameters(): parameter.requires_grad_(True)
+        for parameter in self.critic_2.parameters(): parameter.requires_grad_(True)
 
         # Temperature update (v2 Eq. 18): minimize -log_alpha*(log pi(a|s) + H_bar);
         # log pi is detached (alpha adapts to the policy, not vice versa).

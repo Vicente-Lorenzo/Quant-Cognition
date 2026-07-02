@@ -26,7 +26,7 @@ class _FakeAgent_:
     def decide(self, state, explore=True):
         return self._action_
 
-    def memorise(self, state, action, reward, next_state, done):
+    def memorize(self, state, action, reward, next_state, done):
         self.transitions.append((state, action, reward, next_state, done))
 
     def learn(self):

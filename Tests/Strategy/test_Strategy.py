@@ -1,5 +1,3 @@
-import pytest
-
 from Library.Parameter import ParameterAPI
 from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
@@ -138,7 +136,6 @@ def test_opened_stop_order_propagates_to_portfolio():
     order.Direction.name = "Buy"
     update = OpenedBuyStopOrderUpdateAPI(Account=account, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio, Bar=None, Order=order)
     eng.perform(UpdateID.OpenedBuyStopOrder, update)
-    pass
     portfolio.open_order.assert_called_once_with(order)
 
 def test_filled_stop_order_transitions_order_to_position():

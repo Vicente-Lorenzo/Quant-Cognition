@@ -58,7 +58,7 @@ def seconds_to_string(seconds: float) -> str:
     minutes, seconds = divmod(seconds, 60)
     hours, minutes = divmod(minutes, 60)
     days, hours = divmod(hours, 24)
-    months, days = divmod(days, 12)
+    months, days = divmod(days, 30)
     years, months = divmod(months, 12)
     result = []
     if years:
@@ -77,29 +77,30 @@ def seconds_to_string(seconds: float) -> str:
         result.append(f"{round(milliseconds * 1000)} milliseconds")
     return " ".join(result)
 
-def weekday_shift_datetime(wd: Weekday, shift: int, today: datetime = datetime.today()) -> datetime:
+def weekday_shift_datetime(wd: Weekday, shift: int, today: Union[datetime, None] = None) -> datetime:
+    today = today if today is not None else datetime.today()
     shift = shift - 1 if today.weekday() > wd.value else shift
     return today + relativedelta(weekday=weekday(wd.value)(shift))
 
-def monday_shift_datetime(shift: int, today: datetime = datetime.today()) -> datetime:
+def monday_shift_datetime(shift: int, today: Union[datetime, None] = None) -> datetime:
     return weekday_shift_datetime(wd=Weekday.Monday, shift=shift, today=today)
 
-def tuesday_shift_datetime(shift: int, today: datetime = datetime.today()) -> datetime:
+def tuesday_shift_datetime(shift: int, today: Union[datetime, None] = None) -> datetime:
     return weekday_shift_datetime(wd=Weekday.Tuesday, shift=shift, today=today)
 
-def wednesday_shift_datetime(shift: int, today: datetime = datetime.today()) -> datetime:
+def wednesday_shift_datetime(shift: int, today: Union[datetime, None] = None) -> datetime:
     return weekday_shift_datetime(wd=Weekday.Wednesday, shift=shift, today=today)
 
-def thursday_shift_datetime(shift: int, today: datetime = datetime.today()) -> datetime:
+def thursday_shift_datetime(shift: int, today: Union[datetime, None] = None) -> datetime:
     return weekday_shift_datetime(wd=Weekday.Thursday, shift=shift, today=today)
 
-def friday_shift_datetime(shift: int, today: datetime = datetime.today()) -> datetime:
+def friday_shift_datetime(shift: int, today: Union[datetime, None] = None) -> datetime:
     return weekday_shift_datetime(wd=Weekday.Friday, shift=shift, today=today)
 
-def saturday_shift_datetime(shift: int, today: datetime = datetime.today()) -> datetime:
+def saturday_shift_datetime(shift: int, today: Union[datetime, None] = None) -> datetime:
     return weekday_shift_datetime(wd=Weekday.Saturday, shift=shift, today=today)
 
-def sunday_shift_datetime(shift: int, today: datetime = datetime.today()) -> datetime:
+def sunday_shift_datetime(shift: int, today: Union[datetime, None] = None) -> datetime:
     return weekday_shift_datetime(wd=Weekday.Sunday, shift=shift, today=today)
 
 def _last_weekday_(year: int, month: int, weekday: int) -> datetime:

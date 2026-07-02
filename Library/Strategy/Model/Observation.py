@@ -4,6 +4,7 @@ import math
 from typing import TYPE_CHECKING, Union
 
 from Library.Database.Dataframe import np
+from Library.Strategy.Model.Action import ActionAPI
 
 if TYPE_CHECKING:
     from Library.Protocol.Update import BarUpdateAPI
@@ -63,9 +64,10 @@ class ObservationAPI:
       Account (4)   — wealth trajectory, scale-free. Balance and Equity as returns from
                       initial capital; EquityDrawdown (vs running peak, bounded [-1, 0],
                       bypass) and EquityRunup (vs running trough).
-      Position (4)  — open-trade state, scale-free. Signed exposure (volume / SizingMax,
-                      bounded, bypass); unrealized return, max drawdown and max runup as
-                      fractions of the entry balance.
+      Position (4)  — open-trade state, scale-free. Signed exposure (volume divided by
+                      the sizing decoder's per-bar MaxVolume, bounded in [-1, 1] for both
+                      Fixed and Percentage modes, bypass); unrealized return, max drawdown
+                      and max runup as fractions of the entry balance.
       Market (5)    — bar geometry. Gap/High/Low/Close as vol-scaled log-moves vs the
                       previous close (ln(price / prev_close) / RV); Volume as ln(1 + V).
                       Price moves are already vol-scaled (bypass layer 2); volume is not.
@@ -80,8 +82,8 @@ class ObservationAPI:
     close + normalizer) and must be reset per episode.
     """
 
-    def __init__(self, sizing_max: float = 1.0, realized_volatility: str = "RV", atr: str = "ATR", moving_averages: tuple = (), normalize_window: int = 200) -> None:
-        self._sizing_max_ = sizing_max
+    def __init__(self, action: Union[ActionAPI, None] = None, realized_volatility: str = "RV", atr: str = "ATR", moving_averages: tuple = (), normalize_window: int = 200) -> None:
+        self._action_ = action if action is not None else ActionAPI()
         self._realized_volatility_ = realized_volatility
         self._atr_ = atr
         self._moving_averages_ = tuple(moving_averages)
@@ -133,11 +135,12 @@ class ObservationAPI:
             features.append((0.0, True))
             return
         signed = position.Volume if position.IsLong else -position.Volume
+        maximum = self._action_.maximum_volume(update)
         entry = position.EntryBalance or 0.0
         net = position.NetPnL.PnL if position.NetPnL and position.NetPnL.PnL is not None else 0.0
         drawdown = position.MaxEquityDrawdownPnL.PnL if position.MaxEquityDrawdownPnL and position.MaxEquityDrawdownPnL.PnL is not None else 0.0
         runup = position.MaxEquityRunupPnL.PnL if position.MaxEquityRunupPnL and position.MaxEquityRunupPnL.PnL is not None else 0.0
-        features.append((signed / self._sizing_max_ if self._sizing_max_ else 0.0, False))
+        features.append((max(-1.0, min(1.0, signed / maximum)) if maximum else 0.0, False))
         features.append((net / entry if entry else 0.0, True))
         features.append((drawdown / entry if entry else 0.0, True))
         features.append((runup / entry if entry else 0.0, True))
@@ -161,18 +164,20 @@ class ObservationAPI:
             features.append((0.0, False))
             features.append((0.0, False))
             features.append((0.0, False))
-        features.append((math.log1p(bar.Volume or 0.0), True))
+        volume = bar.Volume
+        features.append((math.log1p(volume) if volume and volume > 0.0 else 0.0, True))
         self._previous_close_ = close_price
 
     def _indicator_features_(self, update: BarUpdateAPI, features: list) -> None:
         close_price = update.Bar.CloseTick.Bid.Price
         realized = self._indicator_(update, self._realized_volatility_)
         atr = self._indicator_(update, self._atr_)
-        features.append((realized if realized else 0.0, True))
-        features.append((atr / close_price if atr and close_price else 0.0, True))
+        scale = atr if atr and atr > 0.0 else None
+        features.append((realized if realized and realized > 0.0 else 0.0, True))
+        features.append((scale / close_price if scale and close_price and close_price > 0.0 else 0.0, True))
         for name in self._moving_averages_:
             average = self._indicator_(update, name)
-            features.append(((close_price - average) / atr if (average is not None and atr) else 0.0, True))
+            features.append(((close_price - average) / scale if (average is not None and math.isfinite(average) and scale) else 0.0, True))
 
     def encode(self, update: BarUpdateAPI) -> np.ndarray:
         features: list = []

@@ -564,44 +564,44 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
     win_pnl = calculate_sum(win_df, net_pnl)
     loss_pnl = calculate_sum(loss_df, net_pnl)
     total_pnl = calculate_sum(df, net_pnl)
-    
+
     exp_win_ret, win_ret, win_vol = calculate_return_and_volatility(win_df)
     exp_loss_ret, loss_ret, loss_vol = calculate_return_and_volatility(loss_df)
     exp_net_ret, net_ret, net_vol = calculate_return_and_volatility(df)
-    
+
     win_ret_ann = calculate_ann_return(start, stop, win_ret)
     win_vol_ann = calculate_ann_volatility(start, stop, win_vol)
     loss_ret_ann = calculate_ann_return(start, stop, loss_ret)
     loss_vol_ann = calculate_ann_volatility(start, stop, loss_vol)
     net_ret_ann = calculate_ann_return(start, stop, net_ret)
     net_vol_ann = calculate_ann_volatility(start, stop, net_vol)
-    
+
     avg_trade = calculate_average(total_pnl, total_n)
     avg_points = calculate_average(total_points, total_n)
     avg_pips = calculate_average(total_pips, total_n)
-    
+
     exp_trade = calculate_expected(win_rate, win_avg_trade, loss_rate, loss_avg_trade)
     exp_points = calculate_expected(win_rate, win_avg_pts, loss_rate, loss_avg_pts)
     exp_pips = calculate_expected(win_rate, win_avg_pips, loss_rate, loss_avg_pips)
-    
+
     rr_ratio = calculate_risk_to_reward(win_avg_trade, loss_avg_trade)
     profit_factor = calculate_profit_factor(win_pnl, loss_pnl)
-    
+
     max_dd_val, max_dd_pct, mean_dd_val, mean_dd_pct = calculate_drawdown(initial_balance, df)
     max_ru_val, max_ru_pct, mean_ru_val, mean_ru_pct = calculate_runup(initial_balance, df)
-    
+
     max_hold, avg_hold, min_hold = calculate_holding_times(df, stop)
-    
+
     sharpe = calculate_sharpe(net_ret_ann, net_vol_ann)
     sortino = calculate_sortino(net_ret_ann, loss_vol_ann)
     calmar = calculate_calmar(net_ret_ann, max_dd_pct)
     fitness = calculate_fitness(net_ret_ann, mean_dd_pct)
-    
+
     return {
         TOTALTRADESVALUE: total_n,
         TOTALPOINTSVALUE: total_points,
         TOTALPIPSVALUE: total_pips,
-            
+
         WINNINGTRADESVALUE: win_n,
         WINNINGPOINTSVALUE: win_points,
         WINNINGPIPSVALUE: win_pips,

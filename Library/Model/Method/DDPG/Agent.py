@@ -135,8 +135,8 @@ class DDPGAgentAPI(AgentAPI):
         # Reset the OU process state between episodes (it is temporally correlated).
         self.noise.reset()
 
-    def memorise(self, state, action, reward, next_state, done) -> None:
-        self.memory.memorise(state, action, reward, next_state, done)
+    def memorize(self, state, action, reward, next_state, done) -> None:
+        self.memory.memorize(state, action, reward, next_state, done)
 
     def remember(self, batch_size) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
         return self.memory.remember(batch_size)
@@ -160,7 +160,7 @@ class DDPGAgentAPI(AgentAPI):
         # force_tau=1 performs the hard copy used to initialize the targets.
         # Applied in place (no clone/state-dict round-trip) for speed; the
         # arithmetic is identical to tau*theta + (1-tau)*theta'.
-        tau = force_tau or self.tau
+        tau = force_tau if force_tau is not None else self.tau
         self._soft_update_(self.critic, self.target_critic, tau)
         self._soft_update_(self.actor, self.target_actor, tau)
 
@@ -212,6 +212,11 @@ class DDPGAgentAPI(AgentAPI):
         # Actor update via the deterministic policy gradient (Algorithm 1):
         #   grad_theta_mu J ~= (1/N) sum_i grad_a Q(s,a)|_{a=mu(s_i)} grad_theta_mu mu(s_i).
         # Realized as ascent on Q(s, mu(s)), i.e. descent on -mean Q(s, mu(s)).
+        # The critic parameters are frozen for this backward pass (gradients still
+        # flow THROUGH the critic to the actor); this only skips accumulating
+        # critic parameter gradients that the next zero_grad would discard, so the
+        # actor update is numerically identical (standard reference-impl practice).
+        for parameter in self.critic.parameters(): parameter.requires_grad_(False)
         self.actor.optimizer.zero_grad()
         actor_loss = -self.critic.forward(states, self.actor.forward(states))
         actor_loss = T.mean(actor_loss)
@@ -219,6 +224,7 @@ class DDPGAgentAPI(AgentAPI):
         if self.grad_clip > 0.0:
             T.nn.utils.clip_grad_norm_(self.actor.parameters(), self.grad_clip)
         self.actor.optimizer.step()
+        for parameter in self.critic.parameters(): parameter.requires_grad_(True)
 
         # Soft-update both target networks (Algorithm 1).
         self.update()

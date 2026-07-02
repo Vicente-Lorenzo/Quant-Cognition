@@ -18,7 +18,7 @@ class MemoryAPI:
         self.next_state_memory: np.ndarray = np.zeros((self.size, *input_shape))
         self.terminal_memory: np.ndarray = np.zeros(self.size, dtype=np.bool_)
 
-    def memorise(self, state, action, reward, next_state, done) -> None:
+    def memorize(self, state, action, reward, next_state, done) -> None:
         index = self.counter % self.size
         self.state_memory[index] = state
         self.action_memory[index] = action

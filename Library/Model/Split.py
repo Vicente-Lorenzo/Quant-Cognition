@@ -1,7 +1,6 @@
 from datetime import datetime
-from typing import Union
-
 from dateutil.relativedelta import relativedelta
+from typing import Union
 
 class SplitAPI:
 
@@ -30,3 +29,5 @@ class SplitAPI:
                 cursor = cursor + relativedelta(months=validation)
             if not folds: folds.append(((start, inner_stop), None))
         return folds, test
+
+__all__ = ["SplitAPI"]
