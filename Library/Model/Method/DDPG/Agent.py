@@ -19,10 +19,22 @@ Default hyperparameters (Section 7, low-dimensional case):
   - OU exploration: theta = 0.15, sigma = 0.2, mu = 0 (passed below).
 
 Reference-implementation conventions (not specified by the paper):
-  - The OU process discretization step dt = 1e-2 (the paper gives only the
-    continuous process); this is the OrnsteinUhlenbeckNoiseAPI default.
+  - The OU process discretization step dt = 1 (the paper gives only the
+    continuous process; unit steps make the per-step noise scale sigma = 0.2,
+    matching the standard reference implementations); this is the
+    OrnsteinUhlenbeckNoiseAPI default.
   - Terminal masking V(terminal) = 0 in the critic target (standard episodic
     handling; Algorithm 1 is written for the continuing case).
+
+Extension (NOT in the paper — the "Extended DDPG" variant, default OFF):
+  - actor_regularization (lambda): adds lambda * mean(u^2) to the actor loss,
+    where u = mu_pre-tanh(s) is the actor's pre-squash activation. The
+    deterministic policy gradient only ever ascends dQ/da, so when the critic is
+    locally monotone in the action nothing pulls u back and tanh(u) pins at +-1
+    where its gradient vanishes (constant-action collapse). Penalizing u^2 keeps
+    the actor inside the responsive region of the tanh while leaving the optimum
+    of a genuinely informative critic essentially unchanged for small lambda.
+    With lambda = 0.0 (the default) the exact paper-pure code path runs.
 """
 
 import torch as T
@@ -51,6 +63,7 @@ class DDPGAgentAPI(AgentAPI):
                  batch_size: int = 64,
                  gamma: float = 0.99,
                  grad_clip: float = 1.0,
+                 actor_regularization: float = 0.0,
                  seed: Union[int, None] = None):
 
         super().__init__(model="DDPG", path=path)
@@ -62,6 +75,7 @@ class DDPGAgentAPI(AgentAPI):
         self.gamma = gamma
         self.tau = tau
         self.grad_clip = grad_clip
+        self.actor_regularization = actor_regularization
 
         self.memory = MemoryAPI(size=memory_size, input_shape=input_shape, action_shape=action_shape, seed=seed)
 
@@ -218,8 +232,16 @@ class DDPGAgentAPI(AgentAPI):
         # actor update is numerically identical (standard reference-impl practice).
         for parameter in self.critic.parameters(): parameter.requires_grad_(False)
         self.actor.optimizer.zero_grad()
-        actor_loss = -self.critic.forward(states, self.actor.forward(states))
-        actor_loss = T.mean(actor_loss)
+        if self.actor_regularization > 0.0:
+            # Extended DDPG (see module docstring): penalize the pre-tanh
+            # activation u so the policy stays inside the responsive region of
+            # the tanh; tanh(u) keeps the graph identical to forward(states).
+            preactivation = self.actor.preactivation(states)
+            actor_loss = -self.critic.forward(states, T.tanh(preactivation))
+            actor_loss = T.mean(actor_loss) + self.actor_regularization * T.mean(preactivation.pow(2))
+        else:
+            actor_loss = -self.critic.forward(states, self.actor.forward(states))
+            actor_loss = T.mean(actor_loss)
         actor_loss.backward()
         if self.grad_clip > 0.0:
             T.nn.utils.clip_grad_norm_(self.actor.parameters(), self.grad_clip)

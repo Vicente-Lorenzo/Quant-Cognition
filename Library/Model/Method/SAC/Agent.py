@@ -174,8 +174,9 @@ class SACAgentAPI(AgentAPI):
             target_value = T.min(self.target_critic_1.forward(next_states, next_actions), self.target_critic_2.forward(next_states, next_actions)) - self.alpha * next_log_probabilities
             target = rewards + self.gamma * (1.0 - dones) * target_value
 
-        # Critic update: each online critic regresses its Q(s, a) onto y.
-        critic_loss = F.mse_loss(self.critic_1.forward(states, actions), target) + F.mse_loss(self.critic_2.forward(states, actions), target)
+        # Critic update: each online critic regresses its Q(s, a) onto y with the
+        # paper's one-half factor, J_Q = E[ 0.5 (Q_i(s,a) - y)^2 ].
+        critic_loss = 0.5 * (F.mse_loss(self.critic_1.forward(states, actions), target) + F.mse_loss(self.critic_2.forward(states, actions), target))
         self.critic_1.optimizer.zero_grad()
         self.critic_2.optimizer.zero_grad()
         critic_loss.backward()

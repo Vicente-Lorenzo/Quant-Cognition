@@ -78,15 +78,19 @@ class ActorNetworkAPI(NetworkAPI):
         self.mu.weight.data.uniform_(-f3, f3)
         self.mu.bias.data.uniform_(-f3, f3)
 
-    def forward(self, state):
-        # mu(s) = tanh( fc2( fc1(s) ) ) with LayerNorm before each ReLU.
-        # (Paper uses BatchNorm here; see module docstring for the deviation.)
+    def preactivation(self, state):
+        # The pre-tanh activation u(s) = mu_linear( fc2( fc1(s) ) ) with LayerNorm
+        # before each ReLU. Exposed separately so the Extended DDPG variant can
+        # regularize u directly; forward() is exactly tanh(preactivation).
         action = self.fc1(state)
         action = self.ln1(action)
         action = F.relu(action)
         action = self.fc2(action)
         action = self.ln2(action)
         action = F.relu(action)
+        return self.mu(action)
+
+    def forward(self, state):
+        # mu(s) = tanh( u(s) ) (paper uses BatchNorm in u; see module docstring).
         # Final tanh bounds the deterministic action to [-1, 1] (Section 7).
-        action = T.tanh(self.mu(action))
-        return action
+        return T.tanh(self.preactivation(state))
