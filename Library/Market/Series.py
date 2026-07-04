@@ -59,9 +59,11 @@ class SeriesAPI:
 
     def dataframe(self) -> Union[pl.DataFrame, pl.Series]:
         if self._data_ is None: return pl.DataFrame() if self._multiple_ else pl.Series(self._prefix_, dtype=pl.Float64)
-        if self._multiple_: return self._data_.select([c for c in self._column_() if c in self._data_.columns])
-        if self._prefix_ in self._data_.columns: return self._data_.get_column(self._prefix_)
-        return pl.Series(self._prefix_, dtype=pl.Float64)
+        if self._multiple_:
+            columns = set(self._data_.columns)
+            return self._data_.select([c for c in self._column_() if c in columns])
+        try: return self._data_.get_column(self._prefix_)
+        except pl.exceptions.ColumnNotFoundError: return pl.Series(self._prefix_, dtype=pl.Float64)
 
     def _slice_(self, shift: int, length: int) -> pl.DataFrame:
         if self._data_ is None or self._data_.is_empty(): return pl.DataFrame()

@@ -191,14 +191,17 @@ class MarketAPI(DatapointAPI):
         else:
             self.Ticks.init_data(self._data_)
 
-    def update_data(self, data: Union[TickAPI, BarAPI]) -> None:
+    def update_data(self, data: Union[TickAPI, BarAPI, pl.DataFrame]) -> None:
         from Library.Market.Bar import BarAPI
-        df = pl.DataFrame([data.dict(flatten=True)], strict=False)
+        if isinstance(data, pl.DataFrame):
+            df, bar = data, str(BarAPI.ID.Timeframe) in data.columns
+        else:
+            df, bar = pl.DataFrame([data.dict(flatten=True)], strict=False), isinstance(data, BarAPI)
         if self._data_ is None or self._data_.width == 0:
             self._data_ = df.rechunk()
         else:
             self._data_.extend(df)
-        if isinstance(data, BarAPI):
+        if bar:
             self.GapTicks.init_data(self._data_)
             self.OpenTicks.init_data(self._data_)
             self.HighTicks.init_data(self._data_)
