@@ -34,7 +34,7 @@ class AverageTrueRangeAPI(TechnicalAPI):
         if len(atr) > self.Window:
             atr = pl.Series(nulls + atr.to_list()[self.Window:])
         else:
-            atr = pl.Series([None] * len(atr))
+            atr = pl.Series([None] * len(atr), dtype=pl.Float64)
         return pl.DataFrame({self.Name: atr})
 
     def stream(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
@@ -58,7 +58,8 @@ class AverageTrueRangeAPI(TechnicalAPI):
             t3 = (lows - prev_closes).abs()
             tr_series = pl.DataFrame({"t1": t1, "t2": t2, "t3": t3}).max_horizontal().drop_nulls()
             if len(tr_series) < self.Window: return self._pad_()
-            return pl.DataFrame({self.Name: pl.Series([float(tr_series.mean())], dtype=pl.Float64)})
+            atr = tr_series.ewm_mean(alpha=1.0 / self.Window, adjust=False)
+            return pl.DataFrame({self.Name: pl.Series([float(atr[-1])], dtype=pl.Float64)})
         new_atr = (prev_atr * (self.Window - 1) + tr) / self.Window
         return pl.DataFrame({self.Name: pl.Series([new_atr], dtype=pl.Float64)})
 

@@ -25,7 +25,7 @@ class RealizedVolatilityAPI(TechnicalAPI):
         if len(rv) > self.Window:
             rv = pl.Series(nulls + rv.to_list()[self.Window:])
         else:
-            rv = pl.Series([None] * len(rv))
+            rv = pl.Series([None] * len(rv), dtype=pl.Float64)
         return pl.DataFrame({self.Name: rv})
 
     def stream(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
@@ -36,9 +36,9 @@ class RealizedVolatilityAPI(TechnicalAPI):
         log_return = math.log(new_close / prev_close)
         if prev_rv is None:
             if len(data) < self.Window + 1: return self._pad_()
-            returns = (data / data.shift(1)).log().drop_nulls().tail(self.Window)
-            if len(returns) < self.Window: return self._pad_()
-            return pl.DataFrame({self.Name: pl.Series([math.sqrt(float(returns.pow(2).mean()))], dtype=pl.Float64)})
+            log_returns = (data / data.shift(1)).log().fill_null(0.0)
+            variance = log_returns.pow(2).ewm_mean(alpha=1.0 / self.Window, adjust=False)
+            return pl.DataFrame({self.Name: pl.Series([math.sqrt(float(variance[-1]))], dtype=pl.Float64)})
         variance = (prev_rv * prev_rv * (self.Window - 1) + log_return * log_return) / self.Window
         return pl.DataFrame({self.Name: pl.Series([math.sqrt(variance)], dtype=pl.Float64)})
 

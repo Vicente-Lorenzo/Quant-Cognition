@@ -21,7 +21,7 @@ class DoubleMovingAverageAPI(TechnicalAPI):
     def batch(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
         if data.is_empty(): return self._pad_()
         ma1 = MovingAverageAPI._batch_(data, self.Window, self.TypeMA)
-        s_valid = ma1.drop_nulls()
+        s_valid = ma1.fill_nan(None).drop_nulls()
         if s_valid.is_empty(): return self._pad_()
         ma2_valid = MovingAverageAPI._batch_(s_valid, self.Window, self.TypeMA)
         nulls = [None] * (len(data) - len(ma2_valid))
@@ -33,7 +33,7 @@ class DoubleMovingAverageAPI(TechnicalAPI):
         series = data.tail(self.Window * 5)
         if len(series) < self.Window * 2: return self._pad_()
         ma1 = MovingAverageAPI._batch_(series, self.Window, self.TypeMA)
-        s_valid = ma1.drop_nulls()
+        s_valid = ma1.fill_nan(None).drop_nulls()
         ma2_valid = MovingAverageAPI._batch_(s_valid, self.Window, self.TypeMA)
         nulls = [None] * (len(series) - len(ma2_valid))
         ma2 = pl.Series(nulls + ma2_valid.to_list())

@@ -28,6 +28,7 @@ class TechnicalAPI:
         self.Mode: IndicatorMode = mode
         self.Result: SeriesAPI = SeriesAPI(self.Name)
         self._data_: Union[pl.DataFrame, None] = None
+        self._composite_: bool = type(self).batch is TechnicalAPI.batch and type(self).stream is TechnicalAPI.stream
         self._indicators_: list = list(indicators.values())
         for k, v in indicators.items():
             setattr(self, k, v)
@@ -52,16 +53,19 @@ class TechnicalAPI:
         return self.batch(data) if batch else self.stream(data)
 
     def init_data(self, market: MarketAPI) -> None:
-        self._data_ = self.calculate(self._extract_(market), batch=True)
-        self.Result.init_data(self._data_)
+        if not self._composite_:
+            self._data_ = self.calculate(self._extract_(market), batch=True)
+            self.Result.init_data(self._data_)
         for ind in self._indicators_:
             if hasattr(ind, "init_data"): ind.init_data(market)
 
     def update_data(self, market: MarketAPI) -> None:
-        if self._data_ is None: return self.init_data(market)
-        df = self.calculate(self._extract_(market), batch=False)
-        self._data_.extend(df)
-        self.Result.init_data(self._data_)
+        if not self._composite_:
+            if self._data_ is None:
+                self._data_ = self.calculate(self._extract_(market), batch=True)
+            else:
+                self._data_.extend(self.calculate(self._extract_(market), batch=False))
+            self.Result.init_data(self._data_)
         for ind in self._indicators_:
             if hasattr(ind, "update_data"): ind.update_data(market)
 

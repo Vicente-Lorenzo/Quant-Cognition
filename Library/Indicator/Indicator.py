@@ -152,6 +152,11 @@ def parse_technical(parameters: Union[dict, None]) -> TechnicalAPI:
                 window = config[1] if len(config) > 1 else 14
                 mode_val = config[2] if len(config) > 2 else IndicatorMode.Off
                 indicators[name] = AverageTrueRangeAPI(name=name, window=window, mode=IndicatorMode.parse(mode_val))
+            case "ROC":
+                from Library.Indicator.Technical.Momentum.ROC import RateOfChangeAPI
+                window = config[1] if len(config) > 1 else 12
+                mode_val = config[2] if len(config) > 2 else IndicatorMode.Off
+                indicators[name] = RateOfChangeAPI(name=name, window=window, mode=IndicatorMode.parse(mode_val))
             case "MACD":
                 from Library.Indicator.Technical.Momentum.MACD import MovingAverageConvergenceDivergenceAPI
                 slow = config[1] if len(config) > 1 else 26

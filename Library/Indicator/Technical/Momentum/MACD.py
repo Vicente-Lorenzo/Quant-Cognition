@@ -41,12 +41,12 @@ class MovingAverageConvergenceDivergenceAPI(TechnicalAPI):
         if len(macd) > self.SlowPeriod - 1:
             macd = pl.Series(nulls + macd.to_list()[self.SlowPeriod - 1:])
         else:
-            macd = pl.Series([None] * len(macd))
+            macd = pl.Series([None] * len(macd), dtype=pl.Float64)
         signal = macd.ewm_mean(span=self.SignalPeriod, adjust=False, ignore_nulls=True)
         if len(signal) > self.Window - 1:
             signal = pl.Series([None] * (self.Window - 1) + signal.to_list()[self.Window - 1:])
         else:
-            signal = pl.Series([None] * len(signal))
+            signal = pl.Series([None] * len(signal), dtype=pl.Float64)
         histogram = macd - signal
         return pl.DataFrame({
             f"{self.Name}.FastEMA": fast_ema,
@@ -67,10 +67,9 @@ class MovingAverageConvergenceDivergenceAPI(TechnicalAPI):
         alpha_slow = 2 / (self.SlowPeriod + 1)
         alpha_signal = 2 / (self.SignalPeriod + 1)
         if prev_fast is None:
-            prices = data.tail(self.SlowPeriod)
-            if len(prices) < self.SlowPeriod: return self._pad_()
-            new_fast = float(prices.tail(self.FastPeriod).mean())
-            new_slow = float(prices.mean())
+            if len(data) < self.SlowPeriod: return self._pad_()
+            new_fast = float(data.ewm_mean(span=self.FastPeriod, adjust=False)[-1])
+            new_slow = float(data.ewm_mean(span=self.SlowPeriod, adjust=False)[-1])
             new_macd = new_fast - new_slow
             new_signal = None
             new_hist = None
@@ -81,9 +80,10 @@ class MovingAverageConvergenceDivergenceAPI(TechnicalAPI):
             new_slow = (new_price - ps) * alpha_slow + ps
             new_macd = new_fast - new_slow
             if prev_signal is None:
-                macds = self.MACD.tail(self.SignalPeriod - 1, dataframe=True).drop_nulls()
-                if len(macds) == self.SignalPeriod - 1:
-                    new_signal = (macds.sum() + new_macd) / self.SignalPeriod
+                macds = self.MACD.tail(dataframe=True).drop_nulls()
+                if len(macds) >= self.SignalPeriod - 1:
+                    seed = pl.Series(macds.to_list() + [new_macd]).ewm_mean(span=self.SignalPeriod, adjust=False)
+                    new_signal = float(seed[-1])
                     new_hist = new_macd - new_signal
                 else:
                     new_signal = None

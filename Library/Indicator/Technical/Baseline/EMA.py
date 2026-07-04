@@ -18,7 +18,7 @@ class ExponentialMovingAverageAPI(TechnicalAPI):
         ema = series.ewm_mean(span=window, adjust=False)
         nulls = [None] * (window - 1)
         if len(ema) > window - 1: return pl.Series(nulls + ema.to_list()[window - 1:])
-        return pl.Series([None] * len(ema))
+        return pl.Series([None] * len(ema), dtype=pl.Float64)
 
     def batch(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
         if data.is_empty(): return self._pad_()
@@ -29,9 +29,9 @@ class ExponentialMovingAverageAPI(TechnicalAPI):
         prev_ema = self.Result.last()
         alpha = 2 / (self.Window + 1)
         if prev_ema is None:
-            prices = data.tail(self.Window)
-            if len(prices) < self.Window: return self._pad_()
-            return pl.DataFrame({self.Name: pl.Series([float(prices.mean())], dtype=pl.Float64)})
+            if len(data) < self.Window: return self._pad_()
+            ema = data.ewm_mean(span=self.Window, adjust=False)
+            return pl.DataFrame({self.Name: pl.Series([float(ema[-1])], dtype=pl.Float64)})
         new_price = (data[-1] if len(data) > 0 else None)
         if new_price is None: return self._pad_()
         new_ema = prev_ema + alpha * (new_price - prev_ema)

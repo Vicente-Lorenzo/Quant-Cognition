@@ -42,9 +42,11 @@ class KaufmanAdaptiveMovingAverageAPI(TechnicalAPI):
         prev_kama = self.Result.last()
         new_price = (data[-1] if len(data) > 0 else None)
         if prev_kama is None:
-            prices = data.tail(self.Window + 1)
-            if len(prices) < self.Window + 1: return self._pad_()
-            return pl.DataFrame({self.Name: pl.Series([float(prices.to_numpy()[-2])], dtype=pl.Float64)})
+            if len(data) < self.Window + 1: return self._pad_()
+            kama = self._batch_(data, self.Window)
+            seed = kama[-1]
+            if seed is None or seed != seed: return self._pad_()
+            return pl.DataFrame({self.Name: pl.Series([float(seed)], dtype=pl.Float64)})
         old_price = (data[-(self.Window + 1)] if len(data) > self.Window else None)
         if old_price is None or new_price is None: return self._pad_()
         change = abs(new_price - old_price)

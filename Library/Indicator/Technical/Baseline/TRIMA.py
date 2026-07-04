@@ -21,11 +21,11 @@ class TriangularMovingAverageAPI(TechnicalAPI):
         sma1 = series.rolling_mean(window_size=w1)
         nulls1 = [None] * (w1 - 1)
         if len(sma1) > w1 - 1: sma1 = pl.Series(nulls1 + sma1.to_list()[w1 - 1:])
-        else: sma1 = pl.Series([None] * len(sma1))
+        else: sma1 = pl.Series([None] * len(sma1), dtype=pl.Float64)
         trima = sma1.rolling_mean(window_size=w2)
         nulls2 = [None] * (w1 - 1 + w2 - 1)
         if len(trima) > w1 - 1 + w2 - 1: return pl.Series(nulls2 + trima.to_list()[w1 - 1 + w2 - 1:])
-        return pl.Series([None] * len(trima))
+        return pl.Series([None] * len(trima), dtype=pl.Float64)
 
     def batch(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
         if data.is_empty(): return self._pad_()
