@@ -40,9 +40,10 @@ def calculate_log_percentage(log_ret: float) -> Union[float, None]:
 def calculate_direction(value: float) -> Direction:
     return Direction.Buy if value > 0 else Direction.Sell if value < 0 else Direction.Neutral
 
-def calculate_annualized_return(ret: float, duration_seconds: float, trading_days: int = 365) -> float:
+def calculate_annualized_return(ret: float, duration_seconds: float, trading_days: int = 365, pct: bool = False) -> float:
     if not ret or not duration_seconds or duration_seconds <= 0.0: return 0.0
-    return ((1.0 + ret) ** ((trading_days * 86400.0) / duration_seconds)) - 1.0
+    value = ((1.0 + ret) ** ((trading_days * 86400.0) / duration_seconds)) - 1.0
+    return calculate_percentage(value) if pct else value
 
 def calculate_annualized_log_return(log_ret: float, duration_seconds: float, trading_days: int = 365) -> float:
     if log_ret is None or not duration_seconds or duration_seconds <= 0.0: return 0.0
@@ -139,6 +140,10 @@ NETPNLVALUE = "Net Profit/Loss"
 EXPECTEDNETRETURNPERC = "Expected Net Return (%)"
 NETRETURNPERC = "Net Return (%)"
 NETRETURNANNPERC = "Net Return Annualized (%) [µ]"
+UPSIDEVOLATILITYPERC = "Upside Volatility (%)"
+UPSIDEVOLATILITYANNPERC = "Upside Volatility Annualized (%) [σ+]"
+DOWNSIDEVOLATILITYPERC = "Downside Volatility (%)"
+DOWNSIDEVOLATILITYANNPERC = "Downside Volatility Annualized (%) [σ-]"
 NETVOLATILITYPERC = "Net Volatility (%)"
 NETVOLATILITYANNPERC = "Net Volatility Annualized (%) [σ]"
 
@@ -227,6 +232,10 @@ Metrics = [
     EXPECTEDNETRETURNPERC,
     NETRETURNPERC,
     NETRETURNANNPERC,
+    UPSIDEVOLATILITYPERC,
+    UPSIDEVOLATILITYANNPERC,
+    DOWNSIDEVOLATILITYPERC,
+    DOWNSIDEVOLATILITYANNPERC,
     NETVOLATILITYPERC,
     NETVOLATILITYANNPERC,
 
@@ -444,28 +453,29 @@ def calculate_average(net_value: float, nr_items: int) -> float:
 def calculate_expected(winning_perc: float, avg_win: float, losing_perc: float, avg_loss: float) -> float:
     return (winning_perc / 100.0 * avg_win) - (losing_perc / 100.0 * abs(avg_loss))
 
-def calculate_return_and_volatility(df: pl.DataFrame) -> tuple[float, float, float]:
+def calculate_return(df: pl.DataFrame) -> tuple[float, float]:
     log_ret = str(PositionAPI.ID.LogReturn)
-    if df.is_empty() or log_ret not in df.columns: return 0.0, 0.0, 0.0
+    if df.is_empty() or log_ret not in df.columns: return 0.0, 0.0
     exp_log = df[log_ret].mean()
     tot_log = df[log_ret].sum()
-    vol_log = df[log_ret].std()
-    exp_ret = (math.exp(exp_log) - 1.0) * 100.0 if exp_log else 0.0
-    tot_ret = (math.exp(tot_log) - 1.0) * 100.0 if tot_log else 0.0
-    vol_ret = math.sqrt(math.exp((vol_log or 0.0)**2) - 1.0) * 100.0 if vol_log else 0.0
-    return exp_ret, tot_ret, vol_ret
+    exp_ret_pct = (math.exp(exp_log) - 1.0) * 100.0 if exp_log else 0.0
+    tot_ret_pct = (math.exp(tot_log) - 1.0) * 100.0 if tot_log else 0.0
+    return exp_ret_pct, tot_ret_pct
 
-def calculate_ann_return(start: date, stop: date, ret_perc: float, days: int = 365) -> float:
-    if not ret_perc or not start or not stop: return 0.0
-    delta = (stop - start).days
-    if delta <= 0: return 0.0
-    return (((1.0 + (ret_perc / 100.0)) ** (days / delta)) - 1.0) * 100.0
 
-def calculate_ann_volatility(start: date, stop: date, vol_perc: float, days: int = 365) -> float:
-    if not vol_perc or not start or not stop: return 0.0
-    delta = (stop - start).days
-    if delta <= 0: return 0.0
-    return (vol_perc / 100.0) * math.sqrt(days / delta) * 100.0
+def calculate_volatility(df: pl.DataFrame, side: Union[str, None] = None) -> float:
+    log_ret = str(PositionAPI.ID.LogReturn)
+    if df.is_empty() or log_ret not in df.columns: return 0.0
+    series = df[log_ret]
+    if side == "Downside": dev_log = math.sqrt(((series.clip(upper_bound=0.0)) ** 2).mean() or 0.0)
+    elif side == "Upside": dev_log = math.sqrt(((series.clip(lower_bound=0.0)) ** 2).mean() or 0.0)
+    else: dev_log = series.std() or 0.0
+    return math.sqrt(math.exp(dev_log ** 2) - 1.0) * 100.0 if dev_log else 0.0
+
+def calculate_annualized_volatility(vol: float, nr_trades: int, duration_seconds: float, trading_days: int = 365, pct: bool = False) -> float:
+    if not vol or not nr_trades or not duration_seconds or duration_seconds <= 0.0: return 0.0
+    value = vol * math.sqrt(nr_trades * (trading_days * 86400.0) / duration_seconds)
+    return calculate_percentage(value) if pct else value
 
 def calculate_risk_to_reward(avg_win: float, avg_loss: float) -> float:
     return abs(avg_loss) / avg_win if avg_win else 0.0
@@ -473,31 +483,24 @@ def calculate_risk_to_reward(avg_win: float, avg_loss: float) -> float:
 def calculate_profit_factor(win_pnl: float, loss_pnl: float) -> float:
     return win_pnl / abs(loss_pnl) if loss_pnl else 0.0
 
-def calculate_drawdown(initial_balance: float, df: pl.DataFrame) -> tuple[float, float, float, float]:
+def calculate_excursion(initial_balance: float, df: pl.DataFrame, drawdown: bool) -> tuple[float, float, float, float]:
     net_pnl = str(PositionAPI.ID.NetPnL)
     if df.is_empty() or net_pnl not in df.columns: return 0.0, 0.0, 0.0, 0.0
     cum_bal = df[net_pnl].cum_sum() + initial_balance
-    run_max = cum_bal.cum_max()
-    dd = run_max - cum_bal
-    max_dd_val = dd.max()
-    cum_max_val = run_max.max()
-    max_dd_pct = (max_dd_val / cum_max_val) * 100.0 if cum_max_val else 0.0
-    mean_dd_val = dd.mean()
-    mean_dd_pct = (mean_dd_val / cum_max_val) * 100.0 if cum_max_val else 0.0
-    return max_dd_val, max_dd_pct, mean_dd_val, mean_dd_pct
+    if drawdown:
+        reference = cum_bal.cum_max().clip(lower_bound=initial_balance)
+        excursion = reference - cum_bal
+    else:
+        reference = cum_bal.cum_min().clip(upper_bound=initial_balance)
+        excursion = cum_bal - reference
+    excursion_pct = excursion / reference
+    return excursion.max(), (excursion_pct.max() or 0.0) * 100.0, excursion.mean(), (excursion_pct.mean() or 0.0) * 100.0
+
+def calculate_drawdown(initial_balance: float, df: pl.DataFrame) -> tuple[float, float, float, float]:
+    return calculate_excursion(initial_balance, df, drawdown=True)
 
 def calculate_runup(initial_balance: float, df: pl.DataFrame) -> tuple[float, float, float, float]:
-    net_pnl = str(PositionAPI.ID.NetPnL)
-    if df.is_empty() or net_pnl not in df.columns: return 0.0, 0.0, 0.0, 0.0
-    cum_bal = df[net_pnl].cum_sum() + initial_balance
-    run_min = cum_bal.cum_min()
-    ru = cum_bal - run_min
-    max_ru_val = ru.max()
-    cum_min_val = run_min.min()
-    max_ru_pct = (max_ru_val / cum_min_val) * 100.0 if cum_min_val else 0.0
-    mean_ru_val = ru.mean()
-    mean_ru_pct = (mean_ru_val / cum_min_val) * 100.0 if cum_min_val else 0.0
-    return max_ru_val, max_ru_pct, mean_ru_val, mean_ru_pct
+    return calculate_excursion(initial_balance, df, drawdown=False)
 
 def calculate_holding_times(df: pl.DataFrame, stop: date) -> tuple[float, float, float]:
     entry_ts = str(PositionAPI.ID.EntryTimestamp)
@@ -511,21 +514,21 @@ def calculate_holding_times(df: pl.DataFrame, stop: date) -> tuple[float, float,
     def _days_(td: timedelta) -> float: return td.total_seconds() / 86400.0 if td else 0.0
     return _days_(h_times.max()), _days_(h_times.mean()), _days_(h_times.min())
 
-def calculate_sharpe(ann_ret: float, ann_vol: float, rfr: float = 0.0) -> float:
-    ann_vol = ann_vol if ann_vol else 1e-2
-    return (ann_ret - rfr) / ann_vol
+def calculate_ratio(ann_ret_pct: float, risk_pct: float, rfr: float = 0.0) -> float:
+    risk_pct = abs(risk_pct) if risk_pct else 1e-2
+    return (ann_ret_pct - rfr) / risk_pct
 
-def calculate_sortino(ann_ret: float, down_vol: float, rfr: float = 0.0) -> float:
-    down_vol = down_vol if down_vol else 1e-2
-    return (ann_ret - rfr) / down_vol
+def calculate_sharpe(ann_ret_pct: float, ann_vol_pct: float, rfr: float = 0.0) -> float:
+    return calculate_ratio(ann_ret_pct, ann_vol_pct, rfr)
 
-def calculate_calmar(ann_ret: float, max_dd_pct: float, rfr: float = 0.0) -> float:
-    max_dd_pct = max_dd_pct if max_dd_pct else 1e-2
-    return (ann_ret - rfr) / abs(max_dd_pct)
+def calculate_sortino(ann_ret_pct: float, down_vol_pct: float, rfr: float = 0.0) -> float:
+    return calculate_ratio(ann_ret_pct, down_vol_pct, rfr)
 
-def calculate_fitness(ann_ret: float, mean_dd_pct: float, rfr: float = 0.0) -> float:
-    mean_dd_pct = mean_dd_pct if mean_dd_pct else 1e-2
-    return (ann_ret - rfr) / abs(mean_dd_pct)
+def calculate_calmar(ann_ret_pct: float, max_dd_pct: float, rfr: float = 0.0) -> float:
+    return calculate_ratio(ann_ret_pct, max_dd_pct, rfr)
+
+def calculate_fitness(ann_ret_pct: float, mean_dd_pct: float, rfr: float = 0.0) -> float:
+    return calculate_ratio(ann_ret_pct, mean_dd_pct, rfr)
 
 def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.DataFrame) -> dict:
     points = str(PositionAPI.ID.Points)
@@ -548,8 +551,8 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
     loss_points = calculate_sum(loss_df, points)
     loss_pips = calculate_sum(loss_df, pips)
 
-    win_rate = calculate_rate_perc(win_n, total_n)
-    loss_rate = calculate_rate_perc(loss_n, total_n)
+    win_rate_pct = calculate_rate_perc(win_n, total_n)
+    loss_rate_pct = calculate_rate_perc(loss_n, total_n)
 
     win_max_trade, win_avg_trade, win_min_trade = calculate_min_avg_max(win_n, win_df, net_pnl)
     loss_min_trade, loss_avg_trade, loss_max_trade = calculate_min_avg_max(loss_n, loss_df, net_pnl)
@@ -565,24 +568,34 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
     loss_pnl = calculate_sum(loss_df, net_pnl)
     total_pnl = calculate_sum(df, net_pnl)
 
-    exp_win_ret, win_ret, win_vol = calculate_return_and_volatility(win_df)
-    exp_loss_ret, loss_ret, loss_vol = calculate_return_and_volatility(loss_df)
-    exp_net_ret, net_ret, net_vol = calculate_return_and_volatility(df)
+    exp_win_ret_pct, win_ret_pct = calculate_return(win_df)
+    win_vol_pct = calculate_volatility(win_df)
+    exp_loss_ret_pct, loss_ret_pct = calculate_return(loss_df)
+    loss_vol_pct = calculate_volatility(loss_df)
+    exp_net_ret_pct, net_ret_pct = calculate_return(df)
+    net_vol_pct = calculate_volatility(df)
 
-    win_ret_ann = calculate_ann_return(start, stop, win_ret)
-    win_vol_ann = calculate_ann_volatility(start, stop, win_vol)
-    loss_ret_ann = calculate_ann_return(start, stop, loss_ret)
-    loss_vol_ann = calculate_ann_volatility(start, stop, loss_vol)
-    net_ret_ann = calculate_ann_return(start, stop, net_ret)
-    net_vol_ann = calculate_ann_volatility(start, stop, net_vol)
+    up_vol_pct = calculate_volatility(df, "Upside")
+    down_vol_pct = calculate_volatility(df, "Downside")
+
+    duration_seconds = (stop - start).days * 86400.0 if start and stop else 0.0
+
+    win_ret_annualized_pct = calculate_annualized_return(win_ret_pct / 100.0, duration_seconds, pct=True)
+    win_vol_annualized_pct = calculate_annualized_volatility(win_vol_pct / 100.0, win_n, duration_seconds, pct=True)
+    loss_ret_annualized_pct = calculate_annualized_return(loss_ret_pct / 100.0, duration_seconds, pct=True)
+    loss_vol_annualized_pct = calculate_annualized_volatility(loss_vol_pct / 100.0, loss_n, duration_seconds, pct=True)
+    net_ret_annualized_pct = calculate_annualized_return(net_ret_pct / 100.0, duration_seconds, pct=True)
+    up_vol_annualized_pct = calculate_annualized_volatility(up_vol_pct / 100.0, total_n, duration_seconds, pct=True)
+    down_vol_annualized_pct = calculate_annualized_volatility(down_vol_pct / 100.0, total_n, duration_seconds, pct=True)
+    net_vol_annualized_pct = calculate_annualized_volatility(net_vol_pct / 100.0, total_n, duration_seconds, pct=True)
 
     avg_trade = calculate_average(total_pnl, total_n)
     avg_points = calculate_average(total_points, total_n)
     avg_pips = calculate_average(total_pips, total_n)
 
-    exp_trade = calculate_expected(win_rate, win_avg_trade, loss_rate, loss_avg_trade)
-    exp_points = calculate_expected(win_rate, win_avg_pts, loss_rate, loss_avg_pts)
-    exp_pips = calculate_expected(win_rate, win_avg_pips, loss_rate, loss_avg_pips)
+    exp_trade = calculate_expected(win_rate_pct, win_avg_trade, loss_rate_pct, loss_avg_trade)
+    exp_points = calculate_expected(win_rate_pct, win_avg_pts, loss_rate_pct, loss_avg_pts)
+    exp_pips = calculate_expected(win_rate_pct, win_avg_pips, loss_rate_pct, loss_avg_pips)
 
     rr_ratio = calculate_risk_to_reward(win_avg_trade, loss_avg_trade)
     profit_factor = calculate_profit_factor(win_pnl, loss_pnl)
@@ -592,10 +605,10 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
 
     max_hold, avg_hold, min_hold = calculate_holding_times(df, stop)
 
-    sharpe = calculate_sharpe(net_ret_ann, net_vol_ann)
-    sortino = calculate_sortino(net_ret_ann, loss_vol_ann)
-    calmar = calculate_calmar(net_ret_ann, max_dd_pct)
-    fitness = calculate_fitness(net_ret_ann, mean_dd_pct)
+    sharpe = calculate_sharpe(net_ret_annualized_pct, net_vol_annualized_pct)
+    sortino = calculate_sortino(net_ret_annualized_pct, down_vol_annualized_pct)
+    calmar = calculate_calmar(net_ret_annualized_pct, max_dd_pct)
+    fitness = calculate_fitness(net_ret_annualized_pct, mean_dd_pct)
 
     return {
         TOTALTRADESVALUE: total_n,
@@ -605,7 +618,7 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
         WINNINGTRADESVALUE: win_n,
         WINNINGPOINTSVALUE: win_points,
         WINNINGPIPSVALUE: win_pips,
-        WINNINGRATEPERC: win_rate,
+        WINNINGRATEPERC: win_rate_pct,
         MAXWINNINGTRADE: win_max_trade,
         AVERAGEWINNINGTRADE: win_avg_trade,
         MINWINNINGTRADE: win_min_trade,
@@ -615,16 +628,16 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
         MAXWINNINGPIPS: win_max_pips,
         AVERAGEWINNINGPIPS: win_avg_pips,
         MINWINNINGPIPS: win_min_pips,
-        EXPECTEDWINNINGRETURNPERC: exp_win_ret,
-        WINNINGRETURNPERC: win_ret,
-        WINNINGRETURNANNPERC: win_ret_ann,
-        WINNINGVOLATILITYPERC: win_vol,
-        WINNINGVOLATILITYANNPERC: win_vol_ann,
+        EXPECTEDWINNINGRETURNPERC: exp_win_ret_pct,
+        WINNINGRETURNPERC: win_ret_pct,
+        WINNINGRETURNANNPERC: win_ret_annualized_pct,
+        WINNINGVOLATILITYPERC: win_vol_pct,
+        WINNINGVOLATILITYANNPERC: win_vol_annualized_pct,
 
         LOSINGTRADESVALUE: loss_n,
         LOSINGPOINTSVALUE: loss_points,
         LOSINGPIPSVALUE: loss_pips,
-        LOSINGRATEPERC: loss_rate,
+        LOSINGRATEPERC: loss_rate_pct,
         MAXLOSINGTRADE: loss_max_trade,
         AVERAGELOSINGTRADE: loss_avg_trade,
         MINLOSINGTRADE: loss_min_trade,
@@ -634,11 +647,11 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
         MAXLOSINGPIPS: loss_max_pips,
         AVERAGELOSINGPIPS: loss_avg_pips,
         MINLOSINGPIPS: loss_min_pips,
-        EXPECTEDLOSINGRETURNPERC: exp_loss_ret,
-        LOSINGRETURNPERC: loss_ret,
-        LOSINGRETURNANNPERC: loss_ret_ann,
-        LOSINGVOLATILITYPERC: loss_vol,
-        LOSINGVOLATILITYANNPERC: loss_vol_ann,
+        EXPECTEDLOSINGRETURNPERC: exp_loss_ret_pct,
+        LOSINGRETURNPERC: loss_ret_pct,
+        LOSINGRETURNANNPERC: loss_ret_annualized_pct,
+        LOSINGVOLATILITYPERC: loss_vol_pct,
+        LOSINGVOLATILITYANNPERC: loss_vol_annualized_pct,
 
         AVERAGETRADE: avg_trade,
         AVERAGEPOINTS: avg_points,
@@ -651,11 +664,15 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
         COMMISSIONSPNLVALUE: comm_pnl,
         SWAPSPNLVALUE: swap_pnl,
         NETPNLVALUE: total_pnl,
-        EXPECTEDNETRETURNPERC: exp_net_ret,
-        NETRETURNPERC: net_ret,
-        NETRETURNANNPERC: net_ret_ann,
-        NETVOLATILITYPERC: net_vol,
-        NETVOLATILITYANNPERC: net_vol_ann,
+        EXPECTEDNETRETURNPERC: exp_net_ret_pct,
+        NETRETURNPERC: net_ret_pct,
+        NETRETURNANNPERC: net_ret_annualized_pct,
+        UPSIDEVOLATILITYPERC: up_vol_pct,
+        UPSIDEVOLATILITYANNPERC: up_vol_annualized_pct,
+        DOWNSIDEVOLATILITYPERC: down_vol_pct,
+        DOWNSIDEVOLATILITYANNPERC: down_vol_annualized_pct,
+        NETVOLATILITYPERC: net_vol_pct,
+        NETVOLATILITYANNPERC: net_vol_annualized_pct,
 
         PROFITFACTOR: profit_factor,
         RISKTOREWARDRATIO: rr_ratio,
