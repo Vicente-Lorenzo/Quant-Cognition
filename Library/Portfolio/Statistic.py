@@ -40,8 +40,13 @@ def calculate_log_percentage(log_ret: float) -> Union[float, None]:
 def calculate_direction(value: float) -> Direction:
     return Direction.Buy if value > 0 else Direction.Sell if value < 0 else Direction.Neutral
 
+def calculate_duration_seconds(start: date, stop: date) -> float:
+    if not start or not stop: return 0.0
+    return (stop - start).days * 86400.0
+
 def calculate_annualized_return(ret: float, duration_seconds: float, trading_days: int = 365, pct: bool = False) -> float:
     if not ret or not duration_seconds or duration_seconds <= 0.0: return 0.0
+    ret = ret / 100.0 if pct else ret
     value = ((1.0 + ret) ** ((trading_days * 86400.0) / duration_seconds)) - 1.0
     return calculate_percentage(value) if pct else value
 
@@ -463,17 +468,18 @@ def calculate_return(df: pl.DataFrame) -> tuple[float, float]:
     return exp_ret_pct, tot_ret_pct
 
 
-def calculate_volatility(df: pl.DataFrame, side: Union[str, None] = None) -> float:
+def calculate_volatility(df: pl.DataFrame, upside: bool = False, downside: bool = False) -> float:
     log_ret = str(PositionAPI.ID.LogReturn)
     if df.is_empty() or log_ret not in df.columns: return 0.0
     series = df[log_ret]
-    if side == "Downside": dev_log = math.sqrt(((series.clip(upper_bound=0.0)) ** 2).mean() or 0.0)
-    elif side == "Upside": dev_log = math.sqrt(((series.clip(lower_bound=0.0)) ** 2).mean() or 0.0)
+    if downside: dev_log = math.sqrt(((series.clip(upper_bound=0.0)) ** 2).mean() or 0.0)
+    elif upside: dev_log = math.sqrt(((series.clip(lower_bound=0.0)) ** 2).mean() or 0.0)
     else: dev_log = series.std() or 0.0
     return math.sqrt(math.exp(dev_log ** 2) - 1.0) * 100.0 if dev_log else 0.0
 
 def calculate_annualized_volatility(vol: float, nr_trades: int, duration_seconds: float, trading_days: int = 365, pct: bool = False) -> float:
     if not vol or not nr_trades or not duration_seconds or duration_seconds <= 0.0: return 0.0
+    vol = vol / 100.0 if pct else vol
     value = vol * math.sqrt(nr_trades * (trading_days * 86400.0) / duration_seconds)
     return calculate_percentage(value) if pct else value
 
@@ -575,19 +581,19 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
     exp_net_ret_pct, net_ret_pct = calculate_return(df)
     net_vol_pct = calculate_volatility(df)
 
-    up_vol_pct = calculate_volatility(df, "Upside")
-    down_vol_pct = calculate_volatility(df, "Downside")
+    up_vol_pct = calculate_volatility(df, upside=True)
+    down_vol_pct = calculate_volatility(df, downside=True)
 
-    duration_seconds = (stop - start).days * 86400.0 if start and stop else 0.0
+    duration_seconds = calculate_duration_seconds(start, stop)
 
-    win_ret_annualized_pct = calculate_annualized_return(win_ret_pct / 100.0, duration_seconds, pct=True)
-    win_vol_annualized_pct = calculate_annualized_volatility(win_vol_pct / 100.0, win_n, duration_seconds, pct=True)
-    loss_ret_annualized_pct = calculate_annualized_return(loss_ret_pct / 100.0, duration_seconds, pct=True)
-    loss_vol_annualized_pct = calculate_annualized_volatility(loss_vol_pct / 100.0, loss_n, duration_seconds, pct=True)
-    net_ret_annualized_pct = calculate_annualized_return(net_ret_pct / 100.0, duration_seconds, pct=True)
-    up_vol_annualized_pct = calculate_annualized_volatility(up_vol_pct / 100.0, total_n, duration_seconds, pct=True)
-    down_vol_annualized_pct = calculate_annualized_volatility(down_vol_pct / 100.0, total_n, duration_seconds, pct=True)
-    net_vol_annualized_pct = calculate_annualized_volatility(net_vol_pct / 100.0, total_n, duration_seconds, pct=True)
+    win_ret_annualized_pct = calculate_annualized_return(win_ret_pct, duration_seconds, pct=True)
+    win_vol_annualized_pct = calculate_annualized_volatility(win_vol_pct, win_n, duration_seconds, pct=True)
+    loss_ret_annualized_pct = calculate_annualized_return(loss_ret_pct, duration_seconds, pct=True)
+    loss_vol_annualized_pct = calculate_annualized_volatility(loss_vol_pct, loss_n, duration_seconds, pct=True)
+    net_ret_annualized_pct = calculate_annualized_return(net_ret_pct, duration_seconds, pct=True)
+    up_vol_annualized_pct = calculate_annualized_volatility(up_vol_pct, total_n, duration_seconds, pct=True)
+    down_vol_annualized_pct = calculate_annualized_volatility(down_vol_pct, total_n, duration_seconds, pct=True)
+    net_vol_annualized_pct = calculate_annualized_volatility(net_vol_pct, total_n, duration_seconds, pct=True)
 
     avg_trade = calculate_average(total_pnl, total_n)
     avg_points = calculate_average(total_points, total_n)
