@@ -47,7 +47,7 @@ class TripleMovingAverageAPI(TechnicalAPI):
         nulls3 = [None] * (len(series) - len(ma3_valid))
         ma3 = pl.Series(nulls3 + ma3_valid.to_list())
         tma = 3 * ma1 - 3 * ma2 + ma3
-        return pl.DataFrame({self.Name: pl.Series([tma.to_list()[-1]], dtype=pl.Float64)})
+        return pl.DataFrame({self.Name: pl.Series([tma[-1]], dtype=pl.Float64)})
 
     def filter_buy(self, market: MarketAPI) -> bool:
         return bool(market.CloseTicks.Price.over(self.Result))

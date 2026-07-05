@@ -38,7 +38,7 @@ class DoubleMovingAverageAPI(TechnicalAPI):
         nulls = [None] * (len(series) - len(ma2_valid))
         ma2 = pl.Series(nulls + ma2_valid.to_list())
         dma = 2 * ma1 - ma2
-        return pl.DataFrame({self.Name: pl.Series([dma.to_list()[-1]], dtype=pl.Float64)})
+        return pl.DataFrame({self.Name: pl.Series([dma[-1]], dtype=pl.Float64)})
 
     def filter_buy(self, market: MarketAPI) -> bool:
         return bool(market.CloseTicks.Price.over(self.Result))

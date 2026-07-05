@@ -3,7 +3,8 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING, Union
 
-from Library.Database.Dataframe import np, pl
+from Library.Database.Dataframe import pl
+from Library.Indicator.Technical.Baseline.WMA import WeightedMovingAverageAPI
 from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
 
 if TYPE_CHECKING:
@@ -19,14 +20,7 @@ class HullMovingAverageAPI(TechnicalAPI):
         sqrt_w = math.floor(math.sqrt(window))
         if len(series) < window + sqrt_w: return pl.Series([None] * len(series), dtype=pl.Float64)
         s_np = series.to_numpy()
-
-        def apply_wma(data: np.ndarray, w: int) -> np.ndarray:
-            weights = np.arange(1, w + 1)
-            w_sum = weights.sum()
-            res = np.full_like(data, fill_value=np.nan, dtype=float)
-            for i in range(w - 1, len(data)):
-                res[i] = np.dot(data[i - w + 1: i + 1], weights) / w_sum
-            return res
+        apply_wma = WeightedMovingAverageAPI._weighted_
         wma_f = apply_wma(s_np, window)
         wma_h = apply_wma(s_np, half_w)
         diff = 2 * wma_h - wma_f
@@ -42,7 +36,7 @@ class HullMovingAverageAPI(TechnicalAPI):
         series = data.tail(self.Window * 3)
         if len(series) < self.Window: return self._pad_()
         ma = self._batch_(series, self.Window)
-        return pl.DataFrame({self.Name: pl.Series([ma.to_list()[-1]], dtype=pl.Float64)})
+        return pl.DataFrame({self.Name: pl.Series([ma[-1]], dtype=pl.Float64)})
 
     def filter_buy(self, market: MarketAPI) -> bool:
         return bool(market.CloseTicks.Price.over(self.Result))

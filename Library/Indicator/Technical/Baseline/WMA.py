@@ -13,15 +13,16 @@ class WeightedMovingAverageAPI(TechnicalAPI):
     Type = TechnicalType.Baseline
 
     @staticmethod
+    def _weighted_(values: np.ndarray, window: int) -> np.ndarray:
+        weights = np.arange(1, window + 1, dtype=float)
+        wma = np.full_like(values, fill_value=np.nan, dtype=float)
+        wma[window - 1:] = np.convolve(values, weights[::-1], "valid") / weights.sum()
+        return wma
+
+    @staticmethod
     def _batch_(series: pl.Series, window: int) -> pl.Series:
         if len(series) < window: return pl.Series([None] * len(series), dtype=pl.Float64)
-        weights = np.arange(1, window + 1)
-        w_sum = weights.sum()
-        s_np = series.to_numpy()
-        wma = np.full_like(s_np, fill_value=np.nan, dtype=float)
-        for i in range(window - 1, len(s_np)):
-            wma[i] = np.dot(s_np[i - window + 1: i + 1], weights) / w_sum
-        return pl.Series(wma)
+        return pl.Series(WeightedMovingAverageAPI._weighted_(series.to_numpy(), window))
 
     def batch(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
         if data.is_empty(): return self._pad_()
@@ -32,7 +33,7 @@ class WeightedMovingAverageAPI(TechnicalAPI):
         series = data.tail(self.Window)
         if len(series) < self.Window: return self._pad_()
         ma = self._batch_(series, self.Window)
-        return pl.DataFrame({self.Name: pl.Series([ma.to_list()[-1]], dtype=pl.Float64)})
+        return pl.DataFrame({self.Name: pl.Series([ma[-1]], dtype=pl.Float64)})
 
     def filter_buy(self, market: MarketAPI) -> bool:
         return bool(market.CloseTicks.Price.over(self.Result))
