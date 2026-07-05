@@ -41,6 +41,7 @@ class PortfolioAPI(DatapointAPI):
     _initial_balance_: Union[float, None] = field(default=None, init=False)
     _equity_peak_: Union[float, None] = field(default=None, init=False)
     _equity_trough_: Union[float, None] = field(default=None, init=False)
+    _last_conversion_: float = field(default=1.0, init=False)
 
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],
@@ -227,6 +228,7 @@ class PortfolioAPI(DatapointAPI):
             high_ask = data.HighTick.Ask.Price if data.HighTick and data.HighTick.Ask else ask
             low_ask = data.LowTick.Ask.Price if data.LowTick and data.LowTick.Ask else ask
             conversion = self._conversion_(data.CloseTick.AskQuoteConversion, data.CloseTick.BidQuoteConversion)
+        self._last_conversion_ = conversion
         for pos in self._positions_.values():
             if pos.NetPnL is None or pos.EntryPrice is None: continue
             current_price = bid if pos.IsLong else ask
@@ -306,15 +308,14 @@ class PortfolioAPI(DatapointAPI):
         if dst.Label is None: dst.Label = src.Label
         if dst.Comment is None: dst.Comment = src.Comment
 
-    @staticmethod
-    def _compute_target_pnl_(pos: PositionAPI, target_price: Union[float, None]) -> Union[float, None]:
+    def _compute_target_pnl_(self, pos: PositionAPI, target_price: Union[float, None]) -> Union[float, None]:
         from Library.Portfolio.Statistic import calculate_pnl_difference, calculate_gross_pnl, calculate_net_pnl
         entry = pos.EntryPrice.Price if pos.EntryPrice else None
         if target_price is None or entry is None or pos.Volume is None: return None
         comm = pos.CommissionPnL.PnL if pos.CommissionPnL else 0.0
         swap = pos.SwapPnL.PnL if pos.SwapPnL else 0.0
         diff = calculate_pnl_difference(target_price, entry, pos.IsLong)
-        return calculate_net_pnl(calculate_gross_pnl(diff, pos.Volume), comm, swap)
+        return calculate_net_pnl(calculate_gross_pnl(diff, pos.Volume, self._last_conversion_), comm, swap)
 
     def _refresh_target_pnls_(self, pos: PositionAPI) -> None:
         sl_price = pos.StopLossPrice.Price if pos.StopLossPrice else None
@@ -395,6 +396,8 @@ class PortfolioAPI(DatapointAPI):
     @Account.setter
     def Account(self, account: Union[AccountAPI, None]) -> None:
         self._account_ = account
+        if self._initial_balance_ is None and account is not None and account.Balance is not None:
+            self._initial_balance_ = account.Balance
 
     @property
     def Security(self) -> Union[SecurityAPI, None]:
