@@ -1,6 +1,5 @@
 """Bloomberg Historical Data interface backed by xbbg BDH."""
 from datetime import date, datetime
-from xbbg import blp
 
 from Library.Database.Dataframe import pd, pl
 from Library.Utility.Service import ServiceAPI
@@ -32,7 +31,7 @@ class HistoricalAPI(ServiceAPI):
         """
         period = self._PERIODICITY_[str(timeframe).upper()]
         def _fetch_():
-            return blp.bdh(securities, fields, start, stop or "today", Per=period, backend=self._api_._backend_(legacy), overrides=overrides)
+            return self._api_._call_("bdh", securities, fields, start, stop or "today", Per=period, legacy=legacy, overrides=overrides)
         timer, df = super()._fetch_(callback=_fetch_)
         self._log_.info(lambda: f"Fetch Operation: Fetched {len(df)} Data Points ({timer.result()})")
         return df

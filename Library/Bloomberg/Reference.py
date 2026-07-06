@@ -1,6 +1,4 @@
 """Bloomberg Reference Data interface backed by xbbg BDP / BDS."""
-from xbbg import blp
-
 from Library.Database.Dataframe import pd, pl
 from Library.Utility.Service import ServiceAPI
 from Library.Utility.Typing import MISSING, Missing
@@ -22,7 +20,7 @@ class ReferenceAPI(ServiceAPI):
         :returns: Long-format frame with columns "ticker", "field" and "value" (one row per security and field).
         """
         def _fetch_():
-            return blp.bdp(securities, fields, backend=self._api_._backend_(legacy), overrides=overrides)
+            return self._api_._call_("bdp", securities, fields, legacy=legacy, overrides=overrides)
         timer, df = super()._fetch_(callback=_fetch_)
         self._log_.info(lambda: f"Fetch Operation: Fetched {len(df)} Data Points ({timer.result()})")
         return df
@@ -42,7 +40,7 @@ class ReferenceAPI(ServiceAPI):
         :returns: One row per bulk record, tagged with "ticker" and "field" columns plus the field's own columns.
         """
         def _fetch_():
-            return blp.bds(securities, field, backend=self._api_._backend_(legacy), overrides=overrides)
+            return self._api_._call_("bds", securities, field, legacy=legacy, overrides=overrides)
         timer, df = super()._fetch_(callback=_fetch_)
         self._log_.info(lambda: f"Bulk Operation: Fetched {len(df)} Records ({timer.result()})")
         return df

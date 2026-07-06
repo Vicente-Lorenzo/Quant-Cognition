@@ -1,6 +1,4 @@
 """Bloomberg Query Language (BQL) interface backed by xbbg."""
-from xbbg import blp
-
 from Library.Database.Dataframe import pd, pl
 from Library.Utility.Service import ServiceAPI
 from Library.Utility.Typing import MISSING, Missing
@@ -18,7 +16,7 @@ class QueryAPI(ServiceAPI):
         :returns: A frame whose columns follow the BQL query's own output schema.
         """
         def _execute_():
-            return blp.bql(query, backend=self._api_._backend_(legacy))
+            return self._api_._call_("bql", query, legacy=legacy)
         timer, df = super()._fetch_(callback=_execute_)
         self._log_.info(lambda: f"Execute Operation: Executed {len(df)} Rows ({timer.result()})")
         return df

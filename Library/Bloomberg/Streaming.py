@@ -1,12 +1,11 @@
 """Bloomberg Streaming Data interface backed by xbbg live subscriptions."""
 from typing import Callable
-from xbbg import blp
 
 from Library.Utility.Service import ServiceAPI
 from Library.Utility.Typing import MISSING, Missing
 
 class StreamingAPI(ServiceAPI):
-    """Bloomberg Streaming Data interface (xbbg live stream generator)."""
+    """Bloomberg Streaming Data interface (xbbg live stream generator · local mode only)."""
 
     def subscribe(self,
                   securities: str | list[str],
@@ -19,7 +18,8 @@ class StreamingAPI(ServiceAPI):
 
         xbbg's blp.stream is a synchronous generator (it runs the async subscription on a background
         thread) that yields each update batch already converted to the requested backend, so a plain
-        loop keeps the public interface callback-based like the rest of the module.
+        loop keeps the public interface callback-based like the rest of the module. Streaming needs
+        the local xbbg engine and raises in remote mode.
         :param securities: Security ticker or list of tickers.
         :param fields: Field mnemonic or list of fields.
         :param callback: Function receiving each update batch as a DataFrame.
@@ -29,7 +29,7 @@ class StreamingAPI(ServiceAPI):
         try:
             self.connect()
             count = 0
-            for update in blp.stream(securities, fields, backend=self._api_._backend_(legacy)):
+            for update in self._api_._stream_(securities, fields, legacy):
                 callback(update)
                 count += 1
                 if limit is not None and count >= limit: break

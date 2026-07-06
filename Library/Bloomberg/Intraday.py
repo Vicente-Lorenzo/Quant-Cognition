@@ -1,6 +1,5 @@
 """Bloomberg Intraday Data interface backed by xbbg BDIB / BDTICK."""
 from datetime import date, datetime
-from xbbg import blp
 
 from Library.Database.Dataframe import pd, pl
 from Library.Utility.Service import ServiceAPI
@@ -27,8 +26,7 @@ class IntradayAPI(ServiceAPI):
         :returns: One row per bar with its timestamp and open, high, low, close and volume.
         """
         def _fetch_():
-            return blp.bdib(security, dt=dt, interval=interval, session=session, typ=typ,
-                            backend=self._api_._backend_(legacy))
+            return self._api_._call_("bdib", security, dt=dt, interval=interval, session=session, typ=typ, legacy=legacy)
         timer, df = super()._fetch_(callback=_fetch_)
         self._log_.info(lambda: f"Bars Operation: Fetched {len(df)} bars ({timer.result()})")
         return df
@@ -50,8 +48,7 @@ class IntradayAPI(ServiceAPI):
         """
         event_types = [event_types] if isinstance(event_types, str) else event_types
         def _fetch_():
-            return blp.bdtick(security, start, stop, event_types=event_types,
-                              backend=self._api_._backend_(legacy))
+            return self._api_._call_("bdtick", security, start, stop, event_types=event_types, legacy=legacy)
         timer, df = super()._fetch_(callback=_fetch_)
         self._log_.info(lambda: f"Ticks Operation: Fetched {len(df)} ticks ({timer.result()})")
         return df
