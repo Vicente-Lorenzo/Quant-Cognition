@@ -69,9 +69,11 @@ class DataframeAPI:
             return None, [data], False
         return None, [[data]], False
 
+    def legacy(self, legacy: Union[bool, Missing] = MISSING) -> bool:
+        return self._legacy_ if legacy is MISSING else legacy
+
     def frame(self, data: Any, schema: dict = None, legacy: Union[bool, Missing] = MISSING) -> Any:
         data = self.flatten(data)
         df = pl.DataFrame(data=data, schema=schema, orient="row", strict=False)
         if len(df) > 0: df = df.select([s.shrink_dtype() for s in df.get_columns()])
-        legacy = legacy if legacy is not MISSING else self._legacy_
-        return df.to_pandas() if legacy else df
+        return df.to_pandas() if self.legacy(legacy) else df

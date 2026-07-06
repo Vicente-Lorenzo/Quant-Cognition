@@ -126,13 +126,11 @@ from Library.Utility.IO import (
     copy,
     smartlink
 )
-from Library.Database.Dataclass import (
-    overridefield,
-    DatametaAPI,
-    DataclassAPI
-)
-from Library.Database.Dataframe import DataframeAPI
-from Library.Utility.Service import ServiceAPI
+def __getattr__(name):
+    if name == "ServiceAPI":
+        from Library.Utility.Service import ServiceAPI
+        return ServiceAPI
+    raise AttributeError(f"module 'Library.Utility' has no attribute '{name}'")
 
 __all__ = [
     "gantt",
@@ -163,7 +161,5 @@ __all__ = [
     "is_readable", "is_writable",
     "mkdir", "remove", "read_text", "write_text", "read_json", "write_json",
     "symlink", "hardlink", "copy", "smartlink",
-    "overridefield", "DatametaAPI", "DataclassAPI",
-    "DataframeAPI",
     "ServiceAPI"
 ]
