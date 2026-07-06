@@ -6,12 +6,13 @@ from abc import ABC
 from typing import Callable
 
 from Library.Utility.Statistic import Timer
+from Library.Utility.Typing import MISSING, Missing
 
 
 class ServiceAPI(ABC):
 
     def __init__(self,
-                 api: ServiceAPI = None,
+                 api: ServiceAPI | Missing = MISSING,
                  **kwargs) -> None:
         super().__init__(**kwargs)
 

@@ -11,7 +11,7 @@ class StreamingAPI(ServiceAPI):
                   securities: str | list[str],
                   fields: str | list[str],
                   callback: Callable,
-                  limit: int = None,
+                  limit: int | Missing = MISSING,
                   legacy: bool | Missing = MISSING) -> None:
         """
         Subscribes to real-time market data updates and dispatches them to a callback.
@@ -32,7 +32,7 @@ class StreamingAPI(ServiceAPI):
             for update in self._api_._stream_(securities, fields, legacy):
                 callback(update)
                 count += 1
-                if limit is not None and count >= limit: break
+                if limit is not MISSING and count >= limit: break
         except KeyboardInterrupt:
             self._log_.info(lambda: "Streaming Operation: Interrupted by User")
         except Exception as e:

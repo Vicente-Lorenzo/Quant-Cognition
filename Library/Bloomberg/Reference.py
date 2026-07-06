@@ -9,7 +9,7 @@ class ReferenceAPI(ServiceAPI):
     def fetch(self,
               securities: str | list[str],
               fields: str | list[str],
-              overrides: dict[str, str] = None,
+              overrides: dict[str, str] | Missing = MISSING,
               legacy: bool | Missing = MISSING) -> pd.DataFrame | pl.DataFrame:
         """
         Fetches point-in-time reference data (BDP) for one security/field or lists of them.
@@ -28,7 +28,7 @@ class ReferenceAPI(ServiceAPI):
     def bulk(self,
              securities: str | list[str],
              field: str,
-             overrides: dict[str, str] = None,
+             overrides: dict[str, str] | Missing = MISSING,
              legacy: bool | Missing = MISSING) -> pd.DataFrame | pl.DataFrame:
         """
         Fetches bulk reference data (BDS) - array fields that return a whole table per security, such

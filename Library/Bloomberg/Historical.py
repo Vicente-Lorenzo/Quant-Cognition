@@ -14,9 +14,9 @@ class HistoricalAPI(ServiceAPI):
               securities: str | list[str],
               fields: str | list[str],
               start: str | date | datetime,
-              stop: str | date | datetime = None,
+              stop: str | date | datetime | Missing = MISSING,
               timeframe: str = "DAILY",
-              overrides: dict[str, str] = None,
+              overrides: dict[str, str] | Missing = MISSING,
               legacy: bool | Missing = MISSING) -> pd.DataFrame | pl.DataFrame:
         """
         Fetches historical time series (BDH) for one security/field or lists of them.
@@ -31,7 +31,7 @@ class HistoricalAPI(ServiceAPI):
         """
         period = self._PERIODICITY_[str(timeframe).upper()]
         def _fetch_():
-            return self._api_._call_("bdh", securities, fields, start, stop or "today", Per=period, legacy=legacy, overrides=overrides)
+            return self._api_._call_("bdh", securities, fields, start, "today" if stop is MISSING else stop, Per=period, legacy=legacy, overrides=overrides)
         timer, df = super()._fetch_(callback=_fetch_)
         self._log_.info(lambda: f"Fetch Operation: Fetched {len(df)} Data Points ({timer.result()})")
         return df

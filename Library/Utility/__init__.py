@@ -127,6 +127,7 @@ from Library.Utility.IO import (
     smartlink
 )
 from Library.Utility.Service import ServiceAPI
+from Library.Utility.Remote import RemoteAPI
 
 __all__ = [
     "gantt",
@@ -157,5 +158,6 @@ __all__ = [
     "is_readable", "is_writable",
     "mkdir", "remove", "read_text", "write_text", "read_json", "write_json",
     "symlink", "hardlink", "copy", "smartlink",
-    "ServiceAPI"
+    "ServiceAPI",
+    "RemoteAPI"
 ]
