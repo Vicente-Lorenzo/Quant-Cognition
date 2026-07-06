@@ -35,7 +35,9 @@ class BloombergAPI(RemoteAPI, DataframeAPI):
         :param host: Remote server host - if given (together with port), remote mode is assumed.
         :param port: Remote server port.
         :param token: Optional shared secret expected by the remote server.
-        :param timeout: Optional remote receive timeout in seconds (blocking when omitted).
+        :param timeout: Optional remote receive timeout in seconds (waits forever when omitted) -
+            server availability is verified with a short handshake ping at connect time either way,
+            raising ConnectionError immediately when the server is down.
         :param legacy: If True, sub-APIs default to Pandas DataFrames instead of Polars.
         """
         super().__init__(host=host, port=port, token=token, timeout=timeout, legacy=legacy)
@@ -70,8 +72,13 @@ class BloombergAPI(RemoteAPI, DataframeAPI):
         """Serves one remote envelope by running the local engine call and encoding the frame as Arrow IPC."""
         return self.serialize(self._call_(name, *args, legacy=False, **kwargs))
 
+    def _publish_(self, name: str, args: list, kwargs: dict):
+        """Serves one remote stream by yielding each local live update encoded as Arrow IPC bytes."""
+        for update in self._stream_(*args, legacy=False):
+            yield self.serialize(update)
+
     def _stream_(self, securities: str | list[str], fields: str | list[str], legacy: bool | Missing = MISSING):
-        """Opens the live xbbg stream generator (local mode only)."""
-        if self.remote(): raise RuntimeError("Streaming is not supported in remote mode")
+        """Opens the live xbbg stream generator (requires the local engine - the server side when remote)."""
+        if self.remote(): raise RuntimeError("Streaming requires a local interface")
         from xbbg import blp
         return blp.stream(securities, fields, backend=self._backend_(legacy))

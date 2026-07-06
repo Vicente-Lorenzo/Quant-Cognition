@@ -29,7 +29,7 @@ class HistoricalAPI(ServiceAPI):
         :param legacy: If True, returns a Pandas DataFrame; if False, Polars. Defaults to the API setting.
         :returns: Long-format frame with columns "ticker", "date", "field" and "value" (one row per security, date and field).
         """
-        period = self._PERIODICITY_[str(timeframe).upper()]
+        period = self._PERIODICITY_[timeframe.upper()]
         def _fetch_():
             return self._api_._call_("bdh", securities, fields, start, "today" if stop is MISSING else stop, Per=period, legacy=legacy, overrides=overrides)
         timer, df = super()._fetch_(callback=_fetch_)
