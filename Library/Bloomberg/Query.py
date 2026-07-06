@@ -18,8 +18,7 @@ class QueryAPI(ServiceAPI):
         :returns: A frame whose columns follow the BQL query's own output schema.
         """
         def _execute_():
-            # VERIFY: xbbg 1.4.1 blp.bql backend support
             return blp.bql(query, backend=self._api_._backend_(legacy))
         timer, df = super()._fetch_(callback=_execute_)
-        self._log_.info(lambda: f"Execute Operation: Executed · {len(df)} Rows ({timer.result()})")
+        self._log_.info(lambda: f"Execute Operation: Executed {len(df)} Rows ({timer.result()})")
         return df

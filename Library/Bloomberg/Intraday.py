@@ -26,7 +26,6 @@ class IntradayAPI(ServiceAPI):
         :param legacy: If True, returns a Pandas DataFrame; if False, Polars. Defaults to the API setting.
         :returns: One row per bar with its timestamp and open, high, low, close and volume.
         """
-        if isinstance(dt, (date, datetime)): dt = dt.strftime("%Y-%m-%d")
         def _fetch_():
             return blp.bdib(security, dt=dt, interval=interval, session=session, typ=typ,
                             backend=self._api_._backend_(legacy))
@@ -49,6 +48,7 @@ class IntradayAPI(ServiceAPI):
         :param legacy: If True, returns a Pandas DataFrame; if False, Polars. Defaults to the API setting.
         :returns: One row per tick with its timestamp, value, size and event type.
         """
+        event_types = [event_types] if isinstance(event_types, str) else event_types
         def _fetch_():
             return blp.bdtick(security, start, stop, event_types=event_types,
                               backend=self._api_._backend_(legacy))

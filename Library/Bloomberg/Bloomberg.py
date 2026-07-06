@@ -2,7 +2,7 @@
 from xbbg import Backend
 
 from Library.Utility.Service import ServiceAPI
-from Library.Utility.Typing import MISSING
+from Library.Utility.Typing import MISSING, Missing
 from Library.Bloomberg.Reference import ReferenceAPI
 from Library.Bloomberg.Historical import HistoricalAPI
 from Library.Bloomberg.Intraday import IntradayAPI
@@ -47,7 +47,7 @@ class BloombergAPI(ServiceAPI):
         """Marks the interface disconnected."""
         self._connected_ = False
 
-    def _backend_(self, legacy) -> Backend:
+    def _backend_(self, legacy: bool | Missing) -> Backend:
         """Resolves the effective legacy flag to the matching xbbg output backend (Pandas or Polars)."""
         legacy = self._legacy_ if legacy is MISSING else legacy
         return Backend.PANDAS if legacy else Backend.POLARS

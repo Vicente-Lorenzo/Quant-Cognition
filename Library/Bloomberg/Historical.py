@@ -1,6 +1,6 @@
 """Bloomberg Historical Data interface backed by xbbg BDH."""
 from datetime import date, datetime
-from xbbg import blp, ovr
+from xbbg import blp
 
 from Library.Database.Dataframe import pd, pl
 from Library.Utility.Service import ServiceAPI
@@ -30,16 +30,9 @@ class HistoricalAPI(ServiceAPI):
         :param legacy: If True, returns a Pandas DataFrame; if False, Polars. Defaults to the API setting.
         :returns: Long-format frame with columns "ticker", "date", "field" and "value" (one row per security, date and field).
         """
-        if isinstance(start, (date, datetime)): start = start.strftime("%Y-%m-%d")
-        if isinstance(stop, (date, datetime)): stop = stop.strftime("%Y-%m-%d")
-        period = self._PERIODICITY_.get(str(timeframe).upper(), "D")
+        period = self._PERIODICITY_[str(timeframe).upper()]
         def _fetch_():
-            backend = self._api_._backend_(legacy)
-            overrides_ = ovr(**overrides) if overrides else None
-            # VERIFY: xbbg 1.4.1 bdh periodicity option name (classic xbbg used Per='D'/'W'/'M')
-            if stop:
-                return blp.bdh(securities, fields, start, stop, Per=period, backend=backend, overrides=overrides_)
-            return blp.bdh(securities, fields, start, Per=period, backend=backend, overrides=overrides_)
+            return blp.bdh(securities, fields, start, stop or "today", Per=period, backend=self._api_._backend_(legacy), overrides=overrides)
         timer, df = super()._fetch_(callback=_fetch_)
-        self._log_.info(lambda: f"Fetch Operation: Fetched {len(df)} historical data points ({timer.result()})")
+        self._log_.info(lambda: f"Fetch Operation: Fetched {len(df)} Data Points ({timer.result()})")
         return df

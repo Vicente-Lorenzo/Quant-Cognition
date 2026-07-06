@@ -1,5 +1,5 @@
 """Bloomberg Reference Data interface backed by xbbg BDP / BDS."""
-from xbbg import blp, ovr
+from xbbg import blp
 
 from Library.Database.Dataframe import pd, pl
 from Library.Utility.Service import ServiceAPI
@@ -22,31 +22,27 @@ class ReferenceAPI(ServiceAPI):
         :returns: Long-format frame with columns "ticker", "field" and "value" (one row per security and field).
         """
         def _fetch_():
-            return blp.bdp(securities, fields,
-                           backend=self._api_._backend_(legacy),
-                           overrides=ovr(**overrides) if overrides else None)
+            return blp.bdp(securities, fields, backend=self._api_._backend_(legacy), overrides=overrides)
         timer, df = super()._fetch_(callback=_fetch_)
-        self._log_.info(lambda: f"Fetch Operation: Fetched {len(df)} reference data points ({timer.result()})")
+        self._log_.info(lambda: f"Fetch Operation: Fetched {len(df)} Data Points ({timer.result()})")
         return df
 
     def bulk(self,
-             security: str,
+             securities: str | list[str],
              field: str,
              overrides: dict[str, str] = None,
              legacy: bool | Missing = MISSING) -> pd.DataFrame | pl.DataFrame:
         """
         Fetches bulk reference data (BDS) - array fields that return a whole table per security, such
         as index members (INDX_MEMBERS) or dividend history (DVD_HIST_ALL).
-        :param security: Security ticker.
+        :param securities: Security ticker or list of tickers.
         :param field: Bulk field mnemonic (e.g. INDX_MEMBERS, DVD_HIST_ALL).
         :param overrides: Optional {fieldId: value} override mapping.
         :param legacy: If True, returns a Pandas DataFrame; if False, Polars. Defaults to the API setting.
         :returns: One row per bulk record, tagged with "ticker" and "field" columns plus the field's own columns.
         """
         def _fetch_():
-            return blp.bds(security, field,
-                           backend=self._api_._backend_(legacy),
-                           overrides=ovr(**overrides) if overrides else None)
+            return blp.bds(securities, field, backend=self._api_._backend_(legacy), overrides=overrides)
         timer, df = super()._fetch_(callback=_fetch_)
-        self._log_.info(lambda: f"Bulk Operation: Fetched {len(df)} bulk data points ({timer.result()})")
+        self._log_.info(lambda: f"Bulk Operation: Fetched {len(df)} Records ({timer.result()})")
         return df
