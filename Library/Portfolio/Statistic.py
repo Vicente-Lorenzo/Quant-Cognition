@@ -471,7 +471,7 @@ def calculate_return(df: pl.DataFrame) -> tuple[float, float]:
 def calculate_volatility(df: pl.DataFrame, upside: bool = False, downside: bool = False) -> float:
     log_ret = str(PositionAPI.ID.LogReturn)
     if df.is_empty() or log_ret not in df.columns: return 0.0
-    series = df[log_ret]
+    series = df[log_ret].cast(pl.Float64)
     if downside: dev_log = math.sqrt(((series.clip(upper_bound=0.0)) ** 2).mean() or 0.0)
     elif upside: dev_log = math.sqrt(((series.clip(lower_bound=0.0)) ** 2).mean() or 0.0)
     else: dev_log = series.std() or 0.0
