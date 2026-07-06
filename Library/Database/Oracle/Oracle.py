@@ -6,7 +6,7 @@ from Library.Database.Dataframe import pl
 from Library.Database.Query import QueryAPI
 from Library.Database.Database import DatabaseAPI, IdentityKey, PrimaryKey, ForeignKey
 
-class OracleAPI(DatabaseAPI):
+class OracleDatabaseAPI(DatabaseAPI):
     """
     Oracle SQL database implementation.
     """

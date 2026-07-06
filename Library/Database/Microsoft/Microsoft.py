@@ -6,7 +6,7 @@ from Library.Database.Dataframe import pl
 from Library.Database.Query import QueryAPI
 from Library.Database.Database import DatabaseAPI
 
-class MicrosoftAPI(DatabaseAPI):
+class MicrosoftDatabaseAPI(DatabaseAPI):
     """
     Microsoft SQL Server database implementation.
     """

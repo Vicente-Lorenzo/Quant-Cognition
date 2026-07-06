@@ -9,7 +9,7 @@ from Library.Database.Query import QueryAPI
 from Library.Database.Database import DatabaseAPI, IdentityKey, PrimaryKey, ForeignKey
 from Library.Utility.Typing import MISSING, Missing
 
-class PostgresAPI(DatabaseAPI):
+class PostgresDatabaseAPI(DatabaseAPI):
     """
     Postgres SQL database implementation.
     """

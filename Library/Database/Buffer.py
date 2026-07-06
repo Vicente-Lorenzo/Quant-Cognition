@@ -10,7 +10,7 @@ from typing import Callable, Type, Union, TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
-from Library.Database.Postgres.Postgres import PostgresAPI
+from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Logging.Handler import HandlerLoggingAPI
 from Library.Utility.Statistic import Timer
 
@@ -46,7 +46,7 @@ class BufferAPI(threading.Thread):
         self._work_: queue.Queue = queue.Queue()
         self._last_flush_: datetime = datetime.now()
 
-        self._db_: Callable[[], DatabaseAPI] = db or (lambda: PostgresAPI(database=DatapointAPI.Database))
+        self._db_: Callable[[], DatabaseAPI] = db or (lambda: PostgresDatabaseAPI(database=DatapointAPI.Database))
 
         self._log_: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="Buffer Management")
 
