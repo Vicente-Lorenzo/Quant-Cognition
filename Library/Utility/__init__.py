@@ -126,11 +126,7 @@ from Library.Utility.IO import (
     copy,
     smartlink
 )
-def __getattr__(name):
-    if name == "ServiceAPI":
-        from Library.Utility.Service import ServiceAPI
-        return ServiceAPI
-    raise AttributeError(f"module 'Library.Utility' has no attribute '{name}'")
+from Library.Utility.Service import ServiceAPI
 
 __all__ = [
     "gantt",

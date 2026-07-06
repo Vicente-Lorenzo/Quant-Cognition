@@ -6,10 +6,9 @@ from abc import ABC
 from typing import Callable
 
 from Library.Utility.Statistic import Timer
-from Library.Database.Dataframe import DataframeAPI
 
 
-class ServiceAPI(DataframeAPI, ABC):
+class ServiceAPI(ABC):
 
     def __init__(self,
                  api: ServiceAPI = None,

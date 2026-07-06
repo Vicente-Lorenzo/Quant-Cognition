@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from typing import Union, Callable, Any
 
 from Library.Utility.Statistic import Timer
-from Library.Database.Dataframe import pd, pl
+from Library.Database.Dataframe import DataframeAPI, pd, pl
 from Library.Database.Query import QueryAPI
 from Library.Utility.Service import ServiceAPI
 from Library.Utility.Memory import memory_to_string
@@ -42,7 +42,7 @@ class ForeignKey:
     reference: str
     primary: bool = False
 
-class DatabaseAPI(ServiceAPI, ABC):
+class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
     """
     Abstract base class for database integrations.
     """

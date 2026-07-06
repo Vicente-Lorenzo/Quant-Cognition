@@ -2,7 +2,7 @@
 import io
 import json
 
-from Library.Database.Dataframe import pd, pl
+from Library.Database.Dataframe import DataframeAPI, pd, pl
 from Library.Utility.Service import ServiceAPI
 from Library.Utility.Typing import MISSING, Missing
 from Library.Bloomberg.Reference import ReferenceAPI
@@ -11,7 +11,7 @@ from Library.Bloomberg.Intraday import IntradayAPI
 from Library.Bloomberg.Query import QueryAPI
 from Library.Bloomberg.Streaming import StreamingAPI
 
-class BloombergAPI(ServiceAPI):
+class BloombergAPI(ServiceAPI, DataframeAPI):
     """
     Main Bloomberg interface.
 
