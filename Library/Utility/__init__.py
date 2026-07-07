@@ -47,7 +47,7 @@ from Library.Utility.Datetime import (
     is_summer_time,
     is_winter_time
 )
-from Library.Utility.Math import equals, truncate
+from Library.Utility.Math import equals, truncate, EPSILON
 from Library.Utility.Memory import memory_to_string
 from Library.Utility.Runtime import (
     find_user,
@@ -140,7 +140,7 @@ __all__ = [
     "getvariable", "findvariable",
     "cast", "contains", "format",
     "EPOCH", "MILLISECOND", "MICROSECOND", "datetime_to_string", "string_to_datetime", "datetime_to_timestamp", "datetime_to_epoch", "epoch_to_datetime", "timestamp_to_datetime", "datetime_to_iso", "iso_to_datetime", "parse_datetime", "seconds_to_string", "is_summer_time", "is_winter_time",
-    "equals", "truncate",
+    "EPSILON", "equals", "truncate",
     "memory_to_string",
     "find_user", "is_windows", "is_linux", "is_mac", "is_local", "is_remote", "is_service",
     "find_ipython", "find_shell", "is_python", "is_console", "is_terminal", "is_notebook", "find_notebook",
