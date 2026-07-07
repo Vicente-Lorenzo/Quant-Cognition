@@ -1,24 +1,24 @@
 import os
 import sys
+from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import Type, Union
-from argparse import ArgumentParser, Namespace
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from Library.Utility.Statistic import profiler, timer
-from Library.System.System import SystemType
-from Library.Strategy.Model import DDPGStrategyAPI, SACStrategyAPI
+from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
+from Library.Logging import HandlerLoggingAPI, VerboseLevel
+from Library.Parameter import Parameter, ParameterAPI
+from Library.Strategy import DownloadStrategyAPI, NNFXStrategyAPI, StrategyAPI
+from Library.Strategy.Hybrid import DDPGStrategyAPI
 from Library.Strategy.Model.Reward import RewardType
 from Library.Strategy.Strategy import StrategyType
 from Library.System import BacktestingAPI, LearningAPI, RealtimeAPI, SystemAPI
-from Library.Parameter import Parameter, ParameterAPI
-from Library.Utility.Path import traceback_current_module
-from Library.Utility.Typing import MISSING, Missing
-from Library.Logging import HandlerLoggingAPI, VerboseLevel
-from Library.Database.Postgres.Postgres import PostgresAPI
-from Library.Strategy import DownloadStrategyAPI, NNFXStrategyAPI, StrategyAPI
+from Library.System.System import SystemType
 from Library.Universe import CommissionType, ProviderAPI, SecurityAPI, SpreadType, SwapType, TickerAPI, TimeframeAPI
+from Library.Utility.Path import traceback_current_module
+from Library.Utility.Statistic import profiler, timer
+from Library.Utility.Typing import MISSING, Missing
 
 def _parse_() -> Namespace:
     base_parser = ArgumentParser(add_help=False)
@@ -93,11 +93,13 @@ def _parse_() -> Namespace:
     learning_parser.add_argument("--validation", type=int, required=False, default=0)
     learning_parser.add_argument("--testing", type=int, required=False, default=0)
     learning_parser.add_argument("--rolling", action="store_true", default=False)
+    learning_parser.add_argument("--continuous", action="store_true", default=False)
     learning_parser.add_argument("--fitness", type=str, required=False, default="Net Return (%)")
     learning_parser.add_argument("--patience", type=int, required=False, default=0)
     learning_parser.add_argument("--seed", type=int, required=False, default=None)
     learning_parser.add_argument("--seeds", type=int, required=False, default=1)
     learning_parser.add_argument("--workers", type=int, required=False, default=1)
+    learning_parser.add_argument("--threads", type=int, required=False, default=None)
 
     return parser.parse_args()
 
@@ -141,7 +143,6 @@ def _strategy_(args: Namespace) -> Type[StrategyAPI]:
         case StrategyType.Download: return DownloadStrategyAPI
         case StrategyType.NNFX: return NNFXStrategyAPI
         case StrategyType.DDPG: return DDPGStrategyAPI
-        case StrategyType.SAC: return SACStrategyAPI
 
 def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI, timeframe: TimeframeAPI, parameters: Parameter) -> Union[SystemAPI, None]:
     system = SystemType(args.system)
@@ -224,11 +225,13 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 validation=args.validation,
                 testing=args.testing,
                 rolling=args.rolling,
+                continuous=args.continuous,
                 fitness=args.fitness,
                 patience=args.patience,
                 seed=args.seed,
                 seeds=args.seeds,
                 workers=args.workers,
+                threads=args.threads,
                 report=args.report,
                 export=args.export
             )
@@ -237,7 +240,7 @@ def main() -> None:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"): stream.reconfigure(encoding="utf-8", errors="replace")
     args: Namespace = _parse_()
-    parameterise: ParameterAPI = ParameterAPI()
+    parameterize: ParameterAPI = ParameterAPI()
     execution: str = traceback_current_module().name
 
     log: HandlerLoggingAPI = HandlerLoggingAPI(Class=execution, Subclass="Execution Management")
@@ -248,7 +251,7 @@ def main() -> None:
     @timer
     @log.guard
     def run() -> None:
-        with PostgresAPI(database="Quant") as db:
+        with PostgresDatabaseAPI(database="Quant") as db:
             provider_uid, ticker_uid = ProviderAPI.normalize(args.provider), TickerAPI.normalize(args.ticker)
             ticker = TickerAPI(UID=ticker_uid, db=db, autoload=True)
             provider = ProviderAPI(UID=provider_uid, db=db, autoload=True)
@@ -256,7 +259,7 @@ def main() -> None:
             security = SecurityAPI(Provider=provider, Ticker=ticker, db=db, autoload=True)
             category = security.Category
             if category is None: raise ValueError(f"Security {provider_uid} {ticker_uid}: Failed · Due to missing Category")
-            parameters = parameterise[provider.UID][category.UID][ticker.UID][args.timeframe]
+            parameters = parameterize[provider.UID][category.UID][ticker.UID][args.timeframe]
             strategy = _strategy_(args)
             system = _system_(args, strategy, security, timeframe, parameters)
             if system is None: return

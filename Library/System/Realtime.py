@@ -10,7 +10,7 @@ from typing import Type, Union, TYPE_CHECKING
 
 from Library.Database.Database import DatabaseAPI
 from Library.Database.Dataframe import pl
-from Library.Database.Postgres.Postgres import PostgresAPI
+from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Engine import MachineAPI
 from Library.Indicator.Indicator import IndicatorAPI
 from Library.Market.Bar import BarAPI
@@ -25,9 +25,9 @@ from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Trade import TradeAPI
 from Library.Protocol.Action import ActionAPI, ActionID, Stream, InitActionAPI, ExecutionActionAPI, SubscribeActionAPI, UnsubscribeActionAPI
 from Library.Protocol.Binary import BinaryAPI
+from Library.Protocol.Transport import TransportAPI, PeerExit
 from Library.Protocol.Update import UpdateID, CompleteUpdateAPI, InitUpdateAPI, BarUpdateAPI
 from Library.System.System import SystemAPI, SystemType
-from Library.Protocol.Transport import TransportAPI, PeerExit
 from Library.Universe.Contract import CommissionMode, SwapMode
 from Library.Universe.Security import SecurityAPI
 from Library.Utility.Datetime import Weekday, timestamp_to_datetime
@@ -51,7 +51,7 @@ class RealtimeAPI(SystemAPI):
 
     _binary_account_ = BinaryAPI('s', 's', 'B', 's', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'B')
     _binary_security_ = BinaryAPI('s', 's', 'i', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'B', 'd', 'd', 'B', 'i')
-    
+
     _binary_tick_ = BinaryAPI('q', 'd', 'd', 'd', 'd', 'd', 'd', 'd')
 
     _binary_order_ = BinaryAPI('i', 'B', 'B', 'd', 'd', 'D', 'D', 'q', 's')
@@ -113,7 +113,7 @@ class RealtimeAPI(SystemAPI):
             self.market = MarketAPI()
             self.indicator = IndicatorAPI(technical=self._parameters_.TechnicalManagement, fundamental=self._parameters_.FundamentalManagement, sentimental=self._parameters_.SentimentalManagement)
             self.portfolio = PortfolioAPI(Parameter=self._parameters_.PortfolioManagement)
-            self._db_ = None if self._database_ is None else self._stack_.enter_context(PostgresAPI(database=self._database_))
+            self._db_ = None if self._database_ is None else self._stack_.enter_context(PostgresDatabaseAPI(database=self._database_))
         except Exception:
             self._stack_.__exit__(None, None, None)
             raise

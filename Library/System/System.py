@@ -9,9 +9,6 @@ from typing import Type, Union, TYPE_CHECKING
 
 from Library.Database import BufferAPI
 from Library.Database.Dataframe import pl
-from Library.Utility.Enumeration import EnumerationAPI
-from Library.Utility.Service import ServiceAPI
-from Library.Utility.Statistic import Timer
 from Library.Logging import HandlerLoggingAPI
 from Library.Market.Bar import BarAPI
 from Library.Market.Tick import TickAPI
@@ -19,8 +16,8 @@ from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.Order import OrderAPI
 from Library.Portfolio.Position import PositionAPI, PositionStatus
 from Library.Portfolio.Session import SessionAPI
-from Library.Portfolio.Trade import TradeAPI
 from Library.Portfolio.Statistic import generate_net_report, order_view, position_view, trade_view, deal_view
+from Library.Portfolio.Trade import TradeAPI
 from Library.Protocol.Action import ActionAPI, ActionID, CompleteActionAPI, ShutdownActionAPI
 from Library.Protocol.Update import (
     UpdateID,
@@ -102,6 +99,9 @@ from Library.Protocol.Update import (
 )
 from Library.System.Lifecycle import LifecycleAPI
 from Library.Universe.Security import SecurityAPI
+from Library.Utility.Enumeration import EnumerationAPI
+from Library.Utility.Service import ServiceAPI
+from Library.Utility.Statistic import Timer
 
 if TYPE_CHECKING:
     from Library.Engine import MachineAPI
@@ -338,8 +338,7 @@ class SystemAPI(ServiceAPI, ABC):
     def receive_update_position_trade(self, offset: int = 1) -> tuple[PositionAPI, TradeAPI]:
         raise NotImplementedError
 
-    
-    def _receive_update_position_trade_(self, status: PositionStatus):
+    def _receive_update_position_trade_(self, status: PositionStatus) -> tuple[PositionAPI, TradeAPI]:
         pos, trade = self.receive_update_position_trade()
         pos.Status = status
         self._attach_session_(pos)
@@ -366,7 +365,6 @@ class SystemAPI(ServiceAPI, ABC):
     def system_management(self) -> MachineAPI:
         raise NotImplementedError
 
-    # noinspection PyTypeChecker
     def _process_updates_(self, engine: LifecycleAPI) -> list[ActionAPI]:
         actions: list[ActionAPI] = []
         while True:
