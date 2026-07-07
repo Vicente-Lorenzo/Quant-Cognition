@@ -32,53 +32,7 @@ NNFX:
   FundamentalManagement: null
   SentimentalManagement: null
   PortfolioManagement: null
-HybridDDPG:
-  MoneyManagement:
-    SizingMode: [Risk]
-    SizingMin: [0.5]
-    SizingMax: [2.0]
-    DrawdownThreshold: [10.0]
-    DrawdownFactor: [0.5]
-  RiskManagement:
-    StopLossScale: [1.5]
-    StagnationStopOut: [0]
-    ScalingOutScale: [1.0]
-    ScalingOutPercentage: [50.0]
-    TrailingStopLossScale: [1.5]
-    TrailingStopLossStep: [0.25]
-  SignalManagement:
-    NormalEntryThreshold: [-0.4, 0.4]
-    NormalExitThreshold: [-0.1, 0.1]
-    ContinuationEntryThreshold: [-2.0, 2.0]
-    ContinuationExitThreshold: [-0.1, 0.1]
-    ContinuationDelay: [0]
-    Weights: [null]
-    ActorLearningRate: [0.0001]
-    CriticLearningRate: [0.001]
-    SoftUpdate: [0.001]
-    HiddenShape1: [400]
-    HiddenShape2: [300]
-    MemorySize: [1000000]
-    BatchSize: [64]
-    DiscountFactor: [0.998]
-    GradientClip: [1.0]
-    ActorRegularization: [0.0]
-    MomentumHorizons: [24, 120, 480]
-    MovingAverageHorizons: [24, 120, 480]
-  TechnicalManagement:
-    ATR: [ATR, 14]
-    RVFast: [RV, 16]
-    RVSlow: [RV, 480]
-    MOM24: [ROC, 24]
-    MOM120: [ROC, 120]
-    MOM480: [ROC, 480]
-    MA24: [SMA, 24]
-    MA120: [SMA, 120]
-    MA480: [SMA, 480]
-  FundamentalManagement: null
-  SentimentalManagement: null
-  PortfolioManagement: null
-HybridRDDPG:
+DDPG:
   MoneyManagement:
     SizingMode: [Risk]
     SizingMin: [0.5]
