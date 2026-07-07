@@ -23,8 +23,8 @@ class ActionAPI:
         follows the sign of a. The Risk sizing mode is stop-based money management and
         is handled by the rule strategies, not by this decoder.
 
-    The downstream position controller (ModelStrategyAPI) turns the signed target into
-    open / scale-out / hold / reverse / close orders under a <= 1 position rule.
+    The downstream position controller (the consuming strategy) turns the signed target
+    into open / scale-out / hold / reverse / close orders under a <= 1 position rule.
     """
 
     def __init__(self, mode: SizingMode, maximum: float, deadzone: float) -> None:
