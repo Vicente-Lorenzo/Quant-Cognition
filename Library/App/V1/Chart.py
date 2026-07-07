@@ -4,7 +4,7 @@ from dash import dcc
 from typing import Union, Any
 from dataclasses import dataclass, field
 
-from Library.App.Component import ComponentAPI, Component, ImageAPI, IframeAPI
+from Library.App.V1.Component import ComponentAPI, Component, ImageAPI, IframeAPI
 
 @dataclass(kw_only=True)
 class PlotlyAPI(ComponentAPI):

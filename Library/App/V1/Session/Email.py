@@ -1,7 +1,7 @@
 from typing import Union
 from dataclasses import dataclass, field
 
-from Library.App.Session.Storage import StorageAPI
+from Library.App.V1.Session.Storage import StorageAPI
 
 @dataclass(kw_only=True)
 class EmailAPI(StorageAPI):

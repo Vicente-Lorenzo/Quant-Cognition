@@ -3,7 +3,7 @@ from threading import RLock
 from collections import deque
 
 from Library.Logging import VerboseLevel
-from Library.App.Component import Component, NotificationAPI
+from Library.App.V1.Component import Component, NotificationAPI
 from Library.Utility.Typing import MISSING
 
 class NotifierAPI:

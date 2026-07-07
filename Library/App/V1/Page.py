@@ -1,10 +1,10 @@
 from typing import Union, Generic
 from typing_extensions import Self
 
-from Library.App import AppType
+from Library.App.V1 import AppType
 from Library.Logging import HandlerLoggingAPI
-from Library.App.Component import Component, StorageAPI
-from Library.App.Callback import ComponentID, Output, Input, InjectionType, clientside_callback, serverside_callback
+from Library.App.V1.Component import Component, StorageAPI
+from Library.App.V1.Callback import ComponentID, Output, Input, InjectionType, clientside_callback, serverside_callback
 
 class PageAPI(Generic[AppType]):
 

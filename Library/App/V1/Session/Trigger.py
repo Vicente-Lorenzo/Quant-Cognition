@@ -1,7 +1,7 @@
 from typing_extensions import Self
 from dataclasses import dataclass
 
-from Library.App.Session.Storage import StorageAPI
+from Library.App.V1.Session.Storage import StorageAPI
 
 @dataclass(kw_only=True)
 class TriggerAPI(StorageAPI):

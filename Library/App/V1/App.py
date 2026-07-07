@@ -10,7 +10,7 @@ import flask
 from fastapi import FastAPI
 from fastapi.middleware.wsgi import WSGIMiddleware
 
-from Library.App import *
+from Library.App.V1 import *
 from Library.Logging import *
 from Library.Utility.Path import *
 from Library.Utility.Typing import *

@@ -7,8 +7,8 @@ from typing_extensions import Self
 from abc import ABC, abstractmethod
 from typing import Union, TYPE_CHECKING, Callable, Any
 
-if TYPE_CHECKING: from Library.App import AppAPI, PageAPI
-from Library.App.Component import Component
+if TYPE_CHECKING: from Library.App.V1 import AppAPI, PageAPI
+from Library.App.V1.Component import Component
 from Library.Utility.Typing import hasattribute, getattribute
 
 class ComponentID:
@@ -24,7 +24,7 @@ class Trigger(ABC):
 
     @abstractmethod
     def build(self, context: Union[AppAPI, PageAPI]) -> tuple[dict, str]:
-        from Library.App.Page import PageAPI
+        from Library.App.V1.Page import PageAPI
         trigger: str = self.__class__.__name__
         component = self.component.name if isinstance(self.component, ComponentID) else self.component
         if isinstance(component, dict):

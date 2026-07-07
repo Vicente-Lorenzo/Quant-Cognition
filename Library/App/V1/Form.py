@@ -1,8 +1,8 @@
 from typing import Union
-from Library.App import AppType
-from Library.App.Page import PageAPI
-from Library.App.Callback import ComponentID
-from Library.App.Component import Component, IconAPI, TextAPI, MarkdownAPI, ButtonAPI, PaginatorAPI, ContainerAPI
+from Library.App.V1 import AppType
+from Library.App.V1.Page import PageAPI
+from Library.App.V1.Callback import ComponentID
+from Library.App.V1.Component import Component, IconAPI, TextAPI, MarkdownAPI, ButtonAPI, PaginatorAPI, ContainerAPI
 
 class FormAPI(PageAPI[AppType]):
 

@@ -6,7 +6,7 @@ from dash import html, dcc
 import dash_bootstrap_components as dbc
 from dash.development.base_component import Component
 
-from Library.App.Session import TriggerAPI
+from Library.App.V1.Session import TriggerAPI
 
 def parse_id(id: dict = None) -> dict:
     return id or {}
