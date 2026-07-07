@@ -8,7 +8,9 @@ Download:
   PortfolioManagement: null
 NNFX:
   MoneyManagement:
-    RiskPercentage: [1.0]
+    SizingMode: [Risk]
+    SizingMin: [1.0]
+    SizingMax: [1.0]
   RiskManagement:
     StopLossScale: [1.5]
     ScalingOutScale: [1.0]
