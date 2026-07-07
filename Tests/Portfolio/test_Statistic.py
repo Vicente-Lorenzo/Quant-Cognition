@@ -1,11 +1,21 @@
 import math
+from datetime import date
+from types import SimpleNamespace
 from Library.Database.Dataframe import pl
 from Library.Portfolio.Statistic import (
+    CALMARRATIO,
+    NET_TOTAL_AGGREGATED,
+    SHARPERATIO,
+    SORTINORATIO,
+    STATISTICS_METRICS_LABEL,
+    STERLINGRATIO,
     calculate_annualized_volatility,
     calculate_calmar,
     calculate_volatility,
     calculate_drawdown,
-    calculate_sortino
+    calculate_sortino,
+    equity_curve_ratios,
+    generate_net_report
 )
 from Library.Portfolio.Position import PositionAPI
 
@@ -52,3 +62,31 @@ def test_upside_deviation_mirrors_downside():
     expected_up_log = math.sqrt((0.02 ** 2 + 0.03 ** 2) / 4)
     assert abs(up - math.sqrt(math.exp(expected_up_log ** 2) - 1.0) * 100.0) < 1e-9
     assert up > down
+
+def test_equity_curve_ratios_none_on_empty_or_flat():
+    assert equity_curve_ratios(None, date(2021, 1, 1), date(2022, 1, 1)) is None
+    assert equity_curve_ratios([100.0], date(2021, 1, 1), date(2022, 1, 1)) is None
+    flat = equity_curve_ratios([100.0, 100.0, 100.0], date(2021, 1, 1), date(2022, 1, 1))
+    assert flat[SHARPERATIO] == 0.0 and flat[SORTINORATIO] == 0.0 and flat[CALMARRATIO] == 0.0
+
+def test_equity_curve_ratios_exact_one_year():
+    ratios = equity_curve_ratios([100.0, 80.0, 160.0], date(2021, 1, 1), date(2022, 1, 1))
+    assert abs(ratios[CALMARRATIO] - 3.0) < 1e-9
+    assert abs(ratios[SORTINORATIO] - 4.0) < 1e-9
+    assert abs(ratios[SHARPERATIO] - 2.0 / 3.0) < 1e-9
+    assert abs(ratios[STERLINGRATIO] - 9.0) < 1e-9
+
+def test_equity_curve_ratios_uses_supplied_drawdowns():
+    ratios = equity_curve_ratios([100.0, 160.0], date(2021, 1, 1), date(2022, 1, 1), max_drawdown=0.30, mean_drawdown=0.10)
+    assert abs(ratios[CALMARRATIO] - 2.0) < 1e-9
+    assert abs(ratios[STERLINGRATIO] - 6.0) < 1e-9
+
+def test_net_report_overrides_total_ratios_with_bar_curve():
+    account = SimpleNamespace(Balance=100.0)
+    empty = pl.DataFrame()
+    report = generate_net_report(empty, empty, account, date(2021, 1, 1), date(2022, 1, 1), [100.0, 80.0, 160.0])
+    def _cell_(label): return report.filter(pl.col(STATISTICS_METRICS_LABEL) == label)[NET_TOTAL_AGGREGATED].item()
+    assert abs(_cell_(CALMARRATIO) - 3.0) < 1e-9
+    assert abs(_cell_(SORTINORATIO) - 4.0) < 1e-9
+    assert abs(_cell_(SHARPERATIO) - 2.0 / 3.0) < 1e-9
+    assert abs(_cell_(STERLINGRATIO) - 9.0) < 1e-9

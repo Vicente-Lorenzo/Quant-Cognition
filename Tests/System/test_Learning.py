@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from Library.Database.Dataframe import pl
 from Library.Model.Split import SplitAPI
 from Library.Parameter import Parameter
-from Library.Portfolio.Statistic import NET_TOTAL_AGGREGATED, STATISTICS_METRICS_LABEL
+from Library.Portfolio.Statistic import CALMARRATIO, NETRETURNANNPERC, NET_TOTAL_AGGREGATED, STATISTICS_METRICS_LABEL
 from Library.Strategy.Model.Reward import RewardType
 from Library.System.Learning import LearningAPI
 from Library.Universe.Contract import CommissionType, SpreadType, SwapType
@@ -199,7 +199,7 @@ def test_manifest_records_configuration(tmp_path):
     assert manifest["Episodes"] == 2 and manifest["Epochs"] == 3 and manifest["Training"] == 24
     assert manifest["TrainFrequency"] == 2 and manifest["GradientSteps"] == 3
     assert manifest["Validation"] == 0 and manifest["Testing"] == 0 and manifest["Seeds"] == 1
-    assert manifest["Fitness"] == "Calmar Ratio" and manifest["Best"] == 0.05 and len(manifest["Results"]) == 1
+    assert manifest["Fitness"] == CALMARRATIO and manifest["Best"] == 0.05 and len(manifest["Results"]) == 1
     assert manifest["SizingMin"] == 0.0 and manifest["SizingMax"] == 100.0
     assert manifest["NormalEntryThreshold"] == [-0.4, 0.4] and manifest["NormalExitThreshold"] == [-0.1, 0.1]
 
@@ -247,7 +247,7 @@ def test_fitness_reads_metric_then_falls_back(tmp_path):
     _reset_(tmp_path)
     harness = _make_(episodes=1)
     harness.portfolio = SimpleNamespace(Equity=10500.0, InitialBalance=10000.0)
-    harness.statistics = pl.DataFrame({STATISTICS_METRICS_LABEL: ["Net Return (%)"], NET_TOTAL_AGGREGATED: [0.07]})
+    harness.statistics = pl.DataFrame({STATISTICS_METRICS_LABEL: [NETRETURNANNPERC], NET_TOTAL_AGGREGATED: [0.07]})
     assert abs(harness._fitness_() - 0.07) < 1e-9
     harness.statistics = None
     assert abs(harness._fitness_() - 0.05) < 1e-9

@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from Library.Parameter import Parameter
+from Library.Portfolio.Position import PositionType
 from Library.Protocol.Action import CloseBuyPositionActionAPI
 from Library.Protocol.Update import UpdateID
 from Library.Strategy.Rule.NNFX import NNFXStrategyAPI
@@ -100,3 +101,52 @@ def test_pure_tsl_when_scaling_out_disabled():
     update = SimpleNamespace(Position=SimpleNamespace(UID=4, StopLossPrice=SimpleNamespace(Price=1.0850)), Portfolio=SimpleNamespace(Security=SimpleNamespace(Contract=SimpleNamespace(PointSize=0.00001))))
     actions = strategy.define_tsl_open_buy_action(update)
     assert abs(actions[0].Bid - (1.0850 + 1.75 * 0.01 + 0.00001)) < 1e-12
+
+def _no_risk_strategy_(mode="Volume", maximum=5000.0):
+    money = Parameter({"SizingMode": [mode], "SizingMax": [maximum], "DrawdownThreshold": [0.0], "DrawdownFactor": [1.0]}, ".")
+    risk = Parameter({"StopLossScale": [0.0], "ScalingOutScale": [0.0], "ScalingOutPercentage": [0.0], "TrailingStopLossScale": [0.0], "TrailingStopLossStep": [0.0], "StagnationStopLoss": [0]}, ".")
+    empty = Parameter({}, ".")
+    return NNFXStrategyAPI(money_management=money, risk_management=risk, signal_management=empty, technical_management=empty, fundamental_management=empty, sentimental_management=empty, portfolio_management=empty)
+
+def test_no_risk_management_idles_machine_and_drops_stop_loss():
+    strategy = _no_risk_strategy_(mode="Volume", maximum=5000.0)
+    assert strategy._managed_risk_ is False and strategy._use_stop_loss_ is False
+    engine = strategy.risk_management()
+    assert engine.state(name="No Position")._transitions_[UpdateID.OpenedBuyPosition.value] is None
+    assert engine.state(name="Initialization")._transitions_[UpdateID.Execution.value] is not None
+    actions = strategy.open_buy_position(_update_(), PositionType.Normal)
+    assert actions[-1].Volume == 5000.0 and actions[-1].StopLoss is None and actions[-1].TakeProfit is None
+
+def test_managed_open_attaches_stop_loss():
+    strategy = _strategy_(mode="Risk", maximum=2.0)
+    assert strategy._managed_risk_ is True and strategy._use_stop_loss_ is True
+    actions = strategy.open_sell_position(_update_(atr=0.01), PositionType.Normal)
+    assert actions[-1].StopLoss == 150.0
+
+def _risk_strategy_(stop_loss=1.5, scaling_scale=1.0, scaling_percentage=50.0, trailing=1.5, mode="Risk", maximum=2.0):
+    money = Parameter({"SizingMode": [mode], "SizingMax": [maximum], "DrawdownThreshold": [0.0], "DrawdownFactor": [1.0]}, ".")
+    risk = Parameter({"StopLossScale": [stop_loss], "ScalingOutScale": [scaling_scale], "ScalingOutPercentage": [scaling_percentage], "TrailingStopLossScale": [trailing], "TrailingStopLossStep": [0.25], "StagnationStopLoss": [0]}, ".")
+    empty = Parameter({}, ".")
+    return NNFXStrategyAPI(money_management=money, risk_management=risk, signal_management=empty, technical_management=empty, fundamental_management=empty, sentimental_management=empty, portfolio_management=empty)
+
+def test_null_scales_disable_risk_without_crashing():
+    strategy = _risk_strategy_(stop_loss=None, scaling_scale=None, scaling_percentage=None, trailing=None, mode="Volume", maximum=5000.0)
+    assert strategy._managed_risk_ is False and strategy._use_stop_loss_ is False and strategy._use_trailing_stop_loss_ is False
+    engine = strategy.risk_management()
+    assert engine.state(name="No Position")._transitions_[UpdateID.OpenedBuyPosition.value] is None
+    actions = strategy.open_buy_position(_update_(), PositionType.Normal)
+    assert actions[-1].StopLoss is None
+
+def test_trailing_disabled_holds_after_break_even():
+    strategy = _risk_strategy_(trailing=0.0)
+    assert strategy._use_scaling_out_ is True and strategy._use_trailing_stop_loss_ is False
+    engine = strategy.risk_management()
+    assert engine.state(name="No Position")._transitions_[UpdateID.OpenedBuyPosition.value].To.Name == "Waiting SO"
+    bridge = engine.state(name="Waiting SO")._transitions_[UpdateID.ModifiedBuyPositionStopLoss.value]
+    assert bridge.To.Name == "Waiting Close" and bridge.Action is None
+
+def test_scaling_out_disabled_via_null_percentage_keeps_stop_loss():
+    strategy = _risk_strategy_(scaling_percentage=None)
+    assert strategy._use_scaling_out_ is False and strategy._use_trailing_stop_loss_ is True
+    engine = strategy.risk_management()
+    assert engine.state(name="No Position")._transitions_[UpdateID.OpenedBuyPosition.value].To.Name == "Waiting TSL"

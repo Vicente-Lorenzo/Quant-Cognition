@@ -54,6 +54,10 @@ class NNFXStrategyAPI(StrategyAPI):
         self._trailing_stop_loss_scale_, = self.RiskManagement.TrailingStopLossScale
         self._trailing_stop_loss_step_, = self.RiskManagement.TrailingStopLossStep
         self._stagnation_stop_loss_, = self.RiskManagement.StagnationStopLoss
+        self._use_stop_loss_ = self._positive_(self._stop_loss_scale_)
+        self._use_scaling_out_ = self._positive_(self._scaling_out_scale_) and self._positive_(self._scaling_out_percentage_)
+        self._use_trailing_stop_loss_ = self._positive_(self._trailing_stop_loss_scale_) and self._use_stop_loss_
+        self._managed_risk_ = self._use_stop_loss_ or self._use_scaling_out_ or self._use_trailing_stop_loss_
         self._drawdown_threshold_, = self.MoneyManagement.DrawdownThreshold
         self._drawdown_factor_, = self.MoneyManagement.DrawdownFactor
         self._sizing_mode_ = SizingMode.parse(self.MoneyManagement.SizingMode[0])
@@ -62,6 +66,10 @@ class NNFXStrategyAPI(StrategyAPI):
         self._last_position_atr_: Union[float, None] = None
         self._last_position_trade_type_: Union[Direction, None] = None
         self._position_bars_held_: int = 0
+
+    @staticmethod
+    def _positive_(value: Union[float, None]) -> bool:
+        return value is not None and value > 0.0
 
     def _entry_risk_percentage_(self, update: BarUpdateAPI) -> float:
         return self._risk_percentage_
@@ -137,6 +145,15 @@ class NNFXStrategyAPI(StrategyAPI):
         return [AskBelowTargetActionAPI(Ask=None)]
 
     def risk_management(self) -> MachineAPI:
+        if not self._managed_risk_:
+            unmanaged = MachineAPI(Name="Risk Management", Events=len(UpdateID))
+            idle_initialization = unmanaged.state(name="Initialization")
+            idle_waiting = unmanaged.state(name="No Position")
+            idle_termination = unmanaged.state(name="Termination", end=True)
+            idle_initialization.on(event=UpdateID.Execution, to=idle_waiting, action=None, reason="Initialized")
+            idle_initialization.on(event=UpdateID.Shutdown, to=idle_termination, action=None, reason="Abruptly Terminated")
+            idle_waiting.on(event=UpdateID.Shutdown, to=idle_termination, action=None, reason="Safely Terminated")
+            return unmanaged
         risk_engine = MachineAPI(Name="Risk Management", Events=len(UpdateID))
 
         initialization = risk_engine.state(name="Initialization")
@@ -197,9 +214,16 @@ class NNFXStrategyAPI(StrategyAPI):
         waiting_close.on(event=UpdateID.ModifiedSellPositionStopLoss, to=waiting_close, action=self.define_tsl_sell_action, reason="Updated TSL for Sell Position")
         waiting_close.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Safely Terminated")
 
-        if not self._scaling_out_percentage_:
-            waiting_open.on(event=UpdateID.OpenedBuyPosition, to=waiting_tsl, action=self.define_tsl_open_buy_action, reason="Opened Buy Position")
-            waiting_open.on(event=UpdateID.OpenedSellPosition, to=waiting_tsl, action=self.define_tsl_open_sell_action, reason="Opened Sell Position")
+        if not self._use_scaling_out_:
+            if self._use_trailing_stop_loss_:
+                waiting_open.on(event=UpdateID.OpenedBuyPosition, to=waiting_tsl, action=self.define_tsl_open_buy_action, reason="Opened Buy Position")
+                waiting_open.on(event=UpdateID.OpenedSellPosition, to=waiting_tsl, action=self.define_tsl_open_sell_action, reason="Opened Sell Position")
+            else:
+                waiting_open.on(event=UpdateID.OpenedBuyPosition, to=waiting_close, action=None, reason="Opened Buy Position")
+                waiting_open.on(event=UpdateID.OpenedSellPosition, to=waiting_close, action=None, reason="Opened Sell Position")
+        if not self._use_trailing_stop_loss_:
+            waiting_so.on(event=UpdateID.ModifiedBuyPositionStopLoss, to=waiting_close, action=None, reason="Moved Buy Position to Break-Even")
+            waiting_so.on(event=UpdateID.ModifiedSellPositionStopLoss, to=waiting_close, action=None, reason="Moved Sell Position to Break-Even")
         if self._stagnation_stop_loss_:
             waiting_so.on(event=UpdateID.BarClosed, to=waiting_so, action=self.stagnation_stop_loss_action, reason=None)
 
@@ -207,7 +231,7 @@ class NNFXStrategyAPI(StrategyAPI):
 
     def calculate_position(self, update: BarUpdateAPI) -> tuple:
         self._last_position_atr_ = update.Technical.ATR.Result.last()
-        sl_pips = self._stop_loss_scale_ * self._last_position_atr_ / update.Portfolio.Security.Contract.PipSize
+        sl_pips = self._stop_loss_scale_ * self._last_position_atr_ / update.Portfolio.Security.Contract.PipSize if self._use_stop_loss_ else 0.0
         size = self._entry_risk_percentage_(update) * self._risk_scale_(update)
         contract = update.Portfolio.Security.Contract
         if self._sizing_mode_ == SizingMode.Volume:
@@ -223,12 +247,12 @@ class NNFXStrategyAPI(StrategyAPI):
     def open_buy_position(self, update: BarUpdateAPI, position_type: PositionType) -> list:
         self._last_position_trade_type_ = Direction.Buy
         volume, sl_pips = self.calculate_position(update)
-        return self.close_sell_position(update) + [OpenBuyPositionActionAPI(PositionType=position_type, Volume=volume, StopLoss=sl_pips, TakeProfit=None)]
+        return self.close_sell_position(update) + [OpenBuyPositionActionAPI(PositionType=position_type, Volume=volume, StopLoss=sl_pips if self._use_stop_loss_ else None, TakeProfit=None)]
 
     def open_sell_position(self, update: BarUpdateAPI, position_type: PositionType) -> list:
         self._last_position_trade_type_ = Direction.Sell
         volume, sl_pips = self.calculate_position(update)
-        return self.close_buy_position(update) + [OpenSellPositionActionAPI(PositionType=position_type, Volume=volume, StopLoss=sl_pips, TakeProfit=None)]
+        return self.close_buy_position(update) + [OpenSellPositionActionAPI(PositionType=position_type, Volume=volume, StopLoss=sl_pips if self._use_stop_loss_ else None, TakeProfit=None)]
 
     def close_buy_position(self, update: BarUpdateAPI) -> list:
         return [CloseBuyPositionActionAPI(PositionID=self._last_position_id_)] if update.Portfolio.BuyPositions else []
