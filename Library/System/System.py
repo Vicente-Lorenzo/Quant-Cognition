@@ -234,7 +234,7 @@ class SystemAPI(ServiceAPI, ABC):
 
     def _report_(self, portfolio: PortfolioAPI, account: Union[AccountAPI, None], start, stop) -> None:
         if portfolio is None: return
-        net = generate_net_report(portfolio.Positions, portfolio.Trades, account, start, stop)
+        net = generate_net_report(portfolio.Positions, portfolio.Trades, account, start, stop, portfolio.EquityCurve, portfolio.Excursions)
         self.statistics = net
         if not (self._reporting_ or self._exporting_): return
         tables = {
