@@ -40,8 +40,8 @@ if TYPE_CHECKING:
 class StrategyType(EnumerationAPI):
     Download = 1
     NNFX = 2
-    DDPG = 3
-    SAC = 4
+    Trend = 3
+    DDPG = 4
 
 class Transform(NamedTuple):
     Market: bool = True
