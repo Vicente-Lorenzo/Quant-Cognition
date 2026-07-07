@@ -3,6 +3,7 @@ from typing import Union
 
 import threading
 
+from Library.Database.Dataframe import DataframeAPI
 from Library.Utility.Service import ServiceAPI
 from Library.Spotware.Universe import UniverseAPI
 from Library.Spotware.Market import MarketAPI
@@ -10,7 +11,7 @@ from Library.Spotware.Streaming import StreamingAPI
 from Library.Spotware.Portfolio import PortfolioAPI
 from Library.Spotware.Execution import ExecutionAPI
 
-class SpotwareAPI(ServiceAPI):
+class SpotwareAPI(ServiceAPI, DataframeAPI):
     """
     Main Spotware Open API interface.
     Provides access to Universe, Market, Streaming, and Portfolio data.
