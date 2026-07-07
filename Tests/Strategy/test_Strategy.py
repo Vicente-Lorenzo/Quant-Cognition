@@ -14,20 +14,20 @@ def test_strategy_type_enum():
 
 def test_download_strategy_builds():
     p = ParameterAPI()
-    strat = DownloadStrategyAPI(p, p, p)
+    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
     assert strat.risk_management() is None
     assert strat.signal_management() is None
     assert strat.strategy_management() is not None
 
 def test_download_strategy_machine_initial_state():
     p = ParameterAPI()
-    strat = DownloadStrategyAPI(p, p, p)
+    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
     eng = strat.strategy_management()
     assert eng.At.Name == "Initialization"
 
 def test_account_update_sets_portfolio_account():
     p = ParameterAPI()
-    strat = DownloadStrategyAPI(p, p, p)
+    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
     eng = strat.strategy_management()
     account = AccountAPI(Balance=10000.0)
     portfolio = PortfolioAPI()
@@ -37,7 +37,7 @@ def test_account_update_sets_portfolio_account():
 
 def test_security_update_sets_portfolio_security_in_initialization():
     p = ParameterAPI()
-    strat = DownloadStrategyAPI(p, p, p)
+    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
     eng = strat.strategy_management()
     portfolio = PortfolioAPI()
     update = SecurityUpdateAPI(Account=None, Security=None, Market=None, Technical=None, Fundamental=None, Sentimental=None, Portfolio=portfolio)
@@ -46,7 +46,7 @@ def test_security_update_sets_portfolio_security_in_initialization():
 
 def test_execution_transitions_initialization_to_execution():
     p = ParameterAPI()
-    strat = DownloadStrategyAPI(p, p, p)
+    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
     strat.Transform = Transform()
     eng = strat.strategy_management()
     portfolio = PortfolioAPI()
@@ -62,7 +62,7 @@ def test_execution_transitions_initialization_to_execution():
 
 def test_shutdown_transitions_to_termination_from_initialization():
     p = ParameterAPI()
-    strat = DownloadStrategyAPI(p, p, p)
+    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
     eng = strat.strategy_management()
     portfolio = PortfolioAPI()
     from Library.Protocol.Update import CompleteUpdateAPI
@@ -73,7 +73,7 @@ def test_shutdown_transitions_to_termination_from_initialization():
 
 def test_bar_closed_propagates_to_indicators_and_portfolio():
     p = ParameterAPI()
-    strat = DownloadStrategyAPI(p, p, p)
+    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
     strat.Transform = Transform()
     eng = strat.strategy_management()
     portfolio_mock = type("P", (), {"Account": None, "Security": None, "update_data": lambda self, x: None})()
@@ -91,7 +91,7 @@ def test_bar_closed_propagates_to_indicators_and_portfolio():
 
 def test_download_strategy_skips_indicators_and_portfolio():
     p = ParameterAPI()
-    strat = DownloadStrategyAPI(p, p, p)
+    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
     eng = strat.strategy_management()
     from unittest.mock import MagicMock
     from Library.Protocol.Update import CompleteUpdateAPI
@@ -120,7 +120,7 @@ def test_opened_stop_order_propagates_to_portfolio():
     from unittest.mock import MagicMock
     from Library.Protocol.Update import OpenedBuyStopOrderUpdateAPI, CompleteUpdateAPI
     p = ParameterAPI()
-    strat = DownloadStrategyAPI(p, p, p)
+    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
     eng = strat.strategy_management()
     portfolio = MagicMock()
     portfolio.update_data = MagicMock()
@@ -143,7 +143,7 @@ def test_filled_stop_order_transitions_order_to_position():
     from unittest.mock import MagicMock
     from Library.Protocol.Update import FilledBuyStopOrderUpdateAPI, CompleteUpdateAPI
     p = ParameterAPI()
-    strat = DownloadStrategyAPI(p, p, p)
+    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
     eng = strat.strategy_management()
     portfolio = MagicMock()
     portfolio.update_data = MagicMock()
@@ -166,7 +166,7 @@ def test_expired_limit_order_removes_order():
     from unittest.mock import MagicMock
     from Library.Protocol.Update import ExpiredBuyLimitOrderUpdateAPI, CompleteUpdateAPI
     p = ParameterAPI()
-    strat = DownloadStrategyAPI(p, p, p)
+    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
     eng = strat.strategy_management()
     portfolio = MagicMock()
     portfolio.update_data = MagicMock()

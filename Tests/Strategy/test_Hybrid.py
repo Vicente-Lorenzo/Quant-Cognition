@@ -40,6 +40,9 @@ class _FakeDDPG_(DDPGStrategyAPI):
     def _create_agent_(self, observation_shape, action_shape):
         return _FakeAgent_(self.Fake)
 
+def _technical_():
+    return Parameter({"ATR": ["ATR", 14], "RVFast": ["RV", 16], "RVSlow": ["RV", 63], "MOMFast": ["ROC", 5], "MOMMedium": ["ROC", 21], "MOMSlow": ["ROC", 63]}, ".")
+
 def _indicator_(value):
     return SimpleNamespace(Result=SimpleNamespace(last=lambda: value))
 
@@ -75,9 +78,9 @@ def _strategy_(sizing_min=0.5, sizing_max=2.0, entry=(-0.4, 0.4), exit=(-0.1, 0.
     _FakeDDPG_.Reward = RewardType.LogReturn
     _FakeDDPG_.RewardScale = 1.0
     money = Parameter({"SizingMode": ["Risk"], "SizingMin": [sizing_min], "SizingMax": [sizing_max], "DrawdownThreshold": [0.0], "DrawdownFactor": [1.0]}, ".")
-    risk = Parameter({"StopLossScale": [1.5], "StagnationStopOut": [0], "ScalingOutScale": [1.0], "ScalingOutPercentage": [50.0], "TrailingStopLossScale": [1.5], "TrailingStopLossStep": [0.25]}, ".")
-    signal = Parameter({"NormalEntryThreshold": list(entry), "NormalExitThreshold": list(exit), "ContinuationEntryThreshold": list(entry), "ContinuationExitThreshold": list(exit), "ContinuationDelay": [delay], "MomentumHorizons": [24, 120, 480], "MovingAverageHorizons": [], "ObservationWindow": [1], "NormalizeWindow": [200]}, ".")
-    return _FakeDDPG_(money_management=money, risk_management=risk, signal_management=signal)
+    risk = Parameter({"StopLossScale": [1.5], "StagnationStopLoss": [0], "ScalingOutScale": [1.0], "ScalingOutPercentage": [50.0], "TrailingStopLossScale": [1.5], "TrailingStopLossStep": [0.25]}, ".")
+    signal = Parameter({"NormalEntryThreshold": list(entry), "NormalExitThreshold": list(exit), "ContinuationEntryThreshold": list(entry), "ContinuationExitThreshold": list(exit), "ContinuationDelay": [delay], "ObservationWindow": [1], "NormalizeWindow": [200]}, ".")
+    return _FakeDDPG_(money_management=money, risk_management=risk, signal_management=signal, technical_management=_technical_(), fundamental_management=Parameter({}, "."), sentimental_management=Parameter({}, "."), portfolio_management=Parameter({}, "."))
 
 def test_strategy_type_registers_four_strategies():
     assert StrategyType.Download.value == 1
@@ -225,11 +228,12 @@ def test_ddpg_builds_agent_and_regularization_is_parameter_driven():
     DDPGStrategyAPI.Agent = None
     DDPGStrategyAPI.Training = False
     money = Parameter({"SizingMode": ["Risk"], "SizingMin": [0.5], "SizingMax": [2.0], "DrawdownThreshold": [0.0], "DrawdownFactor": [1.0]}, ".")
-    risk = Parameter({"StopLossScale": [1.5], "StagnationStopOut": [0], "ScalingOutScale": [1.0], "ScalingOutPercentage": [50.0], "TrailingStopLossScale": [1.5], "TrailingStopLossStep": [0.25]}, ".")
+    risk = Parameter({"StopLossScale": [1.5], "StagnationStopLoss": [0], "ScalingOutScale": [1.0], "ScalingOutPercentage": [50.0], "TrailingStopLossScale": [1.5], "TrailingStopLossStep": [0.25]}, ".")
     agent = {"ActorLearningRate": [0.0001], "CriticLearningRate": [0.001], "SoftUpdate": [0.001], "HiddenShape1": [400], "HiddenShape2": [300], "MemorySize": [1000000], "BatchSize": [64], "DiscountFactor": [0.99], "GradientClip": [1.0]}
-    common = {"NormalEntryThreshold": [-0.4, 0.4], "NormalExitThreshold": [-0.1, 0.1], "ContinuationEntryThreshold": [-2.0, 2.0], "ContinuationExitThreshold": [-0.1, 0.1], "ContinuationDelay": [0], "MomentumHorizons": [24, 120, 480], "MovingAverageHorizons": [], "ObservationWindow": [1], "NormalizeWindow": [200]}
-    ddpg = DDPGStrategyAPI(money_management=money, risk_management=risk, signal_management=Parameter({**common, **agent, "ActorRegularization": [0.0]}, "."))
-    rddpg = DDPGStrategyAPI(money_management=money, risk_management=risk, signal_management=Parameter({**common, **agent, "ActorRegularization": [0.01]}, "."))
+    common = {"NormalEntryThreshold": [-0.4, 0.4], "NormalExitThreshold": [-0.1, 0.1], "ContinuationEntryThreshold": [-2.0, 2.0], "ContinuationExitThreshold": [-0.1, 0.1], "ContinuationDelay": [0], "ObservationWindow": [1], "NormalizeWindow": [200]}
+    technical = _technical_()
+    ddpg = DDPGStrategyAPI(money_management=money, risk_management=risk, signal_management=Parameter({**common, **agent, "ActorRegularization": [0.0]}, "."), technical_management=technical, fundamental_management=Parameter({}, "."), sentimental_management=Parameter({}, "."), portfolio_management=Parameter({}, "."))
+    rddpg = DDPGStrategyAPI(money_management=money, risk_management=risk, signal_management=Parameter({**common, **agent, "ActorRegularization": [0.01]}, "."), technical_management=technical, fundamental_management=Parameter({}, "."), sentimental_management=Parameter({}, "."), portfolio_management=Parameter({}, "."))
     assert isinstance(ddpg._agent_, DDPGAgentAPI)
     assert ddpg._agent_.actor_regularization == 0.0 and rddpg._agent_.actor_regularization == 0.01
     assert ddpg._observation_.shape() == 29

@@ -25,9 +25,9 @@ def _update_(buys=None, sells=None, drawdown=0.0, atr=0.01, close=1.0):
 
 def _strategy_(time_stop=0, threshold=0.0, factor=1.0, mode="Risk", maximum=2.0):
     money = Parameter({"SizingMode": [mode], "SizingMax": [maximum], "DrawdownThreshold": [threshold], "DrawdownFactor": [factor]}, ".")
-    risk = Parameter({"StopLossScale": [1.5], "ScalingOutScale": [1.0], "ScalingOutPercentage": [50.0], "TrailingStopLossScale": [1.5], "TrailingStopLossStep": [0.25], "StagnationStopOut": [time_stop]}, ".")
+    risk = Parameter({"StopLossScale": [1.5], "ScalingOutScale": [1.0], "ScalingOutPercentage": [50.0], "TrailingStopLossScale": [1.5], "TrailingStopLossStep": [0.25], "StagnationStopLoss": [time_stop]}, ".")
     empty = Parameter({}, ".")
-    return NNFXStrategyAPI(money_management=money, risk_management=risk, signal_management=empty)
+    return NNFXStrategyAPI(money_management=money, risk_management=risk, signal_management=empty, technical_management=empty, fundamental_management=empty, sentimental_management=empty, portfolio_management=empty)
 
 def test_risk_scale_off_by_default():
     strategy = _strategy_()
@@ -71,9 +71,9 @@ def test_time_stop_closes_after_configured_bars():
     strategy._last_position_atr_ = 0.01
     strategy.define_so_buy_action(SimpleNamespace(Position=SimpleNamespace(UID=7, EntryPrice=SimpleNamespace(Price=1.10))))
     update = _update_(buys=[_position_(5000.0, True, uid=7)])
-    assert strategy.stagnation_stop_out_action(update) == []
-    assert strategy.stagnation_stop_out_action(update) == []
-    actions = strategy.stagnation_stop_out_action(update)
+    assert strategy.stagnation_stop_loss_action(update) == []
+    assert strategy.stagnation_stop_loss_action(update) == []
+    actions = strategy.stagnation_stop_loss_action(update)
     assert len(actions) == 1 and isinstance(actions[0], CloseBuyPositionActionAPI) and actions[0].PositionID == 7
 
 def test_time_stop_counter_resets_on_new_position():
@@ -91,8 +91,8 @@ def test_machine_gains_bar_transition_only_when_enabled():
 
 def test_pure_tsl_when_scaling_out_disabled():
     money = Parameter({"SizingMode": ["Risk"], "SizingMax": [2.0], "DrawdownThreshold": [0.0], "DrawdownFactor": [1.0]}, ".")
-    risk = Parameter({"StopLossScale": [1.5], "ScalingOutScale": [1.0], "ScalingOutPercentage": [0.0], "TrailingStopLossScale": [1.5], "TrailingStopLossStep": [0.25], "StagnationStopOut": [0]}, ".")
-    strategy = NNFXStrategyAPI(money_management=money, risk_management=risk, signal_management=Parameter({}, "."))
+    risk = Parameter({"StopLossScale": [1.5], "ScalingOutScale": [1.0], "ScalingOutPercentage": [0.0], "TrailingStopLossScale": [1.5], "TrailingStopLossStep": [0.25], "StagnationStopLoss": [0]}, ".")
+    strategy = NNFXStrategyAPI(money_management=money, risk_management=risk, signal_management=Parameter({}, "."), technical_management=Parameter({}, "."), fundamental_management=Parameter({}, "."), sentimental_management=Parameter({}, "."), portfolio_management=Parameter({}, "."))
     engine = strategy.risk_management()
     transition = engine.state(name="No Position")._transitions_[UpdateID.OpenedBuyPosition.value]
     assert transition.To.Name == "Waiting TSL"
