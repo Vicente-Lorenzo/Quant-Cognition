@@ -133,12 +133,14 @@ class DataclassAPI:
                     properties.append((attr_name, getattr(attr.fget, "_overridefield_", False)))
         return tuple(fields), tuple(properties)
 
-    def data(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, flatten=False):
+    def data(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, include_missing_fields=False, flatten=False):
         result = []
         def _emit_(name):
             val = self._parse_(name, flatten=flatten)
+            if not include_missing_fields and val is MISSING:
+                return
             if flatten and isinstance(val, DataclassAPI):
-                result.extend((f"{name}.{sub_k}", sub_v) for sub_k, sub_v in val.data(include_fields, include_initvar_fields, include_hidden_fields, include_override_fields, include_properties, flatten))
+                result.extend((f"{name}.{sub_k}", sub_v) for sub_k, sub_v in val.data(include_fields, include_initvar_fields, include_hidden_fields, include_override_fields, include_properties, include_missing_fields, flatten))
             else:
                 result.append((name, val))
         fields, properties = self._plan_(type(self))
@@ -156,33 +158,36 @@ class DataclassAPI:
                     _emit_(attr_name)
         return result
 
-    def tuple(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, flatten=False):
+    def tuple(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, include_missing_fields=False, flatten=False):
         return tuple(v for _, v in self.data(
             include_fields=include_fields,
             include_initvar_fields=include_initvar_fields,
             include_hidden_fields=include_hidden_fields,
             include_override_fields=include_override_fields,
             include_properties=include_properties,
+            include_missing_fields=include_missing_fields,
             flatten=flatten
         ))
 
-    def list(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, flatten=False):
+    def list(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, include_missing_fields=False, flatten=False):
         return [v for _, v in self.data(
             include_fields=include_fields,
             include_initvar_fields=include_initvar_fields,
             include_hidden_fields=include_hidden_fields,
             include_override_fields=include_override_fields,
             include_properties=include_properties,
+            include_missing_fields=include_missing_fields,
             flatten=flatten
         )]
 
-    def dict(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, flatten=False):
+    def dict(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, include_missing_fields=False, flatten=False):
         return dict(self.data(
             include_fields=include_fields,
             include_initvar_fields=include_initvar_fields,
             include_hidden_fields=include_hidden_fields,
             include_override_fields=include_override_fields,
             include_properties=include_properties,
+            include_missing_fields=include_missing_fields,
             flatten=flatten
         ))
 
