@@ -289,7 +289,7 @@ def test_preload_cache_reuses_across_instances(monkeypatch):
     BacktestingAPI._PRELOAD_CACHE_.clear()
     monkeypatch.setattr(BacktestingAPI, "_DISK_CACHE_", False)
     bars = [object()]
-    monkeypatch.setattr(BacktestingAPI, "_load_bars_", lambda self: (None, bars))
+    monkeypatch.setattr(BacktestingAPI, "_load_bars_", lambda self: (None, bars, None))
     calls = []
     monkeypatch.setattr(BacktestingAPI, "_load_frames_", lambda self, b: (calls.append(1), (_FakeArr_(), _FakeArr_(), _FakeArr_(), None, [], {}))[1])
     first, second = _preload_stub_(), _preload_stub_()

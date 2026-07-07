@@ -48,6 +48,9 @@ class _Harness_(LearningAPI):
         mkdir(self.WEIGHTS)
         return self.WEIGHTS
 
+    def _export_(self) -> None:
+        self._exported_ = True
+
     def _promote_(self, source: Path) -> None:
         self._promoted_ = source
 
@@ -56,7 +59,7 @@ class _Harness_(LearningAPI):
         self._passes_.append((start, stop, training))
         self._epochs_seen_ = self._strategy_.Epochs
         agent = self._strategy_.Agent if self._strategy_.Agent is not None else _FakeAgent_()
-        self.strategy = SimpleNamespace(_agent_=agent, _observation_=SimpleNamespace(shape=lambda: 23), _sizing_mode_=SimpleNamespace(name="Percentage"), _sizing_max_=100.0, _sizing_deadzone_=0.1)
+        self.strategy = SimpleNamespace(_agent_=agent, _observation_=SimpleNamespace(shape=lambda: 23), _sizing_mode_=SimpleNamespace(name="Percentage"), _sizing_min_=0.0, _sizing_max_=100.0, _entry_threshold_=(-0.4, 0.4), _exit_threshold_=(-0.1, 0.1))
         self.portfolio = SimpleNamespace(Equity=10000.0, InitialBalance=10000.0)
         return self._script_.pop(0) if self._script_ else 0.0
 
@@ -89,6 +92,30 @@ def _make_(**kwargs) -> _Harness_:
         export=False,
         **defaults
     )
+
+def test_export_copies_promoted_weights_without_seed_and_fold_dirs(tmp_path):
+    _reset_(tmp_path)
+    harness = _make_(episodes=1, validation=0, testing=0, seeds=1)
+    harness._parameters_ = Parameter({}, tmp_path / "Learning.yml")
+    mkdir(tmp_path / "DDPG")
+    (tmp_path / "DDPG" / "actor").write_text("w")
+    mkdir(tmp_path / "Seed 42")
+    mkdir(tmp_path / "Fold 1")
+    LearningAPI._export_(harness)
+    exports = list(tmp_path.glob("Learning _FakeStrategy_ *"))
+    assert len(exports) == 1
+    assert (exports[0] / "DDPG" / "actor").read_text() == "w"
+    assert not (exports[0] / "Seed 42").exists() and not (exports[0] / "Fold 1").exists()
+
+def test_fold_archive_copies_model_weights(tmp_path):
+    seed_dir = tmp_path / "Seed 42"
+    mkdir(seed_dir / "DDPG")
+    (seed_dir / "DDPG" / "actor").write_text("w")
+    LearningAPI._archive_(seed_dir, 3)
+    assert (seed_dir / "Fold 3" / "DDPG" / "actor").read_text() == "w"
+    LearningAPI._archive_(seed_dir, 4)
+    assert (seed_dir / "Fold 4" / "DDPG" / "actor").read_text() == "w"
+    assert not (seed_dir / "Fold 4" / "Fold 3").exists()
 
 def test_walk_forward_single_window():
     folds, test = SplitAPI.walk_forward_folds(datetime(2020, 1, 1), datetime(2024, 1, 1), 0, 0, 0, False)
@@ -124,16 +151,18 @@ def test_single_window_checkpoints_on_train(tmp_path):
     harness = _make_(episodes=3, validation=0, testing=0, seeds=1)
     harness._script_ = [0.01, 0.05, 0.02]
     harness.run()
-    assert len(harness._passes_) == 3
+    assert len(harness._passes_) == 4
     assert _FakeAgent_.saves == 2 and _FakeAgent_.loads == 0
     assert not hasattr(harness, "_promoted_")
+    manifest = read_json(tmp_path / "_FakeStrategy_ Manifest.json")
+    assert manifest["FullRange"] is not None and "NetReturn" in manifest["FullRange"]
 
 def test_validation_checkpoint_and_early_stop(tmp_path):
     _reset_(tmp_path)
     harness = _make_(episodes=5, training=0, validation=6, testing=0, patience=2)
     harness._script_ = [0.0, 0.01, 0.0, 0.05, 0.0, 0.03, 0.0, 0.02]
     harness.run()
-    assert len(harness._passes_) == 8
+    assert len(harness._passes_) == 9
     assert _FakeAgent_.saves == 2
 
 def test_test_pass_loads_best_then_evaluates(tmp_path):
@@ -151,7 +180,7 @@ def test_multi_seed_promotes_best(tmp_path):
     harness = _make_(episodes=1, validation=0, testing=0, seed=42, seeds=2)
     harness._script_ = [0.02, 0.08]
     harness.run()
-    assert _FakeAgent_.instances == 2
+    assert _FakeAgent_.instances == 3
     assert harness._promoted_ == tmp_path / "Seed 43"
 
 def test_epochs_plumbed_as_noop(tmp_path):
@@ -171,6 +200,41 @@ def test_manifest_records_configuration(tmp_path):
     assert manifest["TrainFrequency"] == 2 and manifest["GradientSteps"] == 3
     assert manifest["Validation"] == 0 and manifest["Testing"] == 0 and manifest["Seeds"] == 1
     assert manifest["Fitness"] == "Calmar Ratio" and manifest["Best"] == 0.05 and len(manifest["Results"]) == 1
+    assert manifest["SizingMin"] == 0.0 and manifest["SizingMax"] == 100.0
+    assert manifest["NormalEntryThreshold"] == [-0.4, 0.4] and manifest["NormalExitThreshold"] == [-0.1, 0.1]
+
+def test_scratch_builds_fresh_agent_per_fold(tmp_path):
+    _reset_(tmp_path)
+    harness = _make_(episodes=1, training=12, validation=6, testing=0, rolling=True, seeds=1)
+    folds, _ = SplitAPI.walk_forward_folds(harness._range_start_, harness._range_stop_, 12, 6, 0, True)
+    harness._script_ = [0.01, 0.02] * len(folds)
+    harness.run()
+    assert _FakeAgent_.instances == len(folds) + 1 and _FakeAgent_.loads == 0
+
+def test_continuous_rolls_single_agent_across_folds(tmp_path):
+    _reset_(tmp_path)
+    harness = _make_(episodes=1, training=12, validation=6, testing=0, rolling=True, continuous=True, seeds=1)
+    folds, _ = SplitAPI.walk_forward_folds(harness._range_start_, harness._range_stop_, 12, 6, 0, True)
+    harness._script_ = [0.01, 0.02] * len(folds)
+    harness.run()
+    assert _FakeAgent_.instances == 2
+    assert _FakeAgent_.loads == len(folds) - 1
+    assert _FakeAgent_.saves == len(folds)
+
+def test_continuous_recorded_in_manifest_and_payload(tmp_path):
+    _reset_(tmp_path)
+    harness = _make_(episodes=1, validation=0, testing=0, continuous=True, seeds=1)
+    harness._script_ = [0.01]
+    harness.run()
+    manifest = read_json(tmp_path / "_FakeStrategy_ Manifest.json")
+    assert manifest["Continuous"] is True
+    payload = harness._payload_(42, tmp_path, [], None)
+    assert payload["continuous"] is True
+    _reset_(tmp_path)
+    harness = _make_(episodes=1, validation=0, testing=0, seeds=1)
+    harness._script_ = [0.01]
+    harness.run()
+    assert read_json(tmp_path / "_FakeStrategy_ Manifest.json")["Continuous"] is False
 
 def test_restores_training_flag(tmp_path):
     _reset_(tmp_path)

@@ -8,7 +8,7 @@ from Setup.Universe import populate_universe
 from Setup.Market import populate_market
 from Setup.Portfolio import populate_portfolio
 from Setup.Enum import write_all
-from Library.Database.Postgres.Postgres import PostgresAPI
+from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Logging import HandlerLoggingAPI
 
 def main():
@@ -33,7 +33,7 @@ def main():
                     logger.info("Population cancelled by user.")
                     return
             logger.info(f"Connecting to database: {env}")
-            db = PostgresAPI(database=env)
+            db = PostgresDatabaseAPI(database=env)
             db.connect()
             try:
                 logger.info("Populating universe...")

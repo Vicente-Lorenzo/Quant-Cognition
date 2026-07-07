@@ -1,7 +1,7 @@
 ﻿import pytest
 from datetime import datetime
 from Library.Database.Dataframe import pl
-from Library.Database.Postgres import PostgresAPI
+from Library.Database.Postgres import PostgresDatabaseAPI
 from Library.Database import QueryAPI, PrimaryKey, ForeignKey
 _DATABASES_ = (
     "test_database",
@@ -16,7 +16,7 @@ _DATABASES_ = (
 @pytest.fixture
 def db():
     def _drop_(names):
-        admin = PostgresAPI(admin=True)
+        admin = PostgresDatabaseAPI(admin=True)
         try:
             admin.connect()
             for name in names:
@@ -24,7 +24,7 @@ def db():
                 except Exception: pass
         finally: admin.disconnect()
     def _snapshot_():
-        admin = PostgresAPI(admin=True)
+        admin = PostgresDatabaseAPI(admin=True)
         try:
             admin.connect()
             df = admin.list()
@@ -32,7 +32,7 @@ def db():
         finally: admin.disconnect()
     _drop_(_DATABASES_)
     baseline = _snapshot_()
-    yield PostgresAPI
+    yield PostgresDatabaseAPI
     _drop_(_snapshot_() - baseline)
 def test_exists_only(db):
     api = db(admin=True)

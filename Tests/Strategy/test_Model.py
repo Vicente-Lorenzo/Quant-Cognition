@@ -11,7 +11,7 @@ from Library.Protocol.Action import (
     OpenBuyPositionActionAPI,
     OpenSellPositionActionAPI
 )
-from Library.Strategy.Model import ModelStrategyAPI, DDPGStrategyAPI, SACStrategyAPI
+from Library.Strategy.Model import ModelStrategyAPI, DDPGStrategyAPI, RDDPGStrategyAPI, SACStrategyAPI, TD3StrategyAPI
 from Library.Strategy.Model.Reward import RewardType
 from Library.Strategy.Strategy import StrategyType
 
@@ -48,7 +48,7 @@ def _position_(volume, long, uid=1):
     return SimpleNamespace(Volume=volume, IsLong=long, IsShort=not long, UID=uid, EntryBalance=10000.0, NetPnL=SimpleNamespace(PnL=0.0), MaxEquityDrawdownPnL=SimpleNamespace(PnL=0.0), MaxEquityRunupPnL=SimpleNamespace(PnL=0.0))
 
 def _update_(buys=None, sells=None, equity=10000.0, drawdown=0.0, close=1.11):
-    technical = SimpleNamespace(ATR=_indicator_(0.01), RV=_indicator_(0.008))
+    technical = SimpleNamespace(ATR=_indicator_(0.01), RVFast=_indicator_(0.008))
     bar = SimpleNamespace(
         Timestamp=SimpleNamespace(DateTime=datetime(2020, 6, 15, 13, 30, 0)),
         OpenTick=SimpleNamespace(Bid=SimpleNamespace(Price=1.10)),
@@ -69,15 +69,16 @@ def _update_(buys=None, sells=None, equity=10000.0, drawdown=0.0, close=1.11):
     )
     return SimpleNamespace(Bar=bar, Technical=technical, Portfolio=portfolio)
 
-def _strategy_(action=0.5, mode="Fixed", maximum=10000.0, deadzone=0.0, training=False):
+def _strategy_(action=0.5, mode="Fixed", maximum=10000.0, minimum=0.0, entry=(0.0, 0.0), exit=(0.0, 0.0), training=False):
     _FakeModelStrategy_.Fake = _FakeAgent_(action)
     _FakeModelStrategy_.Agent = None
     _FakeModelStrategy_.Training = training
     _FakeModelStrategy_.Reward = RewardType.LogReturn
     _FakeModelStrategy_.RewardScale = 1.0
-    money = Parameter({"SizingMode": [mode], "SizingMax": [maximum], "SizingDeadzone": [deadzone]}, ".")
+    money = Parameter({"SizingMode": [mode], "SizingMin": [minimum], "SizingMax": [maximum]}, ".")
+    signal = Parameter({"NormalEntryThreshold": list(entry), "NormalExitThreshold": list(exit)}, ".")
     empty = Parameter({}, ".")
-    return _FakeModelStrategy_(money_management=money, risk_management=empty, signal_management=empty)
+    return _FakeModelStrategy_(money_management=money, risk_management=empty, signal_management=signal)
 
 def test_control_opens_from_flat():
     strategy = _strategy_()
@@ -108,9 +109,38 @@ def test_control_closes_on_zero_target():
     actions = strategy._control_(_update_(buys=[_position_(5000.0, True, uid=9)]), 0.05)
     assert len(actions) == 1 and isinstance(actions[0], CloseBuyPositionActionAPI) and actions[0].PositionID == 9
 
-def test_control_deadzone_is_flat():
-    strategy = _strategy_(deadzone=0.2)
+def test_control_exit_interval_is_flat():
+    strategy = _strategy_(exit=(-0.2, 0.2))
     assert strategy._control_(_update_(), 0.1) is None
+
+def test_control_entry_interval_gates_entry_and_reversal():
+    strategy = _strategy_(entry=(-0.4, 0.4), exit=(-0.1, 0.1))
+    assert strategy._control_(_update_(), 0.25) is None
+    opened = strategy._control_(_update_(), 0.5)
+    assert len(opened) == 1 and isinstance(opened[0], OpenBuyPositionActionAPI)
+    weak = strategy._control_(_update_(buys=[_position_(5000.0, True, uid=4)]), -0.25)
+    assert len(weak) == 1 and isinstance(weak[0], CloseBuyPositionActionAPI) and weak[0].PositionID == 4
+    strong = strategy._control_(_update_(buys=[_position_(5000.0, True)]), -0.6)
+    assert len(strong) == 2 and isinstance(strong[1], OpenSellPositionActionAPI)
+
+def test_control_hold_band_suppresses_small_rescales():
+    strategy = _strategy_(entry=(-0.4, 0.4), exit=(-0.1, 0.1))
+    assert strategy._control_(_update_(buys=[_position_(5000.0, True)]), 0.45) is None
+    actions = strategy._control_(_update_(buys=[_position_(9000.0, True)]), 0.3)
+    assert len(actions) == 1 and isinstance(actions[0], ModifyBuyPositionVolumeActionAPI) and actions[0].Volume == 3000.0
+    closed = strategy._control_(_update_(buys=[_position_(5000.0, True)]), 0.05)
+    assert len(closed) == 1 and isinstance(closed[0], CloseBuyPositionActionAPI)
+
+def test_control_asymmetric_entry_disables_one_side():
+    strategy = _strategy_(entry=(-2.0, 0.4), exit=(-0.1, 0.1))
+    assert strategy._control_(_update_(), -0.9) is None
+    opened = strategy._control_(_update_(), 0.5)
+    assert len(opened) == 1 and isinstance(opened[0], OpenBuyPositionActionAPI)
+
+def test_control_sizing_min_floors_volume():
+    strategy = _strategy_(minimum=4000.0, entry=(-0.4, 0.4), exit=(-0.1, 0.1))
+    opened = strategy._control_(_update_(), 0.41)
+    assert len(opened) == 1 and opened[0].Volume == 4000.0
 
 def test_step_records_transition_reward_and_learns():
     strategy = _strategy_(action=0.5, training=True)
@@ -147,17 +177,35 @@ def test_value_helper_reads_or_defaults():
     assert ModelStrategyAPI._value_(Parameter({}, "."), "X", 9) == 9
     assert ModelStrategyAPI._value_(None, "X", 9) == 9
 
-def test_strategy_type_registers_sac():
+def test_strategy_type_registers_model_strategies():
     assert StrategyType.SAC.value == 4
+    assert StrategyType.RDDPG.value == 5
+    assert StrategyType.TD3.value == 6
 
 def test_concrete_strategies_build_agents_with_observation_shape():
-    from Library.Model import DDPGAgentAPI, SACAgentAPI
+    from Library.Model import DDPGAgentAPI, SACAgentAPI, TD3AgentAPI
     money = Parameter({"SizingMode": ["Fixed"], "SizingMax": [1000.0], "SizingDeadzone": [0.0]}, ".")
     empty = Parameter({}, ".")
     ddpg = DDPGStrategyAPI(money_management=money, risk_management=empty, signal_management=empty)
     sac = SACStrategyAPI(money_management=money, risk_management=empty, signal_management=empty)
-    assert isinstance(ddpg._agent_, DDPGAgentAPI) and isinstance(sac._agent_, SACAgentAPI)
-    assert ddpg._observation_.shape() == 23
+    td3 = TD3StrategyAPI(money_management=money, risk_management=empty, signal_management=empty)
+    assert isinstance(ddpg._agent_, DDPGAgentAPI) and isinstance(sac._agent_, SACAgentAPI) and isinstance(td3._agent_, TD3AgentAPI)
+    assert ddpg._observation_.shape() == 29
+
+def test_rddpg_defaults_regularized_and_vanilla_stays_pure():
+    money = Parameter({"SizingMode": ["Fixed"], "SizingMax": [1000.0], "SizingDeadzone": [0.0]}, ".")
+    empty = Parameter({}, ".")
+    ddpg = DDPGStrategyAPI(money_management=money, risk_management=empty, signal_management=empty)
+    extended = RDDPGStrategyAPI(money_management=money, risk_management=empty, signal_management=empty)
+    assert ddpg._agent_.actor_regularization == 0.0
+    assert extended._agent_.actor_regularization == 0.001
+
+def test_td3_recipe_overrides_agent_hyperparameters():
+    money = Parameter({"SizingMode": ["Fixed"], "SizingMax": [1000.0], "SizingDeadzone": [0.0]}, ".")
+    empty = Parameter({}, ".")
+    recipe = Parameter({"BatchSize": [50], "PolicyDelay": [3], "PolicyNoise": [0.3]}, ".")
+    td3 = TD3StrategyAPI(money_management=money, risk_management=empty, signal_management=recipe)
+    assert td3._agent_.batch_size == 50 and td3._agent_.policy_delay == 3 and td3._agent_.policy_noise == 0.3
 
 def test_recipe_overrides_agent_hyperparameters():
     money = Parameter({"SizingMode": ["Fixed"], "SizingMax": [1000.0], "SizingDeadzone": [0.0]}, ".")

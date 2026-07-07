@@ -6,20 +6,20 @@ def override_databases(cls, db_name):
         override_databases(sub, db_name)
 override_databases(DatapointAPI, "Tests")
 from Library.Database.Query import QueryAPI
-from Library.Database.Postgres.Postgres import PostgresAPI
+from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Universe.Universe import UniverseAPI
 from Library.Market.Market import MarketAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 @pytest.fixture(scope="session")
 def db():
-    admin = PostgresAPI(admin=True)
+    admin = PostgresDatabaseAPI(admin=True)
     try:
         admin.connect()
         if not admin.exists(database=DatapointAPI.Database):
             admin.create(database=DatapointAPI.Database)
     finally:
         admin.disconnect()
-    conn = PostgresAPI(database=DatapointAPI.Database)
+    conn = PostgresDatabaseAPI(database=DatapointAPI.Database)
     try:
         conn.connect()
         conn.executeone(QueryAPI(f'DROP SCHEMA IF EXISTS "{UniverseAPI.Schema}" CASCADE'))

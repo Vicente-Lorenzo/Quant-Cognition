@@ -25,7 +25,17 @@ def test_target_below_minimum_is_flat():
     action = ActionAPI(mode=SizingMode.Fixed, maximum=10000.0)
     assert action.target(0.05, _update_()) == 0.0
 
-def test_deadzone_suppresses_small_actions():
-    action = ActionAPI(mode=SizingMode.Fixed, maximum=10000.0, deadzone=0.2)
+def test_exit_interval_suppresses_small_actions():
+    action = ActionAPI(mode=SizingMode.Fixed, maximum=10000.0, exit=(-0.2, 0.2))
     assert action.target(0.1, _update_()) == 0.0
     assert action.target(0.5, _update_()) == 5000.0
+
+def test_asymmetric_exit_interval():
+    action = ActionAPI(mode=SizingMode.Fixed, maximum=10000.0, exit=(-0.3, 0.1))
+    assert action.target(-0.2, _update_()) == 0.0
+    assert action.target(0.2, _update_()) == 2000.0
+
+def test_minimum_floors_target():
+    action = ActionAPI(mode=SizingMode.Fixed, minimum=4000.0, maximum=10000.0)
+    assert action.target(0.2, _update_()) == 4000.0
+    assert action.target(0.8, _update_()) == 8000.0

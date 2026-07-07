@@ -64,7 +64,7 @@ If structural changes (new folders or modules) are detected that are not reflect
 ## PROJECT STRUCTURE MAP
 
 ### Python (`Library/`)
-- **`Library/App`**: Core Dash wrappers (`AppAPI`, `PageAPI`, `LayoutAPI`, `ComponentAPI`, `FormAPI`, `CallbackAPI`, `ChartAPI`, `NotificationAPI`, `InjectionAPI`).
+- **`Library/App`**: Versioned Dash framework. `V1/` is the frozen legacy version (`AppAPI`, `PageAPI`, `LayoutAPI`, `ComponentAPI`, `FormAPI`, `CallbackAPI`, `ChartAPI`, `NotificationAPI`, `InjectionAPI`) — critical bugfixes only; `V2/` is the next-generation version under active development. The package root re-exports `V1` (plus thin per-module shims) so existing apps keep working unchanged; versions are fully self-contained with zero shared code.
 - **`Library/Bloomberg`**: Bloomberg API integration (`HistoricalAPI`, `IntradayAPI`, `ReferenceAPI`, `StreamingAPI`, `QueryAPI`).
 - **`Library/Database`**: Database abstraction layer (`DatabaseAPI`, `DataclassAPI`, `DatapointAPI`, `QueryAPI`, `EnumerationAPI`, dataframe utilities). Supports Oracle, Postgres, and SQL Server via subpackages.
 - **`Library/Engine`**: Generic multi-state-machine engine (`EngineAPI`, `MachineAPI`, `StateAPI`, `TransitionAPI`). Zero trading domain knowledge.
