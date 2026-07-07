@@ -42,8 +42,12 @@ class NNFXStrategyAPI(StrategyAPI):
     def __init__(self,
                  money_management: Parameter,
                  risk_management: Parameter,
-                 signal_management: Parameter) -> None:
-        super().__init__(money_management, risk_management, signal_management)
+                 signal_management: Parameter,
+                 technical_management: Parameter,
+                 fundamental_management: Parameter,
+                 sentimental_management: Parameter,
+                 portfolio_management: Parameter) -> None:
+        super().__init__(money_management, risk_management, signal_management, technical_management, fundamental_management, sentimental_management, portfolio_management)
         self._stop_loss_scale_, = self.RiskManagement.StopLossScale
         self._scaling_out_scale_, = self.RiskManagement.ScalingOutScale
         self._scaling_out_percentage_, = self.RiskManagement.ScalingOutPercentage

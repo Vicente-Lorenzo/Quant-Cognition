@@ -56,10 +56,18 @@ class StrategyAPI(ABC):
     def __init__(self,
                  money_management: Parameter,
                  risk_management: Parameter,
-                 signal_management: Parameter) -> None:
+                 signal_management: Parameter,
+                 technical_management: Parameter,
+                 fundamental_management: Parameter,
+                 sentimental_management: Parameter,
+                 portfolio_management: Parameter) -> None:
         self.MoneyManagement: Parameter = money_management
         self.RiskManagement: Parameter = risk_management
         self.SignalManagement: Parameter = signal_management
+        self.TechnicalManagement: Parameter = technical_management
+        self.FundamentalManagement: Parameter = fundamental_management
+        self.SentimentalManagement: Parameter = sentimental_management
+        self.PortfolioManagement: Parameter = portfolio_management
         self._log_: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="Strategy Management")
 
     @staticmethod
