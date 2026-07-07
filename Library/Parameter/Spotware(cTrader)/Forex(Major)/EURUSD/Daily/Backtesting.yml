@@ -6,13 +6,16 @@ Download:
   FundamentalManagement: null
   SentimentalManagement: null
   PortfolioManagement: null
-NNFX:
+Trend:
   MoneyManagement:
     SizingMode: [Risk]
     SizingMin: [1.0]
     SizingMax: [1.0]
+    DrawdownThreshold: [0.0]
+    DrawdownFactor: [1.0]
   RiskManagement:
     StopLossScale: [1.5]
+    StagnationStopLoss: [0]
     ScalingOutScale: [1.0]
     ScalingOutPercentage: [50.0]
     TrailingStopLossScale: [1.5]
@@ -27,7 +30,7 @@ NNFX:
     Filter1: [TT]
     Filter2: [TT]
     Volume: [TT]
-    Volatility: [ATR, 14]
+    ATR: [ATR, 14]
   FundamentalManagement: null
   SentimentalManagement: null
   PortfolioManagement: null
@@ -40,7 +43,7 @@ DDPG:
     DrawdownFactor: [0.5]
   RiskManagement:
     StopLossScale: [1.5]
-    StagnationStopOut: [0]
+    StagnationStopLoss: [0]
     ScalingOutScale: [1.0]
     ScalingOutPercentage: [50.0]
     TrailingStopLossScale: [1.5]
@@ -62,14 +65,15 @@ DDPG:
     DiscountFactor: [0.99]
     GradientClip: [1.0]
     ActorRegularization: [0.01]
-    MomentumHorizons: [5, 21, 63]
+    ObservationWindow: [1]
+    NormalizeWindow: [200]
   TechnicalManagement:
     ATR: [ATR, 14]
     RVFast: [RV, 16]
     RVSlow: [RV, 63]
-    MOM5: [ROC, 5]
-    MOM21: [ROC, 21]
-    MOM63: [ROC, 63]
+    MOMFast: [ROC, 5]
+    MOMMedium: [ROC, 21]
+    MOMSlow: [ROC, 63]
   FundamentalManagement: null
   SentimentalManagement: null
   PortfolioManagement: null

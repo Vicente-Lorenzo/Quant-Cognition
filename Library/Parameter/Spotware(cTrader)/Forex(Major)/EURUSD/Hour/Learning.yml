@@ -7,7 +7,7 @@ DDPG:
     DrawdownFactor: [0.5]
   RiskManagement:
     StopLossScale: [1.5]
-    StagnationStopOut: [0]
+    StagnationStopLoss: [0]
     ScalingOutScale: [1.0]
     ScalingOutPercentage: [50.0]
     TrailingStopLossScale: [1.5]
@@ -28,18 +28,18 @@ DDPG:
     DiscountFactor: [0.998]
     GradientClip: [1.0]
     ActorRegularization: [0.001]
-    MomentumHorizons: [24, 120, 480]
-    MovingAverageHorizons: [24, 120, 480]
+    ObservationWindow: [1]
+    NormalizeWindow: [200]
   TechnicalManagement:
     ATR: [ATR, 14]
     RVFast: [RV, 16]
     RVSlow: [RV, 480]
-    MOM24: [ROC, 24]
-    MOM120: [ROC, 120]
-    MOM480: [ROC, 480]
-    MA24: [SMA, 24]
-    MA120: [SMA, 120]
-    MA480: [SMA, 480]
+    MOMFast: [ROC, 24]
+    MOMMedium: [ROC, 120]
+    MOMSlow: [ROC, 480]
+    MAFast: [SMA, 24]
+    MAMedium: [SMA, 120]
+    MASlow: [SMA, 480]
   FundamentalManagement: null
   SentimentalManagement: null
   PortfolioManagement: null
