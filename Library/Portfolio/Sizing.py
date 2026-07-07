@@ -3,9 +3,16 @@ from __future__ import annotations
 import math
 from typing import Callable, TYPE_CHECKING
 
+from Library.Utility.Enumeration import EnumerationAPI
+
 if TYPE_CHECKING:
     from Library.Universe.Contract import ContractAPI
     from Library.Portfolio.Account import AccountAPI
+
+class SizingMode(EnumerationAPI):
+    Volume = 0
+    Balance = 1
+    Risk = 2
 
 def calculate_normalized_volume(volume: float, contract: ContractAPI, apply: Callable[[float], int] = math.floor) -> float:
     if not contract or not contract.VolumeStep or not contract.VolumeMin or not contract.VolumeMax: return volume
