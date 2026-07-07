@@ -81,11 +81,15 @@ class TrendStrategyAPI(NNFXStrategyAPI):
 
     def signal_management(self) -> MachineAPI:
         signal_engine = MachineAPI(Name="Signal Management", Events=len(UpdateID))
+
         initialization = signal_engine.state(name="Initialization")
         waiting_signal = signal_engine.state(name="Waiting Signal")
         termination = signal_engine.state(name="Termination", end=True)
+
         initialization.on(event=UpdateID.Execution, to=waiting_signal, action=None, reason="Initialized")
         initialization.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Abruptly Terminated")
+
         waiting_signal.on(event=UpdateID.BarClosed, to=waiting_signal, action=self.update_position, reason=None)
         waiting_signal.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Safely Terminated")
+
         return signal_engine
