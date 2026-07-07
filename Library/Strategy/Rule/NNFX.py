@@ -89,6 +89,16 @@ class NNFXStrategyAPI(StrategyAPI):
         self._position_bars_held_ = 0
         return [AskBelowTargetActionAPI(Ask=update.Position.EntryPrice.Price - self._scaling_out_scale_ * self._last_position_atr_)]
 
+    def register_open_buy_action(self, update: OpenedBuyPositionUpdateAPI) -> list:
+        self._last_position_id_ = update.Position.UID
+        self._position_bars_held_ = 0
+        return []
+
+    def register_open_sell_action(self, update: OpenedSellPositionUpdateAPI) -> list:
+        self._last_position_id_ = update.Position.UID
+        self._position_bars_held_ = 0
+        return []
+
     def define_tsl_open_buy_action(self, update: OpenedBuyPositionUpdateAPI) -> list:
         self._last_position_id_ = update.Position.UID
         self._position_bars_held_ = 0
@@ -152,6 +162,8 @@ class NNFXStrategyAPI(StrategyAPI):
             idle_termination = unmanaged.state(name="Termination", end=True)
             idle_initialization.on(event=UpdateID.Execution, to=idle_waiting, action=None, reason="Initialized")
             idle_initialization.on(event=UpdateID.Shutdown, to=idle_termination, action=None, reason="Abruptly Terminated")
+            idle_waiting.on(event=UpdateID.OpenedBuyPosition, to=idle_waiting, action=self.register_open_buy_action, reason="Opened Buy Position")
+            idle_waiting.on(event=UpdateID.OpenedSellPosition, to=idle_waiting, action=self.register_open_sell_action, reason="Opened Sell Position")
             idle_waiting.on(event=UpdateID.Shutdown, to=idle_termination, action=None, reason="Safely Terminated")
             return unmanaged
         risk_engine = MachineAPI(Name="Risk Management", Events=len(UpdateID))
@@ -219,8 +231,8 @@ class NNFXStrategyAPI(StrategyAPI):
                 waiting_open.on(event=UpdateID.OpenedBuyPosition, to=waiting_tsl, action=self.define_tsl_open_buy_action, reason="Opened Buy Position")
                 waiting_open.on(event=UpdateID.OpenedSellPosition, to=waiting_tsl, action=self.define_tsl_open_sell_action, reason="Opened Sell Position")
             else:
-                waiting_open.on(event=UpdateID.OpenedBuyPosition, to=waiting_close, action=None, reason="Opened Buy Position")
-                waiting_open.on(event=UpdateID.OpenedSellPosition, to=waiting_close, action=None, reason="Opened Sell Position")
+                waiting_open.on(event=UpdateID.OpenedBuyPosition, to=waiting_close, action=self.register_open_buy_action, reason="Opened Buy Position")
+                waiting_open.on(event=UpdateID.OpenedSellPosition, to=waiting_close, action=self.register_open_sell_action, reason="Opened Sell Position")
         if not self._use_trailing_stop_loss_:
             waiting_so.on(event=UpdateID.ModifiedBuyPositionStopLoss, to=waiting_close, action=None, reason="Moved Buy Position to Break-Even")
             waiting_so.on(event=UpdateID.ModifiedSellPositionStopLoss, to=waiting_close, action=None, reason="Moved Sell Position to Break-Even")

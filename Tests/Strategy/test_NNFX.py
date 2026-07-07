@@ -112,10 +112,16 @@ def test_no_risk_management_idles_machine_and_drops_stop_loss():
     strategy = _no_risk_strategy_(mode="Volume", maximum=5000.0)
     assert strategy._managed_risk_ is False and strategy._use_stop_loss_ is False
     engine = strategy.risk_management()
-    assert engine.state(name="No Position")._transitions_[UpdateID.OpenedBuyPosition.value] is None
+    open_transition = engine.state(name="No Position")._transitions_[UpdateID.OpenedBuyPosition.value]
+    assert open_transition.To.Name == "No Position"
     assert engine.state(name="Initialization")._transitions_[UpdateID.Execution.value] is not None
     actions = strategy.open_buy_position(_update_(), PositionType.Normal)
     assert actions[-1].Volume == 5000.0 and actions[-1].StopLoss is None and actions[-1].TakeProfit is None
+
+def test_no_risk_management_records_position_id_on_open():
+    strategy = _no_risk_strategy_(mode="Volume", maximum=5000.0)
+    strategy.register_open_sell_action(SimpleNamespace(Position=SimpleNamespace(UID=99)))
+    assert strategy._last_position_id_ == 99 and strategy._position_bars_held_ == 0
 
 def test_managed_open_attaches_stop_loss():
     strategy = _strategy_(mode="Risk", maximum=2.0)
@@ -133,7 +139,7 @@ def test_null_scales_disable_risk_without_crashing():
     strategy = _risk_strategy_(stop_loss=None, scaling_scale=None, scaling_percentage=None, trailing=None, mode="Volume", maximum=5000.0)
     assert strategy._managed_risk_ is False and strategy._use_stop_loss_ is False and strategy._use_trailing_stop_loss_ is False
     engine = strategy.risk_management()
-    assert engine.state(name="No Position")._transitions_[UpdateID.OpenedBuyPosition.value] is None
+    assert engine.state(name="No Position")._transitions_[UpdateID.OpenedBuyPosition.value].To.Name == "No Position"
     actions = strategy.open_buy_position(_update_(), PositionType.Normal)
     assert actions[-1].StopLoss is None
 
