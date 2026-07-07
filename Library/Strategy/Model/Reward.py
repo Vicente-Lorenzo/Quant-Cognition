@@ -13,7 +13,7 @@ class RewardType(EnumerationAPI):
 
 class RewardAPI:
     """
-    Per-step reward encoder for the model strategies.
+    Per-step reward encoder for direct-reinforcement trading agents.
 
     Every reward is built on the equity log-return r_t = ln(E_t / E_{t-1}), which
     is scale-free (independent of account size) and additive over time. The family
