@@ -16,6 +16,7 @@ from Library.Strategy.Model.Normalizer import NormalizerAPI
 from Library.Strategy.Model.Observation import ObservationAPI
 from Library.Strategy.Model.Reward import RewardAPI, RewardType
 from Library.Strategy.Rule.NNFX import NNFXStrategyAPI
+from Library.Utility.Math import EPSILON
 
 if TYPE_CHECKING:
     from Library.Parameter import Parameter
@@ -31,8 +32,6 @@ class DDPGNormalizationAPI(NormalizerAPI):
     drawdown) bypass this layer so their natural bounds are preserved.
     """
 
-    _EPSILON_ = 1e-8
-
     def __init__(self, window: int) -> None:
         self._alpha_ = 1.0 / window if window else 0.0
         self._mean_: Union[np.ndarray, None] = None
@@ -47,7 +46,7 @@ class DDPGNormalizationAPI(NormalizerAPI):
             self._mean_ = values.copy()
             self._variance_ = np.zeros_like(values)
             return np.where(mask, 0.0, values).astype(np.float32)
-        standardized = (values - self._mean_) / np.sqrt(self._variance_ + self._EPSILON_)
+        standardized = (values - self._mean_) / np.sqrt(self._variance_ + EPSILON)
         output = np.where(mask, standardized, values)
         delta = values - self._mean_
         mean = self._mean_ + self._alpha_ * delta
@@ -371,7 +370,7 @@ class DDPGStrategyAPI(NNFXStrategyAPI):
         observation = self._observation_.encode(update)
         equity = update.Portfolio.Equity
         if self.Training and self._previous_observation_ is not None:
-            reward = self._reward_.reward(equity, self._previous_equity_, update.Portfolio.EquityDrawdown)
+            reward = self._reward_.reward(equity, self._previous_equity_)
             self._agent_.memorize(self._previous_observation_, self._previous_action_, reward, observation, False)
             self._step_index_ += 1
             if self._step_index_ % self.TrainFrequency == 0:
