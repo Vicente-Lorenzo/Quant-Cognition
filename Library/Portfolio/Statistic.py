@@ -176,7 +176,7 @@ MINHOLDINGTIME = "Min Holding Time (Days)"
 SHARPERATIO = "Sharpe Ratio"
 SORTINORATIO = "Sortino Ratio"
 CALMARRATIO = "Calmar Ratio"
-FITNESSRATIO = "Fitness Ratio"
+STERLINGRATIO = "Sterling Ratio"
 
 Metrics = [
     TOTALTRADESVALUE,
@@ -268,7 +268,7 @@ Metrics = [
     SHARPERATIO,
     SORTINORATIO,
     CALMARRATIO,
-    FITNESSRATIO
+    STERLINGRATIO
 ]
 
 OrderView = {
@@ -533,8 +533,37 @@ def calculate_sortino(ann_ret_pct: float, down_vol_pct: float, rfr: float = 0.0)
 def calculate_calmar(ann_ret_pct: float, max_dd_pct: float, rfr: float = 0.0) -> float:
     return calculate_ratio(ann_ret_pct, max_dd_pct, rfr)
 
-def calculate_fitness(ann_ret_pct: float, mean_dd_pct: float, rfr: float = 0.0) -> float:
+def calculate_sterling(ann_ret_pct: float, mean_dd_pct: float, rfr: float = 0.0) -> float:
     return calculate_ratio(ann_ret_pct, mean_dd_pct, rfr)
+
+def equity_curve_ratios(curve: Union[list, None], start: date, stop: date, trading_days: int = 365, max_drawdown: Union[float, None] = None, mean_drawdown: Union[float, None] = None) -> Union[dict, None]:
+    if not curve or len(curve) < 2: return None
+    returns = [(curve[i] / curve[i - 1] - 1.0) if curve[i - 1] else 0.0 for i in range(1, len(curve))]
+    n = len(returns)
+    duration_seconds = calculate_duration_seconds(start, stop)
+    years = duration_seconds / (trading_days * 86400.0) if duration_seconds and duration_seconds > 0.0 else 0.0
+    periods = n / years if years > 0.0 else 0.0
+    annualize = math.sqrt(periods) if periods > 0.0 else 0.0
+    mean = sum(returns) / n
+    variance = sum((value - mean) ** 2 for value in returns) / (n - 1) if n > 1 else 0.0
+    deviation = math.sqrt(variance)
+    downside = math.sqrt(sum(value ** 2 for value in returns if value < 0.0) / n)
+    sharpe = (mean / deviation) * annualize if deviation > 0.0 else 0.0
+    sortino = (mean / downside) * annualize if downside > 0.0 else 0.0
+    if max_drawdown is None or mean_drawdown is None:
+        peak, curve_max, curve_sum = curve[0], 0.0, 0.0
+        for value in curve:
+            if value > peak: peak = value
+            drawdown = (peak - value) / peak if peak else 0.0
+            if drawdown > curve_max: curve_max = drawdown
+            curve_sum += drawdown
+        max_drawdown = curve_max if max_drawdown is None else max_drawdown
+        mean_drawdown = curve_sum / len(curve) if mean_drawdown is None else mean_drawdown
+    total_return = (curve[-1] / curve[0] - 1.0) if curve[0] else 0.0
+    annualized_return = ((1.0 + total_return) ** (1.0 / years) - 1.0) if years > 0.0 and (1.0 + total_return) > 0.0 else 0.0
+    calmar = annualized_return / max_drawdown if max_drawdown > 0.0 else 0.0
+    sterling = annualized_return / mean_drawdown if mean_drawdown > 0.0 else 0.0
+    return {SHARPERATIO: sharpe, SORTINORATIO: sortino, CALMARRATIO: calmar, STERLINGRATIO: sterling}
 
 def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.DataFrame) -> dict:
     points = str(PositionAPI.ID.Points)
@@ -614,7 +643,7 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
     sharpe = calculate_sharpe(net_ret_annualized_pct, net_vol_annualized_pct)
     sortino = calculate_sortino(net_ret_annualized_pct, down_vol_annualized_pct)
     calmar = calculate_calmar(net_ret_annualized_pct, max_dd_pct)
-    fitness = calculate_fitness(net_ret_annualized_pct, mean_dd_pct)
+    sterling = calculate_sterling(net_ret_annualized_pct, mean_dd_pct)
 
     return {
         TOTALTRADESVALUE: total_n,
@@ -696,10 +725,10 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
         SHARPERATIO: sharpe,
         SORTINORATIO: sortino,
         CALMARRATIO: calmar,
-        FITNESSRATIO: fitness
+        STERLINGRATIO: sterling
     }
 
-def dependent_metrics(initial_balance: float, start: date, stop: date, df: pl.DataFrame, buy_col: str, sell_col: str, total_col: str, equity: Union[dict, None] = None) -> pl.DataFrame:
+def dependent_metrics(initial_balance: float, start: date, stop: date, df: pl.DataFrame, buy_col: str, sell_col: str, total_col: str, equity: Union[dict, None] = None, ratios: Union[dict, None] = None) -> pl.DataFrame:
     net_pnl = str(PositionAPI.ID.NetPnL)
     buy_df, sell_df = split_buy_sell(df)
     buy_metrics = independent_metrics(initial_balance, start, stop, buy_df)
@@ -758,6 +787,7 @@ def dependent_metrics(initial_balance: float, start: date, stop: date, df: pl.Da
     for metrics in (buy_metrics, sell_metrics, total_metrics):
         metrics.update(equity_defaults)
         if equity: metrics.update(equity)
+    if ratios: total_metrics.update(ratios)
 
     return pl.DataFrame({
         buy_col: [buy_metrics[k] for k in Metrics],
@@ -836,7 +866,7 @@ def equity_metrics(initial_balance: float, deals: pl.DataFrame) -> dict:
         MEANEQUITYRUNUPPERC: (mean_ru / trough) * 100.0 if trough else 0.0
     }
 
-def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, account: Union[AccountAPI, None], start: date, stop: date) -> pl.DataFrame:
+def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, account: Union[AccountAPI, None], start: date, stop: date, equity_curve: Union[list, None] = None, max_drawdown: Union[float, None] = None, mean_drawdown: Union[float, None] = None) -> pl.DataFrame:
     initial_balance = (account.Balance if account is not None else 0.0) or 0.0
     safe_positions = _safe_df_(positions_df)
     safe_trades = _safe_df_(trades_df)
@@ -850,7 +880,8 @@ def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, acc
     ind = sort_items(net_df)
     agg = sort_items(aggregate_items(net_df))
     equity = equity_metrics(initial_balance, agg)
-    ind_df = dependent_metrics(initial_balance, start, stop, ind, NET_BUY_INDIVIDUAL, NET_SELL_INDIVIDUAL, NET_TOTAL_INDIVIDUAL, equity)
-    agg_df = dependent_metrics(initial_balance, start, stop, agg, NET_BUY_AGGREGATED, NET_SELL_AGGREGATED, NET_TOTAL_AGGREGATED, equity)
+    ratios = equity_curve_ratios(equity_curve, start, stop, max_drawdown=max_drawdown, mean_drawdown=mean_drawdown)
+    ind_df = dependent_metrics(initial_balance, start, stop, ind, NET_BUY_INDIVIDUAL, NET_SELL_INDIVIDUAL, NET_TOTAL_INDIVIDUAL, equity, ratios)
+    agg_df = dependent_metrics(initial_balance, start, stop, agg, NET_BUY_AGGREGATED, NET_SELL_AGGREGATED, NET_TOTAL_AGGREGATED, equity, ratios)
     labels_df = pl.DataFrame({STATISTICS_METRICS_LABEL: Metrics})
     return pl.concat([labels_df, ind_df, agg_df], how="horizontal")
