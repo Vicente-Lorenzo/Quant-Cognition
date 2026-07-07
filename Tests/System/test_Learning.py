@@ -102,7 +102,7 @@ def test_export_copies_promoted_weights_without_seed_and_fold_dirs(tmp_path):
     mkdir(tmp_path / "Seed 42")
     mkdir(tmp_path / "Fold 1")
     LearningAPI._export_(harness)
-    exports = list(tmp_path.glob("Learning _FakeStrategy_ *"))
+    exports = list(tmp_path.glob("_FakeStrategy_ *"))
     assert len(exports) == 1
     assert (exports[0] / "DDPG" / "actor").read_text() == "w"
     assert not (exports[0] / "Seed 42").exists() and not (exports[0] / "Fold 1").exists()

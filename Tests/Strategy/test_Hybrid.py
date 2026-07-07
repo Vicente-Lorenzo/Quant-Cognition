@@ -1,3 +1,4 @@
+import math
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -10,37 +11,34 @@ from Library.Protocol.Action import (
     OpenBuyPositionActionAPI,
     OpenSellPositionActionAPI
 )
-from Library.Strategy.Hybrid import (
-    HybridModelStrategyAPI,
-    HybridDDPGStrategyAPI,
-    HybridRDDPGStrategyAPI,
-    HybridSACStrategyAPI,
-    HybridTD3StrategyAPI
-)
+from Library.Strategy.Hybrid.DDPG import DDPGStrategyAPI
+from Library.Strategy.Model.Reward import RewardType
 from Library.Strategy.Strategy import StrategyType
 
 class _FakeAgent_:
 
     def __init__(self, action=0.0):
         self._action_ = np.array([action], dtype=np.float32)
+        self.transitions = []
+        self.learned = 0
+        self.resets = 0
 
     def decide(self, state, explore=True):
         return self._action_
 
-    def memorize(self, *args):
-        pass
+    def memorize(self, state, action, reward, next_state, done):
+        self.transitions.append((state, action, reward, next_state, done))
 
     def learn(self):
-        pass
+        self.learned += 1
 
     def reset(self):
-        pass
+        self.resets += 1
 
-class _FakeHybridStrategy_(HybridModelStrategyAPI):
+class _FakeDDPG_(DDPGStrategyAPI):
 
     def _create_agent_(self, observation_shape, action_shape):
-        self.observation_shape = observation_shape
-        return _FakeAgent_()
+        return _FakeAgent_(self.Fake)
 
 def _indicator_(value):
     return SimpleNamespace(Result=SimpleNamespace(last=lambda: value))
@@ -48,7 +46,7 @@ def _indicator_(value):
 def _position_(volume, long, uid=1):
     return SimpleNamespace(Volume=volume, IsLong=long, IsShort=not long, UID=uid, EntryBalance=10000.0, NetPnL=SimpleNamespace(PnL=0.0), MaxEquityDrawdownPnL=SimpleNamespace(PnL=0.0), MaxEquityRunupPnL=SimpleNamespace(PnL=0.0))
 
-def _update_(buys=None, sells=None, close=1.11, atr=0.01):
+def _update_(buys=None, sells=None, close=1.11, atr=0.01, equity=10000.0):
     technical = SimpleNamespace(ATR=_indicator_(atr), RVFast=_indicator_(0.008))
     bar = SimpleNamespace(
         Timestamp=SimpleNamespace(DateTime=datetime(2020, 6, 15, 13, 30, 0)),
@@ -63,25 +61,29 @@ def _update_(buys=None, sells=None, close=1.11, atr=0.01):
         SellPositions=sells or [],
         Account=SimpleNamespace(Balance=10000.0),
         InitialBalance=10000.0,
-        Equity=10000.0,
+        Equity=equity,
         EquityDrawdown=0.0,
         EquityRunup=0.0,
         Security=SimpleNamespace(Contract=SimpleNamespace(VolumeStep=1000.0, VolumeMin=1000.0, VolumeMax=100000.0, PipSize=0.0001, PointSize=0.00001))
     )
     return SimpleNamespace(Bar=bar, Technical=technical, Portfolio=portfolio)
 
-def _strategy_(sizing_min=0.5, sizing_max=2.0, entry=(-0.4, 0.4), exit=(-0.1, 0.1), delay=0):
-    money = Parameter({"SizingMode": ["Risk"], "SizingMin": [sizing_min], "SizingMax": [sizing_max]}, ".")
-    signal = Parameter({"NormalEntryThreshold": list(entry), "NormalExitThreshold": list(exit), "ContinuationDelay": [delay]}, ".")
-    risk = Parameter({"StopLossScale": [1.5], "ScalingOutScale": [1.0], "ScalingOutPercentage": [50.0], "TrailingStopLossScale": [1.5], "TrailingStopLossStep": [0.25]}, ".")
-    empty = Parameter({}, ".")
-    return _FakeHybridStrategy_(money_management=money, risk_management=risk, signal_management=signal)
+def _strategy_(sizing_min=0.5, sizing_max=2.0, entry=(-0.4, 0.4), exit=(-0.1, 0.1), delay=0, action=0.0, training=False):
+    _FakeDDPG_.Fake = action
+    _FakeDDPG_.Agent = None
+    _FakeDDPG_.Training = training
+    _FakeDDPG_.Reward = RewardType.LogReturn
+    _FakeDDPG_.RewardScale = 1.0
+    money = Parameter({"SizingMode": ["Risk"], "SizingMin": [sizing_min], "SizingMax": [sizing_max], "DrawdownThreshold": [0.0], "DrawdownFactor": [1.0]}, ".")
+    risk = Parameter({"StopLossScale": [1.5], "StagnationStopOut": [0], "ScalingOutScale": [1.0], "ScalingOutPercentage": [50.0], "TrailingStopLossScale": [1.5], "TrailingStopLossStep": [0.25]}, ".")
+    signal = Parameter({"NormalEntryThreshold": list(entry), "NormalExitThreshold": list(exit), "ContinuationEntryThreshold": list(entry), "ContinuationExitThreshold": list(exit), "ContinuationDelay": [delay], "MomentumHorizons": [24, 120, 480], "MovingAverageHorizons": [], "ObservationWindow": [1], "NormalizeWindow": [200]}, ".")
+    return _FakeDDPG_(money_management=money, risk_management=risk, signal_management=signal)
 
-def test_strategy_type_registers_hybrids():
-    assert StrategyType.HybridDDPG.value == 7
-    assert StrategyType.HybridRDDPG.value == 8
-    assert StrategyType.HybridSAC.value == 9
-    assert StrategyType.HybridTD3.value == 10
+def test_strategy_type_registers_four_strategies():
+    assert StrategyType.Download.value == 1
+    assert StrategyType.NNFX.value == 2
+    assert StrategyType.Trend.value == 3
+    assert StrategyType.DDPG.value == 4
 
 def test_strong_long_signal_opens_buy_with_nnfx_sizing():
     strategy = _strategy_()
@@ -193,16 +195,41 @@ def test_risk_and_signal_machines_present():
     assert isinstance(strategy.risk_management(), MachineAPI)
     assert isinstance(strategy.signal_management(), MachineAPI)
 
-def test_concrete_hybrids_build_agents_with_observation_shape():
-    from Library.Model import DDPGAgentAPI, SACAgentAPI, TD3AgentAPI
-    money = Parameter({"SizingMode": ["Risk"], "SizingMin": [0.5], "SizingMax": [2.0]}, ".")
-    signal = Parameter({"NormalEntryThreshold": [-0.4, 0.4], "NormalExitThreshold": [-0.1, 0.1]}, ".")
-    risk = Parameter({"StopLossScale": [1.5], "ScalingOutScale": [1.0], "ScalingOutPercentage": [50.0], "TrailingStopLossScale": [1.5], "TrailingStopLossStep": [0.25]}, ".")
-    empty = Parameter({}, ".")
-    ddpg = HybridDDPGStrategyAPI(money_management=money, risk_management=risk, signal_management=signal)
-    extended = HybridRDDPGStrategyAPI(money_management=money, risk_management=risk, signal_management=signal)
-    sac = HybridSACStrategyAPI(money_management=money, risk_management=risk, signal_management=signal)
-    td3 = HybridTD3StrategyAPI(money_management=money, risk_management=risk, signal_management=signal)
-    assert isinstance(ddpg._agent_, DDPGAgentAPI) and isinstance(sac._agent_, SACAgentAPI) and isinstance(td3._agent_, TD3AgentAPI)
-    assert ddpg._agent_.actor_regularization == 0.0 and extended._agent_.actor_regularization == 0.001
+def test_step_records_transition_reward_and_learns():
+    strategy = _strategy_(action=0.5, training=True)
+    strategy._step_(_update_(equity=10000.0))
+    assert strategy._agent_.transitions == []
+    strategy._step_(_update_(equity=10050.0))
+    assert len(strategy._agent_.transitions) == 1
+    _, _, reward, _, done = strategy._agent_.transitions[0]
+    assert abs(reward - math.log(10050.0 / 10000.0)) < 1e-9 and done is False
+    assert strategy._agent_.learned >= 1
+
+def test_step_does_not_record_when_not_training():
+    strategy = _strategy_(action=0.5, training=False)
+    strategy._step_(_update_(equity=10000.0))
+    strategy._step_(_update_(equity=10100.0))
+    assert strategy._agent_.transitions == [] and strategy._agent_.learned == 0
+
+def test_initialize_resets_episode_state():
+    strategy = _strategy_(action=0.5, training=True)
+    strategy._step_(_update_())
+    strategy._initialize_(None)
+    assert strategy._previous_observation_ is None
+    assert strategy._previous_action_ is None
+    assert strategy._previous_equity_ is None
+    assert strategy._agent_.resets == 1
+
+def test_ddpg_builds_agent_and_regularization_is_parameter_driven():
+    from Library.Model import DDPGAgentAPI
+    DDPGStrategyAPI.Agent = None
+    DDPGStrategyAPI.Training = False
+    money = Parameter({"SizingMode": ["Risk"], "SizingMin": [0.5], "SizingMax": [2.0], "DrawdownThreshold": [0.0], "DrawdownFactor": [1.0]}, ".")
+    risk = Parameter({"StopLossScale": [1.5], "StagnationStopOut": [0], "ScalingOutScale": [1.0], "ScalingOutPercentage": [50.0], "TrailingStopLossScale": [1.5], "TrailingStopLossStep": [0.25]}, ".")
+    agent = {"ActorLearningRate": [0.0001], "CriticLearningRate": [0.001], "SoftUpdate": [0.001], "HiddenShape1": [400], "HiddenShape2": [300], "MemorySize": [1000000], "BatchSize": [64], "DiscountFactor": [0.99], "GradientClip": [1.0]}
+    common = {"NormalEntryThreshold": [-0.4, 0.4], "NormalExitThreshold": [-0.1, 0.1], "ContinuationEntryThreshold": [-2.0, 2.0], "ContinuationExitThreshold": [-0.1, 0.1], "ContinuationDelay": [0], "MomentumHorizons": [24, 120, 480], "MovingAverageHorizons": [], "ObservationWindow": [1], "NormalizeWindow": [200]}
+    ddpg = DDPGStrategyAPI(money_management=money, risk_management=risk, signal_management=Parameter({**common, **agent, "ActorRegularization": [0.0]}, "."))
+    rddpg = DDPGStrategyAPI(money_management=money, risk_management=risk, signal_management=Parameter({**common, **agent, "ActorRegularization": [0.01]}, "."))
+    assert isinstance(ddpg._agent_, DDPGAgentAPI)
+    assert ddpg._agent_.actor_regularization == 0.0 and rddpg._agent_.actor_regularization == 0.01
     assert ddpg._observation_.shape() == 29

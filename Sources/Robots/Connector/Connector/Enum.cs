@@ -10,7 +10,8 @@ namespace Connector
     {
         Download = 1,
         NNFX = 2,
-        DDPG = 3,
+        Trend = 3,
+        DDPG = 4,
     }
 
     public enum VerboseLevel

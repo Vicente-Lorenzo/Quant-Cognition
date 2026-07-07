@@ -9,7 +9,8 @@ from Library.Strategy.Strategy import StrategyAPI, StrategyType, Transform
 def test_strategy_type_enum():
     assert StrategyType.Download.value == 1
     assert StrategyType.NNFX.value == 2
-    assert StrategyType.DDPG.value == 3
+    assert StrategyType.Trend.value == 3
+    assert StrategyType.DDPG.value == 4
 
 def test_download_strategy_builds():
     p = ParameterAPI()
