@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Logging import HandlerLoggingAPI, VerboseLevel
 from Library.Parameter import Parameter, ParameterAPI
-from Library.Strategy import DownloadStrategyAPI, NNFXStrategyAPI, StrategyAPI
+from Library.Strategy import DownloadStrategyAPI, NNFXStrategyAPI, StrategyAPI, TrendStrategyAPI
 from Library.Strategy.Hybrid import DDPGStrategyAPI
 from Library.Strategy.Model.Reward import RewardType
 from Library.Strategy.Strategy import StrategyType
@@ -142,6 +142,7 @@ def _strategy_(args: Namespace) -> Type[StrategyAPI]:
     match StrategyType(args.strategy):
         case StrategyType.Download: return DownloadStrategyAPI
         case StrategyType.NNFX: return NNFXStrategyAPI
+        case StrategyType.Trend: return TrendStrategyAPI
         case StrategyType.DDPG: return DDPGStrategyAPI
 
 def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI, timeframe: TimeframeAPI, parameters: Parameter) -> Union[SystemAPI, None]:

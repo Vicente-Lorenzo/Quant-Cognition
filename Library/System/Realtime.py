@@ -109,7 +109,7 @@ class RealtimeAPI(SystemAPI):
             self._transport_ = TransportAPI(iid=self._iid_, create=False)
             self._stack_.callback(lambda: self._transport_.close() if self._transport_ else None)
             self._log_.debug(lambda: f"Connect Operation: Bound Shared Memory (iid {self._iid_})")
-            self.strategy = self._strategy_(money_management=self._parameters_.MoneyManagement, risk_management=self._parameters_.RiskManagement, signal_management=self._parameters_.SignalManagement)
+            self.strategy = self._strategy_(money_management=self._parameters_.MoneyManagement, risk_management=self._parameters_.RiskManagement, signal_management=self._parameters_.SignalManagement, technical_management=self._parameters_.TechnicalManagement, fundamental_management=self._parameters_.FundamentalManagement, sentimental_management=self._parameters_.SentimentalManagement, portfolio_management=self._parameters_.PortfolioManagement)
             self.market = MarketAPI()
             self.indicator = IndicatorAPI(technical=self._parameters_.TechnicalManagement, fundamental=self._parameters_.FundamentalManagement, sentimental=self._parameters_.SentimentalManagement)
             self.portfolio = PortfolioAPI(Parameter=self._parameters_.PortfolioManagement)
