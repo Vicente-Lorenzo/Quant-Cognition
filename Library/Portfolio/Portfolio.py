@@ -43,11 +43,18 @@ class PortfolioAPI(DatapointAPI):
     _equity_trough_: Union[float, None] = field(default=None, init=False)
     _equity_curve_: list = field(default_factory=list, init=False)
     _equity_stamp_: Union[datetime, None] = field(default=None, init=False)
-    _drawdown_peak_: Union[float, None] = field(default=None, init=False)
+    _excursion_peak_: Union[float, None] = field(default=None, init=False)
+    _excursion_trough_: Union[float, None] = field(default=None, init=False)
     _max_drawdown_: float = field(default=0.0, init=False)
-    _mean_drawdown_sum_: float = field(default=0.0, init=False)
-    _mean_drawdown_count_: int = field(default=0, init=False)
-    _drawdown_stamp_: Union[datetime, None] = field(default=None, init=False)
+    _max_drawdown_value_: float = field(default=0.0, init=False)
+    _max_runup_: float = field(default=0.0, init=False)
+    _max_runup_value_: float = field(default=0.0, init=False)
+    _drawdown_sum_: float = field(default=0.0, init=False)
+    _drawdown_value_sum_: float = field(default=0.0, init=False)
+    _runup_sum_: float = field(default=0.0, init=False)
+    _runup_value_sum_: float = field(default=0.0, init=False)
+    _excursion_count_: int = field(default=0, init=False)
+    _excursion_stamp_: Union[datetime, None] = field(default=None, init=False)
     _last_conversion_: float = field(default=1.0, init=False)
 
     def __post_init__(self,
@@ -220,12 +227,22 @@ class PortfolioAPI(DatapointAPI):
         if self._equity_curve_ and self._equity_curve_[-1][0] == self._equity_stamp_: self._equity_curve_[-1] = (self._equity_stamp_, equity)
         else: self._equity_curve_.append((self._equity_stamp_, equity))
 
-    def _accumulate_drawdown_(self, equity: float) -> None:
-        if self._drawdown_peak_ is None or equity > self._drawdown_peak_: self._drawdown_peak_ = equity
-        drawdown = (self._drawdown_peak_ - equity) / self._drawdown_peak_ if self._drawdown_peak_ else 0.0
+    def _accumulate_excursion_(self, equity: float) -> None:
+        if self._excursion_peak_ is None or equity > self._excursion_peak_: self._excursion_peak_ = equity
+        if self._excursion_trough_ is None or equity < self._excursion_trough_: self._excursion_trough_ = equity
+        drawdown_value = self._excursion_peak_ - equity
+        runup_value = equity - self._excursion_trough_
+        drawdown = drawdown_value / self._excursion_peak_ if self._excursion_peak_ else 0.0
+        runup = runup_value / self._excursion_trough_ if self._excursion_trough_ else 0.0
         if drawdown > self._max_drawdown_: self._max_drawdown_ = drawdown
-        self._mean_drawdown_sum_ += drawdown
-        self._mean_drawdown_count_ += 1
+        if drawdown_value > self._max_drawdown_value_: self._max_drawdown_value_ = drawdown_value
+        if runup > self._max_runup_: self._max_runup_ = runup
+        if runup_value > self._max_runup_value_: self._max_runup_value_ = runup_value
+        self._drawdown_sum_ += drawdown
+        self._drawdown_value_sum_ += drawdown_value
+        self._runup_sum_ += runup
+        self._runup_value_sum_ += runup_value
+        self._excursion_count_ += 1
 
     @staticmethod
     def _conversion_(ask: Union[PriceAPI, None], bid: Union[PriceAPI, None]) -> float:
@@ -296,17 +313,17 @@ class PortfolioAPI(DatapointAPI):
         if not isinstance(data, TickAPI):
             self._equity_stamp_ = timestamp
             self._record_equity_()
-            if timestamp != self._drawdown_stamp_:
-                self._drawdown_stamp_ = timestamp
+            if timestamp != self._excursion_stamp_:
+                self._excursion_stamp_ = timestamp
                 base = self._account_.Balance if (self._account_ and self._account_.Balance is not None) else 0.0
                 high, low = data.HighTick, data.LowTick
                 if high is not None and low is not None and high.Timestamp is not None and low.Timestamp is not None and high.Timestamp.DateTime <= low.Timestamp.DateTime:
                     first, second = base + high_pnl, base + low_pnl
                 else:
                     first, second = base + low_pnl, base + high_pnl
-                self._accumulate_drawdown_(first)
-                self._accumulate_drawdown_(second)
-                self._accumulate_drawdown_(self.Equity)
+                self._accumulate_excursion_(first)
+                self._accumulate_excursion_(second)
+                self._accumulate_excursion_(self.Equity)
 
     def open_order(self, order: OrderAPI) -> None:
         self._orders_[order.UID] = order
@@ -425,7 +442,7 @@ class PortfolioAPI(DatapointAPI):
     def calculate_statistics(self, start: datetime, stop: datetime) -> pl.DataFrame:
         from Library.Portfolio.Statistic import generate_net_report
         if not self._account_: return pl.DataFrame()
-        return generate_net_report(self.Positions, self.Trades, self._account_, start, stop, self.EquityCurve, self.MaxDrawdown, self.MeanDrawdown)
+        return generate_net_report(self.Positions, self.Trades, self._account_, start, stop, self.EquityCurve, self.Excursions)
 
     @property
     def Account(self) -> Union[AccountAPI, None]:
@@ -525,7 +542,25 @@ class PortfolioAPI(DatapointAPI):
 
     @property
     def MeanDrawdown(self) -> float:
-        return self._mean_drawdown_sum_ / self._mean_drawdown_count_ if self._mean_drawdown_count_ else 0.0
+        return self._drawdown_sum_ / self._excursion_count_ if self._excursion_count_ else 0.0
+
+    @property
+    def MaxRunup(self) -> float:
+        return self._max_runup_
+
+    @property
+    def MeanRunup(self) -> float:
+        return self._runup_sum_ / self._excursion_count_ if self._excursion_count_ else 0.0
+
+    @property
+    def Excursions(self) -> dict:
+        count = self._excursion_count_ or 1
+        return {
+            "max_drawdown": self._max_drawdown_, "mean_drawdown": self._drawdown_sum_ / count,
+            "max_runup": self._max_runup_, "mean_runup": self._runup_sum_ / count,
+            "max_drawdown_value": self._max_drawdown_value_, "mean_drawdown_value": self._drawdown_value_sum_ / count,
+            "max_runup_value": self._max_runup_value_, "mean_runup_value": self._runup_value_sum_ / count
+        }
 
     @property
     def Direction(self) -> Direction:

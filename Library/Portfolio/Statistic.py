@@ -173,10 +173,10 @@ MEANEQUITYRUNUPPERC = "Mean Equity Runup (%)"
 MAXHOLDINGTIME = "Max Holding Time (Days)"
 AVERAGEHOLDINGTIME = "Avg Holding Time (Days)"
 MINHOLDINGTIME = "Min Holding Time (Days)"
-SHARPERATIO = "Sharpe Ratio"
-SORTINORATIO = "Sortino Ratio"
-CALMARRATIO = "Calmar Ratio"
-STERLINGRATIO = "Sterling Ratio"
+SHARPERATIO = "Sharpe Ratio Annualized"
+SORTINORATIO = "Sortino Ratio Annualized"
+CALMARRATIO = "Calmar Ratio Annualized"
+STERLINGRATIO = "Sterling Ratio Annualized"
 
 Metrics = [
     TOTALTRADESVALUE,
@@ -728,7 +728,7 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
         STERLINGRATIO: sterling
     }
 
-def dependent_metrics(initial_balance: float, start: date, stop: date, df: pl.DataFrame, buy_col: str, sell_col: str, total_col: str, equity: Union[dict, None] = None, ratios: Union[dict, None] = None) -> pl.DataFrame:
+def dependent_metrics(initial_balance: float, start: date, stop: date, df: pl.DataFrame, buy_col: str, sell_col: str, total_col: str, equity: Union[dict, None] = None, ratios: Union[dict, None] = None, override: Union[dict, None] = None) -> pl.DataFrame:
     net_pnl = str(PositionAPI.ID.NetPnL)
     buy_df, sell_df = split_buy_sell(df)
     buy_metrics = independent_metrics(initial_balance, start, stop, buy_df)
@@ -788,6 +788,7 @@ def dependent_metrics(initial_balance: float, start: date, stop: date, df: pl.Da
         metrics.update(equity_defaults)
         if equity: metrics.update(equity)
     if ratios: total_metrics.update(ratios)
+    if override: total_metrics.update(override)
 
     return pl.DataFrame({
         buy_col: [buy_metrics[k] for k in Metrics],
@@ -866,7 +867,19 @@ def equity_metrics(initial_balance: float, deals: pl.DataFrame) -> dict:
         MEANEQUITYRUNUPPERC: (mean_ru / trough) * 100.0 if trough else 0.0
     }
 
-def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, account: Union[AccountAPI, None], start: date, stop: date, equity_curve: Union[list, None] = None, max_drawdown: Union[float, None] = None, mean_drawdown: Union[float, None] = None) -> pl.DataFrame:
+def _equity_excursion_(excursions: dict) -> dict:
+    return {
+        MAXEQUITYDRAWDOWNVALUE: excursions["max_drawdown_value"],
+        MAXEQUITYDRAWDOWNPERC: excursions["max_drawdown"] * 100.0,
+        MEANEQUITYDRAWDOWNVALUE: excursions["mean_drawdown_value"],
+        MEANEQUITYDRAWDOWNPERC: excursions["mean_drawdown"] * 100.0,
+        MAXEQUITYRUNUPVALUE: excursions["max_runup_value"],
+        MAXEQUITYRUNUPPERC: excursions["max_runup"] * 100.0,
+        MEANEQUITYRUNUPVALUE: excursions["mean_runup_value"],
+        MEANEQUITYRUNUPPERC: excursions["mean_runup"] * 100.0
+    }
+
+def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, account: Union[AccountAPI, None], start: date, stop: date, equity_curve: Union[list, None] = None, excursions: Union[dict, None] = None) -> pl.DataFrame:
     initial_balance = (account.Balance if account is not None else 0.0) or 0.0
     safe_positions = _safe_df_(positions_df)
     safe_trades = _safe_df_(trades_df)
@@ -880,8 +893,11 @@ def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, acc
     ind = sort_items(net_df)
     agg = sort_items(aggregate_items(net_df))
     equity = equity_metrics(initial_balance, agg)
+    max_drawdown = excursions["max_drawdown"] if excursions else None
+    mean_drawdown = excursions["mean_drawdown"] if excursions else None
     ratios = equity_curve_ratios(equity_curve, start, stop, max_drawdown=max_drawdown, mean_drawdown=mean_drawdown)
-    ind_df = dependent_metrics(initial_balance, start, stop, ind, NET_BUY_INDIVIDUAL, NET_SELL_INDIVIDUAL, NET_TOTAL_INDIVIDUAL, equity, ratios)
-    agg_df = dependent_metrics(initial_balance, start, stop, agg, NET_BUY_AGGREGATED, NET_SELL_AGGREGATED, NET_TOTAL_AGGREGATED, equity, ratios)
+    override = _equity_excursion_(excursions) if excursions else None
+    ind_df = dependent_metrics(initial_balance, start, stop, ind, NET_BUY_INDIVIDUAL, NET_SELL_INDIVIDUAL, NET_TOTAL_INDIVIDUAL, equity, ratios, override)
+    agg_df = dependent_metrics(initial_balance, start, stop, agg, NET_BUY_AGGREGATED, NET_SELL_AGGREGATED, NET_TOTAL_AGGREGATED, equity, ratios, override)
     labels_df = pl.DataFrame({STATISTICS_METRICS_LABEL: Metrics})
     return pl.concat([labels_df, ind_df, agg_df], how="horizontal")
