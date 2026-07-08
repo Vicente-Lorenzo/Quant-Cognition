@@ -1,34 +1,119 @@
-from dash import html
+from dash import dcc, html
+import dash_bootstrap_components as dbc
 
+from Library.App.V2.Callback import ComponentID, Output, Input, State, InjectionType, clientside_callback
 from Library.App.V2.Component import ButtonAPI, ContainerAPI, IconAPI, TextAPI
 from Library.App.V2.Page import PageAPI
 
 class SettingsPageAPI(PageAPI):
 
+    SETTINGS_TABS_ID: ComponentID | dict = ComponentID()
+    SETTINGS_MEMORY_EDITOR_ID: ComponentID | dict = ComponentID()
+    SETTINGS_SESSION_EDITOR_ID: ComponentID | dict = ComponentID()
+    SETTINGS_LOCAL_EDITOR_ID: ComponentID | dict = ComponentID()
+    SETTINGS_MEMORY_SAVE_ID: ComponentID | dict = ComponentID()
+    SETTINGS_SESSION_SAVE_ID: ComponentID | dict = ComponentID()
+    SETTINGS_LOCAL_SAVE_ID: ComponentID | dict = ComponentID()
+
     def __init__(self, *, app) -> None:
         super().__init__(app=app, path="/settings", button="Settings", icon="bi bi-gear", description="Manage appearance and session preferences")
+
+    def ids(self) -> None:
+        self.SETTINGS_TABS_ID = self.register(type="tabs", name="settings")
+        self.SETTINGS_MEMORY_EDITOR_ID = self.register(type="textarea", name="memory_editor", portable="value")
+        self.SETTINGS_SESSION_EDITOR_ID = self.register(type="textarea", name="session_editor", portable="value")
+        self.SETTINGS_LOCAL_EDITOR_ID = self.register(type="textarea", name="local_editor", portable="value")
+        self.SETTINGS_MEMORY_SAVE_ID = self.register(type="button", name="memory_save")
+        self.SETTINGS_SESSION_SAVE_ID = self.register(type="button", name="session_save")
+        self.SETTINGS_LOCAL_SAVE_ID = self.register(type="button", name="local_save")
 
     def content(self) -> list:
         return [
             TextAPI(text="Settings", classname="page-title", builder=html.H1),
             TextAPI(text="Manage appearance and session preferences.", classname="page-lead", builder=html.P),
-            self._theme_(),
-            self._session_(),
+            html.Div(dbc.Tabs([
+                dbc.Tab(self._appearance_().build(), label="Appearance", tab_id="appearance"),
+                dbc.Tab(self._session_().build(), label="Session", tab_id="session"),
+                dbc.Tab(self._storage_().build(), label="Storage", tab_id="storage"),
+            ], id=self.SETTINGS_TABS_ID, active_tab="appearance"), className="settings-tabs"),
         ]
 
-    def _theme_(self) -> ContainerAPI:
-        toggle = ButtonAPI(id=self.app.GLOBAL_SETTINGS_THEME_ID, background="secondary", classname="settings-control", label=[IconAPI(icon="bi bi-circle-half"), TextAPI(text="Toggle Theme")])
-        return ContainerAPI(fluid=True, id="theme", classname="panel settings-panel", elements=[
+    def _appearance_(self) -> ContainerAPI:
+        theme = ButtonAPI(id=self.app.GLOBAL_SETTINGS_THEME_ID, background="secondary", classname="settings-control", label=[IconAPI(id=self.app.GLOBAL_SETTINGS_THEME_ICON_ID, icon="bi bi-circle-half"), TextAPI(id=self.app.GLOBAL_SETTINGS_THEME_LABEL_ID, text="System")])
+        return ContainerAPI(fluid=True, id="appearance", classname="panel settings-panel", elements=[
             TextAPI(text="Appearance", classname="panel-title", builder=html.H5),
-            TextAPI(text="Switch between light and dark themes · Your choice is remembered on this device", classname="settings-note", builder=html.P),
-            ContainerAPI(fluid=True, classname="settings-row", elements=[TextAPI(text="Theme", classname="settings-label"), toggle]),
+            TextAPI(text="Cycle between light · dark · system themes · Your choice is remembered on this device", classname="settings-note", builder=html.P),
+            ContainerAPI(fluid=True, classname="settings-row", elements=[TextAPI(text="Theme", classname="settings-label"), theme]),
         ])
 
     def _session_(self) -> ContainerAPI:
-        auth = ButtonAPI(id=self.app.GLOBAL_SETTINGS_AUTH_ID, background="primary", classname="settings-control", label=[IconAPI(icon="bi bi-box-arrow-in-right"), TextAPI(text="Sign In · Sign Out")])
+        auth = ButtonAPI(id=self.app.GLOBAL_SETTINGS_AUTH_ID, background="primary", classname="settings-control", label=[IconAPI(id=self.app.GLOBAL_SETTINGS_AUTH_ICON_ID, icon="bi bi-box-arrow-in-right"), TextAPI(id=self.app.GLOBAL_SETTINGS_AUTH_LABEL_ID, text="Sign In")])
         return ContainerAPI(fluid=True, id="session", classname="panel settings-panel", elements=[
             TextAPI(text="Session", classname="panel-title", builder=html.H5),
             TextAPI(text="Sign in to authenticate this session · Your account is shown in the header menu", classname="settings-note", builder=html.P),
             ContainerAPI(fluid=True, classname="settings-row", elements=[TextAPI(text="Account", classname="settings-label"), auth]),
-            TextAPI(text="Clear stored Memory · Session · Local data or Reset everything from the footer controls", classname="settings-hint", builder=html.P),
         ])
+
+    def _storage_(self) -> ContainerAPI:
+        return ContainerAPI(fluid=True, id="storage", classname="panel settings-panel", elements=[
+            TextAPI(text="Storage", classname="panel-title", builder=html.H5),
+            TextAPI(text="Inspect · edit · save · or clean the raw JSON held in each store", classname="settings-note", builder=html.P),
+            self._editor_("Memory", self.SETTINGS_MEMORY_EDITOR_ID, self.SETTINGS_MEMORY_SAVE_ID, self.app.GLOBAL_CLEAN_MEMORY_BUTTON_ID),
+            self._editor_("Session", self.SETTINGS_SESSION_EDITOR_ID, self.SETTINGS_SESSION_SAVE_ID, self.app.GLOBAL_CLEAN_SESSION_BUTTON_ID),
+            self._editor_("Local", self.SETTINGS_LOCAL_EDITOR_ID, self.SETTINGS_LOCAL_SAVE_ID, self.app.GLOBAL_CLEAN_LOCAL_BUTTON_ID),
+        ])
+
+    def _editor_(self, name: str, editor: dict, save: dict, clean: dict) -> ContainerAPI:
+        save_button = ButtonAPI(id=save, background="primary", classname="settings-control", label=[IconAPI(icon="bi bi-save"), TextAPI(text="Save")])
+        clean_button = ButtonAPI(id=clean, background="danger", classname="settings-control", label=[IconAPI(icon="bi bi-eraser-fill"), TextAPI(text="Clean")])
+        return ContainerAPI(fluid=True, classname="settings-editor", elements=[
+            ContainerAPI(fluid=True, classname="settings-row", elements=[TextAPI(text=name, classname="settings-label"), ContainerAPI(fluid=True, classname="settings-controls", elements=[save_button, clean_button])]),
+            dcc.Textarea(id=editor, className="settings-textarea", spellCheck=False, persistence=False),
+        ])
+
+    @clientside_callback(
+        Output(SETTINGS_TABS_ID, "active_tab"),
+        Input("GLOBAL_LOCATION_ID", "hash"),
+        on_init=InjectionType.Hidden
+    )
+    def _settings_async_tab_callback_(self):
+        return self.app.asset("Callbacks/Tab.js", url=False)
+
+    @clientside_callback(
+        Output(SETTINGS_MEMORY_EDITOR_ID, "value"),
+        Output(SETTINGS_SESSION_EDITOR_ID, "value"),
+        Output(SETTINGS_LOCAL_EDITOR_ID, "value"),
+        Input("GLOBAL_MEMORY_STORAGE_ID", "data"),
+        Input("GLOBAL_SESSION_STORAGE_ID", "data"),
+        Input("GLOBAL_LOCAL_STORAGE_ID", "data"),
+        on_init=InjectionType.Hidden
+    )
+    def _settings_async_load_callback_(self):
+        return self.app.asset("Callbacks/Stringify.js", url=False)
+
+    @clientside_callback(
+        Output("GLOBAL_MEMORY_STORAGE_ID", "data"),
+        Input(SETTINGS_MEMORY_SAVE_ID, "n_clicks"),
+        State(SETTINGS_MEMORY_EDITOR_ID, "value"),
+        on_click=InjectionType.Hidden
+    )
+    def _settings_async_save_memory_callback_(self):
+        return self.app.asset("Callbacks/Parse.js", url=False)
+
+    @clientside_callback(
+        Output("GLOBAL_SESSION_STORAGE_ID", "data"),
+        Input(SETTINGS_SESSION_SAVE_ID, "n_clicks"),
+        State(SETTINGS_SESSION_EDITOR_ID, "value"),
+        on_click=InjectionType.Hidden
+    )
+    def _settings_async_save_session_callback_(self):
+        return self.app.asset("Callbacks/Parse.js", url=False)
+
+    @clientside_callback(
+        Output("GLOBAL_LOCAL_STORAGE_ID", "data"),
+        Input(SETTINGS_LOCAL_SAVE_ID, "n_clicks"),
+        State(SETTINGS_LOCAL_EDITOR_ID, "value"),
+        on_click=InjectionType.Hidden
+    )
+    def _settings_async_save_local_callback_(self):
+        return self.app.asset("Callbacks/Parse.js", url=False)

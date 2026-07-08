@@ -23,6 +23,8 @@ class ComponentAPI(ABC):
     stylename: str = MISSING
     style: dict = MISSING
     hidden: bool = MISSING
+    tooltip: str = MISSING
+    placement: str = MISSING
     element: Any = MISSING
     builder: type[Component] = html.Div
 
@@ -66,9 +68,14 @@ class ComponentAPI(ABC):
             (hidden if isinstance(c, (dcc.Store, dcc.Download)) else other).append(c)
         return other, hidden
 
-    @staticmethod
-    def serialize(elements: list[Component] = None, hidden: list[Component] = None) -> list[Component]:
-        return [*(elements or []), *(hidden or [])]
+    def _tooltip_(self) -> list[Component]:
+        if self.tooltip is MISSING or not self.id: return []
+        kwargs = {"target": self.id, "delay": {"show": 400, "hide": 100}}
+        if self.placement is not MISSING: kwargs["placement"] = self.placement
+        return [dbc.Tooltip(self.tooltip, **kwargs)]
+
+    def serialize(self, elements: list[Component] = None, hidden: list[Component] = None) -> list[Component]:
+        return [*(elements or []), *(hidden or []), *self._tooltip_()]
 
     def build(self) -> list[Component]:
         elements = self.flatten(self.element)

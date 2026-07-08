@@ -32,6 +32,7 @@ class AppAPI:
 
     GLOBAL_LOCATION_ID: ComponentID | dict = ComponentID()
     GLOBAL_ROUTING_STORAGE_ID: ComponentID | dict = ComponentID()
+    GLOBAL_BRAND_ID: ComponentID | dict = ComponentID()
     GLOBAL_NAVIGATION_ID: ComponentID | dict = ComponentID()
     GLOBAL_CONTENT_ID: ComponentID | dict = ComponentID()
     GLOBAL_CONTENT_LOADING_ID: ComponentID | dict = ComponentID()
@@ -92,7 +93,11 @@ class AppAPI:
     GLOBAL_LOGIN_SUBMIT_ID: ComponentID | dict = ComponentID()
 
     GLOBAL_SETTINGS_THEME_ID: ComponentID | dict = ComponentID()
+    GLOBAL_SETTINGS_THEME_ICON_ID: ComponentID | dict = ComponentID()
+    GLOBAL_SETTINGS_THEME_LABEL_ID: ComponentID | dict = ComponentID()
     GLOBAL_SETTINGS_AUTH_ID: ComponentID | dict = ComponentID()
+    GLOBAL_SETTINGS_AUTH_ICON_ID: ComponentID | dict = ComponentID()
+    GLOBAL_SETTINGS_AUTH_LABEL_ID: ComponentID | dict = ComponentID()
 
     GLOBAL_NOT_FOUND_LAYOUT: Component
     GLOBAL_LOADING_LAYOUT: Component
@@ -104,6 +109,7 @@ class AppAPI:
                  title: str = MISSING,
                  team: str = MISSING,
                  contact: str = MISSING,
+                 motto: str = MISSING,
                  host: str = "127.0.0.1",
                  port: int = MISSING,
                  anchor: str = "/",
@@ -113,6 +119,7 @@ class AppAPI:
         self._title_ = title if title is not MISSING else name
         self._team_ = team if team is not MISSING else None
         self._contact_ = contact if contact is not MISSING else None
+        self._motto_ = motto if motto is not MISSING else None
         self._host_ = host
         self._port_ = port if port is not MISSING else find_host_port(host=host, port_min=8050)
         self._debug_ = debug
@@ -230,6 +237,7 @@ class AppAPI:
     def __init_ids__(self) -> None:
         self.GLOBAL_LOCATION_ID = self.register(type="location", name="location")
         self.GLOBAL_ROUTING_STORAGE_ID = self.register(type="storage", name="routing")
+        self.GLOBAL_BRAND_ID = self.register(type="link", name="brand")
         self.GLOBAL_NAVIGATION_ID = self.register(type="navigator", name="navigation")
         self.GLOBAL_CONTENT_ID = self.register(type="div", name="content")
         self.GLOBAL_CONTENT_LOADING_ID = self.register(type="loading", name="content")
@@ -281,7 +289,11 @@ class AppAPI:
         self.GLOBAL_LOGIN_PASS_ID = self.register(type="input", name="password")
         self.GLOBAL_LOGIN_SUBMIT_ID = self.register(type="button", name="login")
         self.GLOBAL_SETTINGS_THEME_ID = self.register(type="button", name="settings_theme")
+        self.GLOBAL_SETTINGS_THEME_ICON_ID = self.register(type="icon", name="settings_theme")
+        self.GLOBAL_SETTINGS_THEME_LABEL_ID = self.register(type="text", name="settings_theme")
         self.GLOBAL_SETTINGS_AUTH_ID = self.register(type="button", name="settings_auth")
+        self.GLOBAL_SETTINGS_AUTH_ICON_ID = self.register(type="icon", name="settings_auth")
+        self.GLOBAL_SETTINGS_AUTH_LABEL_ID = self.register(type="text", name="settings_auth")
         self.ids()
 
     def _init_ids_(self) -> None:
@@ -297,9 +309,9 @@ class AppAPI:
     def __init_header_layout__(self) -> Component:
         titles = [html.Span(self._name_, className="app-brand-name")]
         if self._team_: titles.append(html.Span(self._team_, className="app-brand-team"))
-        brand = dcc.Link([html.Img(src=self.asset("Images/logo.png"), className="app-logo"), html.Div(titles, className="app-brand-titles")], href=self._endpoint_, className="app-brand")
+        brand = dcc.Link([html.Img(src=self.asset("Images/logo.png"), className="app-logo"), html.Div(titles, className="app-brand-titles")], href=self._endpoint_, id=self.GLOBAL_BRAND_ID, className="app-brand")
         nav = html.Div(id=self.GLOBAL_NAVIGATION_ID, className="app-nav")
-        return html.Header([brand, nav, self.__init_menu_layout__()], className="app-header")
+        return html.Header([brand, self._tip_(self.GLOBAL_BRAND_ID, "Go to Launchpad page"), nav, self.__init_menu_layout__()], className="app-header")
 
     def __init_menu_layout__(self) -> Component:
         settings = self.endpointize(path="/settings", relative=True)
@@ -337,13 +349,11 @@ class AppAPI:
                 html.Div([html.B("Contact: "), html.A(self._contact_ or "", href=f"mailto:{self._contact_}")]),
             ]), className="panel"), id=self.GLOBAL_CONTACTS_COLLAPSE_ID, is_open=False),
         ], className="left")
+        center = html.Div(html.Span(self._motto_, className="app-motto") if self._motto_ else None, className="center")
         right = html.Div([
-            *ButtonAPI(id=self.GLOBAL_CLEAN_MEMORY_BUTTON_ID, background="danger", label=[IconAPI(icon="bi bi-eraser-fill"), TextAPI(text=" Memory ")], asyncer=self.GLOBAL_CLEAN_MEMORY_ASYNC_ID).build(),
-            *ButtonAPI(id=self.GLOBAL_CLEAN_SESSION_BUTTON_ID, background="danger", label=[IconAPI(icon="bi bi-eraser-fill"), TextAPI(text=" Session ")], asyncer=self.GLOBAL_CLEAN_SESSION_ASYNC_ID).build(),
-            *ButtonAPI(id=self.GLOBAL_CLEAN_LOCAL_BUTTON_ID, background="danger", label=[IconAPI(icon="bi bi-eraser-fill"), TextAPI(text=" Local ")], asyncer=self.GLOBAL_CLEAN_LOCAL_ASYNC_ID).build(),
-            *ButtonAPI(id=self.GLOBAL_CLEAN_RESET_BUTTON_ID, background="danger", label=[IconAPI(icon="bi bi-trash"), TextAPI(text=" Reset ")], asyncer=self.GLOBAL_CLEAN_RESET_ASYNC_ID).build(),
+            *ButtonAPI(id=self.GLOBAL_CLEAN_RESET_BUTTON_ID, background="danger", label=[IconAPI(icon="bi bi-trash"), TextAPI(text=" Reset ")]).build(),
         ], className="right")
-        return html.Footer([left, right], className="app-footer")
+        return html.Footer([left, center, right], className="app-footer")
 
     def __init_notification_layout__(self) -> Component:
         return html.Div(id=self.GLOBAL_NOTIFICATION_ID, className="app-notifications")
@@ -355,6 +365,10 @@ class AppAPI:
         hidden.extend(StorageAPI(id=self.GLOBAL_REENTER_ASYNC_ID, persistence="memory").build())
         hidden.extend(StorageAPI(id=self.GLOBAL_ROUTE_ASYNC_ID, persistence="memory").build())
         hidden.extend(StorageAPI(id=self.GLOBAL_LEAVE_ASYNC_ID, persistence="memory").build())
+        hidden.extend(StorageAPI(id=self.GLOBAL_CLEAN_MEMORY_ASYNC_ID, data=TriggerAPI().dict(), persistence="memory").build())
+        hidden.extend(StorageAPI(id=self.GLOBAL_CLEAN_SESSION_ASYNC_ID, data=TriggerAPI().dict(), persistence="memory").build())
+        hidden.extend(StorageAPI(id=self.GLOBAL_CLEAN_LOCAL_ASYNC_ID, data=TriggerAPI().dict(), persistence="memory").build())
+        hidden.extend(StorageAPI(id=self.GLOBAL_CLEAN_RESET_ASYNC_ID, data=TriggerAPI().dict(), persistence="memory").build())
         hidden.extend(StorageAPI(id=self.GLOBAL_MEMORY_STORAGE_ID, persistence="memory").build())
         hidden.extend(StorageAPI(id=self.GLOBAL_SESSION_STORAGE_ID, persistence="session").build())
         hidden.extend(StorageAPI(id=self.GLOBAL_LOCAL_STORAGE_ID, persistence="local").build())
@@ -365,7 +379,11 @@ class AppAPI:
 
     def __init_modal_layout__(self) -> Component:
         modal = ModalAPI(id=self.GLOBAL_MODAL_ID, size="lg", open=False, fade=False, centered=True, keyboard=True, backdrop=True, header=[html.Div(id=self.GLOBAL_MODAL_HEADER_ID)], body=[html.Div(id=self.GLOBAL_MODAL_BODY_ID)], footer=[html.Div(id=self.GLOBAL_MODAL_FOOTER_ID, style={"flex": "1"}), *ButtonAPI(id=self.GLOBAL_MODAL_BUTTON_ID, background="primary", label=[TextAPI(text="Close")]).build()]).build()
-        login = dbc.Modal([dbc.ModalHeader(dbc.ModalTitle("Authenticate")), dbc.ModalBody([dbc.Input(id=self.GLOBAL_LOGIN_USER_ID, placeholder="Username", type="text", className="app-login-input"), dbc.Input(id=self.GLOBAL_LOGIN_PASS_ID, placeholder="Password", type="password", className="app-login-input")]), dbc.ModalFooter(dbc.Button("Sign In", id=self.GLOBAL_LOGIN_SUBMIT_ID, color="primary", n_clicks=0))], id=self.GLOBAL_LOGIN_MODAL_ID, is_open=False, centered=True)
+        form = html.Form([
+            dbc.Input(id=self.GLOBAL_LOGIN_USER_ID, placeholder="Username", type="text", name="username", autoComplete="username", className="app-login-input"),
+            dbc.Input(id=self.GLOBAL_LOGIN_PASS_ID, placeholder="Password", type="password", name="password", autoComplete="current-password", className="app-login-input"),
+        ], className="app-login-form")
+        login = dbc.Modal([dbc.ModalHeader(dbc.ModalTitle([html.I(className="bi bi-key"), html.Span(f"Sign in to {self._name_}")])), dbc.ModalBody(form), dbc.ModalFooter(dbc.Button([html.I(className="bi bi-box-arrow-in-right"), html.Span("Sign In")], id=self.GLOBAL_LOGIN_SUBMIT_ID, color="primary", n_clicks=0, type="button"))], id=self.GLOBAL_LOGIN_MODAL_ID, is_open=False, centered=True)
         return html.Div([*modal, login], className="app-modal")
 
     def _init_layout_(self) -> None:
@@ -388,6 +406,15 @@ class AppAPI:
         launchpad.refresh()
         self._log_.debug(lambda: f"Pages Operation: Loaded ({len(self._pages_)} Pages)")
 
+    @staticmethod
+    def _label_(page) -> list | str:
+        if not page.icon: return page.button
+        return [html.I(className=page.icon), html.Span(page.button)]
+
+    @staticmethod
+    def _tip_(target: dict, text: str) -> Component:
+        return dbc.Tooltip(text, target=target, delay={"show": 500, "hide": 100}, placement="bottom")
+
     def _init_navigation_(self) -> None:
         for endpoint, page in self._pages_.items():
             if page._navigation_: continue
@@ -403,10 +430,12 @@ class AppAPI:
             for current in page.currents():
                 forwards = page.forwards(current)
                 if forwards and current.endpoint != page.endpoint:
-                    items = [dbc.DropdownMenuItem(forward.button, href=forward.endpoint) for forward in forwards]
-                    links.append(dbc.DropdownMenu(items, label=current.button, nav=True, in_navbar=True, toggle_style={"padding": "0"}, className="app-navlink app-navlink-drop"))
+                    items = [dbc.DropdownMenuItem(self._label_(forward), href=forward.endpoint) for forward in forwards]
+                    links.append(dbc.DropdownMenu(items, label=self._label_(current), nav=True, in_navbar=True, toggle_style={"padding": "0"}, className="app-navlink app-navlink-drop"))
                 else:
-                    links.append(dbc.NavLink(current.button, href=current.endpoint, active="exact", className="app-navlink"))
+                    identifier = self.identify(type="navlink", name=current.endpoint)
+                    links.append(dbc.NavLink(self._label_(current), href=current.endpoint, active="exact", id=identifier, className="app-navlink"))
+                    links.append(self._tip_(identifier, f"Go to {current.button} page"))
             page._navigation_ = dbc.Nav(links, navbar=True, className="app-nav-inner")
         self._log_.debug(lambda: "Navigation Operation: Composed (Family)")
 
@@ -608,6 +637,24 @@ class AppAPI:
         return self.asset("Callbacks/Theme.js", url=False)
 
     @clientside_callback(
+        Output(GLOBAL_SETTINGS_THEME_ICON_ID, "className"),
+        Output(GLOBAL_SETTINGS_THEME_LABEL_ID, "children"),
+        Input(GLOBAL_THEME_STORAGE_ID, "data"),
+        on_init=InjectionType.Hidden
+    )
+    def _global_async_settings_theme_display_callback_(self):
+        return self.asset("Callbacks/ThemeDisplay.js", url=False)
+
+    @clientside_callback(
+        Output(GLOBAL_SETTINGS_AUTH_ICON_ID, "className"),
+        Output(GLOBAL_SETTINGS_AUTH_LABEL_ID, "children"),
+        Input(GLOBAL_USER_STORAGE_ID, "data"),
+        on_init=InjectionType.Hidden
+    )
+    def _global_async_settings_auth_display_callback_(self):
+        return self.asset("Callbacks/AuthDisplay.js", url=False)
+
+    @clientside_callback(
         Output(GLOBAL_THEME_ICON_ID, "className"),
         Input(GLOBAL_THEME_STORAGE_ID, "data"),
         on_init=InjectionType.Hidden
@@ -632,11 +679,12 @@ class AppAPI:
         Input(GLOBAL_LOGIN_OPEN_ID, "n_clicks"),
         Input(GLOBAL_SETTINGS_AUTH_ID, "n_clicks"),
         Input(GLOBAL_LOGIN_SUBMIT_ID, "n_clicks"),
+        Input(GLOBAL_LOGIN_PASS_ID, "n_submit"),
         State(GLOBAL_LOGIN_USER_ID, "value"),
         State(GLOBAL_LOGIN_PASS_ID, "value"),
         State(GLOBAL_USER_STORAGE_ID, "data")
     )
-    def _global_async_authenticate_callback_(self, open_clicks, settings_clicks, submit_clicks, username, password, user):
+    def _global_async_authenticate_callback_(self, open_clicks, settings_clicks, submit_clicks, submit_enter, username, password, user):
         if dash.ctx.triggered_id == self.GLOBAL_SETTINGS_AUTH_ID and not settings_clicks:
             return dash.no_update, dash.no_update
         if dash.ctx.triggered_id in (self.GLOBAL_LOGIN_OPEN_ID, self.GLOBAL_SETTINGS_AUTH_ID):
@@ -667,7 +715,7 @@ class AppAPI:
 
     def run(self) -> None:
         self._log_.info(lambda: f"Run Operation: Serving (http://{self._host_}:{self._port_})")
-        self.app.run(host=self._host_, port=self._port_, debug=self._debug_, use_reloader=False)
+        self.app.run(host=self._host_, port=self._port_, debug=self._debug_, use_reloader=False, dev_tools_silence_routes_logging=False)
 
     def mount(self, path: str = "/") -> FastAPI:
         server = FastAPI(title=self._title_)
