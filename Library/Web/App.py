@@ -23,5 +23,11 @@ class WebAppAPI(AppAPI):
         self.link(HierarchyPageAPI(app=self))
         self.link(SchedulerPageAPI(app=self))
 
+    def apps(self) -> list[dict]:
+        return [
+            {"name": "cTrader", "url": "https://app.ctrader.com", "icon": "bi bi-graph-up-arrow", "description": "Open the cTrader web trading platform"},
+            {"name": "TradingView", "url": "https://www.tradingview.com/chart", "icon": "bi bi-bar-chart-line", "description": "Open TradingView charts in a new tab"},
+        ]
+
 if __name__ == "__main__":
     WebAppAPI(name="Quant Cognition", title="Quant Cognition", team="Vicente Lorenzo", debug=True).run()

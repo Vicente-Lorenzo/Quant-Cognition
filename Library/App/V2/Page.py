@@ -3,7 +3,7 @@ from typing_extensions import Self
 
 from Library.App.V2 import AppType
 from Library.App.V2.Component import Component, ComponentAPI, StorageAPI
-from Library.App.V2.Callback import ComponentID, Output, Input, InjectionType, clientside_callback, serverside_callback
+from Library.App.V2.Callback import ComponentID
 from Library.Logging import HandlerLoggingAPI
 
 class PageAPI(Generic[AppType]):
@@ -12,10 +12,6 @@ class PageAPI(Generic[AppType]):
     PAGE_REENTER_ASYNC_ID: ComponentID | dict = ComponentID()
     PAGE_ROUTE_ASYNC_ID: ComponentID | dict = ComponentID()
     PAGE_LEAVE_ASYNC_ID: ComponentID | dict = ComponentID()
-
-    PAGE_MEMORY_STORAGE_ID: ComponentID | dict = ComponentID()
-    PAGE_SESSION_STORAGE_ID: ComponentID | dict = ComponentID()
-    PAGE_LOCAL_STORAGE_ID: ComponentID | dict = ComponentID()
 
     def __init__(self, *,
                  app: AppType,
@@ -139,38 +135,11 @@ class PageAPI(Generic[AppType]):
         page._children_.clear()
         self._log_.debug(lambda: f"Merge Operation: Merged ({self.endpoint}) · From {page.endpoint}")
 
-    @clientside_callback(Output(PAGE_MEMORY_STORAGE_ID, "data"), on_clean_memory=InjectionType.Hidden)
-    def _page_async_clean_memory_callback_(self):
-        return self.app.asset("Callbacks/Clear.js", url=False)
-
-    @clientside_callback(Output(PAGE_SESSION_STORAGE_ID, "data"), on_clean_session=InjectionType.Hidden)
-    def _page_async_clean_session_callback_(self):
-        return self.app.asset("Callbacks/Clear.js", url=False)
-
-    @clientside_callback(Output(PAGE_LOCAL_STORAGE_ID, "data"), on_clean_local=InjectionType.Hidden)
-    def _page_async_clean_local_callback_(self):
-        return self.app.asset("Callbacks/Clear.js", url=False)
-
-    @serverside_callback(Input(PAGE_MEMORY_STORAGE_ID, "data"))
-    def _page_async_update_memory_callback_(self, data):
-        self._log_.debug(lambda: f"Storage Operation: Updated (Memory) · {'Empty' if not data else 'Data'}")
-
-    @serverside_callback(Input(PAGE_SESSION_STORAGE_ID, "data"))
-    def _page_async_update_session_callback_(self, data):
-        self._log_.debug(lambda: f"Storage Operation: Updated (Session) · {'Empty' if not data else 'Data'}")
-
-    @serverside_callback(Input(PAGE_LOCAL_STORAGE_ID, "data"))
-    def _page_async_update_local_callback_(self, data):
-        self._log_.debug(lambda: f"Storage Operation: Updated (Local) · {'Empty' if not data else 'Data'}")
-
     def __init_ids__(self) -> None:
         self.PAGE_ENTER_ASYNC_ID = self.register(type="asyncer", name="enter")
         self.PAGE_REENTER_ASYNC_ID = self.register(type="asyncer", name="reenter")
         self.PAGE_ROUTE_ASYNC_ID = self.register(type="asyncer", name="route")
         self.PAGE_LEAVE_ASYNC_ID = self.register(type="asyncer", name="leave")
-        self.PAGE_MEMORY_STORAGE_ID = self.register(type="storage", name="memory", portable="data")
-        self.PAGE_SESSION_STORAGE_ID = self.register(type="storage", name="session", portable="data")
-        self.PAGE_LOCAL_STORAGE_ID = self.register(type="storage", name="local", portable="data")
         self.ids()
 
     def __init_hidden_layout__(self) -> list[Component]:
@@ -179,9 +148,6 @@ class PageAPI(Generic[AppType]):
         hidden.extend(StorageAPI(id=self.PAGE_REENTER_ASYNC_ID, persistence="memory").build())
         hidden.extend(StorageAPI(id=self.PAGE_ROUTE_ASYNC_ID, persistence="memory").build())
         hidden.extend(StorageAPI(id=self.PAGE_LEAVE_ASYNC_ID, persistence="memory").build())
-        hidden.extend(StorageAPI(id=self.PAGE_MEMORY_STORAGE_ID, persistence="memory").build())
-        hidden.extend(StorageAPI(id=self.PAGE_SESSION_STORAGE_ID, persistence="session").build())
-        hidden.extend(StorageAPI(id=self.PAGE_LOCAL_STORAGE_ID, persistence="local").build())
         return hidden
 
     def __init_content_layout__(self) -> list[Component]:

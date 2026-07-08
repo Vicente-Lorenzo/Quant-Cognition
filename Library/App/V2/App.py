@@ -82,8 +82,11 @@ class AppAPI:
     GLOBAL_THEME_TOGGLE_ID: ComponentID | dict = ComponentID()
     GLOBAL_THEME_ICON_ID: ComponentID | dict = ComponentID()
     GLOBAL_USER_STORAGE_ID: ComponentID | dict = ComponentID()
+    GLOBAL_MENU_ID: ComponentID | dict = ComponentID()
     GLOBAL_MENU_LOCK_ID: ComponentID | dict = ComponentID()
     GLOBAL_MENU_USER_ID: ComponentID | dict = ComponentID()
+    GLOBAL_MENU_SESSION_ID: ComponentID | dict = ComponentID()
+    GLOBAL_MENU_SETTINGS_ID: ComponentID | dict = ComponentID()
     GLOBAL_LOGIN_OPEN_ID: ComponentID | dict = ComponentID()
     GLOBAL_LOGIN_ICON_ID: ComponentID | dict = ComponentID()
     GLOBAL_LOGIN_LABEL_ID: ComponentID | dict = ComponentID()
@@ -279,8 +282,11 @@ class AppAPI:
         self.GLOBAL_THEME_TOGGLE_ID = self.register(type="menuitem", name="theme")
         self.GLOBAL_THEME_ICON_ID = self.register(type="icon", name="theme")
         self.GLOBAL_USER_STORAGE_ID = self.register(type="storage", name="user")
+        self.GLOBAL_MENU_ID = self.register(type="menu", name="account")
         self.GLOBAL_MENU_LOCK_ID = self.register(type="icon", name="lock")
         self.GLOBAL_MENU_USER_ID = self.register(type="text", name="user")
+        self.GLOBAL_MENU_SESSION_ID = self.register(type="menuitem", name="session")
+        self.GLOBAL_MENU_SETTINGS_ID = self.register(type="menuitem", name="settings")
         self.GLOBAL_LOGIN_OPEN_ID = self.register(type="menuitem", name="login")
         self.GLOBAL_LOGIN_ICON_ID = self.register(type="icon", name="login")
         self.GLOBAL_LOGIN_LABEL_ID = self.register(type="text", name="login")
@@ -311,19 +317,25 @@ class AppAPI:
         if self._team_: titles.append(html.Span(self._team_, className="app-brand-team"))
         brand = dcc.Link([html.Img(src=self.asset("Images/logo.png"), className="app-logo"), html.Div(titles, className="app-brand-titles")], href=self._endpoint_, id=self.GLOBAL_BRAND_ID, className="app-brand")
         nav = html.Div(id=self.GLOBAL_NAVIGATION_ID, className="app-nav")
-        return html.Header([brand, self._tip_(self.GLOBAL_BRAND_ID, "Go to Launchpad page"), nav, self.__init_menu_layout__()], className="app-header")
+        return html.Header([brand, self._tip_(self.GLOBAL_BRAND_ID, "Go to Launchpad page"), nav, *self.__init_menu_layout__()], className="app-header")
 
-    def __init_menu_layout__(self) -> Component:
+    def __init_menu_layout__(self) -> list[Component]:
         settings = self.endpointize(path="/settings", relative=True)
         label = html.Span([html.I(className="bi bi-unlock app-lock app-lock-guest", id=self.GLOBAL_MENU_LOCK_ID), html.Span("Guest", id=self.GLOBAL_MENU_USER_ID)], className="app-menu-label")
         items = [
             dbc.DropdownMenuItem([html.I(className="bi bi-box-arrow-in-right", id=self.GLOBAL_LOGIN_ICON_ID), html.Span("Sign In", id=self.GLOBAL_LOGIN_LABEL_ID)], id=self.GLOBAL_LOGIN_OPEN_ID, n_clicks=0, className="app-menu-item"),
             dbc.DropdownMenuItem([html.I(className="bi bi-moon-stars", id=self.GLOBAL_THEME_ICON_ID), html.Span("Theme")], id=self.GLOBAL_THEME_TOGGLE_ID, n_clicks=0, className="app-menu-item"),
             dbc.DropdownMenuItem(divider=True),
-            dbc.DropdownMenuItem([html.I(className="bi bi-clock-history"), html.Span("Session")], href=f"{settings}#session", className="app-menu-item"),
-            dbc.DropdownMenuItem([html.I(className="bi bi-gear"), html.Span("Settings")], href=settings, className="app-menu-item"),
+            dbc.DropdownMenuItem([html.I(className="bi bi-clock-history"), html.Span("Session")], id=self.GLOBAL_MENU_SESSION_ID, href=f"{settings}#session", className="app-menu-item"),
+            dbc.DropdownMenuItem([html.I(className="bi bi-gear"), html.Span("Settings")], id=self.GLOBAL_MENU_SETTINGS_ID, href=settings, className="app-menu-item"),
         ]
-        return dbc.DropdownMenu(items, label=label, align_end=True, nav=True, in_navbar=True, className="app-menu")
+        menu = dbc.DropdownMenu(items, label=label, align_end=True, nav=True, in_navbar=True, id=self.GLOBAL_MENU_ID, className="app-menu")
+        return [menu,
+                self._tip_(self.GLOBAL_MENU_ID, "Your account", placement="bottom"),
+                self._tip_(self.GLOBAL_LOGIN_OPEN_ID, "Sign in to your account", placement="left"),
+                self._tip_(self.GLOBAL_THEME_TOGGLE_ID, "Cycle the color theme", placement="left"),
+                self._tip_(self.GLOBAL_MENU_SESSION_ID, "Edit and clean stored data", placement="left"),
+                self._tip_(self.GLOBAL_MENU_SETTINGS_ID, "Open the settings page", placement="left")]
 
     def __init_body_layout__(self) -> Component:
         sidebar = html.Div([
@@ -340,10 +352,10 @@ class AppAPI:
 
     def __init_footer_layout__(self) -> Component:
         left = html.Div([
-            *ButtonAPI(id=self.GLOBAL_SIDEBAR_BUTTON_ID, background="primary", label=[IconAPI(icon="bi bi-layout-sidebar-inset")]).build(),
-            *ButtonAPI(id=self.GLOBAL_CONTACTS_BUTTON_ID, background="primary", label=[IconAPI(icon="bi bi-caret-down-fill", id=self.GLOBAL_CONTACTS_ARROW_ID), TextAPI(text=" Contacts "), IconAPI(icon="bi bi-question-circle")]).build(),
-            *ButtonAPI(id=self.GLOBAL_IMPORT_ID, upload=self.GLOBAL_IMPORT_UPLOAD_ID, background="warning", label=[TextAPI(text="Import "), IconAPI(icon="bi bi-upload")]).build(),
-            *ButtonAPI(id=self.GLOBAL_EXPORT_ID, download=self.GLOBAL_EXPORT_DOWNLOAD_ID, background="warning", label=[TextAPI(text="Export "), IconAPI(icon="bi bi-download")]).build(),
+            *ButtonAPI(id=self.GLOBAL_SIDEBAR_BUTTON_ID, background="primary", tooltip="Toggle the sidebar", placement="top", label=[IconAPI(icon="bi bi-layout-sidebar-inset")]).build(),
+            *ButtonAPI(id=self.GLOBAL_CONTACTS_BUTTON_ID, background="primary", tooltip="Show contact details", placement="top", label=[IconAPI(icon="bi bi-caret-down-fill", id=self.GLOBAL_CONTACTS_ARROW_ID), TextAPI(text=" Contacts "), IconAPI(icon="bi bi-question-circle")]).build(),
+            *ButtonAPI(id=self.GLOBAL_IMPORT_ID, upload=self.GLOBAL_IMPORT_UPLOAD_ID, background="warning", tooltip="Import a session snapshot", placement="top", label=[TextAPI(text="Import "), IconAPI(icon="bi bi-upload")]).build(),
+            *ButtonAPI(id=self.GLOBAL_EXPORT_ID, download=self.GLOBAL_EXPORT_DOWNLOAD_ID, background="warning", tooltip="Export a session snapshot", placement="top", label=[TextAPI(text="Export "), IconAPI(icon="bi bi-download")]).build(),
             dbc.Collapse(dbc.Card(dbc.CardBody([
                 html.Div([html.B("Team: "), html.Span(self._team_ or "")]),
                 html.Div([html.B("Contact: "), html.A(self._contact_ or "", href=f"mailto:{self._contact_}")]),
@@ -351,7 +363,7 @@ class AppAPI:
         ], className="left")
         center = html.Div(html.Span(self._motto_, className="app-motto") if self._motto_ else None, className="center")
         right = html.Div([
-            *ButtonAPI(id=self.GLOBAL_CLEAN_RESET_BUTTON_ID, background="danger", label=[IconAPI(icon="bi bi-trash"), TextAPI(text=" Reset ")]).build(),
+            *ButtonAPI(id=self.GLOBAL_CLEAN_RESET_BUTTON_ID, background="danger", tooltip="Clear all stored data and reload", placement="top", label=[IconAPI(icon="bi bi-trash"), TextAPI(text=" Reset ")]).build(),
         ], className="right")
         return html.Footer([left, center, right], className="app-footer")
 
@@ -412,8 +424,8 @@ class AppAPI:
         return [html.I(className=page.icon), html.Span(page.button)]
 
     @staticmethod
-    def _tip_(target: dict, text: str) -> Component:
-        return dbc.Tooltip(text, target=target, delay={"show": 500, "hide": 100}, placement="bottom")
+    def _tip_(target: dict, text: str, placement: str = "bottom") -> Component:
+        return dbc.Tooltip(text, target=target, delay={"show": 500, "hide": 100}, placement=placement)
 
     def _init_navigation_(self) -> None:
         for endpoint, page in self._pages_.items():
@@ -709,6 +721,9 @@ class AppAPI:
 
     def pages(self) -> None:
         pass
+
+    def apps(self) -> list[dict]:
+        return []
 
     def authenticate(self, username: str | None, password: str | None) -> str | None:
         return username or None

@@ -33,8 +33,8 @@ class SettingsPageAPI(PageAPI):
             TextAPI(text="Manage appearance and session preferences.", classname="page-lead", builder=html.P),
             html.Div(dbc.Tabs([
                 dbc.Tab(self._appearance_().build(), label="Appearance", tab_id="appearance"),
+                dbc.Tab(self._security_().build(), label="Security", tab_id="security"),
                 dbc.Tab(self._session_().build(), label="Session", tab_id="session"),
-                dbc.Tab(self._storage_().build(), label="Storage", tab_id="storage"),
             ], id=self.SETTINGS_TABS_ID, active_tab="appearance"), className="settings-tabs"),
         ]
 
@@ -46,28 +46,29 @@ class SettingsPageAPI(PageAPI):
             ContainerAPI(fluid=True, classname="settings-row", elements=[TextAPI(text="Theme", classname="settings-label"), theme]),
         ])
 
-    def _session_(self) -> ContainerAPI:
+    def _security_(self) -> ContainerAPI:
         auth = ButtonAPI(id=self.app.GLOBAL_SETTINGS_AUTH_ID, background="primary", classname="settings-control", label=[IconAPI(id=self.app.GLOBAL_SETTINGS_AUTH_ICON_ID, icon="bi bi-box-arrow-in-right"), TextAPI(id=self.app.GLOBAL_SETTINGS_AUTH_LABEL_ID, text="Sign In")])
-        return ContainerAPI(fluid=True, id="session", classname="panel settings-panel", elements=[
-            TextAPI(text="Session", classname="panel-title", builder=html.H5),
+        return ContainerAPI(fluid=True, id="security", classname="panel settings-panel", elements=[
+            TextAPI(text="Security", classname="panel-title", builder=html.H5),
             TextAPI(text="Sign in to authenticate this session · Your account is shown in the header menu", classname="settings-note", builder=html.P),
             ContainerAPI(fluid=True, classname="settings-row", elements=[TextAPI(text="Account", classname="settings-label"), auth]),
         ])
 
-    def _storage_(self) -> ContainerAPI:
-        return ContainerAPI(fluid=True, id="storage", classname="panel settings-panel", elements=[
-            TextAPI(text="Storage", classname="panel-title", builder=html.H5),
-            TextAPI(text="Inspect · edit · save · or clean the raw JSON held in each store", classname="settings-note", builder=html.P),
-            self._editor_("Memory", self.SETTINGS_MEMORY_EDITOR_ID, self.SETTINGS_MEMORY_SAVE_ID, self.app.GLOBAL_CLEAN_MEMORY_BUTTON_ID),
-            self._editor_("Session", self.SETTINGS_SESSION_EDITOR_ID, self.SETTINGS_SESSION_SAVE_ID, self.app.GLOBAL_CLEAN_SESSION_BUTTON_ID),
-            self._editor_("Local", self.SETTINGS_LOCAL_EDITOR_ID, self.SETTINGS_LOCAL_SAVE_ID, self.app.GLOBAL_CLEAN_LOCAL_BUTTON_ID),
+    def _session_(self) -> ContainerAPI:
+        return ContainerAPI(fluid=True, id="session", classname="panel settings-panel", elements=[
+            TextAPI(text="Session", classname="panel-title", builder=html.H5),
+            TextAPI(text="Inspect · edit · save · or clean the raw JSON held in each browser store", classname="settings-note", builder=html.P),
+            self._editor_("Memory", "Cleared as soon as the page reloads — the shortest-lived store", self.SETTINGS_MEMORY_EDITOR_ID, self.SETTINGS_MEMORY_SAVE_ID, self.app.GLOBAL_CLEAN_MEMORY_BUTTON_ID),
+            self._editor_("Session", "Kept until this browser tab is closed — survives navigation and reloads", self.SETTINGS_SESSION_EDITOR_ID, self.SETTINGS_SESSION_SAVE_ID, self.app.GLOBAL_CLEAN_SESSION_BUTTON_ID),
+            self._editor_("Local", "Persisted on this device across visits until you clean it", self.SETTINGS_LOCAL_EDITOR_ID, self.SETTINGS_LOCAL_SAVE_ID, self.app.GLOBAL_CLEAN_LOCAL_BUTTON_ID),
         ])
 
-    def _editor_(self, name: str, editor: dict, save: dict, clean: dict) -> ContainerAPI:
+    def _editor_(self, name: str, hint: str, editor: dict, save: dict, clean: dict) -> ContainerAPI:
         save_button = ButtonAPI(id=save, background="primary", classname="settings-control", label=[IconAPI(icon="bi bi-save"), TextAPI(text="Save")])
         clean_button = ButtonAPI(id=clean, background="danger", classname="settings-control", label=[IconAPI(icon="bi bi-eraser-fill"), TextAPI(text="Clean")])
         return ContainerAPI(fluid=True, classname="settings-editor", elements=[
             ContainerAPI(fluid=True, classname="settings-row", elements=[TextAPI(text=name, classname="settings-label"), ContainerAPI(fluid=True, classname="settings-controls", elements=[save_button, clean_button])]),
+            TextAPI(text=hint, classname="settings-hint", builder=html.P),
             dcc.Textarea(id=editor, className="settings-textarea", spellCheck=False, persistence=False),
         ])
 
