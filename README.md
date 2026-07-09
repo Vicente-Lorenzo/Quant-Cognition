@@ -69,7 +69,35 @@ We use Miniforge to handle the environment creation, as it includes the Mamba so
 2. Direct Communication: Use standard Localhost TCP (127.0.0.1) or Windows Named Pipes directly within your Python scripts to communicate with cTrader.
 3. Native Python in cTrader: If using cTrader 5.4 or later, you can leverage their native Python integration to run algorithms directly without an external bridge.
 
+## 🌐 Step 7: Production Web Deployment (Cloudflare Tunnel)
+The **Quant Cognition** web app (Dash, `Library/Web`) is published to the public internet at **https://quantcognition.com** with no open inbound ports — a Cloudflare Tunnel dials out from this machine, and Cloudflare's edge terminates TLS.
+
+**Topology:** `Browser → https://quantcognition.com → Cloudflare edge → cloudflared tunnel (Quant) → http://127.0.0.1:8050 → waitress → Dash app`
+
+### 7.1 Components
+- **App server (`Scripts/Quant.bat`):** runs `python -m Library.Web.Serve`, a **waitress** WSGI server binding the app to `127.0.0.1:8050` (loopback only — never exposed directly). `Library/Web/Serve.py` is the production entry point; `python -m Library.Web.App` is the dev/`debug` entry point.
+- **Tunnel (`Scripts/Tunnel.bat`):** runs `cloudflared --config C:\Users\Admin\.cloudflared\config.yml tunnel run Quant`. The named tunnel **`Quant`** (`config.yml` → `ingress: quantcognition.com → http://127.0.0.1:8050`, fallback `http_status:404`) authenticates with its credentials JSON in `~/.cloudflared`. The Cloudflare dashboard holds the DNS record routing `quantcognition.com` to this tunnel.
+- **Auth:** the app is **private** (`access="Viewer"`) — unauthenticated visitors land on `/login`. Roles/pages are enforced server-side (see `Library/Auth`); seed/manage the admin account with `python -m Setup.Auth`. Cookies are `Secure` in prod (TLS at the edge + `ProxyFix`); `QUANT_INSECURE=1` is **only** for local `http` development.
+
+### 7.2 Auto-Start on Boot
+Two **Task Scheduler** tasks run at system startup as user `Admin` (not SYSTEM — the tunnel config lives in the user profile):
+| Task | Trigger | Runs |
+| --- | --- | --- |
+| `Quant Cognition` | At boot | `Scripts\Quant.bat` |
+| `Cloudflare Tunnel` | At boot | `Scripts\Tunnel.bat` |
+
+After a reboot the site is live within a few seconds — no manual steps. Do **not** install `cloudflared` as a Windows *service* (it runs as LocalSystem and cannot read the user-profile tunnel config).
+
+### 7.3 Manual Control
+```powershell
+Start-ScheduledTask -TaskName "Quant Cognition"    # start app
+Start-ScheduledTask -TaskName "Cloudflare Tunnel"   # start tunnel
+Stop-ScheduledTask  -TaskName "Cloudflare Tunnel"   # take the site offline
+cloudflared tunnel list                             # inspect tunnels + live connections
+```
+
 ## 🚀 Daily Launch Sequence
 1. Verify the postgresql service is running natively in Windows (set to Automatic start via services.msc).
 2. Open PyCharm Professional (it will now start as Admin automatically) and verify the active interpreter is set to the Quant local environment.
 3. Start cTrader and run your Python backend/DRL agents.
+4. The public site (**https://quantcognition.com**) and its tunnel start automatically at boot (Step 7) — no action needed.
