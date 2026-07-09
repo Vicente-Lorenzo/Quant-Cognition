@@ -21,4 +21,5 @@
     if (targetMessage) params.push(`body=${encodeURIComponent(targetMessage)}`);
     const queryString = params.length > 0 ? '?' + params.join('&') : '';
     window.location.href = `mailto:${targetTo}${queryString}`;
+    return null;
 })

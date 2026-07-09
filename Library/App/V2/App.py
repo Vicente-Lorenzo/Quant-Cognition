@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from typing import TYPE_CHECKING
 from pathlib import Path, PurePosixPath
 
 import dash
@@ -18,11 +19,14 @@ from Library.App.V2.Notification import NotifierAPI
 from Library.App.V2.Page import PageAPI
 from Library.App.V2.Session import TriggerAPI
 from Library.App.V2.Launchpad import LaunchpadPageAPI
+from Library.App.V2.Login import LoginPageAPI
 from Library.App.V2.Settings import SettingsPageAPI
 from Library.Logging import HandlerLoggingAPI
 from Library.Utility.Path import inspect_file, inspect_file_path
 from Library.Utility.Runtime import find_host_port
 from Library.Utility.Typing import MISSING, getmro, iscallable
+
+if TYPE_CHECKING: from Library.Auth import AuthAPI
 
 class AppAPI:
 
@@ -83,17 +87,13 @@ class AppAPI:
     GLOBAL_THEME_ICON_ID: ComponentID | dict = ComponentID()
     GLOBAL_USER_STORAGE_ID: ComponentID | dict = ComponentID()
     GLOBAL_MENU_ID: ComponentID | dict = ComponentID()
-    GLOBAL_MENU_LOCK_ID: ComponentID | dict = ComponentID()
+    GLOBAL_ACCOUNT_ICON_ID: ComponentID | dict = ComponentID()
     GLOBAL_MENU_USER_ID: ComponentID | dict = ComponentID()
     GLOBAL_MENU_SESSION_ID: ComponentID | dict = ComponentID()
     GLOBAL_MENU_SETTINGS_ID: ComponentID | dict = ComponentID()
     GLOBAL_LOGIN_OPEN_ID: ComponentID | dict = ComponentID()
     GLOBAL_LOGIN_ICON_ID: ComponentID | dict = ComponentID()
     GLOBAL_LOGIN_LABEL_ID: ComponentID | dict = ComponentID()
-    GLOBAL_LOGIN_MODAL_ID: ComponentID | dict = ComponentID()
-    GLOBAL_LOGIN_USER_ID: ComponentID | dict = ComponentID()
-    GLOBAL_LOGIN_PASS_ID: ComponentID | dict = ComponentID()
-    GLOBAL_LOGIN_SUBMIT_ID: ComponentID | dict = ComponentID()
 
     GLOBAL_SETTINGS_THEME_ID: ComponentID | dict = ComponentID()
     GLOBAL_SETTINGS_THEME_ICON_ID: ComponentID | dict = ComponentID()
@@ -102,10 +102,16 @@ class AppAPI:
     GLOBAL_SETTINGS_AUTH_ICON_ID: ComponentID | dict = ComponentID()
     GLOBAL_SETTINGS_AUTH_LABEL_ID: ComponentID | dict = ComponentID()
 
+    GLOBAL_LOGINPAGE_USER_ID: ComponentID | dict = ComponentID()
+    GLOBAL_LOGINPAGE_PASS_ID: ComponentID | dict = ComponentID()
+    GLOBAL_LOGINPAGE_SUBMIT_ID: ComponentID | dict = ComponentID()
+    GLOBAL_LOGINPAGE_SIGNUP_ID: ComponentID | dict = ComponentID()
+
     GLOBAL_NOT_FOUND_LAYOUT: Component
     GLOBAL_LOADING_LAYOUT: Component
     GLOBAL_MAINTENANCE_LAYOUT: Component
     GLOBAL_DEVELOPMENT_LAYOUT: Component
+    GLOBAL_FORBIDDEN_LAYOUT: Component
 
     def __init__(self, *,
                  name: str = "Quant",
@@ -113,6 +119,8 @@ class AppAPI:
                  team: str = MISSING,
                  contact: str = MISSING,
                  motto: str = MISSING,
+                 auth: AuthAPI = None,
+                 access: str | int | None = None,
                  host: str = "127.0.0.1",
                  port: int = MISSING,
                  anchor: str = "/",
@@ -123,15 +131,19 @@ class AppAPI:
         self._team_ = team if team is not MISSING else None
         self._contact_ = contact if contact is not MISSING else None
         self._motto_ = motto if motto is not MISSING else None
+        self._auth_ = auth
+        self._access_ = access
         self._host_ = host
         self._port_ = port if port is not MISSING else find_host_port(host=host, port_min=8050)
         self._debug_ = debug
         self._anchor_ = inspect_file(anchor, header=True, builder=PurePosixPath)
         self._endpoint_ = inspect_file_path(anchor, header=True, footer=True, builder=PurePosixPath)
+        self._login_ = self.endpointize(path="/login", relative=True)
         self._ids_ = set()
         self._pages_ = {}
         self._assets_ = Path(inspect.getfile(type(self))).parent / "Assets"
         self.app = self._compose_()
+        if self._auth_ is not None: self._auth_.install(self.app.server, login=self.anchorize(path="/login", relative=True))
         self._log_.debug(lambda: f"Assets Operation: Resolved ({'Application' if self._assets_ != self.Assets else 'Library'})")
         self._injector_ = InjectorAPI(self)
         self._init_ids_()
@@ -283,23 +295,23 @@ class AppAPI:
         self.GLOBAL_THEME_ICON_ID = self.register(type="icon", name="theme")
         self.GLOBAL_USER_STORAGE_ID = self.register(type="storage", name="user")
         self.GLOBAL_MENU_ID = self.register(type="menu", name="account")
-        self.GLOBAL_MENU_LOCK_ID = self.register(type="icon", name="lock")
+        self.GLOBAL_ACCOUNT_ICON_ID = self.register(type="icon", name="account")
         self.GLOBAL_MENU_USER_ID = self.register(type="text", name="user")
         self.GLOBAL_MENU_SESSION_ID = self.register(type="menuitem", name="session")
         self.GLOBAL_MENU_SETTINGS_ID = self.register(type="menuitem", name="settings")
         self.GLOBAL_LOGIN_OPEN_ID = self.register(type="menuitem", name="login")
         self.GLOBAL_LOGIN_ICON_ID = self.register(type="icon", name="login")
         self.GLOBAL_LOGIN_LABEL_ID = self.register(type="text", name="login")
-        self.GLOBAL_LOGIN_MODAL_ID = self.register(type="modal", name="login")
-        self.GLOBAL_LOGIN_USER_ID = self.register(type="input", name="username")
-        self.GLOBAL_LOGIN_PASS_ID = self.register(type="input", name="password")
-        self.GLOBAL_LOGIN_SUBMIT_ID = self.register(type="button", name="login")
         self.GLOBAL_SETTINGS_THEME_ID = self.register(type="button", name="settings_theme")
         self.GLOBAL_SETTINGS_THEME_ICON_ID = self.register(type="icon", name="settings_theme")
         self.GLOBAL_SETTINGS_THEME_LABEL_ID = self.register(type="text", name="settings_theme")
         self.GLOBAL_SETTINGS_AUTH_ID = self.register(type="button", name="settings_auth")
         self.GLOBAL_SETTINGS_AUTH_ICON_ID = self.register(type="icon", name="settings_auth")
         self.GLOBAL_SETTINGS_AUTH_LABEL_ID = self.register(type="text", name="settings_auth")
+        self.GLOBAL_LOGINPAGE_USER_ID = self.register(type="input", name="loginpage_username")
+        self.GLOBAL_LOGINPAGE_PASS_ID = self.register(type="input", name="loginpage_password")
+        self.GLOBAL_LOGINPAGE_SUBMIT_ID = self.register(type="button", name="loginpage_submit")
+        self.GLOBAL_LOGINPAGE_SIGNUP_ID = self.register(type="button", name="loginpage_signup")
         self.ids()
 
     def _init_ids_(self) -> None:
@@ -311,6 +323,7 @@ class AppAPI:
         self.GLOBAL_LOADING_LAYOUT = DefaultLayoutAPI(icon="bi bi-hourglass-split", title="Loading", description="This resource is loading its content", details="Please wait a moment", classname="loading").build()
         self.GLOBAL_MAINTENANCE_LAYOUT = DefaultLayoutAPI(icon="bi bi-tools", title="Under Maintenance", description="This resource is temporarily down for maintenance", details="Please try again later", classname="maintenance").build()
         self.GLOBAL_DEVELOPMENT_LAYOUT = DefaultLayoutAPI(icon="bi bi-cone-striped", title="Under Development", description="This resource is currently under development", details="Please try again later", classname="development").build()
+        self.GLOBAL_FORBIDDEN_LAYOUT = DefaultLayoutAPI(icon="bi bi-shield-lock", title="Access Denied", description="You do not have permission to view this resource", details="Please sign in with an authorized account", classname="forbidden").build()
 
     def __init_header_layout__(self) -> Component:
         titles = [html.Span(self._name_, className="app-brand-name")]
@@ -321,7 +334,7 @@ class AppAPI:
 
     def __init_menu_layout__(self) -> list[Component]:
         settings = self.endpointize(path="/settings", relative=True)
-        label = html.Span([html.I(className="bi bi-unlock app-lock app-lock-guest", id=self.GLOBAL_MENU_LOCK_ID), html.Span("Guest", id=self.GLOBAL_MENU_USER_ID)], className="app-menu-label")
+        label = html.Span([html.I(className="bi bi-person app-account-icon app-account-public", id=self.GLOBAL_ACCOUNT_ICON_ID), html.Span("Guest", id=self.GLOBAL_MENU_USER_ID)], className="app-menu-label")
         items = [
             dbc.DropdownMenuItem([html.I(className="bi bi-box-arrow-in-right", id=self.GLOBAL_LOGIN_ICON_ID), html.Span("Sign In", id=self.GLOBAL_LOGIN_LABEL_ID)], id=self.GLOBAL_LOGIN_OPEN_ID, n_clicks=0, className="app-menu-item"),
             dbc.DropdownMenuItem([html.I(className="bi bi-moon-stars", id=self.GLOBAL_THEME_ICON_ID), html.Span("Theme")], id=self.GLOBAL_THEME_TOGGLE_ID, n_clicks=0, className="app-menu-item"),
@@ -331,8 +344,8 @@ class AppAPI:
         ]
         menu = dbc.DropdownMenu(items, label=label, align_end=True, nav=True, in_navbar=True, id=self.GLOBAL_MENU_ID, className="app-menu")
         return [menu,
-                self._tip_(self.GLOBAL_MENU_ID, "Your account", placement="bottom"),
-                self._tip_(self.GLOBAL_LOGIN_OPEN_ID, "Sign in to your account", placement="left"),
+                self._tip_(self.GLOBAL_MENU_ID, "Your account", placement="left"),
+                self._tip_(self.GLOBAL_LOGIN_OPEN_ID, "Sign in or out of your account", placement="left"),
                 self._tip_(self.GLOBAL_THEME_TOGGLE_ID, "Cycle the color theme", placement="left"),
                 self._tip_(self.GLOBAL_MENU_SESSION_ID, "Edit and clean stored data", placement="left"),
                 self._tip_(self.GLOBAL_MENU_SETTINGS_ID, "Open the settings page", placement="left")]
@@ -357,8 +370,9 @@ class AppAPI:
             *ButtonAPI(id=self.GLOBAL_IMPORT_ID, upload=self.GLOBAL_IMPORT_UPLOAD_ID, background="warning", tooltip="Import a session snapshot", placement="top", label=[TextAPI(text="Import "), IconAPI(icon="bi bi-upload")]).build(),
             *ButtonAPI(id=self.GLOBAL_EXPORT_ID, download=self.GLOBAL_EXPORT_DOWNLOAD_ID, background="warning", tooltip="Export a session snapshot", placement="top", label=[TextAPI(text="Export "), IconAPI(icon="bi bi-download")]).build(),
             dbc.Collapse(dbc.Card(dbc.CardBody([
-                html.Div([html.B("Team: "), html.Span(self._team_ or "")]),
-                html.Div([html.B("Contact: "), html.A(self._contact_ or "", href=f"mailto:{self._contact_}")]),
+                *([html.Div([html.B("Team: "), html.Span(self._team_)])] if self._team_ else []),
+                *([html.Div([html.B("Contact: "), html.A(self._contact_, href=f"mailto:{self._contact_}")])] if self._contact_ else []),
+                *([html.Div("No contact details available", className="settings-hint")] if not (self._team_ or self._contact_) else []),
             ]), className="panel"), id=self.GLOBAL_CONTACTS_COLLAPSE_ID, is_open=False),
         ], className="left")
         center = html.Div(html.Span(self._motto_, className="app-motto") if self._motto_ else None, className="center")
@@ -391,12 +405,7 @@ class AppAPI:
 
     def __init_modal_layout__(self) -> Component:
         modal = ModalAPI(id=self.GLOBAL_MODAL_ID, size="lg", open=False, fade=False, centered=True, keyboard=True, backdrop=True, header=[html.Div(id=self.GLOBAL_MODAL_HEADER_ID)], body=[html.Div(id=self.GLOBAL_MODAL_BODY_ID)], footer=[html.Div(id=self.GLOBAL_MODAL_FOOTER_ID, style={"flex": "1"}), *ButtonAPI(id=self.GLOBAL_MODAL_BUTTON_ID, background="primary", label=[TextAPI(text="Close")]).build()]).build()
-        form = html.Form([
-            dbc.Input(id=self.GLOBAL_LOGIN_USER_ID, placeholder="Username", type="text", name="username", autoComplete="username", className="app-login-input"),
-            dbc.Input(id=self.GLOBAL_LOGIN_PASS_ID, placeholder="Password", type="password", name="password", autoComplete="current-password", className="app-login-input"),
-        ], className="app-login-form")
-        login = dbc.Modal([dbc.ModalHeader(dbc.ModalTitle([html.I(className="bi bi-key"), html.Span(f"Sign in to {self._name_}")])), dbc.ModalBody(form), dbc.ModalFooter(dbc.Button([html.I(className="bi bi-box-arrow-in-right"), html.Span("Sign In")], id=self.GLOBAL_LOGIN_SUBMIT_ID, color="primary", n_clicks=0, type="button"))], id=self.GLOBAL_LOGIN_MODAL_ID, is_open=False, centered=True)
-        return html.Div([*modal, login], className="app-modal")
+        return html.Div([*modal], className="app-modal")
 
     def _init_layout_(self) -> None:
         self.components()
@@ -415,6 +424,11 @@ class AppAPI:
         self.link(launchpad)
         self.pages()
         self.link(SettingsPageAPI(app=self))
+        login = LoginPageAPI(app=self)
+        login.anchor = self.anchorize(path="/login", relative=True)
+        login.endpoint = self.endpointize(path="/login", relative=True)
+        login._init_()
+        self.index(endpoint=login.endpoint, page=login)
         launchpad.refresh()
         self._log_.debug(lambda: f"Pages Operation: Loaded ({len(self._pages_)} Pages)")
 
@@ -517,6 +531,7 @@ class AppAPI:
         Output(GLOBAL_REENTER_ASYNC_ID, "data"),
         Output(GLOBAL_ROUTE_ASYNC_ID, "data"),
         Output(GLOBAL_LEAVE_ASYNC_ID, "data"),
+        Output(GLOBAL_USER_STORAGE_ID, "data"),
         Input(GLOBAL_LOCATION_ID, "pathname"),
         State(GLOBAL_ROUTING_STORAGE_ID, "data"),
         State(GLOBAL_ENTER_ASYNC_ID, "data"),
@@ -529,6 +544,14 @@ class AppAPI:
         endpoint = self.endpointize(path=pathname, relative=False)
         current = (routing or {}).get("current")
         redirect, page = self.redirect(endpoint=endpoint)
+        forbidden, role, account = False, None, dash.no_update
+        if self._auth_ is not None:
+            from flask_login import current_user
+            role = current_user.Role
+            account = {"name": current_user.Name or current_user.Username, "role": role.name} if current_user.is_authenticated else None
+            if redirect != self._login_ and not current_user.grants(self._required_(page)):
+                if current_user.is_authenticated: forbidden = True
+                else: redirect, page = self.redirect(endpoint=self._login_)
         enter, reenter, route, leave = TriggerAPI(**(enter or {})), TriggerAPI(**(reenter or {})), TriggerAPI(**(route or {})), TriggerAPI(**(leave or {}))
         if current == redirect:
             enter, reenter, route, leave = dash.no_update, reenter.trigger().dict(), route.trigger().dict(), dash.no_update
@@ -536,14 +559,18 @@ class AppAPI:
         else:
             enter, reenter, route, leave = enter.trigger().dict(), dash.no_update, route.trigger().dict(), leave.trigger().dict()
             self._log_.info(lambda: f"Route Operation: Entered ({redirect})")
-        if page:
+        if forbidden:
+            navigation, sidebar, content = dash.no_update, self.GLOBAL_FORBIDDEN_LAYOUT, self.GLOBAL_FORBIDDEN_LAYOUT
+            self._log_.warning(lambda: f"Access Operation: Denied ({endpoint})")
+        elif page:
             navigation = page._navigation_ if page._navigation_ else dash.no_update
-            sidebar, content = page._sidebar_, page._content_
+            dynamic = page.personalize(role)
+            sidebar, content = page._sidebar_, dynamic if dynamic is not None else page._content_
         else:
             navigation, sidebar, content = dash.no_update, self.GLOBAL_NOT_FOUND_LAYOUT, self.GLOBAL_NOT_FOUND_LAYOUT
             self._log_.warning(lambda: f"Route Operation: Missing ({endpoint})")
         pathname = self.anchorize(path=redirect, relative=False) if redirect != endpoint else dash.no_update
-        return pathname, {"current": redirect}, navigation, sidebar, content, enter, reenter, route, leave
+        return pathname, {"current": redirect}, navigation, sidebar, content, enter, reenter, route, leave, account
 
     @clientside_callback(
         Output(GLOBAL_SIDEBAR_COLLAPSE_ID, "is_open"),
@@ -675,7 +702,7 @@ class AppAPI:
         return self.asset("Callbacks/ThemeApply.js", url=False)
 
     @clientside_callback(
-        Output(GLOBAL_MENU_LOCK_ID, "className"),
+        Output(GLOBAL_ACCOUNT_ICON_ID, "className"),
         Output(GLOBAL_MENU_USER_ID, "children"),
         Output(GLOBAL_LOGIN_ICON_ID, "className"),
         Output(GLOBAL_LOGIN_LABEL_ID, "children"),
@@ -686,32 +713,54 @@ class AppAPI:
         return self.asset("Callbacks/Account.js", url=False)
 
     @serverside_callback(
-        Output(GLOBAL_LOGIN_MODAL_ID, "is_open"),
-        Output(GLOBAL_USER_STORAGE_ID, "data"),
+        Output(GLOBAL_LOCATION_ID, "pathname"),
         Input(GLOBAL_LOGIN_OPEN_ID, "n_clicks"),
         Input(GLOBAL_SETTINGS_AUTH_ID, "n_clicks"),
-        Input(GLOBAL_LOGIN_SUBMIT_ID, "n_clicks"),
-        Input(GLOBAL_LOGIN_PASS_ID, "n_submit"),
-        State(GLOBAL_LOGIN_USER_ID, "value"),
-        State(GLOBAL_LOGIN_PASS_ID, "value"),
         State(GLOBAL_USER_STORAGE_ID, "data")
     )
-    def _global_async_authenticate_callback_(self, open_clicks, settings_clicks, submit_clicks, submit_enter, username, password, user):
-        if dash.ctx.triggered_id == self.GLOBAL_SETTINGS_AUTH_ID and not settings_clicks:
-            return dash.no_update, dash.no_update
-        if dash.ctx.triggered_id in (self.GLOBAL_LOGIN_OPEN_ID, self.GLOBAL_SETTINGS_AUTH_ID):
-            if user:
-                self._log_.info(lambda: f"Authenticate Operation: Revoked ({user})")
-                self.notify.info("Signed out", header="Session Ended")
-                return False, None
-            return True, user
+    def _global_async_session_callback_(self, menu_clicks, settings_clicks, user):
+        trigger = dash.ctx.triggered_id
+        if trigger == self.GLOBAL_LOGIN_OPEN_ID and not menu_clicks: return dash.no_update
+        if trigger == self.GLOBAL_SETTINGS_AUTH_ID and not settings_clicks: return dash.no_update
+        if user:
+            if self._auth_ is not None: self._auth_.logout()
+            self._log_.info(lambda: f"Authenticate Operation: Revoked ({user.get('name') if isinstance(user, dict) else user})")
+            self.notify.info("Signed out", header="Session Ended")
+        return self._login_
+
+    @serverside_callback(
+        Output(GLOBAL_LOCATION_ID, "pathname"),
+        Input(GLOBAL_LOGINPAGE_SUBMIT_ID, "n_clicks"),
+        Input(GLOBAL_LOGINPAGE_PASS_ID, "n_submit"),
+        State(GLOBAL_LOGINPAGE_USER_ID, "value"),
+        State(GLOBAL_LOGINPAGE_PASS_ID, "value")
+    )
+    def _global_async_login_page_callback_(self, submit_clicks, submit_enter, username, password):
+        if not submit_clicks and not submit_enter:
+            return dash.no_update
         if (result := self.authenticate(username, password)):
             self._log_.info(lambda: f"Authenticate Operation: Granted ({result})")
             self.notify.success(f"Signed in as {result}", header="Authenticated")
-            return False, result
+            return self._endpoint_
         self._log_.warning(lambda: "Authenticate Operation: Failed · Due to Invalid Credentials")
         self.notify.error("Invalid credentials", header="Authentication Failed")
-        return True, user
+        return dash.no_update
+
+    @serverside_callback(
+        Output(GLOBAL_EMAIL_STORAGE_ID, "data"),
+        Input(GLOBAL_LOGINPAGE_SIGNUP_ID, "n_clicks"),
+        State(GLOBAL_LOGINPAGE_USER_ID, "value")
+    )
+    def _global_async_signup_request_callback_(self, signup_clicks, requester):
+        if not signup_clicks:
+            return dash.no_update
+        if not self._contact_:
+            self.notify.warning("Access requests are not available", header="Request Access")
+            return dash.no_update
+        message = "\n".join([f"I would like to request access to {self._name_}.", "", f"Email: {requester or ''}", "Name: ", "Team: ", "Reason: "])
+        self._log_.info(lambda: f"Signup Operation: Requested ({requester or 'Unknown'})")
+        self.notify.info("Your email client will open — send the request to the team to complete it", header="Request Access")
+        return {"to": self._contact_, "subject": f"Access Request · {self._name_}", "message": message}
 
     def ids(self) -> None:
         pass
@@ -725,8 +774,23 @@ class AppAPI:
     def apps(self) -> list[dict]:
         return []
 
+    def _required_(self, page: PageAPI | None):
+        from Library.Auth import RoleAPI
+        app_access = RoleAPI.parse(self._access_) if self._access_ is not None else RoleAPI.Public
+        page_access = RoleAPI.parse(getattr(page, "access", None)) if page is not None else RoleAPI.Public
+        app_access = app_access if isinstance(app_access, RoleAPI) else RoleAPI.Public
+        page_access = page_access if isinstance(page_access, RoleAPI) else RoleAPI.Public
+        return app_access if app_access.value >= page_access.value else page_access
+
+    def _private_(self) -> bool:
+        from Library.Auth import RoleAPI
+        access = RoleAPI.parse(self._access_) if self._access_ is not None else RoleAPI.Public
+        return isinstance(access, RoleAPI) and access.value > RoleAPI.Public.value
+
     def authenticate(self, username: str | None, password: str | None) -> str | None:
-        return username or None
+        if self._auth_ is None: return username or None
+        identity = self._auth_.login(username=username, password=password)
+        return identity.get_id() if identity else None
 
     def run(self) -> None:
         self._log_.info(lambda: f"Run Operation: Serving (http://{self._host_}:{self._port_})")

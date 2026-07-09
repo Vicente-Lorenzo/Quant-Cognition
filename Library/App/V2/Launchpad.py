@@ -1,6 +1,6 @@
 from dash import html
 
-from Library.App.V2.Component import ButtonAPI, ContainerAPI, IconAPI, TextAPI
+from Library.App.V2.Component import ButtonAPI, ComponentAPI, ContainerAPI, IconAPI, TextAPI
 from Library.App.V2.Page import PageAPI
 
 class LaunchpadPageAPI(PageAPI):
@@ -8,17 +8,25 @@ class LaunchpadPageAPI(PageAPI):
     def __init__(self, *, app) -> None:
         super().__init__(app=app, path="/", button="Launchpad", icon="bi bi-grid-3x3-gap", add_backward_parent=False, add_current_parent=False, add_current_children=True, add_forward_parent=False, add_forward_children=False)
 
+    def personalize(self, role) -> list:
+        return ComponentAPI.flatten([*self.normalize(self._render_(role)), *self.__init_hidden_layout__()])
+
     def content(self) -> ContainerAPI:
-        tiles = [self._tile_(child) for child in self.children if child.button]
+        return self._render_(None)
+
+    def _render_(self, role) -> ContainerAPI:
+        tiles = [self._tile_(child, role) for child in self.children if child.button]
         tiles.extend(self._link_(app) for app in self.app.apps())
         grid = ContainerAPI(builder=html.Div, classname="app-launchpad-grid", elements=tiles) if tiles else TextAPI(text="No applications registered", classname="app-launchpad-empty")
         heading = TextAPI(text="Launchpad", classname="app-launchpad-title", builder=html.H1)
         return ContainerAPI(fluid=True, classname="app-launchpad", elements=[heading, grid])
 
-    @staticmethod
-    def _tile_(page: PageAPI) -> ButtonAPI:
+    def _tile_(self, page: PageAPI, role) -> ButtonAPI:
         label = [IconAPI(icon=page.icon or "bi bi-app", classname="app-tile-icon"), TextAPI(text=page.button, classname="app-tile-name")]
         if page.description: label.append(TextAPI(text=page.description, classname="app-tile-desc"))
+        if role is not None and not role.grants(self.app._required_(page)):
+            label.insert(0, IconAPI(icon="bi bi-lock-fill", classname="app-tile-lock"))
+            return ButtonAPI(background="link", classname="app-tile app-tile-locked", disabled=True, label=label)
         return ButtonAPI(href=page.endpoint, background="link", classname="app-tile", label=label)
 
     @staticmethod

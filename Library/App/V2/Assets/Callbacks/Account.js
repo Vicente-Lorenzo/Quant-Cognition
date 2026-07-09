@@ -1,8 +1,10 @@
 (function(user) {
-    var authed = !!user;
+    var authed = !!(user && user.name);
+    var role = (authed ? (user.role || "Member") : "Public").toLowerCase();
+    var icon = authed ? "bi bi-person-check-fill" : "bi bi-person";
     return [
-        authed ? "bi bi-lock-fill app-lock app-lock-authed" : "bi bi-unlock app-lock app-lock-guest",
-        authed ? user : "Guest",
+        icon + " app-account-icon app-account-" + role,
+        authed ? user.name : "Guest",
         authed ? "bi bi-box-arrow-right" : "bi bi-box-arrow-in-right",
         authed ? "Sign Out" : "Sign In"
     ];

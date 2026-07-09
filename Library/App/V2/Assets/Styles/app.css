@@ -79,7 +79,7 @@ html, body { height: 100%; margin: 0; }
     font-weight: 600;
 }
 
-.app-logo { height: 1.75rem; width: auto; }
+.app-logo { height: 1.75rem; width: auto; border-radius: 50%; }
 
 .app-menu { margin-left: auto; display: flex; align-items: center; }
 
@@ -103,11 +103,17 @@ html, body { height: 100%; margin: 0; }
 
 .app-menu-label { display: inline-flex; align-items: center; gap: 0.4rem; }
 
-.app-lock { font-size: 0.95rem; display: inline-block; width: 1.1em; text-align: center; }
+.app-account-icon { font-size: 0.95rem; display: inline-block; width: 1.1em; text-align: center; }
 
-.app-lock-guest { color: #e06666; }
+.app-account-public { color: var(--bs-secondary-color); }
 
-.app-lock-authed { color: #26a69a; }
+.app-account-viewer { color: #26c6da; }
+
+.app-account-member { color: #40c057; }
+
+.app-account-moderator { color: #4c82ff; }
+
+.app-account-administrator { color: #f6465d; }
 
 .app-menu .dropdown-menu {
     min-width: 12.5rem;
@@ -186,6 +192,60 @@ html, body { height: 100%; margin: 0; }
 
 .app-launchpad-empty { text-align: center; color: var(--bs-secondary-color); }
 
+.app-login-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 10rem);
+    padding: 1rem;
+}
+
+.app-login-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+    max-width: 22rem;
+    padding: 2.5rem 2rem;
+    background: var(--bs-secondary-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+.app-login-logo { height: 3.5rem; width: auto; border-radius: 50%; margin-bottom: 0.5rem; }
+
+.app-login-title { margin: 0; font-size: 1.4rem; font-weight: 700; text-align: center; letter-spacing: -0.01em; }
+
+.app-login-subtitle { margin: 0; color: var(--bs-secondary-color); font-size: 0.85rem; text-align: center; }
+
+.app-login-form { display: flex; flex-direction: column; gap: 0.75rem; width: 100%; margin-top: 0.5rem; }
+
+.app-login-input { width: 100%; }
+
+.app-login-submit { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; margin-top: 0.25rem; }
+
+.app-login-signup-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    width: 100%;
+    padding-top: 0.75rem;
+    margin-top: 0.25rem;
+    border-top: 1px solid var(--bs-border-color);
+    font-size: 0.85rem;
+}
+
+.app-login-hint { color: var(--bs-secondary-color); }
+
+.app-login-signup { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0; font-size: 0.85rem; text-decoration: none; }
+
+.app-login-guest { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; width: 100%; color: var(--bs-secondary-color); font-size: 0.85rem; text-decoration: none; }
+
+.app-login-guest:hover { color: var(--bs-body-color); }
+
 .app-tile.btn, a.app-tile {
     position: relative;
     display: flex;
@@ -221,6 +281,18 @@ html, body { height: 100%; margin: 0; }
 
 .app-tile-badge { position: absolute; top: 0.85rem; right: 0.95rem; font-size: 0.85rem; color: var(--bs-secondary-color); }
 
+.app-tile.app-tile-locked, .app-tile.app-tile-locked:hover {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    border-color: var(--bs-border-color);
+    box-shadow: none;
+}
+
+.app-tile-locked .app-tile-icon { color: var(--bs-secondary-color); }
+
+.app-tile-lock { position: absolute; top: 0.85rem; right: 0.95rem; font-size: 0.9rem; color: var(--bs-secondary-color); }
+
 .panel {
     border: 1px solid var(--bs-border-color);
     border-radius: 0.75rem;
@@ -235,10 +307,6 @@ html, body { height: 100%; margin: 0; }
 .page-lead { color: var(--bs-secondary-color); margin-bottom: 1.5rem; }
 
 .status-line { font-family: var(--bs-font-monospace); font-size: 0.85rem; color: var(--bs-secondary-color); }
-
-.app-login-form { display: flex; flex-direction: column; }
-
-.app-login-input { margin-bottom: 0.75rem; }
 
 .modal-title { display: inline-flex; align-items: center; gap: 0.5rem; }
 

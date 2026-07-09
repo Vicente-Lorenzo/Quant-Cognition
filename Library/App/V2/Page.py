@@ -22,6 +22,7 @@ class PageAPI(Generic[AppType]):
                  button: str = None,
                  icon: str = None,
                  description: str = None,
+                 access: str | int = None,
                  content: Component | list[Component] = None,
                  sidebar: Component | list[Component] = None,
                  navigation: Component | list[Component] = None,
@@ -37,6 +38,7 @@ class PageAPI(Generic[AppType]):
         self.button = button
         self.icon = icon
         self.description = description
+        self.access = access
         self._add_backward_parent_ = add_backward_parent
         self._add_backward_children_ = add_backward_children
         self._add_current_parent_ = add_current_parent
@@ -182,6 +184,9 @@ class PageAPI(Generic[AppType]):
 
     def ids(self) -> None:
         pass
+
+    def personalize(self, role) -> list[Component] | None:
+        return None
 
     def content(self) -> Component | list[Component]:
         return self.normalize(self.app.GLOBAL_DEVELOPMENT_LAYOUT)
