@@ -31,9 +31,9 @@ class LocalAuthProviderAPI(AuthProviderAPI):
     def authenticate(self, *, username: Union[str, None] = None, password: Union[str, None] = None, **_) -> Union[UserAPI, None]:
         if not username or not password: return None
         user = self._auth_.find(username)
-        if user is None or not user.IsActive or not user.PasswordHash: return None
-        if not PasswordAPI.verify(user.PasswordHash, password): return None
-        if PasswordAPI.stale(user.PasswordHash): self._auth_.password(user.UID, password)
+        if user is None or not user.Active or not user.Password: return None
+        if not PasswordAPI.verify(user.Password, password): return None
+        if PasswordAPI.stale(user.Password): self._auth_.password(user.UID, password)
         return user
 
 class CloudflareAuthProviderAPI(AuthProviderAPI):

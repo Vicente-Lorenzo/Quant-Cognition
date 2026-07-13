@@ -1,11 +1,9 @@
 from __future__ import annotations
-
-import os
 import secrets
 from datetime import datetime
 from typing import Union, TYPE_CHECKING
 
-from Library.Auth.Identity import IdentityAPI, AnonymousIdentityAPI
+from Library.Auth.Identity import IdentityAPI, AnonymousAPI
 from Library.Auth.Password import PasswordAPI
 from Library.Auth.Provider import AuthProviderAPI, LocalAuthProviderAPI
 from Library.Auth.Role import RoleAPI
@@ -24,15 +22,13 @@ class AuthAPI:
     def __init__(self, *,
                  database: str = "Quant",
                  providers: Union[list[AuthProviderAPI], None] = None,
-                 secret: Union[str, None] = None) -> None:
+                 secret: Union[str, None] = None,
+                 secure: bool = True) -> None:
         self._database_ = database
-        self._secret_ = secret or os.environ.get("QUANT_SECRET_KEY") or secrets.token_hex(32)
+        self._secret_ = secret or secrets.token_hex(32)
+        self._secure_ = secure
         self._providers_ = providers if providers is not None else [LocalAuthProviderAPI(self)]
         self._manager_ = None
-
-    @property
-    def _secure_(self) -> bool:
-        return os.environ.get("QUANT_INSECURE") != "1"
 
     def install(self, server: Flask, *, login: str = "/login") -> LoginManager:
         from flask_login import LoginManager
@@ -43,7 +39,7 @@ class AuthAPI:
         manager = LoginManager()
         manager.init_app(server)
         manager.login_view = login
-        manager.anonymous_user = AnonymousIdentityAPI
+        manager.anonymous_user = AnonymousAPI
         manager.user_loader(self.identity)
         manager.request_loader(self._sso_)
         self._manager_ = manager
@@ -68,14 +64,14 @@ class AuthAPI:
 
     def identity(self, username: str) -> Union[IdentityAPI, None]:
         user = self.find(username)
-        if user is None or not user.IsActive: return None
+        if user is None or not user.Active: return None
         return IdentityAPI.of(user)
 
     def touch(self, username: str) -> None:
         self._update_('"LastLogin" = :ts:', {"ts": datetime.now(), "key": username})
 
     def password(self, username: str, password: str) -> None:
-        self._update_('"PasswordHash" = :hash:', {"hash": PasswordAPI.hash(password), "key": username})
+        self._update_('"Password" = :hash:', {"hash": PasswordAPI.hash(password), "key": username})
 
     def authenticate(self, **credentials) -> Union[IdentityAPI, None]:
         for provider in self._providers_:
@@ -121,20 +117,10 @@ class AuthAPI:
                role: Union[str, int, RoleAPI] = RoleAPI.Viewer,
                provider: str = "Local",
                active: bool = True) -> Union[UserAPI, None]:
-        parsed = RoleAPI.parse(role)
-        now = datetime.now()
-        record = {
-            "UID": username,
-            "Email": email,
-            "Name": name,
-            "PasswordHash": PasswordAPI.hash(password) if password else None,
-            "Role": (parsed if isinstance(parsed, RoleAPI) else RoleAPI.Viewer).name,
-            "Provider": provider,
-            "IsActive": active,
-            "CreatedAt": now,
-            "UpdatedAt": now,
-            "UpdatedBy": provider
-        }
         with PostgresDatabaseAPI(database=self._database_) as db:
-            db.upsert(schema=self.Schema, table=self.Table, data=[record], key=["UID"])
-        return self.find(username)
+            user = UserAPI(db=db, UID=username, Email=email, Name=name,
+                           Password=PasswordAPI.hash(password) if password else None,
+                           Role=RoleAPI.coerce(role, RoleAPI.Viewer), Provider=provider,
+                           Active=active)
+            user.save(by=provider)
+        return user

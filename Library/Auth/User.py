@@ -5,9 +5,11 @@ from dataclasses import dataclass
 from typing import Union, ClassVar, TYPE_CHECKING
 
 from Library.Auth.Role import RoleAPI
+from Library.Auth.Team import TeamAPI
+from Library.Auth.Office import OfficeAPI
 from Library.Database.Dataframe import pl
-from Library.Database.Database import PrimaryKey
 from Library.Database.Datapoint import DatapointAPI
+from Library.Database.Database import PrimaryKey, ForeignKey
 
 if TYPE_CHECKING: from Library.Database.Database import DatabaseAPI
 
@@ -19,26 +21,36 @@ class UserAPI(DatapointAPI):
     Table: ClassVar[str] = "User"
 
     UID: Union[str, None] = None
-    Email: Union[str, None] = None
-    Name: Union[str, None] = None
-    PasswordHash: Union[str, None] = None
-    Role: Union[str, RoleAPI, None] = None
+    Office: Union[str, None] = None
+    Team: Union[str, None] = None
     Provider: Union[str, None] = None
-    IsActive: Union[bool, None] = None
-    CreatedAt: Union[datetime, None] = None
+    Active: Union[bool, None] = None
+    Role: Union[str, RoleAPI, None] = None
+    Name: Union[str, None] = None
+    Forename: Union[str, None] = None
+    Middlename: Union[str, None] = None
+    Surname: Union[str, None] = None
+    Email: Union[str, None] = None
+    Telephone: Union[str, None] = None
+    Password: Union[str, None] = None
     LastLogin: Union[datetime, None] = None
 
     @property
     def Structure(self) -> dict:
         return {
             self.ID.UID: PrimaryKey(pl.String),
-            self.ID.Email: pl.String(),
-            self.ID.Name: pl.String(),
-            self.ID.PasswordHash: pl.String(),
-            self.ID.Role: pl.String(),
+            self.ID.Office: ForeignKey(pl.String, reference=f'"{OfficeAPI.Schema}"."{OfficeAPI.Table}"("{OfficeAPI.ID.UID}")'),
+            self.ID.Team: ForeignKey(pl.String, reference=f'"{TeamAPI.Schema}"."{TeamAPI.Table}"("{TeamAPI.ID.UID}")'),
             self.ID.Provider: pl.String(),
-            self.ID.IsActive: pl.Boolean(),
-            self.ID.CreatedAt: pl.Datetime(),
+            self.ID.Active: pl.Boolean(),
+            self.ID.Role: pl.String(),
+            self.ID.Name: pl.String(),
+            self.ID.Forename: pl.String(),
+            self.ID.Middlename: pl.String(),
+            self.ID.Surname: pl.String(),
+            self.ID.Email: pl.String(),
+            self.ID.Telephone: pl.String(),
+            self.ID.Password: pl.String(),
             self.ID.LastLogin: pl.Datetime(),
             **super().Structure
         }
@@ -53,5 +65,4 @@ class UserAPI(DatapointAPI):
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     def authority(self) -> RoleAPI:
-        role = RoleAPI.parse(self.Role)
-        return role if isinstance(role, RoleAPI) else RoleAPI.Public
+        return RoleAPI.coerce(self.Role)

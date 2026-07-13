@@ -17,11 +17,10 @@ class IdentityAPI:
                  role: Union[str, int, RoleAPI] = RoleAPI.Viewer,
                  provider: Union[str, None] = None,
                  active: bool = True) -> None:
-        parsed = RoleAPI.parse(role)
         self.Username = username
         self.Email = email
         self.Name = name
-        self.Role = parsed if isinstance(parsed, RoleAPI) else RoleAPI.Viewer
+        self.Role = RoleAPI.coerce(role, RoleAPI.Viewer)
         self.Provider = provider
         self._active_ = active
 
@@ -40,9 +39,9 @@ class IdentityAPI:
 
     @classmethod
     def of(cls, user: UserAPI) -> Self:
-        return cls(username=user.UID, email=user.Email, name=user.Name, role=user.authority(), provider=user.Provider, active=bool(user.IsActive))
+        return cls(username=user.UID, email=user.Email, name=user.Name, role=user.authority(), provider=user.Provider, active=bool(user.Active))
 
-class AnonymousIdentityAPI(AnonymousUserMixin):
+class AnonymousAPI(AnonymousUserMixin):
 
     Username: Union[str, None] = None
     Email: Union[str, None] = None
