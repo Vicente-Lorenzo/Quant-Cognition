@@ -77,7 +77,7 @@ The **Quant Cognition** web app (Dash, `Library/Web`) is published to the public
 ### 7.1 Components
 - **App server (`Scripts/Quant.bat`):** runs `python -m Library.Web.Serve`, a **waitress** WSGI server binding the app to `127.0.0.1:8050` (loopback only — never exposed directly). `Library/Web/Serve.py` is the production entry point; `python -m Library.Web.App` is the dev/`debug` entry point.
 - **Tunnel (`Scripts/Tunnel.bat`):** runs `cloudflared --config C:\Users\Admin\.cloudflared\config.yml tunnel run Quant`. The named tunnel **`Quant`** (`config.yml` → `ingress: quantcognition.com → http://127.0.0.1:8050`, fallback `http_status:404`) authenticates with its credentials JSON in `~/.cloudflared`. The Cloudflare dashboard holds the DNS record routing `quantcognition.com` to this tunnel.
-- **Auth:** the app is **private** (`access="Viewer"`) — unauthenticated visitors land on `/login`. Roles/pages are enforced server-side (see `Library/Auth`); seed/manage the admin account with `python -m Setup.Auth`. Cookies are `Secure` in prod (TLS at the edge + `ProxyFix`); `QUANT_INSECURE=1` is **only** for local `http` development.
+- **Auth:** the app is **private** (`access="Viewer"`) — unauthenticated visitors land on `/login`. Roles/pages are enforced server-side (see `Library/Auth`); seed/manage the admin account with `python -m Setup.Auth`. Cookies are `Secure` by default (TLS at the edge + `ProxyFix`); pass `AuthAPI(secure=False)` only for non-localhost `http` development. The session secret is generated per process (restart ⇒ re-login); pass `AuthAPI(secret=...)` if you want a stable one.
 
 ### 7.2 Auto-Start on Boot
 Two **Task Scheduler** tasks run at system startup as user `Admin` (not SYSTEM — the tunnel config lives in the user profile):
@@ -95,6 +95,24 @@ Start-ScheduledTask -TaskName "Cloudflare Tunnel"   # start tunnel
 Stop-ScheduledTask  -TaskName "Cloudflare Tunnel"   # take the site offline
 cloudflared tunnel list                             # inspect tunnels + live connections
 ```
+
+## ⏱️ Step 8: Job Orchestration (Quant Scheduler)
+The **Quant Scheduler** (`Library/Scheduler`) replaces Windows Task Scheduler for recurring jobs with a single boot daemon that owns all scheduling. Provision the `Scheduler` schema once with `python -m Setup.Scheduler` (idempotent — creates the schema, adds the `Auth` name/`Team`/`Office` columns, and migrates the Scheduler tables in FK order).
+
+**Model:** a **Task** is a `.bat`/`.sh`/`.py` artifact with a cron `Schedule`; each execution produces an auditable **Run** (status, duration, peak memory, exit code). Tasks are `Scheduled` (cron → run once) or `Service` (always-on, respawned on exit). Optional human gates: **Approval** on a passing run (exit 0), **Review** on a crashed run (exit ≠ 0) — Accept → Success, Reject → Failure. **Retry:** a crash retries up to `MaxAttempts` with a `RetryDelay` between attempts before Review/Failure. **Workflows** chain Tasks into a DAG (`WorkflowAPI` cron `Schedule`; a step fires only when every predecessor succeeded — a pending gate blocks all downstream). **Self-healing:** each run heartbeats; a runner killed mid-run (or a machine reboot) is detected via a stale heartbeat lease and re-dispatched/failed per the retry/review policy.
+
+### 8.1 Components
+- **Daemon (`Scripts/Scheduler.bat`):** runs `python -m Library.Scheduler.Serve` — a single-threaded control loop that evaluates cron schedules (`croniter`) and **spawns a separate `Runner` process per run** (never threads), isolating each job. It supervises `Service` tasks (respawn on death), reaps dead runs, re-dispatches retries, advances workflow DAGs, and caps concurrent active runs.
+- **Runner (`python -m Library.Scheduler.Runner <TID>`):** the per-run entry point; executes one Task's artifact as a child process, samples peak RSS via `psutil`, drives the Run state machine, and records the Run.
+- **CLI (`python -m Library.Scheduler.Main`):** full terminal control — `task`/`workflow`/`run` subcommands (`create`/`update`/`delete`/`list`/`show`/`enable`/`disable`/`run`, `workflow link`/`unlink`, `run approve`/`reject`) plus `serve`. Backed by `ManagerAPI`, the single operations layer the web UI also calls, so everything is doable from the terminal without the UI. Example: `python -m Library.Scheduler.Main task create --uid daily-download --name Download --owner me --type Batch --path Scripts/System.bat --schedule "0 22 * * 1-5"`.
+
+### 8.2 Auto-Start on Boot (cutover from Task Scheduler)
+End state: the **only** Windows startup task is `Quant Scheduler`; everything else becomes a Task it manages.
+| Task | Trigger | Runs |
+| --- | --- | --- |
+| `Quant Scheduler` | At boot | `Scripts\Scheduler.bat` |
+
+Migrate the existing jobs into it — `System.bat`/`Calendar.bat` as `Scheduled` Tasks, `Quant.bat` (app) / `Tunnel.bat` as `Service` Tasks — then disable the old `Quant Cognition` / `Cloudflare Tunnel` boot tasks once supervision is verified. Until then the Step-7 boot tasks are left untouched (working prod deployment); the cutover is deliberate, not automatic.
 
 ## 🚀 Daily Launch Sequence
 1. Verify the postgresql service is running natively in Windows (set to Automatic start via services.msc).
