@@ -1,10 +1,12 @@
-﻿import pymssql
+﻿import re
+import pymssql
 from typing import Union, Callable, Any
 from collections.abc import Sequence
 
 from Library.Database.Dataframe import pl
 from Library.Database.Query import QueryAPI
 from Library.Database.Database import DatabaseAPI
+from Library.Utility.Typing import MISSING, Missing
 
 class MicrosoftDatabaseAPI(DatabaseAPI):
     """
@@ -154,8 +156,26 @@ class MicrosoftDatabaseAPI(DatabaseAPI):
         return f"CAST({column} AS NVARCHAR(MAX))"
 
     def _limit_(self, sql: str, limit: int) -> str:
-        import re
-        return re.sub(r"(?i)^SELECT\s+", f"SELECT TOP {limit} ", sql.strip())
+        return re.sub(r"(?i)^SELECT\s+(?:DISTINCT\s+|ALL\s+)?", lambda m: f"{m.group(0)}TOP {limit} ", sql.strip(), count=1)
+
+    def _datatype_(self, dtype, *, indexed: bool = False) -> str:
+        datatype = self._CREATE_DATATYPE_MAPPING_[self._normalize_(dtype)]
+        return "NVARCHAR(450)" if indexed and datatype == "NVARCHAR(MAX)" else datatype
+
+    def _identity_(self) -> str:
+        return " IDENTITY(1, 1)"
+
+    def _fingerprint_(self, *,
+                      database: Union[str, Sequence, None, Missing] = MISSING,
+                      schema: Union[str, Sequence, None, Missing] = MISSING,
+                      table: Union[str, Sequence, None, Missing] = MISSING) -> Union[str, None]:
+        sql = ("SELECT SUM(leaf_insert_count + leaf_update_count + leaf_delete_count) AS token "
+               "FROM sys.dm_db_index_operational_stats(DB_ID(), OBJECT_ID(:fingerprint_object:), NULL, NULL)")
+        db = self.executeone(QueryAPI(sql), database=database, admin=False, fingerprint_object=self._target_(schema, table))
+        frame = db.fetchall(legacy=False)
+        records = frame.to_dicts() if hasattr(frame, "to_dicts") else frame.to_dict("records")
+        if records and records[0].get("token") is not None: return str(records[0]["token"])
+        return None
 
     def _upsert_(self, target: str, columns: Sequence[str], keys: Sequence[str], exclude: Sequence[str] = (), returning: Sequence[str] = (), rows: int = 1) -> str:
         ql, qr = self._quote_

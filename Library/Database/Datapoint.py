@@ -58,7 +58,8 @@ class DatapointAPI(DataclassAPI):
         object.__setattr__(self, name, value)
         if self._autosave_ and name and name[0].isupper():
             try: self.save()
-            except Exception: pass
+            except Exception as e:
+                if self._db_ is not None: self._db_._log_.debug(lambda: f"Autosave {type(self).__name__}: Failed · {e}")
 
     def primary_keys(self) -> list[str]:
         return [str(n) for n, d in self.Structure.items() if isinstance(d, PrimaryKey) or (isinstance(d, (IdentityKey, ForeignKey)) and getattr(d, "primary", False))]

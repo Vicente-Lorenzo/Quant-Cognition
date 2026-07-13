@@ -197,6 +197,7 @@ class PostgresDatabaseAPI(DatabaseAPI):
         frame = self._csvframe_(data, columns)
         if frame.is_empty(): return self
         self._copy_(self._target_(schema, table), frame)
+        self._transaction_ = True
         self._log_.alert(lambda: f"Copy Operation: Streamed {frame.height} rows in {table} Table")
         return self
 
@@ -208,8 +209,7 @@ class PostgresDatabaseAPI(DatabaseAPI):
               key: Union[str, Sequence[str], None] = None,
               exclude: Union[Sequence[str], None] = None) -> Self:
         if not key:
-            if self._STRUCTURE_:
-                key = [name for name, dtype in self._STRUCTURE_.items() if isinstance(dtype, PrimaryKey) or (isinstance(dtype, (IdentityKey, ForeignKey)) and dtype.primary)]
+            key = self._structure_keys_()
             if not key: raise ValueError("Key must be provided to merge rows")
         routed = self._route_("merge", database, schema, table, data=data, key=key, exclude=exclude)
         if isinstance(routed, list): return self
@@ -232,3 +232,15 @@ class PostgresDatabaseAPI(DatabaseAPI):
             self._cursor_.execute(f"INSERT INTO {target} ({cols}) SELECT {cols} FROM {stage} ON CONFLICT ({key_str}) {conflict}")
         self._log_.alert(lambda: f"Merge Operation: Merged {frame.height} rows in {table} Table")
         return self
+
+    def _fingerprint_(self, *,
+                      database: Union[str, Sequence, None, Missing] = MISSING,
+                      schema: Union[str, Sequence, None, Missing] = MISSING,
+                      table: Union[str, Sequence, None, Missing] = MISSING) -> Union[str, None]:
+        frame = self.select(database=database, schema="pg_catalog", table="pg_stat_all_tables",
+                            columns="COALESCE(n_tup_ins, 0) + COALESCE(n_tup_upd, 0) + COALESCE(n_tup_del, 0)",
+                            condition='schemaname = :fingerprint_schema: AND relname = :fingerprint_table:',
+                            parameters={"fingerprint_schema": schema, "fingerprint_table": table})
+        records = frame.to_dicts() if hasattr(frame, "to_dicts") else frame.to_dict("records")
+        if records: return str(next(iter(records[0].values())))
+        return None

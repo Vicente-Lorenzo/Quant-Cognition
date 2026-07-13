@@ -40,6 +40,7 @@ class BufferAPI(threading.Thread):
         self._active_: bool = workers > 0 and (self._full_ or batch > 0 or interval > 0)
 
         self._buffer_: dict = {t: [] for t in self._types_}
+        self._failed_: dict = {t: [] for t in self._types_}
         self._count_: int = 0
         self._queue_: dict = {t: queue.Queue(maxsize=maxsize) for t in self._types_}
         self._signal_: queue.Queue = queue.Queue()
@@ -69,6 +70,10 @@ class BufferAPI(threading.Thread):
         if 0 < self._batch_ <= total: return False
         if self._interval_ > 0 and (datetime.now() - self._last_flush_) >= timedelta(seconds=self._interval_): return False
         return True
+
+    @property
+    def Failed(self) -> dict:
+        return {t: len(records) for t, records in self._failed_.items() if records}
 
     @staticmethod
     def _noop_(*args, **kwargs) -> None:
@@ -157,7 +162,8 @@ class BufferAPI(threading.Thread):
             timer.stop()
             self._log_.debug(lambda: f"Drain {t.Table}: {len(records)} Records · {count} Unique Rows ({timer.result()})")
         except Exception as e:
-            self._log_.error(lambda: f"Drain {t.Table}: Failed · {e}")
+            self._failed_[t].extend(records)
+            self._log_.error(lambda: f"Drain {t.Table}: Failed · Retained {len(records)} Records · {sum(len(v) for v in self._failed_.values())} Pending · {e}")
 
     def _consume_(self, db: DatabaseAPI) -> None:
         snapshot = {t: self._collect_(t) for t in reversed(self._types_)}

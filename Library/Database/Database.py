@@ -264,11 +264,12 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         defs = []
         pks = []
         for name, dtype in structure.items():
-            base = self._CREATE_DATATYPE_MAPPING_[self._normalize_(dtype)]
+            indexed = isinstance(dtype, (PrimaryKey, IdentityKey, ForeignKey))
+            base = self._datatype_(dtype, indexed=indexed)
             if isinstance(dtype, IdentityKey):
                 if dtype.primary: pks.append(name)
                 else: base += " UNIQUE"
-                base += " GENERATED ALWAYS AS IDENTITY"
+                base += self._identity_()
             elif isinstance(dtype, PrimaryKey):
                 pks.append(name)
             elif isinstance(dtype, ForeignKey):
@@ -279,6 +280,16 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
             pk_cols = ", ".join(f"{ql}{c}{qr}" for c in pks)
             defs.append(f"PRIMARY KEY ({pk_cols})")
         return ",\n    ".join(defs)
+
+    def _datatype_(self, dtype, *, indexed: bool = False) -> str:
+        return self._CREATE_DATATYPE_MAPPING_[self._normalize_(dtype)]
+
+    def _identity_(self) -> str:
+        return " GENERATED ALWAYS AS IDENTITY"
+
+    def _structure_keys_(self) -> list:
+        if not self._STRUCTURE_: return []
+        return [name for name, dtype in self._STRUCTURE_.items() if isinstance(dtype, PrimaryKey) or (isinstance(dtype, (IdentityKey, ForeignKey)) and dtype.primary)]
 
     def _route_(self, method: str, database: Any, schema: Any, table: Any, args: tuple = (), **kwargs) -> Union[tuple[str | None, str | None, str | None], list]:
         db = database if database is not MISSING else self._database_
@@ -1144,6 +1155,43 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         db = self.executeone(QueryAPI(sql), database=database, schema=schema, table=table, admin=False, **(parameters or {}))
         return db.fetchall(legacy=legacy)
 
+    def fingerprint(self, *,
+                    database: Union[str, Sequence, None, Missing] = MISSING,
+                    schema: Union[str, Sequence, None, Missing] = MISSING,
+                    table: Union[str, Sequence, None, Missing] = MISSING,
+                    condition: Union[str, None] = None,
+                    parameters: Union[dict, None] = None,
+                    column: Union[str, None] = None) -> str:
+        """
+        Computes a lightweight change token for a relation without pulling its rows, cheap
+        enough to poll: the token only changes when the target rows change. Drivers may expose
+        an O(1) statistics-based token via the ``_fingerprint_`` hook; otherwise (or for a
+        filtered or non-concrete target) the portable fallback counts the rows and optionally
+        folds in the maximum of a stamp column.
+        :param database: Target database.
+        :param schema: Target schema.
+        :param table: Target table.
+        :param condition: Optional WHERE condition to fingerprint a filtered subset.
+        :param parameters: Parameters for the condition.
+        :param column: Optional column whose maximum is folded into the token (e.g. an UpdatedAt stamp).
+        :return: A stable string token that changes whenever the target rows change.
+        """
+        if condition is None and isinstance(schema, str) and isinstance(table, str):
+            try: token = self._fingerprint_(database=database, schema=schema, table=table)
+            except Exception: token = None
+            if token is not None: return token
+        expression = "COUNT(*)" if column is None else f"COUNT(*), MAX({self._quoted_(column)})"
+        frame = self.select(database=database, schema=schema, table=table, columns=expression, condition=condition, parameters=parameters)
+        records = frame.to_dicts() if hasattr(frame, "to_dicts") else frame.to_dict("records")
+        if not records: return ""
+        return "|".join("" if value is None else str(value) for value in records[0].values())
+
+    def _fingerprint_(self, *,
+                      database: Union[str, Sequence, None, Missing] = MISSING,
+                      schema: Union[str, Sequence, None, Missing] = MISSING,
+                      table: Union[str, Sequence, None, Missing] = MISSING) -> Union[str, None]:
+        return None
+
     def insert(self, *,
                database: Union[str, Sequence, None, Missing] = MISSING,
                schema: Union[str, Sequence, None, Missing] = MISSING,
@@ -1228,8 +1276,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         :return: Self reference, or a DataFrame of returned columns when ``returning`` is set.
         """
         if not key:
-            if self._STRUCTURE_:
-                key = [name for name, dtype in self._STRUCTURE_.items() if isinstance(dtype, PrimaryKey) or (isinstance(dtype, (IdentityKey, ForeignKey)) and dtype.primary)]
+            key = self._structure_keys_()
             if not key:
                 raise ValueError("Key must be provided to upsert rows")
         routed = self._route_("upsert", database, schema, table, data=data, key=key, exclude=exclude, returning=returning)
