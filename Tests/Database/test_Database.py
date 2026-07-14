@@ -616,3 +616,49 @@ def test_python_types_in_structure(db):
     assert isinstance(df["id"][0], int)
     api.disconnect()
     admin.disconnect()
+def test_fingerprint_count_fallback(db):
+    admin = db(admin=True)
+    admin.create(database="test_database")
+    api = db(database="test_database", schema="test_schema", table="test_table")
+    api.create(structure={"id": pl.Int64, "name": pl.String})
+    api.insert(data=[{"id": 1, "name": "A"}, {"id": 2, "name": "B"}])
+    fp1 = api.fingerprint(schema="test_schema", table="test_table", condition="id > 0")
+    assert fp1 == "2"
+    api.insert(data=[{"id": 3, "name": "C"}])
+    fp2 = api.fingerprint(schema="test_schema", table="test_table", condition="id > 0")
+    assert fp2 == "3"
+    assert fp2 != fp1
+    api.remove(condition="id = 1")
+    fp3 = api.fingerprint(schema="test_schema", table="test_table", condition="id > 0")
+    assert fp3 == "2"
+    api.disconnect()
+    admin.disconnect()
+def test_fingerprint_column_fold(db):
+    admin = db(admin=True)
+    admin.create(database="test_database")
+    api = db(database="test_database", schema="test_schema", table="test_table")
+    api.create(structure={"id": pl.Int64, "name": pl.String})
+    api.insert(data=[{"id": 1, "name": "A"}, {"id": 2, "name": "B"}])
+    fp1 = api.fingerprint(schema="test_schema", table="test_table", condition="id > 0", column="id")
+    assert fp1 == "2|2"
+    api.insert(data=[{"id": 5, "name": "E"}])
+    fp2 = api.fingerprint(schema="test_schema", table="test_table", condition="id > 0", column="id")
+    assert fp2 == "3|5"
+    assert fp2 != fp1
+    api.disconnect()
+    admin.disconnect()
+def test_fingerprint_pg_stat_fast_path(db):
+    admin = db(admin=True)
+    admin.create(database="test_database")
+    api = db(database="test_database", schema="test_schema", table="test_table")
+    api.create(structure={"id": pl.Int64, "name": pl.String})
+    api.insert(data=[{"id": 1, "name": "A"}])
+    api.executeone(QueryAPI("SELECT pg_stat_force_next_flush()"))
+    fp1 = api.fingerprint(schema="test_schema", table="test_table")
+    assert fp1 and fp1.isdigit()
+    api.insert(data=[{"id": 2, "name": "B"}])
+    api.executeone(QueryAPI("SELECT pg_stat_force_next_flush()"))
+    fp2 = api.fingerprint(schema="test_schema", table="test_table")
+    assert fp2 != fp1
+    api.disconnect()
+    admin.disconnect()
