@@ -195,6 +195,9 @@ def traceback_package_module_path(package: str, *, header: bool = None, footer: 
     traceback: str = traceback_package(package=package)
     return inspect_module_path(file=traceback, header=header, footer=footer, resolve=resolve, builder=builder)
 
+def traceback_root(*, package: str = "Library") -> Path:
+    return traceback_package_module(package, resolve=True).parent
+
 @dataclass(kw_only=True)
 class PathAPI:
 
