@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import secrets
 from datetime import datetime
 from typing import Union, TYPE_CHECKING
@@ -99,11 +100,6 @@ class AuthAPI:
         from flask_login import logout_user
         logout_user()
 
-    @staticmethod
-    def authorize(required: Union[str, int, RoleAPI]) -> bool:
-        from flask_login import current_user
-        return current_user.grants(required)
-
     def provision(self, *, email: str, provider: str, name: Union[str, None] = None, role: Union[str, int, RoleAPI] = RoleAPI.Viewer) -> Union[UserAPI, None]:
         user = self.locate(email) or self.find(email)
         if user is not None: return user
@@ -116,7 +112,7 @@ class AuthAPI:
                password: Union[str, None] = None,
                role: Union[str, int, RoleAPI] = RoleAPI.Viewer,
                provider: str = "Local",
-               active: bool = True) -> Union[UserAPI, None]:
+               active: bool = True) -> UserAPI:
         with PostgresDatabaseAPI(database=self._database_) as db:
             user = UserAPI(db=db, UID=username, Email=email, Name=name,
                            Password=PasswordAPI.hash(password) if password else None,

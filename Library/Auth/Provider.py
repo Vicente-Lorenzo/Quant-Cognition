@@ -56,7 +56,7 @@ class CloudflareAuthProviderAPI(AuthProviderAPI):
         email = request.headers.get(self._EMAIL_)
         token = request.headers.get(self._TOKEN_)
         if not email: return None
-        if not self._verify_(token, email) and not self._trust_: return None
+        if not self._trust_ and not self._verify_(token, email): return None
         return self._auth_.provision(email=email, provider=self.Name, role=RoleAPI.Viewer)
 
     def _verify_(self, token: Union[str, None], email: str) -> bool:
