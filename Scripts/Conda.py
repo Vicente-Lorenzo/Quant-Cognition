@@ -2,6 +2,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from Cache import clean
+
 ROOT = Path(__file__).resolve().parent.parent
 MAMBA = os.environ.get("MAMBA_EXE") or "mamba"
 ENVIRONMENTS = {"Quant": ROOT / "Quant.yml", "Future": ROOT / "Future.yml", "Exotics": ROOT / "Exotics.yml"}
@@ -26,6 +28,7 @@ def ensure_environment(base, name, manifest):
     subprocess.run(command, check=True)
 
 def main():
+    clean()
     os.environ["CONDA_ALWAYS_YES"] = "true"
     base = _base_()
     for name, manifest in ENVIRONMENTS.items(): ensure_environment(base, name, manifest)

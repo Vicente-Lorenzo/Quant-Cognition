@@ -1,11 +1,14 @@
-import subprocess
 import sys
+import subprocess
 from pathlib import Path
+
+from Cache import clean
 
 ROOT = Path(__file__).resolve().parent.parent
 REQUIREMENTS = ROOT / "Requirements.txt"
 
 def main():
+    clean()
     subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"], check=True)
     if not REQUIREMENTS.is_file():
         print(f"System Update: Skipped · {REQUIREMENTS.name} Absent · Use Conda.py for the Quant environment")
