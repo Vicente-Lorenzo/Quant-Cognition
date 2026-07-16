@@ -7,6 +7,7 @@ from typing import Union, ClassVar, TYPE_CHECKING
 from Library.Auth.User import UserAPI
 from Library.Engine.Machine import MachineAPI
 from Library.Scheduler.Task import TaskAPI
+from Library.Scheduler.Cycle import CycleAPI
 from Library.Utility.Enumeration import EnumerationAPI
 from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
@@ -37,39 +38,47 @@ class RunEvent(EnumerationAPI):
 class RunAPI(DatapointAPI):
 
     Database: ClassVar[str] = DatapointAPI.Database
-    Schema: ClassVar[str] = "Scheduler"
+    Schema: ClassVar[str] = TaskAPI.Schema
     Table: ClassVar[str] = "Run"
 
+    Busy: ClassVar[tuple] = (RunStatus.Waiting.name, RunStatus.Running.name)
+    Live: ClassVar[tuple] = (RunStatus.Waiting.name, RunStatus.Running.name, RunStatus.Retrying.name)
+    Active: ClassVar[tuple] = (RunStatus.Waiting.name, RunStatus.Running.name, RunStatus.Approving.name, RunStatus.Reviewing.name, RunStatus.Retrying.name)
+
     UID: Union[str, None] = None
+    CID: Union[str, None] = None
     TID: Union[str, None] = None
-    WorkflowRun: Union[str, None] = None
+    Kind: Union[str, None] = None
     Status: Union[str, RunStatus, None] = None
-    Attempt: Union[int, None] = None
-    StartedAt: Union[datetime, None] = None
-    FinishedAt: Union[datetime, None] = None
-    Heartbeat: Union[datetime, None] = None
+    ExitCode: Union[int, None] = None
+    Retry: Union[int, None] = None
     Duration: Union[float, None] = None
     Memory: Union[int, None] = None
-    ExitCode: Union[int, None] = None
-    Approver: Union[str, None] = None
+    PID: Union[int, None] = None
+    Auditor: Union[str, None] = None
     Log: Union[str, None] = None
+    StartedAt: Union[datetime, None] = None
+    StoppedAt: Union[datetime, None] = None
+    Heartbeat: Union[datetime, None] = None
 
     @property
     def Structure(self) -> dict:
         return {
             self.ID.UID: PrimaryKey(pl.String),
+            self.ID.CID: ForeignKey(pl.String, reference=f'"{CycleAPI.Schema}"."{CycleAPI.Table}"("{CycleAPI.ID.UID}")'),
             self.ID.TID: ForeignKey(pl.String, reference=f'"{TaskAPI.Schema}"."{TaskAPI.Table}"("{TaskAPI.ID.UID}")'),
-            self.ID.WorkflowRun: pl.String(),
+            self.ID.Kind: pl.String(),
             self.ID.Status: pl.String(),
-            self.ID.Attempt: pl.Int64(),
-            self.ID.StartedAt: pl.Datetime(),
-            self.ID.FinishedAt: pl.Datetime(),
-            self.ID.Heartbeat: pl.Datetime(),
+            self.ID.ExitCode: pl.Int64(),
+            self.ID.Retry: pl.Int64(),
             self.ID.Duration: pl.Float64(),
             self.ID.Memory: pl.Int64(),
-            self.ID.ExitCode: pl.Int64(),
-            self.ID.Approver: ForeignKey(pl.String, reference=f'"{UserAPI.Schema}"."{UserAPI.Table}"("{UserAPI.ID.UID}")'),
+            self.ID.PID: pl.Int64(),
+            self.ID.Auditor: ForeignKey(pl.String, reference=f'"{UserAPI.Schema}"."{UserAPI.Table}"("{UserAPI.ID.UID}")'),
             self.ID.Log: pl.String(),
+            self.ID.StartedAt: pl.Datetime(),
+            self.ID.StoppedAt: pl.Datetime(),
+            self.ID.Heartbeat: pl.Datetime(),
             **super().Structure
         }
 
@@ -88,7 +97,7 @@ class RunAPI(DatapointAPI):
         machine.perform(RunEvent.Start, None)
         machine.perform(RunEvent.RequireApproval if self.Status == RunStatus.Approving.name else RunEvent.RequireReview, None)
         machine.perform(event, None)
-        self.Status, self.Approver, self.FinishedAt = machine.At.Name, by, self.FinishedAt or datetime.now()
+        self.Status, self.Auditor, self.StoppedAt = machine.At.Name, by, self.StoppedAt or datetime.now()
         self.save(by=by)
         return True
 

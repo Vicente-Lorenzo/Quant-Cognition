@@ -15,12 +15,13 @@ def load(database: str, tid: str) -> TaskAPI:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("tid")
-    parser.add_argument("--workflow-run", default=None)
-    parser.add_argument("--attempt", type=int, default=1)
+    parser.add_argument("--cycle", default=None)
+    parser.add_argument("--retry", type=int, default=0)
+    parser.add_argument("--manual", action="store_true")
     parser.add_argument("--database", default="Quant")
     arguments = parser.parse_args()
     task = load(arguments.database, arguments.tid)
-    ExecutorAPI(database=arguments.database).run(task, workflow_run=arguments.workflow_run, attempt=arguments.attempt)
+    ExecutorAPI(database=arguments.database).run(task, cycle=arguments.cycle, retry=arguments.retry, manual=arguments.manual)
 
 if __name__ == "__main__":
     main()
