@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 
 from abc import ABC, abstractmethod
-from pathlib import Path
 from datetime import datetime
 from typing import Type, Union, TYPE_CHECKING
 
@@ -100,6 +99,7 @@ from Library.Protocol.Update import (
 from Library.System.Lifecycle import LifecycleAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Utility.Enumeration import EnumerationAPI
+from Library.Utility.Path import traceback_root
 from Library.Utility.Service import ServiceAPI
 from Library.Utility.Statistic import Timer
 
@@ -221,7 +221,7 @@ class SystemAPI(ServiceAPI, ABC):
     def _export_(self, tables: dict) -> None:
         try:
             ident = getattr(self, "_iid_", None) or getattr(self._session_, "UID", None) or self.__class__.__name__
-            folder = Path(__file__).resolve().parents[2] / "Reports" / f"{datetime.now():%Y-%m-%d %H-%M-%S} {ident}"
+            folder = traceback_root() / "Reports" / f"{datetime.now():%Y-%m-%d %H-%M-%S} {ident}"
             folder.mkdir(parents=True, exist_ok=True)
             for name, table in tables.items():
                 try:
