@@ -1,6 +1,12 @@
+import sys
+from pathlib import Path
 from datetime import datetime
 
-import polars as pl
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from Library.Database.Dataframe import pl
+from Library.Database import PostgresDatabaseAPI
+from Library.Logging import HandlerLoggingAPI
 from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Ticker import TickerAPI, ContractType
 from Library.Universe.Contract import ContractAPI, PayoffType
@@ -331,3 +337,17 @@ def populate_universe(db):
         "W1", "MN1"
     ]
     UniverseAPI.push_timeframes(db, _stamp_(pl.DataFrame([{str(TimeframeAPI.ID.UID): tf} for tf in timeframes])))
+
+def main(database="Quant"):
+    with HandlerLoggingAPI(Class="Setup", Subclass="Universe") as log:
+        try:
+            with PostgresDatabaseAPI(database=database) as db:
+                populate_universe(db)
+            log.info(lambda: "Universe Setup: Completed · Schema + 6 Tables")
+            return 0
+        except Exception as error:
+            log.exception(lambda: f"Universe Setup: Failed · Due to {error}")
+            return 1
+
+if __name__ == "__main__":
+    raise SystemExit(main())

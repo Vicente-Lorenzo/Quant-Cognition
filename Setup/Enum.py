@@ -1,6 +1,11 @@
+import sys
 from pathlib import Path
 
-OUTPUT_PATH = Path(__file__).parent.parent / "Sources" / "Robots" / "Connector" / "Connector" / "Enum.cs"
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from Library.Logging import HandlerLoggingAPI
+
+OUTPUT_PATH = Path(__file__).resolve().parent.parent / "Sources" / "Robots" / "Connector" / "Connector" / "Enum.cs"
 
 def enum_block(name: str, members, flags: bool = False) -> str:
     body = "\n".join(f"        {member} = {value}," for member, value in members)
@@ -22,3 +27,16 @@ def write_all() -> Path:
     from Setup.Action import action_block
     from Setup.Stream import stream_block
     return write_enum_file([position_block(), strategy_block(), logging_block(), system_block(), update_block(), action_block(), stream_block()])
+
+def main(database="Quant"):
+    with HandlerLoggingAPI(Class="Setup", Subclass="Enums") as log:
+        try:
+            path = write_all()
+            log.info(lambda: f"Enums Setup: Completed · {path.name}")
+            return 0
+        except Exception as error:
+            log.exception(lambda: f"Enums Setup: Failed · Due to {error}")
+            return 1
+
+if __name__ == "__main__":
+    raise SystemExit(main())
