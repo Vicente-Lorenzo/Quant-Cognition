@@ -233,6 +233,34 @@ class PostgresDatabaseAPI(DatabaseAPI):
         self._log_.alert(lambda: f"Merge Operation: Merged {frame.height} rows in {table} Table")
         return self
 
+    def listen(self, *, channel: str) -> bool:
+        """
+        Subscribes this connection to a Postgres notification channel via ``LISTEN``.
+        :param channel: The notification channel name.
+        :return: True when the subscription is active.
+        """
+        self._connection_.execute(f'LISTEN "{channel}"')
+        return True
+
+    def notify(self, *, channel: str) -> bool:
+        """
+        Publishes a Postgres notification on a channel via ``NOTIFY``.
+        :param channel: The notification channel name.
+        :return: True when the notification was published.
+        """
+        self._connection_.execute(f'NOTIFY "{channel}"')
+        return True
+
+    def wait(self, *, timeout: float) -> bool:
+        """
+        Blocks on this connection until a listened notification arrives or the timeout elapses.
+        :param timeout: The maximum number of seconds to block.
+        :return: True when a notification arrived, False on timeout.
+        """
+        for _ in self._connection_.notifies(timeout=timeout, stop_after=1):
+            return True
+        return False
+
     def _fingerprint_(self, *,
                       database: Union[str, Sequence, None, Missing] = MISSING,
                       schema: Union[str, Sequence, None, Missing] = MISSING,

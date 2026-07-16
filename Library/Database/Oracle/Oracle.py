@@ -156,6 +156,38 @@ class OracleDatabaseAPI(DatabaseAPI):
     def _cast_(self, column: str) -> str:
         return f"TO_CHAR({column})"
 
+    def listen(self, *, channel: str) -> bool:
+        """
+        Subscribes this connection to an Oracle alert channel via ``DBMS_ALERT.REGISTER``.
+        :param channel: The notification channel name.
+        :return: True when the subscription is active.
+        """
+        cursor = self._connection_.cursor()
+        cursor.callproc("DBMS_ALERT.REGISTER", [channel])
+        return True
+
+    def notify(self, *, channel: str) -> bool:
+        """
+        Publishes an Oracle alert on a channel via ``DBMS_ALERT.SIGNAL`` (delivered on commit).
+        :param channel: The notification channel name.
+        :return: True when the notification was published.
+        """
+        cursor = self._connection_.cursor()
+        cursor.callproc("DBMS_ALERT.SIGNAL", [channel, ""])
+        self._connection_.commit()
+        return True
+
+    def wait(self, *, timeout: float) -> bool:
+        """
+        Blocks until any registered alert fires or the timeout elapses via ``DBMS_ALERT.WAITANY``.
+        :param timeout: The maximum number of seconds to block.
+        :return: True when an alert arrived, False on timeout.
+        """
+        cursor = self._connection_.cursor()
+        name, message, status = cursor.var(str), cursor.var(str), cursor.var(int)
+        cursor.callproc("DBMS_ALERT.WAITANY", [name, message, status, timeout])
+        return status.getvalue() == 0
+
     def _limit_(self, sql: str, limit: int) -> str:
         return f"{sql} FETCH FIRST {limit} ROWS ONLY"
 

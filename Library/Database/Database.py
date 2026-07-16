@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import uuid
 import datetime
 import threading
@@ -1191,6 +1192,38 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
                       schema: Union[str, Sequence, None, Missing] = MISSING,
                       table: Union[str, Sequence, None, Missing] = MISSING) -> Union[str, None]:
         return None
+
+    def listen(self, *, channel: str) -> bool:
+        """
+        Subscribes this connection to a named notification channel so that subsequent
+        ``wait`` calls return as soon as a ``notify`` on that channel arrives. Drivers
+        without native push support keep the portable default and report False, in which
+        case ``wait`` degrades to plain sleeping.
+        :param channel: The notification channel name.
+        :return: True when the subscription is active, False when unsupported.
+        """
+        return False
+
+    def notify(self, *, channel: str) -> bool:
+        """
+        Publishes a notification on a named channel, waking every connection currently
+        listening on it. Drivers without native push support keep the portable default
+        and report False.
+        :param channel: The notification channel name.
+        :return: True when the notification was published, False when unsupported.
+        """
+        return False
+
+    def wait(self, *, timeout: float) -> bool:
+        """
+        Blocks until a notification arrives on a channel this connection listens to, or
+        until the timeout elapses. The portable default simply sleeps for the timeout so
+        that callers can poll uniformly regardless of driver capability.
+        :param timeout: The maximum number of seconds to block.
+        :return: True when a notification arrived, False on timeout or when unsupported.
+        """
+        time.sleep(timeout)
+        return False
 
     def insert(self, *,
                database: Union[str, Sequence, None, Missing] = MISSING,

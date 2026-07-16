@@ -155,6 +155,42 @@ class MicrosoftDatabaseAPI(DatabaseAPI):
     def _cast_(self, column: str) -> str:
         return f"CAST({column} AS NVARCHAR(MAX))"
 
+    def listen(self, *, channel: str) -> bool:
+        """
+        Subscribes this connection to a Service Broker channel, creating the queue and
+        service idempotently (requires the database to have the broker enabled).
+        :param channel: The notification channel name.
+        :return: True when the subscription is active.
+        """
+        cursor = self._connection_.cursor()
+        cursor.execute(f"IF NOT EXISTS (SELECT 1 FROM sys.service_queues WHERE name = '{channel}') CREATE QUEUE [{channel}]")
+        cursor.execute(f"IF NOT EXISTS (SELECT 1 FROM sys.services WHERE name = '{channel}') CREATE SERVICE [{channel}] ON QUEUE [{channel}] ([DEFAULT])")
+        self._listened_ = channel
+        return True
+
+    def notify(self, *, channel: str) -> bool:
+        """
+        Publishes a Service Broker message on a channel, waking every ``wait`` on its queue.
+        :param channel: The notification channel name.
+        :return: True when the notification was published.
+        """
+        cursor = self._connection_.cursor()
+        cursor.execute(f"DECLARE @handle UNIQUEIDENTIFIER; BEGIN DIALOG CONVERSATION @handle FROM SERVICE [{channel}] TO SERVICE '{channel}' WITH ENCRYPTION = OFF; SEND ON CONVERSATION @handle; END CONVERSATION @handle")
+        return True
+
+    def wait(self, *, timeout: float) -> bool:
+        """
+        Blocks on the listened Service Broker queue until a message arrives or the timeout
+        elapses via ``WAITFOR (RECEIVE ...)``. Falls back to sleeping when nothing is listened.
+        :param timeout: The maximum number of seconds to block.
+        :return: True when a notification arrived, False on timeout.
+        """
+        channel = getattr(self, "_listened_", None)
+        if channel is None: return super().wait(timeout=timeout)
+        cursor = self._connection_.cursor()
+        cursor.execute(f"WAITFOR (RECEIVE TOP (1) conversation_handle FROM [{channel}]), TIMEOUT {int(timeout * 1000)}")
+        return cursor.fetchone() is not None
+
     def _limit_(self, sql: str, limit: int) -> str:
         return re.sub(r"(?i)^SELECT\s+(?:DISTINCT\s+|ALL\s+)?", lambda m: f"{m.group(0)}TOP {limit} ", sql.strip(), count=1)
 
