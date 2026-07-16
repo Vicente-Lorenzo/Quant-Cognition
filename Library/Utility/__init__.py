@@ -67,7 +67,9 @@ from Library.Utility.Runtime import (
     find_notebook,
     find_env_var,
     match_env_vars,
-    find_host_port
+    find_host_port,
+    terminate,
+    tail_terminal
 )
 from Library.Utility.Path import (
     inspect_separator,
@@ -109,6 +111,7 @@ from Library.Utility.Path import (
     traceback_package_file_path,
     traceback_package_module,
     traceback_package_module_path,
+    traceback_root,
     PathAPI
 )
 from Library.Utility.File import FileAPI
@@ -143,8 +146,8 @@ __all__ = [
     "EPSILON", "equals", "truncate",
     "memory_to_string",
     "find_user", "is_windows", "is_linux", "is_mac", "is_local", "is_remote", "is_service",
-    "find_ipython", "find_shell", "is_python", "is_console", "is_terminal", "is_notebook", "find_notebook",
-    "find_env_var", "match_env_vars", "find_host_port",
+    "find_ipython", "find_shell", "is_python", "is_ipython", "is_console", "is_terminal", "is_notebook", "find_notebook",
+    "find_env_var", "match_env_vars", "find_host_port", "terminate", "tail_terminal",
     "inspect_separator", "inspect_file", "inspect_file_path", "inspect_module", "inspect_module_path",
     "traceback_working", "traceback_working_module", "traceback_working_module_path",
     "traceback_depth", "traceback_depth_file", "traceback_depth_file_path", "traceback_depth_module", "traceback_depth_module_path",
@@ -153,6 +156,7 @@ __all__ = [
     "traceback_calling", "traceback_calling_file", "traceback_calling_file_path", "traceback_calling_module", "traceback_calling_module_path",
     "traceback_regex", "traceback_regex_file", "traceback_regex_file_path", "traceback_regex_module", "traceback_regex_module_path",
     "traceback_package", "traceback_package_file", "traceback_package_file_path", "traceback_package_module", "traceback_package_module_path",
+    "traceback_root",
     "PathAPI",
     "FileAPI",
     "is_readable", "is_writable",

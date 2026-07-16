@@ -1,5 +1,7 @@
 import os
 import sys
+import shutil
+import subprocess
 from typing import Union
 from functools import lru_cache
 
@@ -105,3 +107,21 @@ def find_host_port(*, host: str = "localhost", port_min: int = 1024, port_max: i
             rc = probe.connect_ex((host, port))
             if rc != 0: return port
     raise RuntimeError(f"No free port found in range [{port_min}, {port_max}] on {host}")
+
+def terminate(pid: Union[int, None]) -> None:
+    import psutil
+    if pid is None: return
+    try: parent = psutil.Process(pid)
+    except psutil.Error: return
+    processes = parent.children(recursive=True) + [parent]
+    for process in processes:
+        try: process.terminate()
+        except psutil.Error: pass
+    for process in psutil.wait_procs(processes, timeout=5)[1]:
+        try: process.kill()
+        except psutil.Error: pass
+
+def tail_terminal(file) -> None:
+    tail = f"Get-Content -LiteralPath '{file}' -Wait -Tail 200 -Encoding UTF8"
+    if shutil.which("wt"): subprocess.Popen(["wt", "powershell", "-NoExit", "-Command", tail])
+    else: subprocess.Popen(["powershell", "-NoExit", "-Command", tail], creationflags=subprocess.CREATE_NEW_CONSOLE)
