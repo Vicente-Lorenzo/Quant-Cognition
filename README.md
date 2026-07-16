@@ -112,15 +112,15 @@ Windows Task Scheduler runs exactly **one** thing: the **master orchestrator** (
 | Workflow | Schedule | Tasks | The daemon… |
 | --- | --- | --- | --- |
 | **`Setup`** | none | 7 DB-provisioning tasks (`Scheduled`) | never auto-launches — **run manually** (UI Run button or `Library.Scheduler.Main workflow run --uid Setup`) |
-| **`Environment`** | `0 4 * * 0` | `Environment.Update` (`Setup/Environment.py` → conda refresh, `Scheduled`) → `Environment.Tunnel` → `Environment.Server` (both `Service`) | keeps the tunnel + app always-on; weekly it suspends them, refreshes the environment, then relaunches |
+| **`Environment`** | `0 4 * * 0` | `Environment.Cache` (`Scripts/Cache.py` → cache cleanup) → `Environment.Update` (`Setup/Environment.py` → conda refresh, both `Scheduled`) → `Environment.Tunnel` → `Environment.Server` (both `Service`) | keeps the tunnel + app always-on; weekly (and at every boot) it suspends them, cleans the caches, refreshes the environment, then relaunches in order |
 | **`Market Data`** (`Market`) | `0 6 * * *` | `Market.Calendar` (economic-calendar update; extensible with more daily data jobs) | fresh-launches daily |
 
 **New machine, from scratch:**
 1. **`python -m Setup.Install --boot`** — creates + populates every schema, seeds the administrator, registers the three workflows, and schedules the orchestrator (`Quant Scheduler`) at logon in Windows Task Scheduler (the boot task runs the Quant interpreter on `Scripts\Scheduler.py`). Drop `--boot` to skip the Task-Scheduler step and register it yourself.
-2. **Launch the orchestrator** (reboot/re-logon, or run `python Scripts\Scheduler.py`). It immediately brings up the tunnel + web app (the `Environment` Service tasks).
+2. **Launch the orchestrator** (reboot/re-logon, or run `python Scripts\Scheduler.py`). It boot-launches the `Environment` workflow — cache cleanup, environment refresh, then tunnel + web app in strict order.
 3. **Open the app → Scheduler.** The three workflows are listed and the DB is already populated. Run `Setup` from the UI whenever you need to re-provision.
 
-`Setup.Install` provisions **in-process** (no daemon needed) so the DB is fully populated *before* the orchestrator launches. The `Setup` workflow is that same provisioning exposed as a re-runnable, UI-visible DAG — a manual DAG of idempotent Python tasks (`Enums` · `Auth`→`Scheduler` · `Universe`→(`Market`, `Portfolio`) · `Indicator`), each a `.py` with a uniform entry, RULES logging, and an exit code, so failures surface in the app's **Runs** section. **Env-free** — no `QUANT_*`; the admin password is generated on first seed and logged. These Python tasks, along with the all-Python dev launchers in `Scripts/`, replace the old `Scripts/*.bat` files.
+`Setup.Install` provisions **in-process** (no daemon needed) so the DB is fully populated *before* the orchestrator launches. The `Setup` workflow is that same provisioning exposed as a re-runnable, UI-visible DAG — a manual DAG of idempotent Python tasks (`Enums` · `Auth`→`Scheduler` · `Universe`→(`Market`, `Portfolio`) · `Indicator`), each a `.py` with a uniform entry, RULES logging, and an exit code, so failures surface in the app's **Runs** section. **Env-free** — no `QUANT_*`; the admin password is generated on first seed and logged. These Python tasks, along with the essential helpers in `Scripts/` (`Scheduler` boot launcher · `System`/`Conda`/`UV` environment updaters · `Cache` cleanup), replace the old `Scripts/*.bat` files.
 
 ## 🚀 Daily Launch Sequence
 1. Verify the postgresql service is running natively in Windows (set to Automatic start via services.msc).

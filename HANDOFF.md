@@ -7,7 +7,7 @@ Single source of truth for the `cAlgo` repo: orientation, current state, and the
 ## 1. Orientation
 
 - **Root:** `C:\Users\Admin\OneDrive\Documents\cAlgo`
-- **`Library/`** Python core (engine, persistence, AI, Dash UI) · **`Sources/`** C# cTrader Robots/Indicators/Plugins (shared-memory bridge + binary protocol) · **`Tests/`** pytest mirror · **`Setup/`** provisioning + workflow registrar · **`Scripts/`** all-Python launchers.
+- **`Library/`** Python core (engine, persistence, AI, Dash UI) · **`Sources/`** C# cTrader Robots/Indicators/Plugins (shared-memory bridge + binary protocol) · **`Tests/`** pytest mirror · **`Setup/`** provisioning + workflow registrar · **`Scripts/`** boot launcher + environment helpers (`Scheduler` · `System`/`Conda`/`UV` · `Cache`).
 - **Env:** `conda run -n Quant --no-capture-output ...` (`--no-capture-output` avoids a charmap crash on log `·`/`→` glyphs; also `PYTHONIOENCODING=utf-8`).
 - **Test:** `conda run -n Quant python -m pytest Tests/ --ignore=Tests/Spotware --ignore=Tests/Bloomberg` — currently **543 green**.
 - **Build C#:** `dotnet build Sources/` (the user builds/runs the Connector — the agent cannot).
@@ -68,7 +68,7 @@ Any engine change must keep reproducing all 6 (counts bit-exact, Net at the docu
 - **Learning CLI trap:** `--timeframe Hour` (parameter folder key), never `H1` — a missing key auto-vivifies an empty parameter node.
 - **Learning worker logs:** spawn workers set console `Warning` (flood control); `LearningAPI._export_` has a known signature collision — run with `export=False`.
 - **Custom logging:** stdlib `logging.disable()` does nothing; silence via handler levels (`log.console.set_verbose_level(...)`).
-- **Scheduler:** daemon ticks every 30s (`SchedulerAPI(interval=...)`); everything (workflows/tasks/runs/DAG edges) persists in the Postgres `Scheduler` schema; a boot/logon replays `Environment.Update → Tunnel → Server` in strict order; per-run logs land in `Runs/<uid>.log`, daemon log in `Logs/Scheduler.log` (tray → Terminal live-tails it).
+- **Scheduler:** event-driven — Postgres `LISTEN/NOTIFY` triggers wake the daemon instantly on task/workflow/DAG changes and run/cycle status changes (heartbeats stay silent); `SchedulerAPI(interval=...)` (30s default) is the cron/fallback cadence; a workflow execution is a **Cycle** (workflow cron opens it; member schedules are gates inside it; `Workflow.Waits=false` resets an overrun cycle); everything persists in the Postgres `Scheduler` schema; a boot/logon replays `Environment.Cache → Update → Tunnel → Server` in strict order; per-run logs land in `%TEMP%/Quant/Runs/<uid>.log`, daemon log in `Logs/Scheduler.log` (Scheduler tray → Open in Terminal live-tails it). Two trays: `Scheduler` (graphite clock) and `Quant Cognition` (blue chart) — symmetric menus (Debug Mode · Launch/Restart/Shutdown · Quit).
 - **No `QUANT_*` environment variables anywhere** — configuration is constructor arguments only (per user directive).
 - **Report folders** are named at seconds granularity — two exports in the same second collide (needs a uniqueness suffix before fleet-scale exporting).
 

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from Library.Scheduler import WorkflowAPI, TaskAPI, DependencyAPI, RunAPI, CoordinatorAPI, ManagerAPI
+from Library.Scheduler import WorkflowAPI, TaskAPI, DependencyAPI, CycleAPI, RunAPI, CoordinatorAPI, ManagerAPI
 from Library.Auth import UserAPI
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Setup.Install import bootstrap, register, WORKFLOWS
@@ -29,7 +29,7 @@ def test_task_artifacts_exist_and_are_runnable():
 
 @pytest.fixture(scope="module")
 def prepared():
-    for cls in (UserAPI, WorkflowAPI, TaskAPI, DependencyAPI, RunAPI):
+    for cls in (UserAPI, WorkflowAPI, TaskAPI, DependencyAPI, CycleAPI, RunAPI):
         cls.Database = DATABASE
     admin = PostgresDatabaseAPI(admin=True)
     try:
