@@ -13,7 +13,7 @@ from Library.Database.Database import ForeignKey
 class DependencyAPI(DatapointAPI):
 
     Database: ClassVar[str] = DatapointAPI.Database
-    Schema: ClassVar[str] = "Scheduler"
+    Schema: ClassVar[str] = WorkflowAPI.Schema
     Table: ClassVar[str] = "Dependency"
 
     WID: Union[str, None] = None
