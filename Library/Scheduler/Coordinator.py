@@ -29,9 +29,9 @@ class CoordinatorAPI:
         cron = croniter(workflow, datetime.now())
         start = cron.get_next(datetime)
         for _ in range(samples):
-            end = cron.get_next(datetime)
-            if croniter(task, start - timedelta(seconds=1)).get_next(datetime) >= end: return False
-            start = end
+            stop = cron.get_next(datetime)
+            if croniter(task, start - timedelta(seconds=1)).get_next(datetime) >= stop: return False
+            start = stop
         return True
 
     @staticmethod

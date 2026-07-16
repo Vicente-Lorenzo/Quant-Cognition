@@ -61,7 +61,7 @@ WORKFLOWS = [
         "uid": "Market", "name": "Market Data", "schedule": "0 6 * * *", "kind": Kind.Scheduled, "tolerates": True,
         "description": "Daily download and update of market and fundamental data into the database",
         "tasks": [
-            {"uid": "Market.Calendar", "name": "Economic Calendar", "path": "Library/Indicator/Fundamental/Calendar.py", "kind": Kind.Scheduled, "description": "Downloads and updates the Forex Factory economic calendar (previous · current · next week)"}
+            {"uid": "Market.Calendar", "name": "Economic Calendar", "path": "Library/Indicator/Fundamental/Calendar.py", "kind": Kind.Scheduled, "description": "Downloads and updates the Forex Factory economic calendar (rolling week · idempotent upsert)"}
         ],
         "edges": []
     }
