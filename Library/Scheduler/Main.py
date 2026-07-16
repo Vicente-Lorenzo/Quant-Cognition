@@ -22,10 +22,10 @@ def _dest_(name: str) -> str:
     return "".join(f"_{char.lower()}" if index and char.isupper() else char.lower() for index, char in enumerate(name))
 
 def _fields_(args: Namespace, model: type) -> dict:
-    return {field.name: getattr(args, _dest_(field.name)) for field in fields(model) if hasattr(args, _dest_(field.name))}
+    return {field.name: getattr(args, _dest_(field.name)) for field in fields(model) if not field.name.startswith("_") and hasattr(args, _dest_(field.name))}
 
 def _table_(rows: list, model: type) -> None:
-    columns = [field.name for field in fields(model) if field.name not in _WIDE_]
+    columns = [field.name for field in fields(model) if not field.name.startswith("_") and field.name not in _WIDE_]
     if not rows:
         print("(none)")
         return
