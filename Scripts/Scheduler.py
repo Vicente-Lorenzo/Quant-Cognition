@@ -7,7 +7,7 @@ sys.path.insert(0, str(ROOT))
 if sys.stdout is None or sys.stderr is None:
     _sink_ = ROOT / "Logs" / "Scheduler.log"
     _sink_.parent.mkdir(parents=True, exist_ok=True)
-    _handle_ = _sink_.open("w", buffering=1, encoding="utf-8")
+    _handle_ = _sink_.open("w", buffering=1, encoding="utf-8-sig")
     sys.stdout = _handle_
     sys.stderr = _handle_
 
