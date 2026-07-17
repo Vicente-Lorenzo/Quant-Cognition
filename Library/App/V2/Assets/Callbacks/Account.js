@@ -1,6 +1,6 @@
 (function(user) {
     var authed = !!(user && user.name);
-    var role = (authed ? (user.role || "Member") : "Public").toLowerCase();
+    var role = (authed ? (user.role || "Editor") : "Public").toLowerCase();
     var icon = authed ? "bi bi-person-check-fill" : "bi bi-person";
     return [
         icon + " app-account-icon app-account-" + role,
