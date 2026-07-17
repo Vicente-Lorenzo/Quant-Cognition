@@ -1,13 +1,13 @@
 from dataclasses import dataclass, field
 
-from Library.App.V2.Session.Storage import StorageAPI
+from Library.App.V2.Session.State import StateAPI
 from Library.Utility.Typing import MISSING
 
 @dataclass(kw_only=True)
-class EmailAPI(StorageAPI):
+class EmailAPI(StateAPI):
 
-    to: str | list = field(default=MISSING, init=True, repr=True)
-    cc: str | list = field(default=MISSING, init=True, repr=True)
-    bcc: str | list = field(default=MISSING, init=True, repr=True)
-    subject: str | list = field(default=MISSING, init=True, repr=True)
-    message: str | list = field(default=MISSING, init=True, repr=True)
+    to: str | list = field(default=MISSING)
+    cc: str | list = field(default=MISSING)
+    bcc: str | list = field(default=MISSING)
+    subject: str | list = field(default=MISSING)
+    message: str | list = field(default=MISSING)
