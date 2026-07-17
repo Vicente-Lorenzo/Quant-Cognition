@@ -84,7 +84,7 @@ class ManagerAPI:
         return self._select_(TaskAPI.Schema, TaskAPI.Table, " AND ".join(conditions) or None, parameters or None, order='"UID" ASC')
 
     def create_task(self, **fields) -> TaskAPI:
-        task = TaskAPI(**self._clean_(fields))
+        task = TaskAPI(**{**TaskAPI.DEFAULTS, **self._clean_(fields)})
         self._lawful_(task)
         self._save_(task)
         self._log_.info(lambda: f"Task Create: Saved ({task.UID}) · {task.Name}")
@@ -158,7 +158,9 @@ class ManagerAPI:
         return self._select_(WorkflowAPI.Schema, WorkflowAPI.Table, " AND ".join(conditions) or None, parameters or None, order='"UID" ASC')
 
     def create_workflow(self, **fields) -> WorkflowAPI:
-        workflow = WorkflowAPI(**self._clean_(fields))
+        fields = {**WorkflowAPI.DEFAULTS, **self._clean_(fields)}
+        if not fields.get("Kind"): fields["Kind"] = Kind.Scheduled.name if fields.get("Schedule") else Kind.Manual.name
+        workflow = WorkflowAPI(**fields)
         self._coherent_(workflow.Kind, workflow.Schedule)
         self._save_(workflow)
         self._log_.info(lambda: f"Workflow Create: Saved ({workflow.UID}) · {workflow.Name}")
@@ -235,6 +237,11 @@ class ManagerAPI:
     def run(self, uid: str) -> Union[dict, None]:
         rows = self._select_(RunAPI.Schema, RunAPI.Table, '"UID" = :uid:', {"uid": uid}, limit=1)
         return rows[0] if rows else None
+
+    def latest(self) -> dict:
+        with PostgresDatabaseAPI(database=self._database_) as db:
+            frame = db.executeone(QueryAPI(f'SELECT DISTINCT ON ("TID") "TID", "Status" FROM {db._target_(RunAPI.Schema, RunAPI.Table)} ORDER BY "TID", "StartedAt" DESC'), schema=RunAPI.Schema, table=RunAPI.Table).fetchall(legacy=False)
+        return {row["TID"]: row["Status"] for row in frame.to_dicts()}
 
     def runs(self, *, task: Union[str, Missing] = MISSING, cycle: Union[str, None, Missing] = MISSING, status: Union[str, Missing] = MISSING, limit: Union[int, None] = None) -> list[dict]:
         conditions, parameters = [], {}

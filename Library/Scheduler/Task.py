@@ -24,6 +24,8 @@ class TaskAPI(DatapointAPI):
     Schema: ClassVar[str] = WorkflowAPI.Schema
     Table: ClassVar[str] = "Task"
 
+    DEFAULTS: ClassVar[dict] = {"Enabled": True, "Kind": Kind.Scheduled.name, "Type": TaskType.Python.name, "RequiresApproval": False, "RequiresReview": False, "MaxRetry": 0, "RetryDelay": 0, "Waits": True, "Tolerates": True}
+
     UID: Union[str, None] = None
     WID: Union[str, None] = None
     Enabled: Union[bool, None] = None

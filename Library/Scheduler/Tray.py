@@ -15,7 +15,7 @@ class TrayAPI:
     def __init__(self) -> None:
         import pystray
         self._log_ = HandlerLoggingAPI(Class=type(self).__name__)
-        self._verbose_ = False
+        self._verbose_ = True
         self._running_ = False
         self._scheduler_ = None
         self._thread_ = None
@@ -77,7 +77,7 @@ class TrayAPI:
 
 def main() -> None:
     log = HandlerLoggingAPI(Class=TrayAPI.__name__)
-    log.console.set_verbose_level(VerboseLevel.Info)
+    log.console.set_verbose_level(VerboseLevel.Debug)
     log.file.set_verbose_level(VerboseLevel.Debug)
     try:
         tray = TrayAPI()

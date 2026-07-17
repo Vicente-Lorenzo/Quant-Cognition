@@ -6,7 +6,7 @@ def build() -> SchedulerAPI:
 
 def main() -> None:
     log = HandlerLoggingAPI(Class=SchedulerAPI.__name__, Subclass="Serve")
-    log.console.set_verbose_level(VerboseLevel.Info)
+    log.console.set_verbose_level(VerboseLevel.Debug)
     log.file.set_verbose_level(VerboseLevel.Debug)
     build().start()
 

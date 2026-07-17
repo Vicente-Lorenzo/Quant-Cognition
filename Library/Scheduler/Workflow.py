@@ -23,6 +23,8 @@ class WorkflowAPI(DatapointAPI):
     Schema: ClassVar[str] = "Scheduler"
     Table: ClassVar[str] = "Workflow"
 
+    DEFAULTS: ClassVar[dict] = {"Enabled": True, "Waits": True}
+
     UID: Union[str, None] = None
     Enabled: Union[bool, None] = None
     Schedule: Union[str, None] = None

@@ -79,13 +79,13 @@ def _parse_() -> Namespace:
     create.add_argument("--name", required=True)
     create.add_argument("--owner", required=True)
     create.add_argument("--type", required=True, choices=[member.name for member in TaskType])
-    create.add_argument("--kind", default=Kind.Scheduled.name, choices=[member.name for member in Kind])
+    create.add_argument("--kind", default=None, choices=[member.name for member in Kind])
     create.add_argument("--path", required=True)
     create.add_argument("--schedule", default=None)
     create.add_argument("--workflow", dest="wid", default=None)
     create.add_argument("--description", default=None)
-    create.add_argument("--max-retry", type=int, default=0)
-    create.add_argument("--retry-delay", type=int, default=0)
+    create.add_argument("--max-retry", type=int, default=None)
+    create.add_argument("--retry-delay", type=int, default=None)
     create.add_argument("--approval", action="store_true")
     create.add_argument("--review", action="store_true")
     create.add_argument("--disabled", action="store_true")
@@ -144,9 +144,7 @@ def _parse_() -> Namespace:
 def _workflow_(manager: ManagerAPI, args: Namespace) -> None:
     match args.action:
         case "create":
-            settings = _fields_(args, WorkflowAPI)
-            settings["Kind"] = args.kind or (Kind.Scheduled.name if args.schedule else Kind.Manual.name)
-            print(f"Workflow '{manager.create_workflow(Enabled=not args.disabled, Waits=not args.no_waits, **settings).UID}' created")
+            print(f"Workflow '{manager.create_workflow(Enabled=not args.disabled, Waits=not args.no_waits, **_fields_(args, WorkflowAPI)).UID}' created")
         case "update": print(f"Workflow '{args.uid}' updated" if manager.update_workflow(args.uid, **_fields_(args, WorkflowAPI)) else f"Workflow '{args.uid}' not found")
         case "delete": print(f"Workflow '{args.uid}' deleted" if manager.delete_workflow(args.uid) else f"Workflow '{args.uid}' not found")
         case "enable": print(f"Workflow '{args.uid}' enabled" if manager.enable_workflow(args.uid) else f"Workflow '{args.uid}' not found")
