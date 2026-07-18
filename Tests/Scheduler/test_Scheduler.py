@@ -672,6 +672,38 @@ def test_advance_latest_attempt_governs(scheduler):
         sched._advance_(conn, workflow, members, edges, datetime.now(), 8)
     assert sched.spawned == [("att-b", "wr-att")]
 
+def test_create_defaults(scheduler):
+    manager = ManagerAPI(database=DATABASE)
+    task = manager.create_task(UID="def-task", Name="Defaults", Owner="owner", Type=TaskType.Python.name, Path="x")
+    row = manager.task("def-task")
+    assert row["Enabled"] is True
+    assert row["Kind"] == Kind.Scheduled.name
+    assert row["Type"] == TaskType.Python.name
+    assert row["RequiresApproval"] is False
+    assert row["RequiresReview"] is False
+    assert row["MaxRetry"] == 0
+    assert row["RetryDelay"] == 0
+    assert row["Waits"] is True
+    assert row["Tolerates"] is True
+    manual = manager.create_workflow(UID="def-manual", Name="Defaults", Owner="owner")
+    scheduled = manager.create_workflow(UID="def-scheduled", Name="Defaults", Owner="owner", Schedule="0 0 1 1 *")
+    assert manager.workflow("def-manual")["Kind"] == Kind.Manual.name
+    assert manager.workflow("def-manual")["Waits"] is True
+    assert manager.workflow("def-scheduled")["Kind"] == Kind.Scheduled.name
+    manager.delete_task("def-task")
+    manager.delete_workflow("def-manual")
+    manager.delete_workflow("def-scheduled")
+
+def test_latest(scheduler):
+    early = datetime.now() - timedelta(minutes=5)
+    manager = ManagerAPI(database=DATABASE)
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        TaskAPI(UID="lat-a", Name="A", Owner="owner", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
+        RunAPI(UID="lat-run-1", TID="lat-a", Status="Failure", StartedAt=early, db=conn).save(by="Test")
+        RunAPI(UID="lat-run-2", TID="lat-a", Status="Success", StartedAt=datetime.now(), db=conn).save(by="Test")
+    latest = manager.latest()
+    assert latest["lat-a"] == "Success"
+
 def test_workflow_reset_on_overrun(scheduler):
     early = datetime.now() - timedelta(minutes=5)
     with PostgresDatabaseAPI(database=DATABASE) as conn:

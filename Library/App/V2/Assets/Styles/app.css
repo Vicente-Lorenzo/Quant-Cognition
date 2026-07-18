@@ -463,6 +463,8 @@ html, body { height: 100%; margin: 0; }
 
 .table-bar { display: flex; align-items: center; gap: 0.5rem; }
 
+.table-toolbar .form-select, .table-toolbar .form-control { width: auto; height: auto; padding-top: 0.34rem; padding-bottom: 0.34rem; font-size: 0.8rem; line-height: 1.4; border-radius: 6px; }
+
 .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner table { --hover: rgba(41, 98, 255, 0.13) !important; --accent: var(--bs-primary) !important; --text-color: var(--bs-body-color) !important; }
 
 [data-bs-theme="dark"] .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner table { --hover: rgba(41, 98, 255, 0.26) !important; }

@@ -24,9 +24,9 @@ Single source of truth for the `cAlgo` repo: orientation, current state, and the
 | **Learning** (`LearningAPI`) | Done — full WF DRL trainer: episodes, greedy validation, early stop, multi-seed mean±std, ProcessPool `--workers`, `--fitness` report metrics, checkpoint + JSON manifest |
 | **Strategies** | Four: `Download`, `NNFX` (money/risk base), `Trend` (+signal machine), `DDPG` (DRL signals wrapped by NNFX money/risk; `ActorRegularization` >0 = RDDPG) |
 | **Auth** (`Library/Auth`) | Done — Postgres RBAC + Argon2 + Flask-Login + SSO provider seam (Cloudflare/OIDC JIT-provisioning); env-free (`AuthAPI(secure, secret)`) |
-| **App V2** (`Library/App/V2`) | Done — injection-decorator Dash framework, auth-gated router, `/login` page, live tables (`ViewTableAPI`/`EditTableAPI`, fingerprint-gated polling) |
+| **App V2** (`Library/App/V2`) | Done — injection-decorator Dash framework, auth-gated router, `/login` page, live tables (`TableAPI`, fingerprint-gated polling, opt-in editing) |
 | **Scheduler** (`Library/Scheduler`) | Done — DB-backed orchestrator (Workflow→Task→Run + DAG), gates/retry/heartbeat-reap, service supervision + maintenance pause; Python-console API (`ManagerAPI`), CLI (`Main.py`), web UI, silent tray daemon (`Tray.py`) |
-| **Setup** (`Setup/`) | Done — `python -m Setup.Install [--boot]`: in-process provisioning, registers the 3 standard workflows (`Setup` manual · `Environment` weekly · `Market` daily), creates the single `Quant Scheduler` logon task (`pythonw Scripts/Scheduler.py`) |
+| **Setup** (`Setup/`) | Done — `python -m Setup.Install [--boot]`: in-process provisioning, registers the 3 standard workflows (`Setup` manual · `Environment` daily · `Market` daily), creates the single `Quant Scheduler` logon task (`pythonw Scripts/Scheduler.py`) |
 
 Strategy/engine/indicator/portfolio/reporting code is byte-shared between realtime and offline paths — a cTrader online report is a valid oracle for the offline engine.
 

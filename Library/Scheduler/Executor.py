@@ -41,6 +41,7 @@ class ExecutorAPI:
         environment = dict(os.environ)
         previous = environment.get("PYTHONPATH")
         environment["PYTHONPATH"] = ExecutorAPI._ROOT_ + (os.pathsep + previous if previous else "")
+        environment["PYTHONIOENCODING"] = "utf-8"
         return environment
 
     @staticmethod

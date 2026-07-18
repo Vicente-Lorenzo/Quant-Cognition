@@ -1,6 +1,7 @@
 from typing import TypeVar
 AppType = TypeVar("AppType", bound="AppAPI")
 from Library.App.V2.Session import (
+    StateAPI,
     RoutingAPI,
     TriggerAPI,
     LocationAPI,
@@ -17,6 +18,10 @@ from Library.App.V2.Component import (
     StorageAPI,
     DownloadAPI,
     UploadAPI,
+    InputAPI,
+    SelectAPI,
+    SwitchAPI,
+    TextareaAPI,
     ButtonAPI,
     ImageAPI,
     IframeAPI,
@@ -61,6 +66,7 @@ from Library.App.V2.Layout import (
 )
 from Library.App.V2.Notification import NotifierAPI
 from Library.App.V2.Page import PageAPI
+from Library.App.V2.Table import TableAPI
 from Library.App.V2.Launchpad import LaunchpadPageAPI
 from Library.App.V2.Login import LoginPageAPI
 from Library.App.V2.Settings import SettingsPageAPI
@@ -69,6 +75,7 @@ from Library.App.V2.App import AppAPI
 
 __all__ = [
     "AppType",
+    "StateAPI",
     "RoutingAPI",
     "TriggerAPI",
     "LocationAPI",
@@ -83,6 +90,10 @@ __all__ = [
     "StorageAPI",
     "DownloadAPI",
     "UploadAPI",
+    "InputAPI",
+    "SelectAPI",
+    "SwitchAPI",
+    "TextareaAPI",
     "ButtonAPI",
     "ImageAPI",
     "IframeAPI",
@@ -118,6 +129,7 @@ __all__ = [
     "DefaultLayoutAPI",
     "NotifierAPI",
     "PageAPI",
+    "TableAPI",
     "LaunchpadPageAPI",
     "LoginPageAPI",
     "SettingsPageAPI",

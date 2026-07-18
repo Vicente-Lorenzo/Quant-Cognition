@@ -38,13 +38,17 @@ WORKFLOWS = [
         ],
         "edges": [
             ("Setup.Auth", "Setup.Scheduler"),
+            ("Setup.Scheduler", "Setup.Universe"),
+            ("Setup.Universe", "Setup.Portfolio"),
             ("Setup.Universe", "Setup.Market"),
-            ("Setup.Universe", "Setup.Portfolio")
+            ("Setup.Portfolio", "Setup.Indicator"),
+            ("Setup.Market", "Setup.Indicator"),
+            ("Setup.Indicator", "Setup.Enums")
         ]
     },
     {
-        "uid": "Environment", "name": "Environment", "schedule": "0 4 * * 0", "kind": Kind.Scheduled, "tolerates": True,
-        "description": "Weekly maintenance — refreshes the Quant conda environment then relaunches the always-on tunnel and application server",
+        "uid": "Environment", "name": "Environment", "schedule": "0 4 * * *", "kind": Kind.Scheduled, "tolerates": True,
+        "description": "Daily maintenance — refreshes the Quant conda environment then relaunches the always-on tunnel and application server",
         "tasks": [
             {"uid": "Environment.Cache", "name": "Cache Cleanup", "path": "Scripts/Cache.py", "kind": Kind.Scheduled, "description": "Removes Python bytecode and tooling caches plus C# build artifacts across the repository"},
             {"uid": "Environment.Update", "name": "Environment Update", "path": "Setup/Environment.py", "kind": Kind.Scheduled, "description": "Syncs the active conda environment to the pinned Quant manifest while the services are suspended"},

@@ -104,7 +104,7 @@ class HoloviewsAPI(ComponentAPI):
         if self.figure is MISSING: return super().build()
         import holoviews as hv
         rendered = hv.render(self.figure)
-        kwargs = {k: v for k, v in self.__dict__.items() if k not in ["element", "builder", "figure", "config"]}
+        kwargs = {k: v for k, v in self.__dict__.items() if k not in ["element", "builder", "classname", "figure", "config"]}
         return ChartAPI(figure=rendered, config=self.config, **kwargs).build()
 
 @dataclass(kw_only=True)

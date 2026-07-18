@@ -29,8 +29,6 @@ class SettingsPageAPI(PageAPI):
 
     def content(self) -> list:
         return [
-            TextAPI(text="Settings", classname="page-title", builder=html.H1),
-            TextAPI(text="Manage appearance and session preferences.", classname="page-lead", builder=html.P),
             html.Div(dbc.Tabs([
                 dbc.Tab(self._appearance_().build(), label="Appearance", tab_id="appearance"),
                 dbc.Tab(self._security_().build(), label="Security", tab_id="security"),
@@ -74,11 +72,17 @@ class SettingsPageAPI(PageAPI):
 
     @clientside_callback(
         Output(SETTINGS_TABS_ID, "active_tab"),
-        Input("GLOBAL_LOCATION_ID", "hash"),
-        on_init=InjectionType.Hidden
+        on_enter=InjectionType.Hidden
     )
     def _settings_async_tab_callback_(self):
         return self.app.asset("Callbacks/Tab.js", url=False)
+
+    @clientside_callback(
+        Output("GLOBAL_LOCATION_ID", "hash"),
+        Input(SETTINGS_TABS_ID, "active_tab"),
+    )
+    def _settings_async_hash_callback_(self):
+        return self.app.asset("Callbacks/Hash.js", url=False)
 
     @clientside_callback(
         Output(SETTINGS_MEMORY_EDITOR_ID, "value"),

@@ -31,7 +31,8 @@ class PageAPI(Generic[AppType]):
                  add_current_parent: bool = False,
                  add_current_children: bool = True,
                  add_forward_parent: bool = False,
-                 add_forward_children: bool = True) -> None:
+                 add_forward_children: bool = True,
+                 parametric: bool = False) -> None:
         self._log_ = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="Page Management")
         self.app = app
         self.path = path
@@ -45,6 +46,8 @@ class PageAPI(Generic[AppType]):
         self._add_current_children_ = add_current_children
         self._add_forward_parent_ = add_forward_parent
         self._add_forward_children_ = add_forward_children
+        self._parametric_ = parametric
+        self._param_ = None
         self._anchor_ = self.app.anchorize(path=anchor, relative=True) if anchor else anchor
         self._endpoint_ = self.app.endpointize(path=endpoint, relative=True) if endpoint else endpoint
         self._redirect_ = self.app.endpointize(path=redirect, relative=True) if redirect else redirect

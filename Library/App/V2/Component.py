@@ -176,12 +176,64 @@ class UploadAPI(ComponentAPI):
     maxsize: int = prop("max_size")
 
 @dataclass(kw_only=True)
+class InputAPI(ComponentAPI):
+
+    classname: str = "input"
+    builder: type[Component] = dbc.Input
+
+    type: str = prop()
+    name: str = prop()
+    value: Any = prop()
+    placeholder: str = prop()
+    autocomplete: str = prop("autoComplete")
+    submits: int = prop("n_submit")
+    min: int | float = prop()
+    max: int | float = prop()
+    step: int | float = prop()
+    debounce: bool | int = prop()
+    disabled: bool = prop()
+
+@dataclass(kw_only=True)
+class SelectAPI(ComponentAPI):
+
+    classname: str = "select"
+    builder: type[Component] = dbc.Select
+
+    options: list = prop()
+    value: str = prop()
+    placeholder: str = prop()
+    disabled: bool = prop()
+
+@dataclass(kw_only=True)
+class SwitchAPI(ComponentAPI):
+
+    classname: str = "switch"
+    builder: type[Component] = dbc.Switch
+
+    label: str = prop()
+    value: bool = prop()
+    disabled: bool = prop()
+
+@dataclass(kw_only=True)
+class TextareaAPI(ComponentAPI):
+
+    classname: str = "textarea"
+    builder: type[Component] = dbc.Textarea
+
+    value: str = prop()
+    placeholder: str = prop()
+    rows: int = prop()
+    disabled: bool = prop()
+
+@dataclass(kw_only=True)
 class ButtonAPI(ComponentAPI):
 
     classname: str = "button"
+    builder: type[Component] = dbc.Button
 
     label: list[Component] = MISSING
     title: str = prop()
+    type: str = prop()
     clicks: int = prop("n_clicks")
     value: str = prop()
     active: bool = prop()
@@ -201,7 +253,7 @@ class ButtonAPI(ComponentAPI):
         return kwargs
 
     def build(self) -> list[Component]:
-        button = dbc.Button(self.flatten(self.label), **self.arguments())
+        button = self.builder(self.flatten(self.label), **self.arguments())
         addons = []
         if self.asyncer is not MISSING:
             addons.append(StorageAPI(id=self.asyncer, data=TriggerAPI().dict()) if isinstance(self.asyncer, dict) else self.asyncer)

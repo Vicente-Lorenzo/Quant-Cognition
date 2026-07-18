@@ -33,13 +33,18 @@ class ManagerAPI:
             frame = db.select(schema=schema, table=table, condition=condition, order=order, limit=limit, parameters=parameters, legacy=False)
         return frame.to_dicts()
 
-    def fingerprint(self, schema: str, table: str, condition: Union[str, None] = None, parameters: Union[dict, None] = None) -> str:
+    def fingerprint(self, schema: str, *tables: str, condition: Union[str, None] = None, parameters: Union[dict, None] = None) -> str:
         with PostgresDatabaseAPI(database=self._database_) as db:
-            return db.fingerprint(schema=schema, table=table, condition=condition, parameters=parameters)
+            return "·".join(db.fingerprint(schema=schema, table=table, condition=condition, parameters=parameters) for table in tables)
 
     def _delete_(self, schema: str, table: str, condition: str, parameters: dict) -> None:
         with PostgresDatabaseAPI(database=self._database_) as db:
             db.execute(QueryAPI(f'DELETE FROM {db._target_(schema, table)} WHERE {condition}'), [parameters])
+
+    def _erase_(self, schema: str, table: str, uid: str, columns: list) -> None:
+        with PostgresDatabaseAPI(database=self._database_) as db:
+            sets = ", ".join(f'"{column}" = NULL' for column in columns)
+            db.execute(QueryAPI(f'UPDATE {db._target_(schema, table)} SET {sets} WHERE "UID" = :uid:'), [{"uid": uid}])
 
     def _save_(self, datapoint) -> None:
         with PostgresDatabaseAPI(database=self._database_) as db:
@@ -93,9 +98,11 @@ class ManagerAPI:
     def update_task(self, uid: str, **fields) -> Union[TaskAPI, None]:
         row = self.task(uid)
         if row is None: return None
-        task = TaskAPI(**self._clean_({**row, **fields}))
+        task = TaskAPI(**{**self._clean_(row), **fields})
         self._lawful_(task)
         self._save_(task)
+        cleared = [name for name, value in fields.items() if value is None and row.get(name) is not None]
+        if cleared: self._erase_(TaskAPI.Schema, TaskAPI.Table, uid, cleared)
         self._log_.info(lambda: f"Task Update: Saved ({uid})")
         return task
 
@@ -169,7 +176,7 @@ class ManagerAPI:
     def update_workflow(self, uid: str, **fields) -> Union[WorkflowAPI, None]:
         row = self.workflow(uid)
         if row is None: return None
-        workflow = WorkflowAPI(**self._clean_({**row, **fields}))
+        workflow = WorkflowAPI(**{**self._clean_(row), **fields})
         self._coherent_(workflow.Kind, workflow.Schedule)
         members = self.tasks(workflow=uid)
         if Kind.parse(workflow.Kind) is Kind.Service and any(Kind.parse(member["Kind"]) is not Kind.Service for member in members): raise ValueError("A Service workflow only accepts Service tasks")
@@ -177,6 +184,8 @@ class ManagerAPI:
             for member in members:
                 if member["Schedule"] and not CoordinatorAPI.fits(workflow.Schedule, member["Schedule"]): raise ValueError(f"Task schedule '{member['Schedule']}' of '{member['UID']}' does not fit inside workflow schedule '{workflow.Schedule}'")
         self._save_(workflow)
+        cleared = [name for name, value in fields.items() if value is None and row.get(name) is not None]
+        if cleared: self._erase_(WorkflowAPI.Schema, WorkflowAPI.Table, uid, cleared)
         self._log_.info(lambda: f"Workflow Update: Saved ({uid})")
         return workflow
 

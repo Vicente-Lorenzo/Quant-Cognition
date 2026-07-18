@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import inspect
 from typing import TYPE_CHECKING
 from pathlib import Path, PurePosixPath
@@ -81,6 +82,8 @@ class AppAPI:
 
     GLOBAL_EMAIL_STORAGE_ID: ComponentID | dict = ComponentID()
     GLOBAL_NOTIFICATION_ID: ComponentID | dict = ComponentID()
+    GLOBAL_MOTTO_ID: ComponentID | dict = ComponentID()
+    GLOBAL_MOTTO_ASYNC_ID: ComponentID | dict = ComponentID()
 
     GLOBAL_THEME_STORAGE_ID: ComponentID | dict = ComponentID()
     GLOBAL_THEME_TOGGLE_ID: ComponentID | dict = ComponentID()
@@ -118,8 +121,8 @@ class AppAPI:
                  title: str = MISSING,
                  team: str = MISSING,
                  contact: str = MISSING,
-                 motto: str = MISSING,
-                 auth: AuthAPI = None,
+                 motto: str | list = MISSING,
+                 auth: AuthAPI | None = None,
                  access: str | int | None = None,
                  host: str = "127.0.0.1",
                  port: int = MISSING,
@@ -130,7 +133,7 @@ class AppAPI:
         self._title_ = title if title is not MISSING else name
         self._team_ = team if team is not MISSING else None
         self._contact_ = contact if contact is not MISSING else None
-        self._motto_ = motto if motto is not MISSING else None
+        self._mottos_ = [] if motto is MISSING or motto is None else [motto] if isinstance(motto, str) else list(motto)
         self._auth_ = auth
         self._access_ = access
         self._host_ = host
@@ -141,6 +144,7 @@ class AppAPI:
         self._login_ = self.endpointize(path="/login", relative=True)
         self._ids_ = set()
         self._pages_ = {}
+        self._parametrics_ = {}
         self._assets_ = Path(inspect.getfile(type(self))).parent / "Assets"
         self.app = self._compose_()
         if self._auth_ is not None: self._auth_.install(self.app.server, login=self.anchorize(path="/login", relative=True))
@@ -165,7 +169,7 @@ class AppAPI:
 
     def identify(self, *, page: str = None, type: str, name: str, portable: str = "", **kwargs) -> dict:
         page = page or "global"
-        return {"app": self.__class__.__name__, "page": page, "type": type, "name": name, "portable": portable, **kwargs}
+        return dict(sorted({"app": self.__class__.__name__, "page": page, "type": type, "name": name, "portable": portable, **kwargs}.items()))
 
     def register(self, *, page: str = "global", type: str, name: str, portable: str = "", **kwargs) -> dict:
         cid = self.identify(page=page, type=type, name=name, portable=portable, **kwargs)
@@ -186,7 +190,17 @@ class AppAPI:
         return self.resolve(path=path, relative=relative, footer=True)
 
     def locate(self, *, endpoint: str) -> tuple[str, PageAPI | None]:
-        return endpoint, self._pages_.get(endpoint, None)
+        page = self._pages_.get(endpoint, None)
+        if page is not None: return endpoint, page
+        if self._parametrics_: return self._locate_parametric_(endpoint=endpoint)
+        return endpoint, None
+
+    def _locate_parametric_(self, *, endpoint: str) -> tuple[str, PageAPI | None]:
+        parts = inspect_file(endpoint, header=True, builder=PurePosixPath).parts
+        for cut in range(len(parts) - 1, 1, -1):
+            entry = self._parametrics_.get(self.endpointize(path=PurePosixPath(*parts[:cut]), relative=False))
+            if entry is not None: return endpoint, entry[0]
+        return endpoint, None
 
     def redirect(self, *, endpoint: str) -> tuple[str, PageAPI | None]:
         endpoint, page = self.locate(endpoint=endpoint)
@@ -216,6 +230,16 @@ class AppAPI:
             self.index(endpoint=intermediate_page.endpoint, page=intermediate_page)
             intermediate_page.attach(parent=intermediate_parent)
             intermediate_parent = intermediate_page
+        if page._parametric_:
+            page.anchor = relative_anchor
+            page.endpoint = relative_endpoint
+            page._param_ = relative_path.name.lstrip(":")
+            self._parametrics_[intermediate_parent.endpoint] = (page, page._param_)
+            self.index(endpoint=page.endpoint, page=page)
+            page.attach(parent=intermediate_parent)
+            page._init_()
+            self._log_.info(lambda: f"Link Operation: Linked ({page.endpoint}) · Parametric ({page._param_})")
+            return
         page.anchor = relative_anchor
         page.endpoint = relative_endpoint
         _, existing = self.locate(endpoint=relative_endpoint)
@@ -290,6 +314,8 @@ class AppAPI:
         self.GLOBAL_MODAL_BUTTON_ID = self.register(type="button", name="modal_close")
         self.GLOBAL_EMAIL_STORAGE_ID = self.register(type="storage", name="email")
         self.GLOBAL_NOTIFICATION_ID = self.register(type="div", name="notification")
+        self.GLOBAL_MOTTO_ID = self.register(type="text", name="motto")
+        self.GLOBAL_MOTTO_ASYNC_ID = self.register(type="storage", name="motto")
         self.GLOBAL_THEME_STORAGE_ID = self.register(type="storage", name="theme")
         self.GLOBAL_THEME_TOGGLE_ID = self.register(type="menuitem", name="theme")
         self.GLOBAL_THEME_ICON_ID = self.register(type="icon", name="theme")
@@ -333,7 +359,7 @@ class AppAPI:
         return html.Header([brand, self._tip_(self.GLOBAL_BRAND_ID, "Go to Launchpad page"), nav, *self.__init_menu_layout__()], className="app-header")
 
     def __init_menu_layout__(self) -> list[Component]:
-        settings = self.endpointize(path="/settings", relative=True)
+        settings = self.anchorize(path="/settings", relative=True)
         label = html.Span([html.I(className="bi bi-person app-account-icon app-account-public", id=self.GLOBAL_ACCOUNT_ICON_ID), html.Span("Guest", id=self.GLOBAL_MENU_USER_ID)], className="app-menu-label")
         items = [
             dbc.DropdownMenuItem([html.I(className="bi bi-box-arrow-in-right", id=self.GLOBAL_LOGIN_ICON_ID), html.Span("Sign In", id=self.GLOBAL_LOGIN_LABEL_ID)], id=self.GLOBAL_LOGIN_OPEN_ID, n_clicks=0, className="app-menu-item"),
@@ -365,7 +391,7 @@ class AppAPI:
 
     def __init_footer_layout__(self) -> Component:
         left = html.Div([
-            *ButtonAPI(id=self.GLOBAL_SIDEBAR_BUTTON_ID, background="primary", tooltip="Toggle the sidebar", placement="top", label=[IconAPI(icon="bi bi-layout-sidebar-inset")]).build(),
+            *ButtonAPI(id=self.GLOBAL_SIDEBAR_BUTTON_ID, background="primary", classname="sidebar-toggle", tooltip="Toggle the sidebar", placement="top", label=[IconAPI(icon="bi bi-layout-sidebar-inset")]).build(),
             *ButtonAPI(id=self.GLOBAL_CONTACTS_BUTTON_ID, background="primary", tooltip="Show contact details", placement="top", label=[IconAPI(icon="bi bi-caret-down-fill", id=self.GLOBAL_CONTACTS_ARROW_ID), TextAPI(text=" Contacts "), IconAPI(icon="bi bi-question-circle")]).build(),
             *ButtonAPI(id=self.GLOBAL_IMPORT_ID, upload=self.GLOBAL_IMPORT_UPLOAD_ID, background="warning", tooltip="Import a session snapshot", placement="top", label=[TextAPI(text="Import "), IconAPI(icon="bi bi-upload")]).build(),
             *ButtonAPI(id=self.GLOBAL_EXPORT_ID, download=self.GLOBAL_EXPORT_DOWNLOAD_ID, background="warning", tooltip="Export a session snapshot", placement="top", label=[TextAPI(text="Export "), IconAPI(icon="bi bi-download")]).build(),
@@ -375,7 +401,7 @@ class AppAPI:
                 *([html.Div("No contact details available", className="settings-hint")] if not (self._team_ or self._contact_) else []),
             ]), className="panel"), id=self.GLOBAL_CONTACTS_COLLAPSE_ID, is_open=False),
         ], className="left")
-        center = html.Div(html.Span(self._motto_, className="app-motto") if self._motto_ else None, className="center")
+        center = html.Div(html.Span(random.choice(self._mottos_), id=self.GLOBAL_MOTTO_ID, className="app-motto") if self._mottos_ else None, className="center")
         right = html.Div([
             *ButtonAPI(id=self.GLOBAL_CLEAN_RESET_BUTTON_ID, background="danger", tooltip="Clear all stored data and reload", placement="top", label=[IconAPI(icon="bi bi-trash"), TextAPI(text=" Reset ")]).build(),
         ], className="right")
@@ -399,6 +425,7 @@ class AppAPI:
         hidden.extend(StorageAPI(id=self.GLOBAL_SESSION_STORAGE_ID, persistence="session").build())
         hidden.extend(StorageAPI(id=self.GLOBAL_LOCAL_STORAGE_ID, persistence="local").build())
         hidden.extend(StorageAPI(id=self.GLOBAL_EMAIL_STORAGE_ID, persistence="memory").build())
+        hidden.extend(StorageAPI(id=self.GLOBAL_MOTTO_ASYNC_ID, persistence="memory").build())
         hidden.extend(StorageAPI(id=self.GLOBAL_THEME_STORAGE_ID, persistence="local").build())
         hidden.extend(StorageAPI(id=self.GLOBAL_USER_STORAGE_ID, persistence="session").build())
         return html.Div(hidden, className="app-hidden")
@@ -444,23 +471,25 @@ class AppAPI:
     def _init_navigation_(self) -> None:
         for endpoint, page in self._pages_.items():
             if page._navigation_: continue
-            if not page.parent and not page.children:
+            children = [child for child in page.children if not child._parametric_]
+            if not page.parent and not children:
                 page._navigation_ = []
                 continue
-            if page.parent and not page.children:
+            if page.parent and not children:
                 page._navigation_ = page.parent._navigation_
                 continue
             links = []
             for backward in page.backwards():
-                links.append(dbc.NavLink([html.I(className="bi bi-chevron-left"), html.Span(backward.button)], href=backward.endpoint, className="app-navlink app-navlink-back"))
+                links.append(dbc.NavLink([html.I(className="bi bi-chevron-left"), html.Span(backward.button)], href=backward.anchor or backward.endpoint, className="app-navlink app-navlink-back"))
             for current in page.currents():
-                forwards = page.forwards(current)
+                if current._parametric_: continue
+                forwards = [forward for forward in page.forwards(current) if not forward._parametric_]
                 if forwards and current.endpoint != page.endpoint:
-                    items = [dbc.DropdownMenuItem(self._label_(forward), href=forward.endpoint) for forward in forwards]
+                    items = [dbc.DropdownMenuItem(self._label_(forward), href=forward.anchor or forward.endpoint) for forward in forwards]
                     links.append(dbc.DropdownMenu(items, label=self._label_(current), nav=True, in_navbar=True, toggle_style={"padding": "0"}, className="app-navlink app-navlink-drop"))
                 else:
                     identifier = self.identify(type="navlink", name=current.endpoint)
-                    links.append(dbc.NavLink(self._label_(current), href=current.endpoint, active="exact", id=identifier, className="app-navlink"))
+                    links.append(dbc.NavLink(self._label_(current), href=current.anchor or current.endpoint, active="exact", id=identifier, className="app-navlink"))
                     links.append(self._tip_(identifier, f"Go to {current.button} page"))
             page._navigation_ = dbc.Nav(links, navbar=True, className="app-nav-inner")
         self._log_.debug(lambda: "Navigation Operation: Composed (Family)")
@@ -569,8 +598,10 @@ class AppAPI:
         else:
             navigation, sidebar, content = dash.no_update, self.GLOBAL_NOT_FOUND_LAYOUT, self.GLOBAL_NOT_FOUND_LAYOUT
             self._log_.warning(lambda: f"Route Operation: Missing ({endpoint})")
-        pathname = self.anchorize(path=redirect, relative=False) if redirect != endpoint else dash.no_update
-        return pathname, {"current": redirect}, navigation, sidebar, content, enter, reenter, route, leave, account
+        if current == redirect and not forbidden and page:
+            navigation = sidebar = content = dash.no_update
+        normalized = self.anchorize(path=redirect, relative=False) or "/"
+        return (normalized if normalized != pathname else dash.no_update), {"current": redirect}, navigation, sidebar, content, enter, reenter, route, leave, account
 
     @clientside_callback(
         Output(GLOBAL_SIDEBAR_COLLAPSE_ID, "is_open"),
@@ -599,6 +630,15 @@ class AppAPI:
     def _global_async_email_client_callback_(self):
         return self.asset("Callbacks/Email.js", url=False)
 
+    @serverside_callback(
+        Output(GLOBAL_MOTTO_ID, "children"),
+        Input(GLOBAL_MOTTO_ASYNC_ID, "data"),
+        on_init=InjectionType.Hidden
+    )
+    def _global_async_motto_callback_(self, trigger):
+        if not self._mottos_: return dash.no_update
+        return random.choice(self._mottos_)
+
     @clientside_callback(
         Output(GLOBAL_IMPORT_UPLOAD_ID, "contents"),
         Input(GLOBAL_IMPORT_UPLOAD_ID, "contents"),
@@ -607,12 +647,13 @@ class AppAPI:
     def _global_async_import_snapshot_callback_(self):
         return self.asset("Callbacks/Import.js", url=False)
 
+    _PORTABLES_ = ("data", "value", "input", "filter", "date", "checked", "start_date", "end_date", "options", "disabled", "is_open", "active_tab")
+
     @clientside_callback(
         Output(GLOBAL_EXPORT_DOWNLOAD_ID, "data"),
         Input(GLOBAL_EXPORT_ID, "n_clicks"),
         State(GLOBAL_LOCATION_ID, "pathname"),
-        State({"app": dash.ALL, "page": dash.ALL, "type": dash.ALL, "name": dash.ALL, "portable": "data"}, "data"),
-        State({"app": dash.ALL, "page": dash.ALL, "type": dash.ALL, "name": dash.ALL, "portable": "value"}, "value")
+        *[State({"app": dash.ALL, "page": dash.ALL, "type": dash.ALL, "name": dash.ALL, "portable": portable}, portable) for portable in _PORTABLES_]
     )
     def _global_async_export_snapshot_callback_(self):
         return self.asset("Callbacks/Export.js", url=False)
@@ -720,8 +761,8 @@ class AppAPI:
     )
     def _global_async_session_callback_(self, menu_clicks, settings_clicks, user):
         trigger = dash.ctx.triggered_id
-        if trigger == self.GLOBAL_LOGIN_OPEN_ID and not menu_clicks: return dash.no_update
-        if trigger == self.GLOBAL_SETTINGS_AUTH_ID and not settings_clicks: return dash.no_update
+        clicked = (trigger == self.GLOBAL_LOGIN_OPEN_ID and menu_clicks) or (trigger == self.GLOBAL_SETTINGS_AUTH_ID and settings_clicks)
+        if not clicked: return dash.no_update
         if user:
             if self._auth_ is not None: self._auth_.logout()
             self._log_.info(lambda: f"Authenticate Operation: Revoked ({user.get('name') if isinstance(user, dict) else user})")
