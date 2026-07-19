@@ -6,8 +6,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from Library.Logging import HandlerLoggingAPI
+from Library.Utility.Path import traceback_root
 
-MANIFEST = Path(__file__).resolve().parent.parent / "Quant.yml"
+def find_manifest() -> Path:
+    return traceback_root() / "Quant.yml"
 
 def find_root() -> Path:
     interpreter = Path(sys.executable).resolve()
@@ -24,7 +26,7 @@ def find_managers() -> list:
 def update_environment():
     environment = {**os.environ, "MAMBA_ROOT_PREFIX": str(find_root())}
     for manager in find_managers():
-        try: return subprocess.run([manager, "env", "update", "--name", "Quant", "--file", str(MANIFEST), "--prune"], check=True, env=environment, stdout=sys.stdout, stderr=sys.stderr, creationflags=subprocess.CREATE_NO_WINDOW)
+        try: return subprocess.run([manager, "env", "update", "--name", "Quant", "--file", str(find_manifest()), "--prune"], check=True, env=environment, stdout=sys.stdout, stderr=sys.stderr, creationflags=subprocess.CREATE_NO_WINDOW)
         except FileNotFoundError: continue
     raise FileNotFoundError("Mamba or Conda executable not found")
 
@@ -32,7 +34,7 @@ def main():
     with HandlerLoggingAPI(Class="Setup", Subclass="Environment") as log:
         try:
             update_environment()
-            log.info(lambda: f"Environment Setup: Completed · {MANIFEST.name}")
+            log.info(lambda: f"Environment Setup: Completed · {find_manifest().name}")
             return 0
         except Exception as error:
             log.exception(lambda: f"Environment Setup: Failed · Due to {error}")

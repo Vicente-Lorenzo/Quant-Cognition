@@ -15,8 +15,6 @@ from Library.Scheduler.Run import RunAPI
 from Library.Scheduler.Manager import ManagerAPI
 from Library.Scheduler.Scheduler import SchedulerAPI
 
-_WIDE_ = ("Owner", "Description", "Path", "Memory", "PID", "Auditor", "Log", "Heartbeat", "UpdatedAt", "UpdatedBy")
-
 def _dest_(name: str) -> str:
     if name.isupper(): return name.lower()
     return "".join(f"_{char.lower()}" if index and char.isupper() else char.lower() for index, char in enumerate(name))
@@ -25,7 +23,8 @@ def _fields_(args: Namespace, model: type) -> dict:
     return {field.name: getattr(args, _dest_(field.name)) for field in fields(model) if not field.name.startswith("_") and hasattr(args, _dest_(field.name))}
 
 def _table_(rows: list, model: type) -> None:
-    columns = [field.name for field in fields(model) if not field.name.startswith("_") and field.name not in _WIDE_]
+    wide = ("Owner", "Description", "Path", "Memory", "PID", "Auditor", "Log", "Heartbeat", "UpdatedAt", "UpdatedBy")
+    columns = [field.name for field in fields(model) if not field.name.startswith("_") and field.name not in wide]
     if not rows:
         print("(none)")
         return

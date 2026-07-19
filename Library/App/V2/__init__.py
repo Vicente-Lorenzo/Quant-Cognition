@@ -67,7 +67,7 @@ from Library.App.V2.Layout import (
 from Library.App.V2.Notification import NotifierAPI
 from Library.App.V2.Page import PageAPI
 from Library.App.V2.Table import TableAPI
-from Library.App.V2.Launchpad import LaunchpadPageAPI
+from Library.App.V2.Launchpad import LinkAPI, LaunchpadPageAPI
 from Library.App.V2.Login import LoginPageAPI
 from Library.App.V2.Settings import SettingsPageAPI
 from Library.App.V2.Form import FormAPI
@@ -130,6 +130,7 @@ __all__ = [
     "NotifierAPI",
     "PageAPI",
     "TableAPI",
+    "LinkAPI",
     "LaunchpadPageAPI",
     "LoginPageAPI",
     "SettingsPageAPI",

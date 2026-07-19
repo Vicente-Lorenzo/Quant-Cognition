@@ -12,22 +12,22 @@ import dash_bootstrap_components as dbc
 from Library.App.V2 import PageAPI, TableAPI, ComponentID, Output, Input, State, InjectionType, serverside_callback, clientside_callback, IconAPI, InputAPI, SelectAPI, SwitchAPI, TextareaAPI, ButtonAPI, ModalAPI, StorageAPI, IntervalAPI, PlotlyAPI
 from Library.Auth import RoleAPI
 from Library.Scheduler import ManagerAPI, WorkflowAPI, TaskAPI, TaskType, Kind
-
-_ROOT_ = Path(__file__).resolve().parents[2]
-_WORKFLOW_COLUMNS_ = ["UID", "Name", "Owner", "Enabled", "Kind", "Waits", "Schedule"]
-_TASK_COLUMNS_ = ["Status", "UID", "Name", "Type", "Kind", "Enabled", "Waits", "Tolerates", "Schedule", "WID", "MaxRetry"]
-_MEMBER_COLUMNS_ = ["Status", "UID", "Name", "Type", "Kind", "Enabled"]
-_RUN_COLUMNS_ = ["Status", "UID", "CID", "TID", "Kind", "Retry", "StartedAt", "StoppedAt", "Duration", "ExitCode", "PID", "Auditor"]
-_TASK_RUN_COLUMNS_ = ["Status", "UID", "Kind", "Retry", "StartedAt", "StoppedAt", "Duration", "ExitCode", "PID", "Auditor"]
-_CYCLE_COLUMNS_ = ["Status", "UID", "Kind", "StartedAt", "StoppedAt"]
-_MARKDOWN_COLUMNS_ = {"Status"}
-_STATUS_COLOR_ = {"Success": "#2f9e44", "Failure": "#ef5350", "Running": "#2962ff", "Waiting": "#868993", "Approving": "#ffb300", "Reviewing": "#ff7043", "Retrying": "#ab47bc"}
-_UNRUN_COLOR_ = "#565a66"
-_NEUTRAL_ = "#868993"
-_LEGEND_ = [("Success", "success"), ("Running", "running"), ("Waiting", "waiting"), ("Approving", "approving"), ("Reviewing", "reviewing"), ("Retrying", "retrying"), ("Failure", "failure"), ("No run", "none")]
-_VERBS_ = {"run": "dispatched", "enable": "enabled", "disable": "disabled", "delete": "deleted"}
+from Library.Utility.Path import traceback_root
 
 class SchedulerBaseAPI(PageAPI):
+
+    _WORKFLOW_COLUMNS_ = ["UID", "Name", "Owner", "Enabled", "Kind", "Waits", "Schedule"]
+    _TASK_COLUMNS_ = ["Status", "UID", "Name", "Type", "Kind", "Enabled", "Waits", "Tolerates", "Schedule", "WID", "MaxRetry"]
+    _MEMBER_COLUMNS_ = ["Status", "UID", "Name", "Type", "Kind", "Enabled"]
+    _RUN_COLUMNS_ = ["Status", "UID", "CID", "TID", "Kind", "Retry", "StartedAt", "StoppedAt", "Duration", "ExitCode", "PID", "Auditor"]
+    _TASK_RUN_COLUMNS_ = ["Status", "UID", "Kind", "Retry", "StartedAt", "StoppedAt", "Duration", "ExitCode", "PID", "Auditor"]
+    _CYCLE_COLUMNS_ = ["Status", "UID", "Kind", "StartedAt", "StoppedAt"]
+    _MARKDOWN_COLUMNS_ = {"Status"}
+    _STATUS_COLOR_ = {"Success": "#2f9e44", "Failure": "#ef5350", "Running": "#2962ff", "Waiting": "#868993", "Approving": "#ffb300", "Reviewing": "#ff7043", "Retrying": "#ab47bc"}
+    _UNRUN_COLOR_ = "#565a66"
+    _NEUTRAL_ = "#868993"
+    _LEGEND_ = [("Success", "success"), ("Running", "running"), ("Waiting", "waiting"), ("Approving", "approving"), ("Reviewing", "reviewing"), ("Retrying", "retrying"), ("Failure", "failure"), ("No run", "none")]
+    _VERBS_ = {"run": "dispatched", "enable": "enabled", "disable": "disabled", "delete": "deleted"}
 
     def __init__(self, *, app, **kwargs) -> None:
         super().__init__(app=app, **kwargs)
@@ -63,18 +63,18 @@ class SchedulerBaseAPI(PageAPI):
     def _switch_(self, id: dict, label: str, value, help: str) -> html.Div:
         return html.Div([*SwitchAPI(id=id, label=label, value=value).build(), *self._help_(help)], className="scheduler-switch-field")
 
-    @staticmethod
-    def _legend_() -> html.Div:
-        return html.Div([html.Span([html.Span(className=f"led led-{key}"), label]) for label, key in _LEGEND_], className="scheduler-legend")
+    @classmethod
+    def _legend_(cls) -> html.Div:
+        return html.Div([html.Span([html.Span(className=f"led led-{key}"), label]) for label, key in cls._LEGEND_], className="scheduler-legend")
 
-    @staticmethod
-    def _led_(status) -> str:
-        key = status if status in _STATUS_COLOR_ else None
+    @classmethod
+    def _led_(cls, status) -> str:
+        key = status if status in cls._STATUS_COLOR_ else None
         return f'<span class="led led-{key.lower() if key else "none"}"></span>{key or "—"}'
 
-    @staticmethod
-    def _led_dot_(status):
-        key = status if status in _STATUS_COLOR_ else None
+    @classmethod
+    def _led_dot_(cls, status):
+        key = status if status in cls._STATUS_COLOR_ else None
         return html.Span([html.Span(className=f"led led-{key.lower() if key else 'none'}"), key or "—"])
 
     @staticmethod
@@ -106,11 +106,11 @@ class SchedulerBaseAPI(PageAPI):
         if error: self.app.notify.error(error, header="Action Failed")
         if not done: return dash.no_update
         detail = f"{entity.capitalize()} '{done[0]}'" if len(done) == 1 else f"{len(done)} {entity}s"
-        self.app.notify.success(f"{detail} {_VERBS_[verb]}", header="Done")
+        self.app.notify.success(f"{detail} {self._VERBS_[verb]}", header="Done")
         return uuid.uuid4().hex
 
     def _task_row_(self, task: dict, status) -> dict:
-        row = {column: self._stamp_(task.get(column)) for column in _TASK_COLUMNS_}
+        row = {column: self._stamp_(task.get(column)) for column in self._TASK_COLUMNS_}
         row["Status"] = self._led_(status)
         row["Waits"] = task.get("Waits") is not False
         row["Tolerates"] = task.get("Tolerates") is not False
@@ -118,19 +118,19 @@ class SchedulerBaseAPI(PageAPI):
 
     def _run_row_(self, run: dict) -> dict:
         row = {}
-        for column in _RUN_COLUMNS_:
+        for column in self._RUN_COLUMNS_:
             value = self._stamp_(run.get(column))
             row[column] = round(value, 2) if column == "Duration" and isinstance(value, (int, float)) else value
         row["Status"] = self._led_(run.get("Status"))
         return row
 
     def _workflow_row_(self, workflow: dict) -> dict:
-        row = {column: self._stamp_(workflow.get(column)) for column in _WORKFLOW_COLUMNS_}
+        row = {column: self._stamp_(workflow.get(column)) for column in self._WORKFLOW_COLUMNS_}
         row["Waits"] = workflow.get("Waits") is not False
         return row
 
     def _cycle_row_(self, cycle: dict) -> dict:
-        row = {column: self._stamp_(cycle.get(column)) for column in _CYCLE_COLUMNS_}
+        row = {column: self._stamp_(cycle.get(column)) for column in self._CYCLE_COLUMNS_}
         row["Status"] = self._led_(cycle.get("Status"))
         return row
 
@@ -154,10 +154,10 @@ class SchedulerBaseAPI(PageAPI):
         parent = self.parent
         return html.Div([dcc.Link(parent.button, href=parent.anchor or parent.endpoint, className="scheduler-crumb"), html.Span("›", className="scheduler-crumb-sep"), html.Span(uid, className="scheduler-crumb-current")], className="scheduler-breadcrumb")
 
-    @staticmethod
-    def _empty_figure_(text: str):
+    @classmethod
+    def _empty_figure_(cls, text: str):
         figure = go.Figure()
-        figure.update_layout(annotations=[dict(text=text, showarrow=False, xref="paper", yref="paper", x=0.5, y=0.5, font=dict(color=_NEUTRAL_, size=13))], margin=dict(l=8, r=8, t=8, b=8), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(visible=False), yaxis=dict(visible=False))
+        figure.update_layout(annotations=[dict(text=text, showarrow=False, xref="paper", yref="paper", x=0.5, y=0.5, font=dict(color=cls._NEUTRAL_, size=13))], margin=dict(l=8, r=8, t=8, b=8), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(visible=False), yaxis=dict(visible=False))
         return figure
 
     def _figure_(self, wid: str, members: list, latest: dict):
@@ -178,15 +178,15 @@ class SchedulerBaseAPI(PageAPI):
             bx, by = position[successor]
             edge_x += [ax, bx, None]
             edge_y += [ay, by, None]
-            annotations.append(dict(ax=ax, ay=ay, x=bx, y=by, xref="x", yref="y", axref="x", ayref="y", showarrow=True, arrowhead=3, arrowsize=1.4, arrowwidth=1, arrowcolor=_NEUTRAL_, opacity=0.7))
+            annotations.append(dict(ax=ax, ay=ay, x=bx, y=by, xref="x", yref="y", axref="x", ayref="y", showarrow=True, arrowhead=3, arrowsize=1.4, arrowwidth=1, arrowcolor=self._NEUTRAL_, opacity=0.7))
         node_x = [position[node][0] for node in ordered]
         node_y = [position[node][1] for node in ordered]
-        colors = [_STATUS_COLOR_.get(latest.get(node), _UNRUN_COLOR_) for node in ordered]
+        colors = [self._STATUS_COLOR_.get(latest.get(node), self._UNRUN_COLOR_) for node in ordered]
         hovers = [f"{node}<br>{latest.get(node) or 'No run'}" for node in ordered]
         figure = go.Figure()
-        figure.add_trace(go.Scatter(x=edge_x, y=edge_y, mode="lines", line=dict(color=_NEUTRAL_, width=1), hoverinfo="none"))
-        figure.add_trace(go.Scatter(x=node_x, y=node_y, mode="markers+text", marker=dict(size=26, color=colors, line=dict(color=_NEUTRAL_, width=1.5)), text=ordered, textposition="bottom center", textfont=dict(color=_NEUTRAL_, size=11), hovertext=hovers, hoverinfo="text"))
-        figure.update_layout(showlegend=False, annotations=annotations, margin=dict(l=8, r=8, t=8, b=8), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(visible=False), yaxis=dict(visible=False, autorange="reversed"), font=dict(color=_NEUTRAL_))
+        figure.add_trace(go.Scatter(x=edge_x, y=edge_y, mode="lines", line=dict(color=self._NEUTRAL_, width=1), hoverinfo="none"))
+        figure.add_trace(go.Scatter(x=node_x, y=node_y, mode="markers+text", marker=dict(size=26, color=colors, line=dict(color=self._NEUTRAL_, width=1.5)), text=ordered, textposition="bottom center", textfont=dict(color=self._NEUTRAL_, size=11), hovertext=hovers, hoverinfo="text"))
+        figure.update_layout(showlegend=False, annotations=annotations, margin=dict(l=8, r=8, t=8, b=8), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(visible=False), yaxis=dict(visible=False, autorange="reversed"), font=dict(color=self._NEUTRAL_))
         return figure
 
 class SchedulerSelectionAPI:
@@ -380,6 +380,7 @@ class SchedulerEntityAPI(SchedulerBaseAPI):
 class SchedulerTaskAPI(SchedulerEntityAPI):
 
     _entity_ = "task"
+    _ROOT_ = traceback_root()
 
     F_UID: ComponentID | dict = ComponentID()
     F_NAME: ComponentID | dict = ComponentID()
@@ -435,10 +436,10 @@ class SchedulerTaskAPI(SchedulerEntityAPI):
             SwitchAPI(id=self.F_FAILURE, label="As Failure", value=False, classname="scheduler-switch", tooltip="Outcome recorded by Skip · off records Success · on records Failure", placement="top"),
         ]
 
-    @staticmethod
-    def _relative_(path: str) -> str:
+    @classmethod
+    def _relative_(cls, path: str) -> str:
         try:
-            return Path(path).resolve().relative_to(_ROOT_).as_posix()
+            return Path(path).resolve().relative_to(cls._ROOT_).as_posix()
         except ValueError:
             return str(Path(path))
 
@@ -446,14 +447,14 @@ class SchedulerTaskAPI(SchedulerEntityAPI):
     def _format_(path: Path, relative) -> str:
         return SchedulerTaskAPI._relative_(str(path)) if relative else str(path)
 
-    @staticmethod
-    def _locate_(filename: str) -> Path | None:
+    @classmethod
+    def _locate_(cls, filename: str) -> Path | None:
         for folder in ("Scripts", "Setup", "Library", "Sources"):
-            base = _ROOT_ / folder
+            base = cls._ROOT_ / folder
             if not base.is_dir(): continue
             matches = [match for match in base.rglob(filename) if "__pycache__" not in match.parts]
             if matches: return min(matches, key=lambda match: len(match.parts))
-        direct = _ROOT_ / filename
+        direct = cls._ROOT_ / filename
         return direct if direct.is_file() else None
 
     def _modal_(self) -> ModalAPI:
@@ -526,7 +527,7 @@ class SchedulerTaskAPI(SchedulerEntityAPI):
     def _convert_(self, relative, path):
         from dash.exceptions import PreventUpdate
         if not path: raise PreventUpdate
-        chosen = Path(path) if Path(path).is_absolute() else _ROOT_ / path
+        chosen = Path(path) if Path(path).is_absolute() else self._ROOT_ / path
         return self._format_(chosen, relative)
 
     @clientside_callback(
@@ -912,7 +913,7 @@ class SchedulerWorkflowsPageAPI(SchedulerWorkflowAPI, SchedulerSelectionAPI, Tab
         self._workflow_ids_()
 
     def _columns_(self) -> list:
-        return _WORKFLOW_COLUMNS_
+        return self._WORKFLOW_COLUMNS_
 
     def _detail_base_(self):
         return self.anchor
@@ -978,10 +979,10 @@ class SchedulerWorkflowDetailPageAPI(SchedulerWorkflowAPI, SchedulerDetailAPI):
             PlotlyAPI(id=self.DAG_GRAPH_ID, figure=self._empty_figure_("Loading dependency graph"), config={"displayModeBar": False, "displaylogo": False}, style={"height": "42vh", "minHeight": "280px"}),
             self._legend_(),
             html.Div("Tasks", className="scheduler-subtitle"),
-            TableAPI.navigable(self._table_(self.SUB_TABLE_ID, _MEMBER_COLUMNS_, _MARKDOWN_COLUMNS_), "/scheduler/tasks"),
+            TableAPI.navigable(self._table_(self.SUB_TABLE_ID, self._MEMBER_COLUMNS_, self._MARKDOWN_COLUMNS_), "/scheduler/tasks"),
             self._toolbar_([ButtonAPI(id=self.SUB_OPEN_BTN, label=self._icon_("bi bi-box-arrow-up-right", "Open Task"), background="secondary", tooltip="Open the selected tasks · one opens here · several open in new tabs")], "table-bar"),
             html.Div("Cycles", className="scheduler-subtitle"),
-            self._table_(self.CYCLE_TABLE_ID, _CYCLE_COLUMNS_, _MARKDOWN_COLUMNS_, row_selectable=False),
+            self._table_(self.CYCLE_TABLE_ID, self._CYCLE_COLUMNS_, self._MARKDOWN_COLUMNS_, row_selectable=False),
             self._modal_(),
             StorageAPI(id=self.SUB_CONFIG_STORE_ID, data=self._config_("/scheduler/tasks")),
             StorageAPI(id=self.MODE_STORE_ID, data={}),
@@ -1076,10 +1077,10 @@ class SchedulerTasksPageAPI(SchedulerTaskAPI, SchedulerSelectionAPI, TableAPI):
         self._task_ids_()
 
     def _columns_(self) -> list:
-        return _TASK_COLUMNS_
+        return self._TASK_COLUMNS_
 
     def _markdown_columns_(self) -> set:
-        return _MARKDOWN_COLUMNS_
+        return self._MARKDOWN_COLUMNS_
 
     def _detail_base_(self):
         return self.anchor
@@ -1121,7 +1122,7 @@ class SchedulerTaskDetailPageAPI(SchedulerTaskAPI, SchedulerDetailAPI):
             self._toolbar_([self._refresh_button_()] + self._lifecycle_buttons_(insert=False) + self._intervention_buttons_()),
             html.Div(id=self.FIELDS_ID),
             html.Div("Runs", className="scheduler-subtitle"),
-            TableAPI.navigable(self._table_(self.SUB_TABLE_ID, _TASK_RUN_COLUMNS_, _MARKDOWN_COLUMNS_), "/scheduler/runs"),
+            TableAPI.navigable(self._table_(self.SUB_TABLE_ID, self._TASK_RUN_COLUMNS_, self._MARKDOWN_COLUMNS_), "/scheduler/runs"),
             self._toolbar_([ButtonAPI(id=self.SUB_OPEN_BTN, label=self._icon_("bi bi-box-arrow-up-right", "Open Run"), background="secondary", tooltip="Open the selected runs · one opens here · several open in new tabs")], "table-bar"),
             self._modal_(),
             StorageAPI(id=self.SUB_CONFIG_STORE_ID, data=self._config_("/scheduler/runs")),
@@ -1170,10 +1171,10 @@ class SchedulerRunsPageAPI(SchedulerRunAPI, SchedulerSelectionAPI, TableAPI):
         self._run_ids_()
 
     def _columns_(self) -> list:
-        return _RUN_COLUMNS_
+        return self._RUN_COLUMNS_
 
     def _markdown_columns_(self) -> set:
-        return _MARKDOWN_COLUMNS_
+        return self._MARKDOWN_COLUMNS_
 
     def _detail_base_(self):
         return self.anchor

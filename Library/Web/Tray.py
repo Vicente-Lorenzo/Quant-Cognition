@@ -9,10 +9,10 @@ from Library.Utility.Path import traceback_root
 from Library.Utility.Runtime import tail_terminal
 from Library.Web.Serve import build, main as headless
 
-URL = "https://quantcognition.com"
-LOG = traceback_root() / "Logs" / "Web.log"
-
 class TrayAPI:
+
+    _URL_ = "https://quantcognition.com"
+    _LOG_ = traceback_root() / "Logs" / "Web.log"
 
     def __init__(self) -> None:
         import pystray
@@ -47,10 +47,10 @@ class TrayAPI:
         except Exception: pass
 
     def _browser_(self, icon=None, item=None) -> None:
-        webbrowser.open(URL)
+        webbrowser.open(self._URL_)
 
     def _terminal_(self, icon=None, item=None) -> None:
-        tail_terminal(LOG)
+        tail_terminal(self._LOG_)
 
     def _toggle_(self, icon=None, item=None) -> None:
         self._verbose_ = not self._verbose_
@@ -93,8 +93,8 @@ class TrayAPI:
         self._icon_.run()
 
 def main() -> None:
-    LOG.parent.mkdir(parents=True, exist_ok=True)
-    handle = LOG.open("w", buffering=1, encoding="utf-8-sig")
+    TrayAPI._LOG_.parent.mkdir(parents=True, exist_ok=True)
+    handle = TrayAPI._LOG_.open("w", buffering=1, encoding="utf-8-sig")
     sys.stdout = handle
     sys.stderr = handle
     log = HandlerLoggingAPI(Class=TrayAPI.__name__)

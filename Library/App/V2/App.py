@@ -19,11 +19,11 @@ from Library.App.V2.Layout import DefaultLayoutAPI
 from Library.App.V2.Notification import NotifierAPI
 from Library.App.V2.Page import PageAPI
 from Library.App.V2.Session import TriggerAPI
-from Library.App.V2.Launchpad import LaunchpadPageAPI
+from Library.App.V2.Launchpad import LinkAPI, LaunchpadPageAPI
 from Library.App.V2.Login import LoginPageAPI
 from Library.App.V2.Settings import SettingsPageAPI
 from Library.Logging import HandlerLoggingAPI
-from Library.Utility.Path import inspect_file, inspect_file_path
+from Library.Utility.Path import inspect_file, inspect_file_path, traceback_current_module
 from Library.Utility.Runtime import find_host_port
 from Library.Utility.Typing import MISSING, getmro, iscallable
 
@@ -32,7 +32,7 @@ if TYPE_CHECKING: from Library.Auth import AuthAPI
 class AppAPI:
 
     THEME = [dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP]
-    Assets = Path(__file__).parent / "Assets"
+    Assets = traceback_current_module(resolve=True) / "Assets"
     _FRAMEWORK_ = "/_framework"
 
     GLOBAL_LOCATION_ID: ComponentID | dict = ComponentID()
@@ -812,7 +812,7 @@ class AppAPI:
     def pages(self) -> None:
         pass
 
-    def apps(self) -> list[dict]:
+    def apps(self) -> list[LinkAPI]:
         return []
 
     def _required_(self, page: PageAPI | None):

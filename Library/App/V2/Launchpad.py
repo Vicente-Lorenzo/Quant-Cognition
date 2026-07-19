@@ -1,7 +1,17 @@
+from dataclasses import dataclass
+
 from dash import html
 
 from Library.App.V2.Component import ButtonAPI, ComponentAPI, ContainerAPI, IconAPI, TextAPI
 from Library.App.V2.Page import PageAPI
+
+@dataclass(kw_only=True)
+class LinkAPI:
+
+    name: str
+    url: str
+    icon: str = None
+    description: str = None
 
 class LaunchpadPageAPI(PageAPI):
 
@@ -18,7 +28,7 @@ class LaunchpadPageAPI(PageAPI):
         return self._render_(None)
 
     def _render_(self, role) -> ContainerAPI:
-        if self._links_ is None: self._links_ = [self._link_(app) for app in self.app.apps()]
+        if self._links_ is None: self._links_ = [self._link_(link) for link in self.app.apps()]
         tiles = [self._tile_(child, role) for child in self.children if child.button]
         tiles.extend(self._links_)
         grid = ContainerAPI(builder=html.Div, classname="app-launchpad-grid", elements=tiles) if tiles else TextAPI(text="No applications registered", classname="app-launchpad-empty")
@@ -40,7 +50,7 @@ class LaunchpadPageAPI(PageAPI):
         return tile
 
     @staticmethod
-    def _link_(app: dict) -> ButtonAPI:
-        label = [IconAPI(icon="bi bi-box-arrow-up-right", classname="app-tile-badge"), IconAPI(icon=app.get("icon") or "bi bi-app", classname="app-tile-icon"), TextAPI(text=app["name"], classname="app-tile-name")]
-        if app.get("description"): label.append(TextAPI(text=app["description"], classname="app-tile-desc"))
-        return ButtonAPI(href=app["url"], external=True, background="link", classname="app-tile", label=label)
+    def _link_(link: LinkAPI) -> ButtonAPI:
+        label = [IconAPI(icon="bi bi-box-arrow-up-right", classname="app-tile-badge"), IconAPI(icon=link.icon or "bi bi-app", classname="app-tile-icon"), TextAPI(text=link.name, classname="app-tile-name")]
+        if link.description: label.append(TextAPI(text=link.description, classname="app-tile-desc"))
+        return ButtonAPI(href=link.url, external=True, background="link", classname="app-tile", label=label)

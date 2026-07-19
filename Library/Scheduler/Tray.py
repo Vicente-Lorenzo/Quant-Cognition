@@ -7,10 +7,10 @@ from Library.Utility.Path import traceback_root
 from Library.Utility.Runtime import tail_terminal
 from Library.Scheduler.Serve import build
 
-LOG = traceback_root() / "Logs" / "Scheduler.log"
-LAUNCHER = traceback_root() / "Scripts" / "Scheduler.py"
-
 class TrayAPI:
+
+    _LOG_ = traceback_root() / "Logs" / "Scheduler.log"
+    _LAUNCHER_ = traceback_root() / "Scripts" / "Scheduler.py"
 
     def __init__(self) -> None:
         import pystray
@@ -44,7 +44,7 @@ class TrayAPI:
         except Exception: pass
 
     def _terminal_(self, icon=None, item=None) -> None:
-        tail_terminal(LOG)
+        tail_terminal(self._LOG_)
 
     def _toggle_(self, icon=None, item=None) -> None:
         self._verbose_ = not self._verbose_
@@ -64,7 +64,7 @@ class TrayAPI:
 
     def _restart_(self, icon=None, item=None) -> None:
         self._shutdown_()
-        subprocess.Popen([sys.executable, str(LAUNCHER)], cwd=str(traceback_root()))
+        subprocess.Popen([sys.executable, str(self._LAUNCHER_)], cwd=str(traceback_root()))
         self._icon_.stop()
 
     def _quit_(self, icon, item) -> None:

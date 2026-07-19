@@ -4,8 +4,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from Library.Logging import HandlerLoggingAPI
+from Library.Utility.Path import traceback_root
 
-OUTPUT_PATH = Path(__file__).resolve().parent.parent / "Sources" / "Robots" / "Connector" / "Connector" / "Enum.cs"
+OUTPUT_PATH = traceback_root() / "Sources" / "Robots" / "Connector" / "Connector" / "Enum.cs"
 
 def enum_block(name: str, members, flags: bool = False) -> str:
     body = "\n".join(f"        {member} = {value}," for member, value in members)
