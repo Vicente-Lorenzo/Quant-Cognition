@@ -14,7 +14,7 @@ from typing import Any, Type, Union, Iterator, TYPE_CHECKING
 
 from Library.Database.Database import DatabaseAPI
 from Library.Database.Dataframe import np, pl
-from Library.Database.Postgres.Postgres import PostgresAPI
+from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Engine import MachineAPI
 from Library.Indicator.Indicator import IndicatorAPI
 from Library.Market.Bar import BarAPI
@@ -62,6 +62,7 @@ class DatasetAPI:
     TickConversions: Union[tuple[np.ndarray, ...], None]
     IntraLevels: list[str]
     IntraBars: dict[str, pl.DataFrame]
+    ExecutionRows: Union[pl.DataFrame, None] = None
     IndicatorResults: Union[dict, None] = None
 
 class BacktestingAPI(SystemAPI):
@@ -78,6 +79,8 @@ class BacktestingAPI(SystemAPI):
     _feed_: Iterator
     _resolution_: TimeframeAPI
     _dataset_: DatasetAPI
+    _intra_arrays_: dict[str, tuple]
+    _advance_index_: int
     _uid_queue_: deque
     _arg_queue_: deque
     _bar_: BarAPI
@@ -147,8 +150,8 @@ class BacktestingAPI(SystemAPI):
         stack.__enter__()
         self._stack_ = stack
         try:
-            self._db_ = stack.enter_context(PostgresAPI(database="Quant"))
-            self.strategy = self._strategy_(money_management=self._parameters_.MoneyManagement, risk_management=self._parameters_.RiskManagement, signal_management=self._parameters_.SignalManagement)
+            self._db_ = stack.enter_context(PostgresDatabaseAPI(database="Quant"))
+            self.strategy = self._strategy_(money_management=self._parameters_.MoneyManagement, risk_management=self._parameters_.RiskManagement, signal_management=self._parameters_.SignalManagement, technical_management=self._parameters_.TechnicalManagement, fundamental_management=self._parameters_.FundamentalManagement, sentimental_management=self._parameters_.SentimentalManagement, portfolio_management=self._parameters_.PortfolioManagement)
             self.market = MarketAPI()
             self.indicator = IndicatorAPI(technical=self._parameters_.TechnicalManagement, fundamental=self._parameters_.FundamentalManagement, sentimental=self._parameters_.SentimentalManagement)
             self.portfolio = PortfolioAPI(Parameter=self._parameters_.PortfolioManagement)
@@ -173,6 +176,8 @@ class BacktestingAPI(SystemAPI):
         except Exception:
             stack.__exit__(None, None, None)
             raise
+        self._intra_arrays_ = self._build_intra_arrays_()
+        self._advance_index_ = 0
         self._uid_queue_ = deque()
         self._arg_queue_ = deque()
         self._feed_ = self._generate_()
@@ -241,15 +246,19 @@ class BacktestingAPI(SystemAPI):
             df = df.filter(pl.col(timestamp) != pl.col(open_timestamp))
         return df.unique(subset=open_timestamp, keep="first", maintain_order=True) if open_timestamp in df.columns else df
 
-    def _load_bars_(self) -> tuple[Union[pl.DataFrame, None], list[BarAPI]]:
+    def _load_bars_(self) -> tuple[Union[pl.DataFrame, None], list[BarAPI], Union[pl.DataFrame, None]]:
         warmup_df = self._clean_(MarketAPI.pull_bars(self._db_, self._security_.UID, self._timeframe_.UID, stop=self._start_, limit=self._window_))
         execution_df = self._clean_(MarketAPI.pull_bars(self._db_, self._security_.UID, self._timeframe_.UID, start=self._start_, stop=self._stop_))
         warmup_bars = [self._row_to_bar_(row) for row in warmup_df.to_dicts()] if warmup_df.height else []
         execution_bars = [self._row_to_bar_(row) for row in execution_df.to_dicts()] if execution_df.height else []
         if execution_bars:
             warmup_bars.append(execution_bars.pop(0))
-        warmup_frame = pl.DataFrame([bar.dict(flatten=True) for bar in warmup_bars], strict=False) if warmup_bars else pl.DataFrame()
-        return warmup_frame, execution_bars
+        if not warmup_bars and not execution_bars:
+            return pl.DataFrame(), [], None
+        frame = pl.DataFrame([bar.dict(flatten=True) for bar in warmup_bars + execution_bars], strict=False)
+        warmup_frame = frame.slice(0, len(warmup_bars))
+        execution_rows = frame.slice(len(warmup_bars)) if execution_bars else None
+        return warmup_frame, execution_bars, execution_rows
 
     def _candidate_rungs_(self) -> list[TimeframeAPI]:
         rungs = [TimeframeAPI(UID=uid, db=self._db_) for uid in ("H1", "M1")]
@@ -335,11 +344,11 @@ class BacktestingAPI(SystemAPI):
         self._injected_ = dataset
 
     def _build_dataset_(self) -> DatasetAPI:
-        warmup, bars = self._load_bars_()
+        warmup, bars, rows = self._load_bars_()
         if not bars:
             return DatasetAPI(WarmupBars=warmup, ExecutionBars=[], TickTimestamps=np.empty(0, dtype="int64"), TickAsks=np.empty(0, dtype="float64"), TickBids=np.empty(0, dtype="float64"), TickConversions=None, IntraLevels=[], IntraBars={})
         tick_ts, tick_ask, tick_bid, tick_conversions, intra_levels, intra_bars = self._acquire_frames_(bars)
-        return DatasetAPI(WarmupBars=warmup, ExecutionBars=bars, TickTimestamps=tick_ts, TickAsks=tick_ask, TickBids=tick_bid, TickConversions=tick_conversions, IntraLevels=intra_levels, IntraBars=intra_bars)
+        return DatasetAPI(WarmupBars=warmup, ExecutionBars=bars, TickTimestamps=tick_ts, TickAsks=tick_ask, TickBids=tick_bid, TickConversions=tick_conversions, IntraLevels=intra_levels, IntraBars=intra_bars, ExecutionRows=rows)
 
     def _preload_(self) -> None:
         watch = Timer(); watch.start()
@@ -697,11 +706,12 @@ class BacktestingAPI(SystemAPI):
             self._tick_ = self._synth_tick_(timestamp, ask, bid, raw_ask, raw_bid)
             self._enqueue_(UpdateID.BidBelowTarget, self._tick_); yield
 
-    def _bounds_(self, open_ts: datetime, close_ts: datetime) -> tuple[int, int]:
+    def _bounds_(self, open_ts: Union[int, datetime], close_ts: Union[int, datetime]) -> tuple[int, int]:
         ts = self._dataset_.TickTimestamps
         if ts.size == 0: return 0, 0
-        return (int(np.searchsorted(ts, datetime_to_epoch(open_ts, unit=MICROSECOND), side="left")),
-                int(np.searchsorted(ts, datetime_to_epoch(close_ts, unit=MICROSECOND), side="right")))
+        lo = open_ts if isinstance(open_ts, int) else datetime_to_epoch(open_ts, unit=MICROSECOND)
+        hi = close_ts if isinstance(close_ts, int) else datetime_to_epoch(close_ts, unit=MICROSECOND)
+        return (int(np.searchsorted(ts, lo, side="left")), int(np.searchsorted(ts, hi, side="right")))
 
     def _slice_ticks_(self, open_ts: datetime, close_ts: datetime) -> tuple[list, list, list]:
         start, stop = self._bounds_(open_ts, close_ts)
@@ -743,7 +753,7 @@ class BacktestingAPI(SystemAPI):
                 if tp is not None: mask |= ask_low <= tp + pad
         return mask
 
-    def _ticks_(self, open_ts: datetime, close_ts: datetime) -> Iterator[tuple[int, float, float]]:
+    def _ticks_(self, open_ts: Union[int, datetime], close_ts: Union[int, datetime]) -> Iterator[tuple[int, float, float]]:
         start, stop = self._bounds_(open_ts, close_ts)
         if stop <= start: return
         dataset = self._dataset_
@@ -775,21 +785,21 @@ class BacktestingAPI(SystemAPI):
                 if i not in seen: seen.add(i); order.append(i)
             for i in order: yield ts[i], ak[i], bd[i]
 
-    def _finer_bars_(self, bar: BarAPI) -> Iterator[tuple[datetime, float, float]]:
-        frame = self._dataset_.IntraBars.get(self._resolution_.UID)
-        if frame is None or frame.is_empty(): return
-        opens = frame["OpenTick.Timestamp"]
-        start = opens.search_sorted(bar.OpenTick.Timestamp.DateTime, side="left")
-        stop = opens.search_sorted(bar.CloseTick.Timestamp.DateTime, side="right")
-        for row in frame.slice(start, max(stop - start, 0)).iter_rows(named=True):
-            yield row["OpenTick.Timestamp"], row["OpenTick.Ask"], row["OpenTick.Bid"]
-            if row["HighTick.Timestamp"] <= row["LowTick.Timestamp"]:
-                yield row["HighTick.Timestamp"], row["HighTick.Ask"], row["HighTick.Bid"]
-                yield row["LowTick.Timestamp"], row["LowTick.Ask"], row["LowTick.Bid"]
+    def _finer_bars_(self, bar: BarAPI) -> Iterator[tuple[int, float, float]]:
+        arrays = self._intra_arrays_.get(self._resolution_.UID)
+        if arrays is None: return
+        open_ts_array, close_ts_array, high_ts_array, low_ts_array, open_asks, open_bids, high_asks, high_bids, low_asks, low_bids, close_asks, close_bids = arrays
+        start = int(np.searchsorted(open_ts_array, datetime_to_epoch(bar.OpenTick.Timestamp.DateTime, unit=MICROSECOND), side="left"))
+        stop = int(np.searchsorted(open_ts_array, datetime_to_epoch(bar.CloseTick.Timestamp.DateTime, unit=MICROSECOND), side="right"))
+        for index in range(start, stop):
+            yield int(open_ts_array[index]), float(open_asks[index]), float(open_bids[index])
+            if high_ts_array[index] <= low_ts_array[index]:
+                yield int(high_ts_array[index]), float(high_asks[index]), float(high_bids[index])
+                yield int(low_ts_array[index]), float(low_asks[index]), float(low_bids[index])
             else:
-                yield row["LowTick.Timestamp"], row["LowTick.Ask"], row["LowTick.Bid"]
-                yield row["HighTick.Timestamp"], row["HighTick.Ask"], row["HighTick.Bid"]
-            yield row["CloseTick.Timestamp"], row["CloseTick.Ask"], row["CloseTick.Bid"]
+                yield int(low_ts_array[index]), float(low_asks[index]), float(low_bids[index])
+                yield int(high_ts_array[index]), float(high_asks[index]), float(high_bids[index])
+            yield int(close_ts_array[index]), float(close_asks[index]), float(close_bids[index])
 
     def _spread_ceiling_(self, bids: tuple, asks: tuple) -> float:
         raw = max(ask - bid for ask, bid in zip(asks, bids))
@@ -817,24 +827,38 @@ class BacktestingAPI(SystemAPI):
                 if tp is not None and tp >= low_ask: return True
         return False
 
-    def _sub_rows_(self, resolution: str, open_ts: datetime, close_ts: datetime) -> Iterator[dict]:
-        frame = self._dataset_.IntraBars.get(resolution)
-        if frame is None or frame.is_empty(): return
-        opens = frame["OpenTick.Timestamp"]
-        start = opens.search_sorted(open_ts, side="left")
-        stop = opens.search_sorted(close_ts, side="right")
-        yield from frame.slice(start, max(stop - start, 0)).iter_rows(named=True)
+    def _build_intra_arrays_(self) -> dict[str, tuple]:
+        arrays = {}
+        for uid, frame in self._dataset_.IntraBars.items():
+            arrays[uid] = (
+                frame["OpenTick.Timestamp"].dt.epoch("us").to_numpy(),
+                frame["CloseTick.Timestamp"].dt.epoch("us").to_numpy(),
+                frame["HighTick.Timestamp"].dt.epoch("us").to_numpy(),
+                frame["LowTick.Timestamp"].dt.epoch("us").to_numpy(),
+                frame["OpenTick.Ask"].to_numpy().astype("float64"), frame["OpenTick.Bid"].to_numpy().astype("float64"),
+                frame["HighTick.Ask"].to_numpy().astype("float64"), frame["HighTick.Bid"].to_numpy().astype("float64"),
+                frame["LowTick.Ask"].to_numpy().astype("float64"), frame["LowTick.Bid"].to_numpy().astype("float64"),
+                frame["CloseTick.Ask"].to_numpy().astype("float64"), frame["CloseTick.Bid"].to_numpy().astype("float64")
+            )
+        return arrays
 
-    def _descend_(self, open_ts: datetime, close_ts: datetime, ladder: list) -> Iterator[tuple[int, float, float]]:
+    def _descend_(self, open_ts: Union[int, datetime], close_ts: Union[int, datetime], ladder: list) -> Iterator[tuple[int, float, float]]:
         if not ladder:
             yield from self._ticks_(open_ts, close_ts)
             return
         head, rest = ladder[0], ladder[1:]
-        for row in self._sub_rows_(head, open_ts, close_ts):
-            bids = (row["OpenTick.Bid"], row["HighTick.Bid"], row["LowTick.Bid"], row["CloseTick.Bid"])
-            asks = (row["OpenTick.Ask"], row["HighTick.Ask"], row["LowTick.Ask"], row["CloseTick.Ask"])
+        arrays = self._intra_arrays_.get(head)
+        if arrays is None: return
+        open_ts_array, close_ts_array, _, _, open_asks, open_bids, high_asks, high_bids, low_asks, low_bids, close_asks, close_bids = arrays
+        lo = open_ts if isinstance(open_ts, int) else datetime_to_epoch(open_ts, unit=MICROSECOND)
+        hi = close_ts if isinstance(close_ts, int) else datetime_to_epoch(close_ts, unit=MICROSECOND)
+        start = int(np.searchsorted(open_ts_array, lo, side="left"))
+        stop = int(np.searchsorted(open_ts_array, hi, side="right"))
+        for index in range(start, stop):
+            bids = (open_bids[index], high_bids[index], low_bids[index], close_bids[index])
+            asks = (open_asks[index], high_asks[index], low_asks[index], close_asks[index])
             if self._should_descend_(bids, asks):
-                yield from self._descend_(row["OpenTick.Timestamp"], row["CloseTick.Timestamp"], rest)
+                yield from self._descend_(int(open_ts_array[index]), int(close_ts_array[index]), rest)
 
     def _intrabar_source_(self, bar: BarAPI) -> Iterator[tuple[Union[int, datetime], float, float]]:
         if self._auto_:
@@ -930,7 +954,13 @@ class BacktestingAPI(SystemAPI):
             self._transition_(self._initialization_timer_, "Initialization", self._execution_timer_)
 
         def advance(update: BarUpdateAPI):
-            if self.strategy.Transform.Market and self._dataset_.IndicatorResults is None: update.Market.update_data(update.Bar)
+            if self.strategy.Transform.Market and self._dataset_.IndicatorResults is None:
+                rows = self._dataset_.ExecutionRows
+                if rows is not None:
+                    update.Market.update_data(rows.slice(self._advance_index_, 1))
+                else:
+                    update.Market.update_data(update.Bar)
+                self._advance_index_ += 1
 
         def report(update: CompleteUpdateAPI):
             self._transition_(self._execution_timer_, "Execution", self._finalization_timer_)

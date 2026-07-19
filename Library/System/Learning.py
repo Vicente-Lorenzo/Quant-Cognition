@@ -12,13 +12,14 @@ from typing import Type, Union, TYPE_CHECKING
 
 from Library.Database.Dataframe import np, pl
 from Library.Model.Split import SplitAPI
-from Library.Portfolio.Statistic import NET_TOTAL_AGGREGATED, STATISTICS_METRICS_LABEL
-from Library.Strategy.Model import ModelStrategyAPI
+from Library.Portfolio.Statistic import CALMARRATIO, NETRETURNANNPERC, NET_TOTAL_AGGREGATED, SHARPERATIO, SORTINORATIO, STATISTICS_METRICS_LABEL, STERLINGRATIO
+from Library.Strategy.Hybrid.DDPG import DDPGStrategyAPI
 from Library.Strategy.Model.Reward import RewardType
 from Library.System.Backtesting import BacktestingAPI
+from Library.Utility.Enumeration import EnumerationAPI
 from Library.Universe.Contract import CommissionType, SpreadType, SwapType
 from Library.Utility.IO import mkdir, write_json
-from Library.Utility.Statistic import Timer, timer
+from Library.Utility.Statistic import timer
 from Library.Utility.Typing import Missing
 
 if TYPE_CHECKING:
@@ -64,6 +65,13 @@ class _FrozenTechnicalAPI_:
     def update_offset(self, offset: int = 1) -> None:
         pass
 
+class FitnessType(EnumerationAPI):
+    AnnualizedReturn = NETRETURNANNPERC
+    SharpeRatio = SHARPERATIO
+    SortinoRatio = SORTINORATIO
+    CalmarRatio = CALMARRATIO
+    SterlingRatio = STERLINGRATIO
+
 class LearningAPI(BacktestingAPI):
 
     def __init__(self,
@@ -86,11 +94,13 @@ class LearningAPI(BacktestingAPI):
                  validation: int = 0,
                  testing: int = 0,
                  rolling: bool = False,
-                 fitness: str = "Net Return (%)",
+                 continuous: bool = False,
+                 fitness: Union[str, FitnessType] = FitnessType.AnnualizedReturn,
                  patience: int = 0,
                  seed: Union[int, None] = None,
                  seeds: int = 1,
                  workers: int = 1,
+                 threads: Union[int, None] = None,
                  report: bool = True,
                  export: bool = True) -> None:
         super().__init__(strategy=strategy, security=security, timeframe=timeframe, resolution=timeframe, parameters=parameters, start=start, stop=stop, account=account, spread=spread, commission=commission, swap=swap, report=report, export=export)
@@ -103,11 +113,15 @@ class LearningAPI(BacktestingAPI):
         self._validation_: int = validation
         self._testing_: int = testing
         self._rolling_: bool = rolling
-        self._fitness_label_: str = fitness
+        self._continuous_: bool = continuous
+        try: fitness_type = FitnessType(fitness)
+        except ValueError: raise ValueError(f"Unknown fitness metric: {fitness} · Expected one of {[member.name for member in FitnessType]}")
+        self._fitness_label_: str = fitness_type.value
         self._patience_: int = patience
         self._seed_: Union[int, None] = seed
         self._seeds_: int = seeds
         self._workers_: int = workers
+        self._threads_: Union[int, None] = threads
         self._range_start_: datetime = self._start_
         self._range_stop_: datetime = self._stop_
         self._weights_: Path = self._weights_directory_()
@@ -122,19 +136,25 @@ class LearningAPI(BacktestingAPI):
             self.technical = frozen
 
     def _weights_directory_(self) -> Path:
-        directory = ModelStrategyAPI._DEFAULT_WEIGHTS_ / f"{self._security_.UID} {self._timeframe_.UID} {self._strategy_.__name__}"
+        directory = DDPGStrategyAPI._DEFAULT_WEIGHTS_ / f"{self._security_.UID} {self._timeframe_.UID} {self._strategy_.__name__}"
         mkdir(directory)
         return directory
 
-    def _fitness_(self) -> float:
+    def _metric_(self, label: str) -> float:
         statistics = self.statistics
         if statistics is not None and not statistics.is_empty() and STATISTICS_METRICS_LABEL in statistics.columns and NET_TOTAL_AGGREGATED in statistics.columns:
-            row = statistics.filter(pl.col(STATISTICS_METRICS_LABEL) == self._fitness_label_)
+            row = statistics.filter(pl.col(STATISTICS_METRICS_LABEL) == label)
             if row.height:
                 value = row[NET_TOTAL_AGGREGATED].item()
                 if value is not None: return float(value)
         balance = self.portfolio.InitialBalance if self.portfolio is not None else None
         return self.portfolio.Equity / balance - 1.0 if balance else 0.0
+
+    def _fitness_(self) -> float:
+        return self._metric_(self._fitness_label_)
+
+    def _net_return_(self) -> float:
+        return self._metric_("Net Return (%)")
 
     def _pass_(self, start: datetime, stop: datetime, training: bool) -> float:
         self._strategy_.Training = training
@@ -171,9 +191,22 @@ class LearningAPI(BacktestingAPI):
         self._strategy_.Training = False
         self._strategy_.Agent = None
 
+    @staticmethod
+    def _archive_(directory: Path, index: int) -> None:
+        target = directory / f"Fold {index}"
+        if target.exists(): shutil.rmtree(target)
+        mkdir(target)
+        for item in directory.iterdir():
+            if item.is_dir() and not item.name.startswith("Fold "): shutil.copytree(item, target / item.name)
+
     def _promote_(self, source: Path) -> None:
-        shutil.copytree(source, self._weights_, dirs_exist_ok=True)
+        shutil.copytree(source, self._weights_, dirs_exist_ok=True, ignore=shutil.ignore_patterns("Fold *"))
         self._log_.info(lambda: f"Checkpoint Learning: Promoted · From {source} · To {self._weights_}")
+
+    def _export_weights_(self) -> None:
+        directory = self._parameters_.path.parent / f"{self._strategy_.__name__.removesuffix('StrategyAPI')} {datetime.now():%Y-%m-%d %H-%M-%S}"
+        shutil.copytree(self._weights_, directory, dirs_exist_ok=True, ignore=shutil.ignore_patterns("Seed *", "Fold *"))
+        self._log_.info(lambda: f"Weights Learning: Exported · To {directory}")
 
     def _payload_(self, seed: Union[int, None], directory: Path, folds: list, test: Union[tuple, None]) -> dict:
         return {
@@ -197,16 +230,32 @@ class LearningAPI(BacktestingAPI):
             "validation": self._validation_,
             "testing": self._testing_,
             "rolling": self._rolling_,
+            "continuous": self._continuous_,
             "fitness": self._fitness_label_,
             "patience": self._patience_,
             "seed": seed,
             "weights": str(directory),
             "folds": folds,
             "test": test,
-            "threads": max(1, (os.cpu_count() or self._workers_) // self._workers_)
+            "threads": self._threads_ if self._threads_ else max(1, (os.cpu_count() or self._workers_) // self._workers_)
         }
 
-    def _manifest_(self, results: list, best: Union[float, None]) -> None:
+    def _full_range_(self) -> Union[dict, None]:
+        self._restore_()
+        self._strategy_.Weights = self._weights_
+        try:
+            self._pass_(self._range_start_, self._range_stop_, False)
+        finally:
+            self._strategy_.Weights = None
+        return {
+            "Start": self._range_start_.isoformat(),
+            "Stop": self._range_stop_.isoformat(),
+            "NetReturn": self._net_return_(),
+            "AnnualizedReturn": self._metric_("Net Return Annualized (%) [µ]"),
+            "Trades": self._metric_("Nr Total of Trades")
+        }
+
+    def _manifest_(self, results: list, best: Union[float, None], full_range: Union[dict, None] = None) -> None:
         manifest = {
             "Strategy": self._strategy_.__name__,
             "Security": str(self._security_.UID),
@@ -223,16 +272,19 @@ class LearningAPI(BacktestingAPI):
             "Validation": self._validation_,
             "Testing": self._testing_,
             "Rolling": self._rolling_,
+            "Continuous": self._continuous_,
             "Fitness": self._fitness_label_,
             "Patience": self._patience_,
             "Seeds": self._seeds_,
             "Workers": self._workers_,
             "ObservationShape": self.strategy._observation_.shape(),
             "ActionShape": self._strategy_._ACTION_SHAPE_,
-            "SizingMode": self.strategy._sizing_mode_.name,
+            "SizingMin": self.strategy._sizing_min_,
             "SizingMax": self.strategy._sizing_max_,
-            "SizingDeadzone": self.strategy._sizing_deadzone_,
+            "NormalEntryThreshold": list(self.strategy._entry_threshold_),
+            "NormalExitThreshold": list(self.strategy._exit_threshold_),
             "Best": best,
+            "FullRange": full_range,
             "Results": results,
             "Weights": str(self._weights_)
         }
@@ -243,9 +295,14 @@ class LearningAPI(BacktestingAPI):
     def _train_seed_(self, seed: Union[int, None], directory: Path, folds: list, test: Union[tuple, None]) -> dict:
         self._configure_(seed, directory)
         fold_metrics = []
+        fold_returns = []
         for index, (train_window, validation_window) in enumerate(folds, start=1):
-            self._strategy_.Agent = None
+            if self._continuous_ and self._strategy_.Agent is not None:
+                self._strategy_.Agent.load()
+            else:
+                self._strategy_.Agent = None
             best_validation = None
+            best_return = None
             stale = 0
             for episode in range(1, self._episodes_ + 1):
                 train_metric = self._pass_(train_window[0], train_window[1], True)
@@ -253,6 +310,7 @@ class LearningAPI(BacktestingAPI):
                 selection = self._pass_(validation_window[0], validation_window[1], False) if validation_window is not None else train_metric
                 if best_validation is None or selection > best_validation:
                     best_validation = selection
+                    best_return = self._net_return_()
                     self.strategy._agent_.save()
                     stale = 0
                 else:
@@ -262,14 +320,18 @@ class LearningAPI(BacktestingAPI):
                     self._log_.info(lambda e=episode: f"Episode Learning: Stopped · Early · Patience {self._patience_} · Episode {e}")
                     break
             fold_metrics.append(best_validation)
+            fold_returns.append(best_return)
+            self._archive_(directory, index)
             self._log_.info(lambda i=index, n=len(folds), b=best_validation: f"Fold Learning: Completed · {i}/{n} · Best {b:+.4f}")
         test_metric = None
+        test_return = None
         if test is not None:
             if self._strategy_.Agent is not None: self._strategy_.Agent.load()
             test_metric = self._pass_(test[0], test[1], False)
+            test_return = self._net_return_()
         metric = test_metric if test_metric is not None else (sum(fold_metrics) / len(fold_metrics) if fold_metrics else None)
         self._log_.info(lambda s=seed, m=metric, t=test_metric: f"Seed Learning: Completed · {s} · Metric {m:+.4f}" + (f" · Test {t:+.4f}" if t is not None else ""))
-        return {"Seed": seed, "Folds": fold_metrics, "Test": test_metric, "Metric": metric}
+        return {"Seed": seed, "Folds": fold_metrics, "FoldsReturn": fold_returns, "Test": test_metric, "TestReturn": test_return, "Metric": metric}
 
     @timer
     def run(self) -> None:
@@ -301,7 +363,8 @@ class LearningAPI(BacktestingAPI):
                         best_metric = result["Metric"]
                         best_directory = directory
             if best_directory is not None and best_directory != self._weights_: self._promote_(best_directory)
-            self._manifest_(results, best_metric)
+            self._manifest_(results, best_metric, self._full_range_())
+            self._export_weights_()
             self._aggregate_(results, best_metric)
         finally:
             self._restore_()
@@ -318,16 +381,18 @@ def _learn_seed_(payload: dict) -> dict:
     import torch
     torch.set_num_threads(payload.get("threads") or torch.get_num_threads())
     from Library.Logging import HandlerLoggingAPI, VerboseLevel
-    HandlerLoggingAPI(Class="LearningAPI", Subclass="Worker").set_verbose_level(VerboseLevel.Warning)
-    from Library.Database.Postgres.Postgres import PostgresAPI
+    log = HandlerLoggingAPI(Class=LearningAPI.__name__, Subclass="Worker")
+    log.console.set_verbose_level(VerboseLevel.Warning)
+    log.file.set_verbose_level(VerboseLevel.Debug)
+    from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
     from Library.Parameter import Parameter
     from Library.Universe import ProviderAPI, SecurityAPI, TickerAPI, TimeframeAPI
-    with PostgresAPI(database="Quant") as db:
+    with PostgresDatabaseAPI(database="Quant") as db:
         provider = ProviderAPI(UID=payload["provider"], db=db, autoload=True)
         ticker = TickerAPI(UID=payload["ticker"], db=db, autoload=True)
         timeframe = TimeframeAPI(UID=payload["timeframe"], db=db, autoload=True)
         security = SecurityAPI(Provider=provider, Ticker=ticker, db=db, autoload=True)
-        learner = LearningAPI(strategy=payload["strategy"], security=security, timeframe=timeframe, parameters=Parameter(payload["parameters"], "."), start=payload["start"], stop=payload["stop"], account=payload["account"], spread=payload["spread"], commission=payload["commission"], swap=payload["swap"], reward=payload["reward"], episodes=payload["episodes"], epochs=payload["epochs"], train_frequency=payload["train_frequency"], gradient_steps=payload["gradient_steps"], training=payload["training"], validation=payload["validation"], testing=payload["testing"], rolling=payload["rolling"], fitness=payload["fitness"], patience=payload["patience"], seed=payload["seed"], seeds=1, workers=1, report=False, export=False)
+        learner = LearningAPI(strategy=payload["strategy"], security=security, timeframe=timeframe, parameters=Parameter(payload["parameters"], "."), start=payload["start"], stop=payload["stop"], account=payload["account"], spread=payload["spread"], commission=payload["commission"], swap=payload["swap"], reward=payload["reward"], episodes=payload["episodes"], epochs=payload["epochs"], train_frequency=payload["train_frequency"], gradient_steps=payload["gradient_steps"], training=payload["training"], validation=payload["validation"], testing=payload["testing"], rolling=payload["rolling"], continuous=payload["continuous"], fitness=payload["fitness"], patience=payload["patience"], seed=payload["seed"], seeds=1, workers=1, report=False, export=False)
         try:
             return learner._train_seed_(payload["seed"], Path(payload["weights"]), payload["folds"], payload["test"])
         finally:

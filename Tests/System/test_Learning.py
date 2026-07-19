@@ -10,6 +10,7 @@ from Library.Parameter import Parameter
 from Library.Portfolio.Statistic import CALMARRATIO, NETRETURNANNPERC, NET_TOTAL_AGGREGATED, STATISTICS_METRICS_LABEL
 from Library.Strategy.Model.Reward import RewardType
 from Library.System.Learning import LearningAPI
+from Library.System.System import SystemAPI
 from Library.Universe.Contract import CommissionType, SpreadType, SwapType
 from Library.Utility.IO import mkdir, read_json
 from Library.Utility.Typing import MISSING
@@ -48,7 +49,7 @@ class _Harness_(LearningAPI):
         mkdir(self.WEIGHTS)
         return self.WEIGHTS
 
-    def _export_(self) -> None:
+    def _export_weights_(self) -> None:
         self._exported_ = True
 
     def _promote_(self, source: Path) -> None:
@@ -101,11 +102,14 @@ def test_export_copies_promoted_weights_without_seed_and_fold_dirs(tmp_path):
     (tmp_path / "DDPG" / "actor").write_text("w")
     mkdir(tmp_path / "Seed 42")
     mkdir(tmp_path / "Fold 1")
-    LearningAPI._export_(harness)
+    LearningAPI._export_weights_(harness)
     exports = list(tmp_path.glob("_FakeStrategy_ *"))
     assert len(exports) == 1
     assert (exports[0] / "DDPG" / "actor").read_text() == "w"
     assert not (exports[0] / "Seed 42").exists() and not (exports[0] / "Fold 1").exists()
+
+def test_report_export_hook_is_not_shadowed():
+    assert LearningAPI._export_ is SystemAPI._export_
 
 def test_fold_archive_copies_model_weights(tmp_path):
     seed_dir = tmp_path / "Seed 42"

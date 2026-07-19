@@ -822,7 +822,7 @@ def generate_realized_report(trades_df: pl.DataFrame, account: AccountAPI, start
     agg = sort_items(aggregate_items(safe_trades))
     agg_df = dependent_metrics(initial_balance, start, stop, agg, REALIZED_BUY_AGGREGATED, REALIZED_SELL_AGGREGATED, REALIZED_TOTAL_AGGREGATED)
     labels_df = pl.DataFrame({STATISTICS_METRICS_LABEL: Metrics})
-    return pl.concat([labels_df, ind_df, agg_df], how="horizontal")
+    return pl.concat([labels_df, ind_df, agg_df], how="horizontal_extend")
 
 def generate_unrealized_report(positions_df: pl.DataFrame, account: AccountAPI, start: date, stop: date) -> pl.DataFrame:
     initial_balance = (account.Balance if account is not None else 0.0) or 0.0
@@ -832,7 +832,7 @@ def generate_unrealized_report(positions_df: pl.DataFrame, account: AccountAPI, 
     agg = sort_items(aggregate_items(safe_positions))
     agg_df = dependent_metrics(initial_balance, start, stop, agg, UNREALIZED_BUY_AGGREGATED, UNREALIZED_SELL_AGGREGATED, UNREALIZED_TOTAL_AGGREGATED)
     labels_df = pl.DataFrame({STATISTICS_METRICS_LABEL: Metrics})
-    return pl.concat([labels_df, ind_df, agg_df], how="horizontal")
+    return pl.concat([labels_df, ind_df, agg_df], how="horizontal_extend")
 
 def equity_metrics(initial_balance: float, deals: pl.DataFrame) -> dict:
     entry_bal, mid_bal = str(PositionAPI.ID.EntryBalance), str(PositionAPI.ID.MidBalance)
@@ -900,4 +900,4 @@ def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, acc
     ind_df = dependent_metrics(initial_balance, start, stop, ind, NET_BUY_INDIVIDUAL, NET_SELL_INDIVIDUAL, NET_TOTAL_INDIVIDUAL, equity, ratios, override)
     agg_df = dependent_metrics(initial_balance, start, stop, agg, NET_BUY_AGGREGATED, NET_SELL_AGGREGATED, NET_TOTAL_AGGREGATED, equity, ratios, override)
     labels_df = pl.DataFrame({STATISTICS_METRICS_LABEL: Metrics})
-    return pl.concat([labels_df, ind_df, agg_df], how="horizontal")
+    return pl.concat([labels_df, ind_df, agg_df], how="horizontal_extend")

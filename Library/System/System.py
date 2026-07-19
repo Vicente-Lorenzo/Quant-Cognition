@@ -221,8 +221,12 @@ class SystemAPI(ServiceAPI, ABC):
     def _export_(self, tables: dict) -> None:
         try:
             ident = getattr(self, "_iid_", None) or getattr(self._session_, "UID", None) or self.__class__.__name__
-            folder = traceback_root() / "Reports" / f"{datetime.now():%Y-%m-%d %H-%M-%S} {ident}"
-            folder.mkdir(parents=True, exist_ok=True)
+            base = traceback_root() / "Reports" / f"{datetime.now():%Y-%m-%d %H-%M-%S} {ident}"
+            folder, index = base, 2
+            while folder.exists():
+                folder = base.parent / f"{base.name} ({index})"
+                index += 1
+            folder.mkdir(parents=True)
             for name, table in tables.items():
                 try:
                     self._stringify_(table).write_csv(str(folder / f"{name.lower()}.csv"))
