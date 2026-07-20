@@ -537,6 +537,10 @@ class PortfolioAPI(DatapointAPI):
         return [equity for _, equity in self._equity_curve_]
 
     @property
+    def EquityTrack(self) -> list:
+        return list(self._equity_curve_)
+
+    @property
     def MaxDrawdown(self) -> float:
         return self._max_drawdown_
 
