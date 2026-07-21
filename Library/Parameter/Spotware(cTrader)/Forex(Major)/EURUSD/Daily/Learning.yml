@@ -1,23 +1,13 @@
 DDPG:
   MoneyManagement:
-    SizingMode: [Risk]
-    SizingMin: [0.5]
-    SizingMax: [2.0]
-    DrawdownThreshold: [10.0]
-    DrawdownFactor: [0.5]
-  RiskManagement:
-    StopLossScale: [1.5]
-    StagnationStopLoss: [0]
-    ScalingOutScale: [1.0]
-    ScalingOutPercentage: [50.0]
-    TrailingStopLossScale: [1.5]
-    TrailingStopLossStep: [0.25]
+    RiskPercentage: [1.0]
+    ATRScale: [1.5]
+  RiskManagement: null
   SignalManagement:
-    NormalEntryThreshold: [-0.4, 0.4]
-    NormalExitThreshold: [-0.1, 0.1]
-    ContinuationEntryThreshold: [-2.0, 2.0]
-    ContinuationExitThreshold: [-0.1, 0.1]
-    ContinuationDelay: [0]
+    DirectionalEntryThreshold: null
+    DirectionalExitThreshold: null
+    VolumeEntryThreshold: null
+    VolumeExitThreshold: null
     ActorLearningRate: [0.0001]
     CriticLearningRate: [0.001]
     SoftUpdate: [0.001]
@@ -37,9 +27,10 @@ DDPG:
     MOMFast: [ROC, 5]
     MOMMedium: [ROC, 21]
     MOMSlow: [ROC, 63]
-    MAFast: [SMA, 10]
-    MAMedium: [SMA, 50]
-    MASlow: [SMA, 200]
+    MAFast: [SMA, 5]
+    MAMedium: [SMA, 21]
+    MASlow: [SMA, 63]
+    ER: [ER, 21]
   FundamentalManagement: null
   SentimentalManagement: null
   PortfolioManagement: null

@@ -32,7 +32,7 @@ class ParameterAPI:
         with file_path.open("w", encoding="utf-8") as f:
             yaml.safe_dump(data, f)
 
-    def _get_item_(self, name: str) -> Union[ParameterAPI, Parameter]:
+    def _get_item_(self, name: str) -> Union[ParameterAPI, Parameter, None]:
         item_path = self._resolve_path_(name)
         file_path = self._get_file_path_(name)
 
@@ -46,10 +46,9 @@ class ParameterAPI:
             param = Parameter(data, file_path)
             self._cache_[name] = (mtime, param)
             return param
-        elif item_path.is_dir():
+        if item_path.is_dir():
             return ParameterAPI(item_path)
-        else:
-            return ParameterAPI(item_path)
+        return None
 
     def _set_item_(self, name: str, value: Union[dict, ParameterAPI, Parameter]) -> None:
         item_path = self._resolve_path_(name)
@@ -83,10 +82,10 @@ class ParameterAPI:
         else:
             raise KeyError(f"{name} does not exist.")
 
-    def __getattr__(self, name: str) -> Union[ParameterAPI, Parameter]:
+    def __getattr__(self, name: str) -> Union[ParameterAPI, Parameter, None]:
         return self._get_item_(name)
 
-    def __getitem__(self, name: str) -> Union[ParameterAPI, Parameter]:
+    def __getitem__(self, name: str) -> Union[ParameterAPI, Parameter, None]:
         return self._get_item_(name)
 
     def __setattr__(self, name: str, value: Any) -> None:

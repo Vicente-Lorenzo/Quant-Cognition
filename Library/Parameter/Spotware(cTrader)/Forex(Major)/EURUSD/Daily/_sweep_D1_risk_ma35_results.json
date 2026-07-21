@@ -1,0 +1,102 @@
+[
+  {
+    "net": "16x16",
+    "window": 1,
+    "arm": "risk",
+    "gamma": 0.99,
+    "obs_shape": 35,
+    "seconds": 282.6,
+    "test_return_mean": -0.08735897484697386,
+    "test_return_max": 0.2832616601985638,
+    "test_returns": [
+      0.2832616601985638,
+      -0.32034917403226393,
+      -0.22498941070722145
+    ],
+    "test_metric": [
+      0.0,
+      -0.3226960636075231,
+      -0.3279631791612159
+    ],
+    "best_validation": 0.0,
+    "fullrange_net": -4.803703867000242,
+    "fullrange_ann": -0.44620512146902325,
+    "fullrange_trades": 99.0,
+    "export": "Library\\Parameter\\Spotware(cTrader)\\Forex(Major)\\EURUSD\\Daily\\DDPG 2026-07-19 13-37-59 [n16x16 w1 risk ma35]"
+  },
+  {
+    "net": "32x16",
+    "window": 1,
+    "arm": "risk",
+    "gamma": 0.99,
+    "obs_shape": 35,
+    "seconds": 476.8,
+    "test_return_mean": 0.05883448310317618,
+    "test_return_max": 0.43532446607956743,
+    "test_returns": [
+      0.43532446607956743,
+      -0.5586374342065881,
+      0.2998164174365492
+    ],
+    "test_metric": [
+      1.3979720637863053,
+      -0.5547323719300219,
+      1.7609402119104416
+    ],
+    "best_validation": 1.7609402119104416,
+    "fullrange_net": 1.354951633383128,
+    "fullrange_ann": 0.12233380133483962,
+    "fullrange_trades": 7.0,
+    "export": "Library\\Parameter\\Spotware(cTrader)\\Forex(Major)\\EURUSD\\Daily\\DDPG 2026-07-19 13-45-55 [n32x16 w1 risk ma35]"
+  },
+  {
+    "net": "32x32",
+    "window": 1,
+    "arm": "risk",
+    "gamma": 0.99,
+    "obs_shape": 35,
+    "seconds": 357.5,
+    "test_return_mean": -0.46310656353002466,
+    "test_return_max": 0.051708255481575094,
+    "test_returns": [
+      -0.586773683215247,
+      -0.854254262856402,
+      0.051708255481575094
+    ],
+    "test_metric": [
+      -1.593914020924298,
+      -0.45035178909223905,
+      0.07511108079406534
+    ],
+    "best_validation": 0.07511108079406534,
+    "fullrange_net": 0.4424433636765368,
+    "fullrange_ann": 0.04011148279521315,
+    "fullrange_trades": 11.0,
+    "export": "Library\\Parameter\\Spotware(cTrader)\\Forex(Major)\\EURUSD\\Daily\\DDPG 2026-07-19 13-51-53 [n32x32 w1 risk ma35]"
+  },
+  {
+    "net": "64x32",
+    "window": 1,
+    "arm": "risk",
+    "gamma": 0.99,
+    "obs_shape": 35,
+    "seconds": 376.9,
+    "test_return_mean": -0.6865987874011714,
+    "test_return_max": 0.0,
+    "test_returns": [
+      0.0,
+      -2.0597963622035143,
+      0.0
+    ],
+    "test_metric": [
+      0.0,
+      -1.2114695724556814,
+      0.0
+    ],
+    "best_validation": 0.0,
+    "fullrange_net": 0.0,
+    "fullrange_ann": 0.0,
+    "fullrange_trades": 0.0,
+    "export": "Library\\Parameter\\Spotware(cTrader)\\Forex(Major)\\EURUSD\\Daily\\DDPG 2026-07-19 13-58-10 [n64x32 w1 risk ma35]"
+  }
+]

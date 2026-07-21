@@ -1,0 +1,29 @@
+[
+  {
+    "net": "64x32",
+    "window": 1,
+    "arm": "norisk",
+    "gamma": 0.99,
+    "obs_shape": 35,
+    "seconds": 217.3,
+    "test_return_mean": 1.4130906274341513,
+    "test_return_max": 7.038119990814562,
+    "test_returns": [
+      7.038119990814562,
+      -2.7988481085121086,
+      0.0
+    ],
+    "test_metric": [
+      2.840696191272499,
+      -2.012499397995354,
+      0.0
+    ],
+    "best_validation": 2.840696191272499,
+    "fullrange_net": -0.9047370620978934,
+    "fullrange_ann": -0.08252738876256549,
+    "fullrange_trades": 1.0,
+    "fullrange_buys": 1.0,
+    "fullrange_sells": 0.0,
+    "export": "Library\\Parameter\\Spotware(cTrader)\\Forex(Major)\\EURUSD\\Daily\\DDPG 2026-07-19 15-59-58 [n64x32 w1 norisk ma35neu]"
+  }
+]

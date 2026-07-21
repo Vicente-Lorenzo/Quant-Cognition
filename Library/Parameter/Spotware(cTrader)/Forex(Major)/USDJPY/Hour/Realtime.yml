@@ -9,8 +9,7 @@ Download:
 Trend:
   MoneyManagement:
     SizingMode: [Risk]
-    SizingMin: [1.0]
-    SizingMax: [1.0]
+    RiskPercentage: [1.0]
     DrawdownThreshold: [0.0]
     DrawdownFactor: [1.0]
   RiskManagement:
@@ -21,6 +20,10 @@ Trend:
     TrailingStopLossScale: [1.5]
     TrailingStopLossStep: [0.25]
   SignalManagement:
+    DirectionalEntryThreshold: null
+    DirectionalExitThreshold: null
+    VolumeEntryThreshold: null
+    VolumeExitThreshold: null
     BaselineMode: [Signal, Off, Signal]
     Filter1Mode: [Filter, Off, Off]
     Filter2Mode: [Filter, Off, Off]

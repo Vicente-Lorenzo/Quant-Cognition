@@ -1,0 +1,29 @@
+[
+  {
+    "net": "16x16",
+    "window": 1,
+    "arm": "risk",
+    "gamma": 0.99,
+    "obs_shape": 35,
+    "seconds": 477.1,
+    "test_return_mean": -1.3573401564404932,
+    "test_return_max": -0.045481178242035014,
+    "test_returns": [
+      -0.9763653922026716,
+      -3.0501738988767735,
+      -0.045481178242035014
+    ],
+    "test_metric": [
+      -0.5146532767127124,
+      -1.4866937901072608,
+      -0.0661237126390487
+    ],
+    "best_validation": -0.0661237126390487,
+    "fullrange_net": -5.564231119512442,
+    "fullrange_ann": -0.5187184545392909,
+    "fullrange_trades": 123.0,
+    "fullrange_buys": 1.0,
+    "fullrange_sells": 122.0,
+    "export": "Library\\Parameter\\Spotware(cTrader)\\Forex(Major)\\EURUSD\\Daily\\DDPG 2026-07-19 15-28-54 [n16x16 w1 risk ma35wu4096]"
+  }
+]

@@ -1,0 +1,74 @@
+{
+  "ActionShape": 1,
+  "Activity": 0,
+  "Balance": 3,
+  "Best": -49.487287261464196,
+  "Continuous": false,
+  "Episodes": 10,
+  "Epochs": 1,
+  "Fitness": "Net Return Annualized (%) [\u00b5]",
+  "FullRange": {
+    "AnnualizedReturn": -7.075621813284139,
+    "BuyTrades": 39.0,
+    "NetReturn": -55.41750678164534,
+    "SellTrades": 2615.0,
+    "Start": "2015-01-01T00:00:00",
+    "Stop": "2026-01-01T23:59:59.999999",
+    "Trades": 2654.0
+  },
+  "GradientSteps": 1,
+  "Mirror": true,
+  "NormalEntryThreshold": [
+    -0.4,
+    0.4
+  ],
+  "NormalExitThreshold": [
+    -0.1,
+    0.1
+  ],
+  "ObservationShape": 36,
+  "Patience": 3,
+  "Results": [
+    {
+      "Folds": [
+        -86.55600984515253
+      ],
+      "FoldsReturn": [
+        -86.6297172474321
+      ],
+      "Metric": -83.30962119935307,
+      "Seed": 0,
+      "Test": -83.30962119935307,
+      "TestReturn": -83.30962119935307
+    },
+    {
+      "Folds": [
+        -33.32534636637601
+      ],
+      "FoldsReturn": [
+        -33.3993498100685
+      ],
+      "Metric": -49.487287261464196,
+      "Seed": 1,
+      "Test": -49.487287261464196,
+      "TestReturn": -49.487287261464196
+    }
+  ],
+  "Reward": "DifferentialSortino",
+  "RewardScale": 1.0,
+  "Rolling": false,
+  "Security": "1",
+  "Seeds": 2,
+  "SizingMax": 2.0,
+  "SizingMin": 0.5,
+  "Start": "2015-01-01T00:00:00",
+  "Stop": "2026-01-01T23:59:59.999999",
+  "Strategy": "DDPGStrategyAPI",
+  "Testing": 12,
+  "Timeframe": "H1",
+  "TrainFrequency": 1,
+  "Training": 0,
+  "Validation": 12,
+  "Weights": "C:\\Users\\Admin\\AppData\\Local\\Temp\\claude\\C--Users-Admin-OneDrive-Documents-cAlgo\\ea22ce65-89c0-4dab-8074-2790bae51d02\\scratchpad\\weights_hi_t1\\1 H1 DDPGStrategyAPI",
+  "Workers": 2
+}
