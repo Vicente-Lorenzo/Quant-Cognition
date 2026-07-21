@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from threading import local
 from datetime import datetime
 from dataclasses import dataclass, field, InitVar
 from typing import Union, ClassVar, TYPE_CHECKING, Any
@@ -19,6 +20,8 @@ class DatapointAPI(DataclassAPI):
     Database: ClassVar[str] = "Quant"
     Schema: ClassVar[str]
     Table: ClassVar[str]
+
+    _LOADING_: ClassVar[local] = local()
 
     UpdatedAt: Union[datetime, None] = field(default=None, kw_only=True)
     UpdatedBy: Union[str, None] = field(default=None, kw_only=True)
@@ -123,19 +126,30 @@ class DatapointAPI(DataclassAPI):
     def save(self, by: str = "Autosave") -> None:
         self._push_(by=by)
 
+    def _loading_(self) -> set:
+        keys = getattr(self._LOADING_, "keys", None)
+        if keys is None: keys = self._LOADING_.keys = set()
+        return keys
+
     def _fetch_(self, condition: str, parameters: dict, overload: bool) -> Union[dict, None]:
         if self._db_ is None: return None
-        df = self._db_.select(schema=self.Schema, table=self.Table, condition=condition, parameters=parameters, limit=1, legacy=False)
-        if df.is_empty(): return None
-        row = df.row(0, named=True)
-        save_state, self._autosave_ = self._autosave_, False
+        loading = self._loading_()
+        key = (self.Schema, self.Table, condition, tuple(sorted((str(k), str(v)) for k, v in (parameters or {}).items())))
+        if key in loading: return None
+        loading.add(key)
         try:
-            for k, v in row.items():
-                if hasattr(self, k) and v is not None:
-                    if overload or getattr(self, k) is None or getattr(self, k) is MISSING:
-                        setattr(self, k, v)
-        finally: self._autosave_ = save_state
-        return row
+            df = self._db_.select(schema=self.Schema, table=self.Table, condition=condition, parameters=parameters, limit=1, legacy=False)
+            if df.is_empty(): return None
+            row = df.row(0, named=True)
+            save_state, self._autosave_ = self._autosave_, False
+            try:
+                for k, v in row.items():
+                    if hasattr(self, k) and v is not None:
+                        if overload or getattr(self, k) is None or getattr(self, k) is MISSING:
+                            setattr(self, k, v)
+            finally: self._autosave_ = save_state
+            return row
+        finally: loading.discard(key)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
         if self._db_ is None: return None
