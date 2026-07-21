@@ -129,6 +129,7 @@ from Library.Utility.IO import (
     copy,
     smartlink
 )
+from Library.Utility.Plot import PlotAPI
 from Library.Utility.Service import ServiceAPI
 from Library.Utility.Remote import RemoteAPI
 
@@ -162,6 +163,7 @@ __all__ = [
     "is_readable", "is_writable",
     "mkdir", "remove", "read_text", "write_text", "read_json", "write_json",
     "symlink", "hardlink", "copy", "smartlink",
+    "PlotAPI",
     "ServiceAPI",
     "RemoteAPI"
 ]
