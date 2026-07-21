@@ -71,13 +71,15 @@ class RealtimeAPI(SystemAPI):
                  universe: tuple[int, float, int, int] = (0, 0.0, 0, 0),
                  market: tuple[int, float, int, int] = (0, 0.0, 0, 0),
                  portfolio: tuple[int, float, int, int] = (0, 0.0, 0, 0),
+                 benchmark: Union[str, list, None] = None,
                  report: bool = True,
-                 export: bool = True) -> None:
+                 export: bool = True,
+                 plot: bool = False) -> None:
         if database is None:
             universe = (0, 0.0, 0, 0)
             market = (0, 0.0, 0, 0)
             portfolio = (0, 0.0, 0, 0)
-        super().__init__(strategy=strategy, security=security, timeframe=timeframe, parameters=parameters, universe=universe, market=market, portfolio=portfolio, report=report, export=export)
+        super().__init__(strategy=strategy, security=security, timeframe=timeframe, parameters=parameters, universe=universe, market=market, portfolio=portfolio, benchmark=benchmark, report=report, export=export, plot=plot)
 
         self._system_: SystemType = system
         self._iid_: str = iid
