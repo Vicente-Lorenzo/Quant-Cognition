@@ -39,6 +39,42 @@ class OpenSellPositionActionAPI(ActionAPI):
         return self._binary_.pack(self.ActionID.value, self.PositionType.name, self.Volume, self.StopLoss, self.TakeProfit)
 
 @dataclass(slots=True)
+class IncreaseBuyPositionVolumeActionAPI(ActionAPI):
+    ActionID: ClassVar[ActionID] = ActionID.IncreaseBuyPositionVolume
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
+    PositionID: int
+    Volume: float
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.PositionID, self.Volume)
+
+@dataclass(slots=True)
+class IncreaseSellPositionVolumeActionAPI(ActionAPI):
+    ActionID: ClassVar[ActionID] = ActionID.IncreaseSellPositionVolume
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
+    PositionID: int
+    Volume: float
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.PositionID, self.Volume)
+
+@dataclass(slots=True)
+class DecreaseBuyPositionVolumeActionAPI(ActionAPI):
+    ActionID: ClassVar[ActionID] = ActionID.DecreaseBuyPositionVolume
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
+    PositionID: int
+    Volume: float
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.PositionID, self.Volume)
+
+@dataclass(slots=True)
+class DecreaseSellPositionVolumeActionAPI(ActionAPI):
+    ActionID: ClassVar[ActionID] = ActionID.DecreaseSellPositionVolume
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
+    PositionID: int
+    Volume: float
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.PositionID, self.Volume)
+
+@dataclass(slots=True)
 class ModifyBuyPositionVolumeActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyPositionVolume
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
@@ -119,6 +155,10 @@ class CloseSellPositionActionAPI(ActionAPI):
 __all__ = [
     "OpenBuyPositionActionAPI",
     "OpenSellPositionActionAPI",
+    "IncreaseBuyPositionVolumeActionAPI",
+    "IncreaseSellPositionVolumeActionAPI",
+    "DecreaseBuyPositionVolumeActionAPI",
+    "DecreaseSellPositionVolumeActionAPI",
     "ModifyBuyPositionVolumeActionAPI",
     "ModifySellPositionVolumeActionAPI",
     "ModifyBuyPositionStopLossActionAPI",

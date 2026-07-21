@@ -129,11 +129,42 @@ def test_managed_open_attaches_stop_loss():
     actions = strategy.open_sell_position(_update_(atr=0.01), PositionType.Normal)
     assert actions[-1].StopLoss == 150.0
 
-def _risk_strategy_(stop_loss=1.5, scaling_scale=1.0, scaling_percentage=50.0, trailing=1.5, mode="Risk", maximum=2.0):
+def _risk_strategy_(stop_loss=1.5, scaling_scale=1.0, scaling_percentage=50.0, trailing=1.5, time_stop=0, mode="Risk", maximum=2.0):
     money = Parameter({"SizingMode": [mode], "SizingMax": [maximum], "DrawdownThreshold": [0.0], "DrawdownFactor": [1.0]}, ".")
-    risk = Parameter({"StopLossScale": [stop_loss], "ScalingOutScale": [scaling_scale], "ScalingOutPercentage": [scaling_percentage], "TrailingStopLossScale": [trailing], "TrailingStopLossStep": [0.25], "StagnationStopLoss": [0]}, ".")
+    risk = Parameter({"StopLossScale": [stop_loss], "ScalingOutScale": [scaling_scale], "ScalingOutPercentage": [scaling_percentage], "TrailingStopLossScale": [trailing], "TrailingStopLossStep": [0.25], "StagnationStopLoss": [time_stop]}, ".")
     empty = Parameter({}, ".")
     return NNFXStrategyAPI(money_management=money, risk_management=risk, signal_management=empty, technical_management=empty, fundamental_management=empty, sentimental_management=empty, portfolio_management=empty)
+
+def test_stagnation_ignored_after_scale_out_milestone():
+    engine = _strategy_(time_stop=3).risk_management()
+    assert engine.state(name="Waiting SO")._transitions_[UpdateID.BarClosed.value] is not None
+    assert engine.state(name="Waiting TSL")._transitions_[UpdateID.BarClosed.value] is None
+    assert engine.state(name="Waiting Close")._transitions_[UpdateID.BarClosed.value] is None
+
+def test_stagnation_counts_without_scaling_out():
+    strategy = _risk_strategy_(scaling_scale=0.0, trailing=0.0, time_stop=3)
+    assert strategy._use_scaling_out_ is False and strategy._use_stagnation_ is True
+    engine = strategy.risk_management()
+    assert engine.state(name="No Position")._transitions_[UpdateID.OpenedBuyPosition.value].To.Name == "Waiting Close"
+    assert engine.state(name="Waiting Close")._transitions_[UpdateID.BarClosed.value] is not None
+
+def test_stagnation_counts_before_trailing_arms():
+    strategy = _risk_strategy_(scaling_scale=0.0, time_stop=3)
+    assert strategy._use_trailing_stop_loss_ is True
+    engine = strategy.risk_management()
+    assert engine.state(name="Waiting TSL")._transitions_[UpdateID.BarClosed.value] is not None
+    assert engine.state(name="Waiting Close")._transitions_[UpdateID.BarClosed.value] is None
+
+def test_stagnation_alone_manages_machine_and_closes_position():
+    strategy = _risk_strategy_(stop_loss=0.0, scaling_scale=0.0, scaling_percentage=0.0, trailing=0.0, time_stop=2, mode="Volume", maximum=5000.0)
+    assert strategy._managed_risk_ is True and strategy._use_stop_loss_ is False
+    engine = strategy.risk_management()
+    assert engine.state(name="No Position")._transitions_[UpdateID.OpenedBuyPosition.value].To.Name == "Waiting Close"
+    strategy.register_open_buy_action(SimpleNamespace(Position=SimpleNamespace(UID=5)))
+    update = _update_(buys=[_position_(5000.0, True, uid=5)])
+    assert strategy.stagnation_stop_loss_action(update) == []
+    actions = strategy.stagnation_stop_loss_action(update)
+    assert len(actions) == 1 and isinstance(actions[0], CloseBuyPositionActionAPI) and actions[0].PositionID == 5
 
 def test_null_scales_disable_risk_without_crashing():
     strategy = _risk_strategy_(stop_loss=None, scaling_scale=None, scaling_percentage=None, trailing=None, mode="Volume", maximum=5000.0)

@@ -15,8 +15,8 @@ def _action_(exposure=100.0):
 def _encoder_(action=None, momentum_features=("MOMFast", "MOMMedium", "MOMSlow"), overlap_features=(), normalize_window=200, window=1):
     return DDPGObservationAPI(action=action if action is not None else _action_(), momentum_features=momentum_features, overlap_features=overlap_features, normalize_window=normalize_window, window=window)
 
-def _indicator_(value, window=1):
-    return SimpleNamespace(Result=SimpleNamespace(last=lambda: value), Window=window)
+def _indicator_(value, window=1, previous=None):
+    return SimpleNamespace(Result=SimpleNamespace(last=lambda shift=0: value if shift == 0 or previous is None else previous), Window=window)
 
 def _position_(volume, long, entry=10000.0, net=0.0, drawdown=0.0, runup=0.0, uid=1):
     return SimpleNamespace(Volume=volume, IsLong=long, IsShort=not long, UID=uid, EntryBalance=entry, NetPnL=SimpleNamespace(PnL=net), MaxEquityDrawdownPnL=SimpleNamespace(PnL=drawdown), MaxEquityRunupPnL=SimpleNamespace(PnL=runup))
@@ -47,28 +47,28 @@ def _update_(open=1.10, high=1.13, low=1.09, close=1.11, volume=5000.0, atr=0.01
     return SimpleNamespace(Bar=bar, Technical=technical, Portfolio=portfolio)
 
 def test_shape_essential_and_with_moving_averages():
-    assert _encoder_().shape() == 29
-    assert _encoder_(overlap_features=("MASlow", "MAMedium", "MAFast")).shape() == 32
-    assert _encoder_(momentum_features=("MOMFast",)).shape() == 27
+    assert _encoder_().shape() == 30
+    assert _encoder_(overlap_features=("MASlow", "MAMedium", "MAFast")).shape() == 36
+    assert _encoder_(momentum_features=("MOMFast",)).shape() == 28
 
 def test_encode_shape_and_dtype():
     observation = _encoder_(action=_action_()).encode(_update_())
-    assert observation.shape == (29,)
+    assert observation.shape == (30,)
     assert observation.dtype == np.float32
 
 def test_window_stacks_frames_with_repeat_padding():
     encoder = _encoder_(action=_action_(), window=3)
-    assert encoder.shape() == 87
+    assert encoder.shape() == 90
     first = encoder.encode(_update_(close=1.11))
-    assert first.shape == (87,) and first.dtype == np.float32
-    assert np.array_equal(first[:29], first[29:58]) and np.array_equal(first[29:58], first[58:])
+    assert first.shape == (90,) and first.dtype == np.float32
+    assert np.array_equal(first[:30], first[30:60]) and np.array_equal(first[30:60], first[60:])
     second = encoder.encode(_update_(close=1.20))
-    assert np.array_equal(second[:29], first[:29])
-    assert np.array_equal(second[29:58], first[58:])
-    assert not np.array_equal(second[58:], first[58:])
+    assert np.array_equal(second[:30], first[:30])
+    assert np.array_equal(second[30:60], first[60:])
+    assert not np.array_equal(second[60:], first[60:])
     encoder.reset()
     fresh = encoder.encode(_update_(close=1.11))
-    assert np.array_equal(fresh[:29], fresh[58:])
+    assert np.array_equal(fresh[:30], fresh[60:])
 
 def test_timestamp_is_raw_sin_cos():
     when = datetime(2020, 6, 15, 13, 30, 0)
@@ -104,8 +104,25 @@ def test_reset_clears_previous_close():
 def test_moving_average_extends_vector():
     encoder = _encoder_(action=_action_(), overlap_features=("MA20",))
     observation = encoder.encode(_update_(close=1.11, atr=0.01, extra={"MA20": 1.09}))
-    assert observation.shape == (30,)
-    assert math.isfinite(float(observation[29]))
+    assert observation.shape == (32,)
+    assert math.isfinite(float(observation[30])) and math.isfinite(float(observation[31]))
+
+def test_overlap_pair_encodes_distance_and_slope():
+    encoder = _encoder_(action=_action_(), overlap_features=("MA20",))
+    update = _update_(close=1.11, atr=0.01)
+    update.Technical.MA20 = _indicator_(1.09, previous=1.085)
+    features = []
+    encoder._indicator_features_(update, features)
+    assert abs(features[7][0] - (1.11 - 1.09) / 0.01) < 1e-12 and features[8][1] is True
+    assert abs(features[8][0] - (1.09 - 1.085) / 0.01) < 1e-12 and features[8][1] is True
+
+def test_overlap_slope_zero_without_history():
+    encoder = _encoder_(action=_action_(), overlap_features=("MA20",))
+    update = _update_(close=1.11, atr=0.01)
+    update.Technical.MA20 = SimpleNamespace(Result=SimpleNamespace(last=lambda shift=0: 1.09 if shift == 0 else None), Window=1)
+    features = []
+    encoder._indicator_features_(update, features)
+    assert features[7][0] > 0.0 and abs(features[8][0]) < 1e-12
 
 def test_spread_is_relative_ask_bid_of_close_tick():
     encoder = _encoder_(action=_action_())
@@ -138,7 +155,7 @@ def test_position_duration_counts_holds_and_resets():
 def test_momentum_reads_roc_indicator_vol_scaled():
     encoder = _encoder_(action=_action_(), momentum_features=("MOM2",))
     observation = encoder.encode(_update_(rv=0.008, extra={"MOM2": (0.016, 2)}))
-    assert abs(observation[26] - 0.016 / (0.008 * math.sqrt(2))) < 1e-6
+    assert abs(observation[27] - 0.016 / (0.008 * math.sqrt(2))) < 1e-6
 
 def test_momentum_zero_without_indicator():
     observation = _encoder_(action=_action_(), momentum_features=("MOM2",)).encode(_update_(rv=0.008))

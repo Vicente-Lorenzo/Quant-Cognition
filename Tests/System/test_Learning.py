@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from Library.Database.Dataframe import pl
 from Library.Model.Split import SplitAPI
 from Library.Parameter import Parameter
-from Library.Portfolio.Statistic import CALMARRATIO, NETRETURNANNPERC, NET_TOTAL_AGGREGATED, STATISTICS_METRICS_LABEL
+from Library.Portfolio.Statistic import CALMARRATIO, NETRETURNANNPERC, NET_BUY_AGGREGATED, NET_SELL_AGGREGATED, NET_TOTAL_AGGREGATED, STATISTICS_METRICS_LABEL
 from Library.Strategy.Model.Reward import RewardType
 from Library.System.Learning import LearningAPI
 from Library.System.System import SystemAPI
@@ -55,14 +55,22 @@ class _Harness_(LearningAPI):
     def _promote_(self, source: Path) -> None:
         self._promoted_ = source
 
-    def _pass_(self, start, stop, training):
+    def _pass_(self, start, stop, training, mirror=False):
         self._passes_ = getattr(self, "_passes_", [])
-        self._passes_.append((start, stop, training))
+        self._passes_.append((start, stop, training, mirror))
         self._epochs_seen_ = self._strategy_.Epochs
         agent = self._strategy_.Agent if self._strategy_.Agent is not None else _FakeAgent_()
         self.strategy = SimpleNamespace(_agent_=agent, _observation_=SimpleNamespace(shape=lambda: 23), _sizing_mode_=SimpleNamespace(name="Percentage"), _sizing_min_=0.0, _sizing_max_=100.0, _entry_threshold_=(-0.4, 0.4), _exit_threshold_=(-0.1, 0.1))
         self.portfolio = SimpleNamespace(Equity=10000.0, InitialBalance=10000.0)
         return self._script_.pop(0) if self._script_ else 0.0
+
+    def _trades_(self):
+        script = getattr(self, "_trades_script_", None)
+        return script.pop(0) if script else 1000000.0
+
+    def _directions_(self):
+        script = getattr(self, "_directions_script_", None)
+        return script.pop(0) if script else (1000000.0, 1000000.0)
 
 def _reset_(weights: Path) -> None:
     _FakeAgent_.instances = 0
@@ -255,6 +263,74 @@ def test_fitness_reads_metric_then_falls_back(tmp_path):
     assert abs(harness._fitness_() - 0.07) < 1e-9
     harness.statistics = None
     assert abs(harness._fitness_() - 0.05) < 1e-9
+
+def test_activity_floor_prefers_active_checkpoints(tmp_path):
+    _reset_(tmp_path)
+    harness = _make_(episodes=3, training=0, validation=6, testing=0, activity=5)
+    harness._script_ = [0.0, 0.05, 0.0, 0.01, 0.0, 0.09]
+    harness._trades_script_ = [0.0, 10.0, 0.0]
+    harness.run()
+    assert _FakeAgent_.saves == 2
+    manifest = read_json(tmp_path / "_FakeStrategy_ Manifest.json")
+    assert manifest["Best"] == 0.01 and manifest["Activity"] == 5
+    assert harness._payload_(42, tmp_path, [], None)["activity"] == 5
+
+def _mirror_frame_():
+    return pl.DataFrame({
+        "OpenTick.Ask": [1.1002, 1.2002], "OpenTick.Bid": [1.1000, 1.2000], "OpenTick.Timestamp": [1, 5],
+        "HighTick.Ask": [1.3002, 1.4002], "HighTick.Bid": [1.3000, 1.4000], "HighTick.Timestamp": [2, 6],
+        "LowTick.Ask": [1.0002, 1.1002], "LowTick.Bid": [1.0000, 1.1000], "LowTick.Timestamp": [3, 7],
+        "CloseTick.Ask": [1.2002, 1.3002], "CloseTick.Bid": [1.2000, 1.3000], "CloseTick.Timestamp": [4, 8],
+        "CloseTick.AskBaseConversion": [1.0, 1.0]
+    })
+
+def test_mirror_frame_negates_returns_and_swaps_extremes():
+    frame = _mirror_frame_()
+    anchor = 1.2 * 1.2
+    mirrored = LearningAPI._mirror_frame_(frame, anchor)
+    assert abs(mirrored["CloseTick.Bid"][0] - anchor / 1.2002) < 1e-12
+    assert abs(mirrored["CloseTick.Ask"][0] - anchor / 1.2000) < 1e-12
+    assert (mirrored["CloseTick.Ask"] > mirrored["CloseTick.Bid"]).all()
+    assert abs(mirrored["HighTick.Bid"][0] - anchor / 1.0002) < 1e-12
+    assert mirrored["HighTick.Timestamp"][0] == 3 and mirrored["LowTick.Timestamp"][0] == 2
+    assert (mirrored["HighTick.Bid"] > mirrored["LowTick.Bid"]).all()
+    assert mirrored["CloseTick.AskBaseConversion"][0] is None
+    import math
+    original_return = math.log(1.3000 / 1.2000)
+    mirrored_return = math.log(mirrored["CloseTick.Bid"][1] / mirrored["CloseTick.Bid"][0])
+    assert abs(mirrored_return + math.log(1.3002 / 1.2002)) < 1e-9
+    assert mirrored_return < 0.0 < original_return
+
+def test_mirror_alternates_training_episodes_only(tmp_path):
+    _reset_(tmp_path)
+    harness = _make_(episodes=4, training=0, validation=6, testing=0, mirror=True)
+    harness._script_ = [0.0] * 8
+    harness.run()
+    trains = [p for p in harness._passes_ if p[2] is True]
+    validations = [p for p in harness._passes_ if p[2] is False]
+    assert [p[3] for p in trains[:4]] == [False, True, False, True]
+    assert all(p[3] is False for p in validations)
+    manifest = read_json(tmp_path / "_FakeStrategy_ Manifest.json")
+    assert manifest["Mirror"] is True
+
+def test_balance_floor_requires_both_directions(tmp_path):
+    _reset_(tmp_path)
+    harness = _make_(episodes=3, training=0, validation=6, testing=0, balance=2)
+    harness._script_ = [0.0, 0.09, 0.0, 0.01, 0.0, 0.07]
+    harness._directions_script_ = [(9.0, 0.0), (3.0, 4.0), (0.0, 9.0)]
+    harness.run()
+    manifest = read_json(tmp_path / "_FakeStrategy_ Manifest.json")
+    assert manifest["Best"] == 0.01 and manifest["Balance"] == 2
+    assert harness._payload_(42, tmp_path, [], None)["balance"] == 2
+
+def test_metric_reads_buy_and_sell_columns(tmp_path):
+    _reset_(tmp_path)
+    harness = _make_(episodes=1)
+    harness.portfolio = SimpleNamespace(Equity=10000.0, InitialBalance=10000.0)
+    harness.statistics = pl.DataFrame({STATISTICS_METRICS_LABEL: ["Nr Total of Trades"], NET_BUY_AGGREGATED: [7.0], NET_SELL_AGGREGATED: [5.0], NET_TOTAL_AGGREGATED: [12.0]})
+    assert harness._metric_("Nr Total of Trades", NET_BUY_AGGREGATED) == 7.0
+    assert harness._metric_("Nr Total of Trades", NET_SELL_AGGREGATED) == 5.0
+    assert harness._metric_("Nr Total of Trades") == 12.0
 
 def test_parallel_payload_is_picklable(tmp_path):
     _reset_(tmp_path)

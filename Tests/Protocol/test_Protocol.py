@@ -13,10 +13,13 @@ def test_action_id_enum_values():
     assert ActionID.OpenBuyStopOrder.value == 6
     assert ActionID.OpenBuyLimitOrder.value == 18
     assert ActionID.OpenBuyStopLimitOrder.value == 30
-    assert ActionID.Subscribe.value == 54
-    assert ActionID.Unsubscribe.value == 55
-    assert ActionID.Shutdown.value == 56
-    assert ActionID.Complete.value == 57
+    assert ActionID.IncreaseBuyPositionVolume.value == 46
+    assert ActionID.DecreaseBuyPositionVolume.value == 48
+    assert ActionID.ModifyBuyPositionVolume.value == 50
+    assert ActionID.Subscribe.value == 58
+    assert ActionID.Unsubscribe.value == 59
+    assert ActionID.Shutdown.value == 60
+    assert ActionID.Complete.value == 61
 
 def test_update_id_enum_values():
     assert UpdateID.Init.value == 0
@@ -28,12 +31,14 @@ def test_update_id_enum_values():
     assert UpdateID.BarClosed.value == 6
     assert UpdateID.OpenedBuyStopOrder.value == 11
     assert UpdateID.OpenedBuyPosition.value == 61
-    assert UpdateID.StopLossBuyPosition.value == 71
-    assert UpdateID.Denied.value == 77
-    assert UpdateID.Exception.value == 78
-    assert UpdateID.Shutdown.value == 79
-    assert UpdateID.Batch.value == 80
-    assert UpdateID.Complete.value == 81
+    assert UpdateID.IncreasedBuyPositionVolume.value == 63
+    assert UpdateID.DecreasedBuyPositionVolume.value == 65
+    assert UpdateID.StopLossBuyPosition.value == 73
+    assert UpdateID.Denied.value == 79
+    assert UpdateID.Exception.value == 80
+    assert UpdateID.Shutdown.value == 81
+    assert UpdateID.Batch.value == 82
+    assert UpdateID.Complete.value == 83
 
 def test_open_buy_position_action_serialization():
     action = OpenBuyPositionActionAPI(PositionType=PositionType.Normal, Volume=1000.0, StopLoss=1.0500, TakeProfit=1.0600)
@@ -51,6 +56,22 @@ def test_open_buy_stop_limit_order_action_serialization():
     action = OpenBuyStopLimitOrderActionAPI(Volume=500.0, StopPrice=1.10, LimitPrice=1.105, StopLoss=1.09, TakeProfit=1.15)
     data = action.serialize()
     assert data[0] == ActionID.OpenBuyStopLimitOrder.value
+
+def test_target_volume_actions_share_wire_shape():
+    increase = IncreaseBuyPositionVolumeActionAPI(PositionID=7, Volume=3000.0)
+    decrease = DecreaseBuyPositionVolumeActionAPI(PositionID=7, Volume=3000.0)
+    modify = ModifyBuyPositionVolumeActionAPI(PositionID=7, Volume=3000.0)
+    assert increase.serialize()[0] == ActionID.IncreaseBuyPositionVolume.value
+    assert decrease.serialize()[0] == ActionID.DecreaseBuyPositionVolume.value
+    assert modify.serialize()[0] == ActionID.ModifyBuyPositionVolume.value
+    assert len({len(increase.serialize()), len(decrease.serialize()), len(modify.serialize())}) == 1
+    assert increase.serialize()[1:] == decrease.serialize()[1:] == modify.serialize()[1:]
+
+def test_target_volume_actions_cover_both_directions():
+    for action, identifier in ((IncreaseSellPositionVolumeActionAPI, ActionID.IncreaseSellPositionVolume),
+                               (DecreaseSellPositionVolumeActionAPI, ActionID.DecreaseSellPositionVolume),
+                               (ModifySellPositionVolumeActionAPI, ActionID.ModifySellPositionVolume)):
+        assert action(PositionID=1, Volume=1000.0).serialize()[0] == identifier.value
 
 def test_modify_action_only_carries_relevant_field():
     a = ModifyBuyPositionStopLossActionAPI(PositionID=42, StopLoss=1.0400)
@@ -238,3 +259,27 @@ def test_exception_update_fields():
 def test_position_close_carries_trade():
     update = StopLossBuyPositionUpdateAPI(Account=None, Security=None, Market=None, Technical=None, Fundamental=None, Sentimental=None, Portfolio=None, Bar=None, Position=None, Trade=None)
     assert hasattr(update, "Trade")
+
+def _connector_enum_(name: str) -> dict:
+    from pathlib import Path
+    source = Path(__file__).resolve().parents[2] / "Sources" / "Robots" / "Connector" / "Connector" / "Enum.cs"
+    if not source.exists(): return {}
+    members, inside = {}, False
+    for line in source.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("public enum "): inside = stripped.split()[2] == name; continue
+        if inside and stripped.startswith("}"): break
+        if inside and "=" in stripped:
+            member, _, value = stripped.rstrip(",").partition("=")
+            members[member.strip()] = int(value.strip())
+    return members
+
+def test_update_id_matches_connector_enum():
+    connector = _connector_enum_("UpdateID")
+    if not connector: return
+    assert connector == {member.name: member.value for member in UpdateID}
+
+def test_action_id_matches_connector_enum():
+    connector = _connector_enum_("ActionID")
+    if not connector: return
+    assert connector == {member.name: member.value for member in ActionID}

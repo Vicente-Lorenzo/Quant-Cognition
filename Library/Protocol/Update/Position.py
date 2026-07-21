@@ -18,13 +18,23 @@ class OpenedSellPositionUpdateAPI(UpdateAPI):
     Position: PositionAPI
 
 @dataclass(slots=True)
-class ModifiedBuyPositionVolumeUpdateAPI(UpdateAPI):
+class IncreasedBuyPositionVolumeUpdateAPI(UpdateAPI):
+    Bar: BarAPI
+    Position: PositionAPI
+
+@dataclass(slots=True)
+class IncreasedSellPositionVolumeUpdateAPI(UpdateAPI):
+    Bar: BarAPI
+    Position: PositionAPI
+
+@dataclass(slots=True)
+class DecreasedBuyPositionVolumeUpdateAPI(UpdateAPI):
     Bar: BarAPI
     Position: PositionAPI
     Trade: TradeAPI
 
 @dataclass(slots=True)
-class ModifiedSellPositionVolumeUpdateAPI(UpdateAPI):
+class DecreasedSellPositionVolumeUpdateAPI(UpdateAPI):
     Bar: BarAPI
     Position: PositionAPI
     Trade: TradeAPI
@@ -100,8 +110,10 @@ class MarginCallSellPositionUpdateAPI(UpdateAPI):
 __all__ = [
     "OpenedBuyPositionUpdateAPI",
     "OpenedSellPositionUpdateAPI",
-    "ModifiedBuyPositionVolumeUpdateAPI",
-    "ModifiedSellPositionVolumeUpdateAPI",
+    "IncreasedBuyPositionVolumeUpdateAPI",
+    "IncreasedSellPositionVolumeUpdateAPI",
+    "DecreasedBuyPositionVolumeUpdateAPI",
+    "DecreasedSellPositionVolumeUpdateAPI",
     "ModifiedBuyPositionStopLossUpdateAPI",
     "ModifiedSellPositionStopLossUpdateAPI",
     "ModifiedBuyPositionTakeProfitUpdateAPI",

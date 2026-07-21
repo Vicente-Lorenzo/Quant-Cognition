@@ -126,11 +126,20 @@ public class Connector : Robot
     [Parameter("Profile", Group = "Logging Management", DefaultValue = false)]
     public bool Profile { get; set; }
 
+    [Parameter("Benchmark", Group = "Analysis Management", DefaultValue = false)]
+    public bool Benchmark { get; set; }
+
+    [Parameter("Benchmark Tickers", Group = "Analysis Management", DefaultValue = "")]
+    public string BenchmarkTickers { get; set; }
+
     [Parameter("Report", Group = "Reporting Management", DefaultValue = true)]
     public bool Report { get; set; }
 
     [Parameter("Export", Group = "Reporting Management", DefaultValue = true)]
     public bool Export { get; set; }
+
+    [Parameter("Plot", Group = "Reporting Management", DefaultValue = false)]
+    public bool Plot { get; set; }
 
     private RobotAPI _robot_api_;
 
@@ -149,7 +158,7 @@ public class Connector : Robot
             UniverseBuffering, UniverseBatch, UniverseInterval, UniverseWorkers, UniverseMaxsize,
             MarketBuffering, MarketBatch, MarketInterval, MarketWorkers, MarketMaxsize,
             PortfolioBuffering, PortfolioBatch, PortfolioInterval, PortfolioWorkers, PortfolioMaxsize,
-            Report, Export, Profile);
+            Benchmark, BenchmarkTickers, Report, Export, Plot, Profile);
     }
 
     protected override void OnStop()

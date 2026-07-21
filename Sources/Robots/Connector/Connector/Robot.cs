@@ -102,8 +102,11 @@ public class RobotAPI : IDisposable
     private readonly double _portfolio_interval_;
     private readonly int _portfolio_workers_;
     private readonly int _portfolio_maxsize_;
+    private readonly bool _benchmark_;
+    private readonly string _benchmark_tickers_;
     private readonly bool _report_;
     private readonly bool _export_;
+    private readonly bool _plot_;
     private readonly bool _profile_;
     private readonly SystemMode _system_mode_;
 
@@ -145,7 +148,7 @@ public class RobotAPI : IDisposable
                     BufferingMode universe_buffering, int universe_batch, double universe_interval, int universe_workers, int universe_maxsize,
                     BufferingMode market_buffering, int market_batch, double market_interval, int market_workers, int market_maxsize,
                     BufferingMode portfolio_buffering, int portfolio_batch, double portfolio_interval, int portfolio_workers, int portfolio_maxsize,
-                    bool report, bool export, bool profile)
+                    bool benchmark, string benchmark_tickers, bool report, bool export, bool plot, bool profile)
     {
         _robot_ = algo;
         _console_ = console;
@@ -190,8 +193,11 @@ public class RobotAPI : IDisposable
         _portfolio_interval_ = portfolio_interval;
         _portfolio_workers_ = portfolio_workers;
         _portfolio_maxsize_ = portfolio_maxsize;
+        _benchmark_ = benchmark;
+        _benchmark_tickers_ = benchmark_tickers;
         _report_ = report;
         _export_ = export;
+        _plot_ = plot;
         _profile_ = profile;
 
         _log_.Debug($"Streams: Tick {_tick_stream_} · Bar {_bar_stream_} · Order {_order_stream_} · Position {_position_stream_} · Trade {_trade_stream_}");
@@ -310,10 +316,13 @@ public class RobotAPI : IDisposable
         var universe_args = BufferingArgs("universe", _universe_buffering_, _universe_batch_, _universe_interval_, _universe_workers_, _universe_maxsize_);
         var market_args = !_persist_market_ ? " --market-batch 0 --market-interval 0" : BufferingArgs("market", _market_buffering_, _market_batch_, _market_interval_, _market_workers_, _market_maxsize_);
         var portfolio_args = BufferingArgs("portfolio", _portfolio_buffering_, _portfolio_batch_, _portfolio_interval_, _portfolio_workers_, _portfolio_maxsize_);
+        var benchmark_tickers = _benchmark_tickers_ == null ? "" : _benchmark_tickers_.Trim();
+        var benchmark_arg = !_benchmark_ ? "" : benchmark_tickers.Length == 0 ? " --benchmark" : $" --benchmark \"{benchmark_tickers}\"";
         var report_arg = _report_ ? " --report" : "";
         var export_arg = _export_ ? " --export" : "";
+        var plot_arg = _plot_ ? " --plot" : "";
         var profile_arg = _profile_ ? " --profile" : "";
-        var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{universe_args}{market_args}{portfolio_args}{report_arg}{export_arg}{profile_arg}";
+        var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{benchmark_arg}{universe_args}{market_args}{portfolio_args}{report_arg}{export_arg}{plot_arg}{profile_arg}";
         var inner_cmd = $"cd /d \"{base_directory}\" && conda run --no-capture-output -n {_environment_} python -m Library.System.Main {script_args}";
         _log_.Debug($"Activation Operation: Launching Python · {_environment_} · {script_args}");
         SpawnTerminal(inner_cmd);
@@ -433,7 +442,7 @@ public class RobotAPI : IDisposable
                 if (symbol.BaseAsset == from_asset && symbol.QuoteAsset == to_asset) return (Ask: () => symbol.Ask, Bid: () => symbol.Bid);
                 if (symbol.QuoteAsset == from_asset && symbol.BaseAsset == to_asset) return (Ask: () => 1.0 / symbol.Bid, Bid: () => 1.0 / symbol.Ask);
             }
-            catch (Exception e) { _log_.Warning($"Conversion Operation: Failed · {e.Message}"); }
+            catch (Exception e) { _log_.Debug($"Conversion Probe: Skipped · {name} · {e.Message}"); }
         }
         throw new Exception($"No conversion symbol found for {from_asset.Name} → {to_asset.Name}");
     }
@@ -627,10 +636,19 @@ public class RobotAPI : IDisposable
         var position_data = _positions_[args.Position.Id];
         if (Math.Abs(args.Position.VolumeInUnits - position_data.LastVolume) > double.Epsilon)
         {
+            bool increased = args.Position.VolumeInUnits > position_data.LastVolume;
             position_data.LastVolume = args.Position.VolumeInUnits;
+            if (increased)
+            {
+                if (!EmitPosition) return;
+                UpdateID increase_id = args.Position.TradeType == TradeType.Buy ? UpdateID.IncreasedBuyPositionVolume : UpdateID.IncreasedSellPositionVolume;
+                _positions_sent_++;
+                Emit(_position_queue_, _position_delay_, _position_delay_count_, _system_.BuildUpdatePosition(increase_id, _bar_, args.Position));
+                return;
+            }
             if (!EmitTrade) return;
             var trade = FindTrade(args.Position.Id);
-            UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.ModifiedBuyPositionVolume : UpdateID.ModifiedSellPositionVolume;
+            UpdateID update_id = args.Position.TradeType == TradeType.Buy ? UpdateID.DecreasedBuyPositionVolume : UpdateID.DecreasedSellPositionVolume;
             _trades_sent_++;
             Emit(_trade_queue_, _trade_delay_, _trade_delay_count_, _system_.BuildUpdatePositionTrade(update_id, _bar_, args.Position, trade));
             return;
@@ -837,10 +855,14 @@ public class RobotAPI : IDisposable
         return result.IsSuccessful;
     }
 
-    private bool ProcessActionModifyVolume(int position_id, double volume)
+    private bool ProcessActionModifyVolume(int position_id, double volume, int intent)
     {
         var position = FindPosition(position_id);
         if (position == null) { _log_.Warning("Modify Volume Operation: Failed · Position Not Found"); return true; }
+        double current = position.VolumeInUnits;
+        if (Math.Abs(volume - current) <= double.Epsilon) return true;
+        if (intent > 0 && volume < current) { _log_.Warning($"Increase Volume Operation: Failed · Target Below Current ({volume} < {current})"); return true; }
+        if (intent < 0 && volume > current) { _log_.Warning($"Decrease Volume Operation: Failed · Target Above Current ({volume} > {current})"); return true; }
         var result = position.ModifyVolume(volume);
         return result.IsSuccessful;
     }
@@ -974,9 +996,17 @@ public class RobotAPI : IDisposable
                     double? tp = NullIfNan(ReadDouble(data, offset + 16));
                     if (!ProcessActionOpenPosition(action_id == ActionID.OpenBuyPosition ? TradeType.Buy : TradeType.Sell, posType, vol, sl, tp)) _robot_.Stop();
                     break;
+                case ActionID.IncreaseBuyPositionVolume:
+                case ActionID.IncreaseSellPositionVolume:
+                    if (!ProcessActionModifyVolume(ReadInt32(data, 1), ReadDouble(data, 5), 1)) _robot_.Stop();
+                    break;
+                case ActionID.DecreaseBuyPositionVolume:
+                case ActionID.DecreaseSellPositionVolume:
+                    if (!ProcessActionModifyVolume(ReadInt32(data, 1), ReadDouble(data, 5), -1)) _robot_.Stop();
+                    break;
                 case ActionID.ModifyBuyPositionVolume:
                 case ActionID.ModifySellPositionVolume:
-                    if (!ProcessActionModifyVolume(ReadInt32(data, 1), ReadDouble(data, 5))) _robot_.Stop();
+                    if (!ProcessActionModifyVolume(ReadInt32(data, 1), ReadDouble(data, 5), 0)) _robot_.Stop();
                     break;
                 case ActionID.ModifyBuyPositionStopLoss:
                 case ActionID.ModifySellPositionStopLoss:

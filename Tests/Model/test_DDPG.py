@@ -3,8 +3,8 @@ import torch as T
 
 from Library.Model import DDPGAgentAPI
 
-def _agent_(path, seed=42, state_dim=4, action_dim=1, batch_size=8, memory_size=100):
-    return DDPGAgentAPI(path=path, input_shape=(state_dim,), action_shape=action_dim, batch_size=batch_size, memory_size=memory_size, seed=seed)
+def _agent_(path, seed=42, state_dim=4, action_dim=1, batch_size=8, memory_size=100, warmup=0):
+    return DDPGAgentAPI(path=path, input_shape=(state_dim,), action_shape=action_dim, batch_size=batch_size, memory_size=memory_size, warmup=warmup, seed=seed)
 
 def _fill_(agent, n, state_dim=4, action_dim=1):
     rng = np.random.default_rng(0)
@@ -58,6 +58,39 @@ def test_memorize_and_remember_shapes(tmp_path):
     assert rewards.shape == (5,)
     assert next_states.shape == (5, 4)
     assert dones.shape == (5,)
+
+def test_warmup_explores_uniformly_and_reproducibly(tmp_path):
+    state = np.zeros(4)
+    agent = _agent_(tmp_path, seed=7, warmup=5)
+    first = agent.decide(state, explore=True)
+    second = agent.decide(state, explore=True)
+    assert first.shape == (1,) and np.all(np.abs(first) <= 1.0)
+    assert not np.allclose(first, second)
+    twin = _agent_(tmp_path, seed=7, warmup=5)
+    assert np.allclose(twin.decide(state, explore=True), first)
+
+def test_warmup_never_affects_greedy_evaluation(tmp_path):
+    state = np.linspace(-1.0, 1.0, 4)
+    agent = _agent_(tmp_path, seed=7, warmup=5)
+    assert np.allclose(agent.decide(state, explore=False), agent.decide(state, explore=False))
+
+def test_warmup_switches_to_actor_once_buffer_seeded(tmp_path):
+    agent = _agent_(tmp_path, seed=7, warmup=5)
+    _fill_(agent, 5)
+    state = np.zeros(4)
+    with_noise = agent.decide(state, explore=True)
+    assert with_noise.shape == (1,) and np.all(np.abs(with_noise) <= 1.0)
+    assert agent.memory.counter == 5
+
+def test_warmup_defers_learning_until_seeded(tmp_path):
+    agent = _agent_(tmp_path, batch_size=8, memory_size=100, warmup=32)
+    _fill_(agent, 16)
+    before = agent.critic.fc1.weight.detach().clone()
+    agent.learn()
+    assert T.equal(before, agent.critic.fc1.weight.detach())
+    _fill_(agent, 16)
+    agent.learn()
+    assert not T.allclose(before, agent.critic.fc1.weight.detach())
 
 def test_save_load_roundtrip(tmp_path):
     state = np.linspace(-1.0, 1.0, 4)

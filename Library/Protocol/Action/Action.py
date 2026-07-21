@@ -56,18 +56,22 @@ class ActionID(EnumerationAPI):
     CloseSellStopLimitOrder = 43
     OpenBuyPosition = 44
     OpenSellPosition = 45
-    ModifyBuyPositionVolume = 46
-    ModifySellPositionVolume = 47
-    ModifyBuyPositionStopLoss = 48
-    ModifySellPositionStopLoss = 49
-    ModifyBuyPositionTakeProfit = 50
-    ModifySellPositionTakeProfit = 51
-    CloseBuyPosition = 52
-    CloseSellPosition = 53
-    Subscribe = 54
-    Unsubscribe = 55
-    Shutdown = 56
-    Complete = 57
+    IncreaseBuyPositionVolume = 46
+    IncreaseSellPositionVolume = 47
+    DecreaseBuyPositionVolume = 48
+    DecreaseSellPositionVolume = 49
+    ModifyBuyPositionVolume = 50
+    ModifySellPositionVolume = 51
+    ModifyBuyPositionStopLoss = 52
+    ModifySellPositionStopLoss = 53
+    ModifyBuyPositionTakeProfit = 54
+    ModifySellPositionTakeProfit = 55
+    CloseBuyPosition = 56
+    CloseSellPosition = 57
+    Subscribe = 58
+    Unsubscribe = 59
+    Shutdown = 60
+    Complete = 61
 
 @dataclass(slots=True)
 class ActionAPI(DataclassAPI):

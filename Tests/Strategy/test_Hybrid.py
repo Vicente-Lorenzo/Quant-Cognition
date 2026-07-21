@@ -71,7 +71,7 @@ def _update_(buys=None, sells=None, close=1.11, atr=0.01, equity=10000.0):
     )
     return SimpleNamespace(Bar=bar, Technical=technical, Portfolio=portfolio)
 
-def _strategy_(sizing_min=0.5, sizing_max=2.0, entry=(-0.4, 0.4), exit=(-0.1, 0.1), delay=0, action=0.0, training=False):
+def _strategy_(sizing_min=0.5, sizing_max=2.0, entry=(-0.4, 0.4), exit=(-0.1, 0.1), delay=0, action=0.0, training=False, neutralize=False):
     _FakeDDPG_.Fake = action
     _FakeDDPG_.Agent = None
     _FakeDDPG_.Training = training
@@ -79,7 +79,7 @@ def _strategy_(sizing_min=0.5, sizing_max=2.0, entry=(-0.4, 0.4), exit=(-0.1, 0.
     _FakeDDPG_.RewardScale = 1.0
     money = Parameter({"SizingMode": ["Risk"], "SizingMin": [sizing_min], "SizingMax": [sizing_max], "DrawdownThreshold": [0.0], "DrawdownFactor": [1.0]}, ".")
     risk = Parameter({"StopLossScale": [1.5], "StagnationStopLoss": [0], "ScalingOutScale": [1.0], "ScalingOutPercentage": [50.0], "TrailingStopLossScale": [1.5], "TrailingStopLossStep": [0.25]}, ".")
-    signal = Parameter({"NormalEntryThreshold": list(entry), "NormalExitThreshold": list(exit), "ContinuationEntryThreshold": list(entry), "ContinuationExitThreshold": list(exit), "ContinuationDelay": [delay], "ObservationWindow": [1], "NormalizeWindow": [200]}, ".")
+    signal = Parameter({"NormalEntryThreshold": list(entry), "NormalExitThreshold": list(exit), "ContinuationEntryThreshold": list(entry), "ContinuationExitThreshold": list(exit), "ContinuationDelay": [delay], "ObservationWindow": [1], "NormalizeWindow": [200], "NeutralizeReward": [neutralize]}, ".")
     return _FakeDDPG_(money_management=money, risk_management=risk, signal_management=signal, technical_management=_technical_(), fundamental_management=Parameter({}, "."), sentimental_management=Parameter({}, "."), portfolio_management=Parameter({}, "."))
 
 def test_strategy_type_registers_four_strategies():
@@ -214,6 +214,32 @@ def test_step_does_not_record_when_not_training():
     strategy._step_(_update_(equity=10100.0))
     assert strategy._agent_.transitions == [] and strategy._agent_.learned == 0
 
+def test_neutral_reward_off_by_default_matches_raw_log_return():
+    strategy = _strategy_(action=0.5, training=True)
+    assert strategy._neutralize_reward_ is False
+    strategy._step_(_update_(equity=10000.0, sells=[_position_(10000.0, False)]))
+    strategy._step_(_update_(equity=10100.0, close=1.089))
+    _, _, reward, _, _ = strategy._agent_.transitions[0]
+    assert abs(reward - math.log(10100.0 / 10000.0)) < 1e-9
+
+def test_neutral_reward_subtracts_held_exposure_times_market_return():
+    strategy = _strategy_(action=0.5, training=True, neutralize=True)
+    assert strategy._neutralize_reward_ is True
+    strategy._step_(_update_(equity=10000.0, close=1.10, sells=[_position_(10000.0, False)]))
+    assert abs(strategy._previous_exposure_ - (-1.10)) < 1e-9
+    strategy._step_(_update_(equity=10100.0, close=1.089))
+    _, _, reward, _, _ = strategy._agent_.transitions[0]
+    hedge = -1.10 * math.log(1.089 / 1.10)
+    assert abs(reward - (math.log(10100.0 / 10000.0) - hedge)) < 1e-9
+
+def test_neutral_reward_flat_bar_has_no_hedge():
+    strategy = _strategy_(action=0.5, training=True, neutralize=True)
+    strategy._step_(_update_(equity=10000.0, close=1.10))
+    assert strategy._previous_exposure_ == 0.0
+    strategy._step_(_update_(equity=10000.0, close=1.089))
+    _, _, reward, _, _ = strategy._agent_.transitions[0]
+    assert reward == 0.0
+
 def test_initialize_resets_episode_state():
     strategy = _strategy_(action=0.5, training=True)
     strategy._step_(_update_())
@@ -236,4 +262,4 @@ def test_ddpg_builds_agent_and_regularization_is_parameter_driven():
     rddpg = DDPGStrategyAPI(money_management=money, risk_management=risk, signal_management=Parameter({**common, **agent, "ActorRegularization": [0.01]}, "."), technical_management=technical, fundamental_management=Parameter({}, "."), sentimental_management=Parameter({}, "."), portfolio_management=Parameter({}, "."))
     assert isinstance(ddpg._agent_, DDPGAgentAPI)
     assert ddpg._agent_.actor_regularization == 0.0 and rddpg._agent_.actor_regularization == 0.01
-    assert ddpg._observation_.shape() == 29
+    assert ddpg._observation_.shape() == 30
