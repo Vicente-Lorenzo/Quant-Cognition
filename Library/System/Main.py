@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Logging import HandlerLoggingAPI, VerboseLevel
 from Library.Parameter import Parameter, ParameterAPI
-from Library.Strategy import DownloadStrategyAPI, NNFXStrategyAPI, StrategyAPI, TrendStrategyAPI
+from Library.Strategy import DownloadStrategyAPI, NettingStrategyAPI, NNFXStrategyAPI, StrategyAPI, TrendStrategyAPI
 from Library.Strategy.Hybrid import DDPGStrategyAPI
 from Library.Strategy.Model.Reward import RewardType
 from Library.Strategy.Strategy import StrategyType
@@ -29,8 +29,10 @@ def _parse_() -> Namespace:
     base_parser.add_argument("--provider", type=str, required=False, default="Spotware")
     base_parser.add_argument("--ticker", type=str, required=False, default="EURUSD")
     base_parser.add_argument("--timeframe", type=str, required=False, default="Daily")
+    base_parser.add_argument("--benchmark", type=str, required=False, nargs="?", const="", default=None)
     base_parser.add_argument("--report", action="store_true", default=False)
     base_parser.add_argument("--export", action="store_true", default=False)
+    base_parser.add_argument("--plot", action="store_true", default=False)
     base_parser.add_argument("--profile", action="store_true", default=False)
 
     period_parser = ArgumentParser(add_help=False)
@@ -145,6 +147,7 @@ def _strategy_(args: Namespace) -> Type[StrategyAPI]:
         case StrategyType.NNFX: return NNFXStrategyAPI
         case StrategyType.Trend: return TrendStrategyAPI
         case StrategyType.DDPG: return DDPGStrategyAPI
+        case StrategyType.Netting: return NettingStrategyAPI
 
 def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI, timeframe: TimeframeAPI, parameters: Parameter) -> Union[SystemAPI, None]:
     system = SystemType(args.system)
@@ -163,8 +166,10 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 universe=_universe_(system, args.universe_batch, args.universe_interval, args.universe_workers, args.universe_maxsize),
                 market=_market_(system, strategy_type, args.market_batch, args.market_interval, args.market_workers, args.market_maxsize),
                 portfolio=_portfolio_(system, args.portfolio_batch, args.portfolio_interval, args.portfolio_workers, args.portfolio_maxsize),
+                benchmark=args.benchmark,
                 report=args.report,
-                export=args.export
+                export=args.export,
+                plot=args.plot
             )
         case SystemType.Backtesting:
             params: Parameter = parameters.Backtesting[args.strategy]
@@ -180,8 +185,10 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 spread=(SpreadType(args.spread_type), args.spread_value),
                 commission=(CommissionType(args.commission_type), args.commission_value),
                 swap=(SwapType(args.swap_type), args.swap_buy, args.swap_sell),
+                benchmark=args.benchmark,
                 report=args.report,
-                export=args.export
+                export=args.export,
+                plot=args.plot
             )
         case SystemType.Optimization:
             return None
@@ -234,8 +241,10 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 seeds=args.seeds,
                 workers=args.workers,
                 threads=args.threads,
+                benchmark=args.benchmark,
                 report=args.report,
-                export=args.export
+                export=args.export,
+                plot=args.plot
             )
 
 def main() -> None:
