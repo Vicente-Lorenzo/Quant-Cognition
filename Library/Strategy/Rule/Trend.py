@@ -65,6 +65,9 @@ class TrendStrategyAPI(NNFXStrategyAPI):
         self._normal_exit_sell_ = lambda update: any(f(update) for f in normal_exits_sell) if normal_exits_sell else False
 
     def update_position(self, update: BarUpdateAPI) -> Union[list, None]:
+        return self._emit_(update, self._signal_position_(update))
+
+    def _signal_position_(self, update: BarUpdateAPI) -> Union[list, None]:
         if not update.Portfolio.BuyPositions and self._normal_entry_buy_(update):
             return self.open_buy_position(update, PositionType.Normal)
         if not update.Portfolio.SellPositions and self._normal_entry_sell_(update):

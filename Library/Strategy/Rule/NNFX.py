@@ -7,17 +7,17 @@ from Library.Market.Price import Direction
 from Library.Portfolio.Position import PositionType
 from Library.Portfolio.Sizing import SizingMode, calculate_fixed_fractional_volume, calculate_normalized_volume
 from Library.Protocol.Action import (
+    Stream,
     AskBelowTargetActionAPI,
     BidAboveTargetActionAPI,
-    CloseBuyPositionActionAPI,
-    CloseSellPositionActionAPI,
-    ModifyBuyPositionStopLossActionAPI,
-    ModifyBuyPositionVolumeActionAPI,
-    ModifySellPositionStopLossActionAPI,
-    ModifySellPositionVolumeActionAPI,
     OpenBuyPositionActionAPI,
     OpenSellPositionActionAPI,
-    Stream
+    DecreaseBuyPositionVolumeActionAPI,
+    DecreaseSellPositionVolumeActionAPI,
+    ModifyBuyPositionStopLossActionAPI,
+    ModifySellPositionStopLossActionAPI,
+    CloseBuyPositionActionAPI,
+    CloseSellPositionActionAPI
 )
 from Library.Protocol.Update import (
     UpdateID,
@@ -25,8 +25,8 @@ from Library.Protocol.Update import (
     BarUpdateAPI,
     OpenedBuyPositionUpdateAPI,
     OpenedSellPositionUpdateAPI,
-    ModifiedBuyPositionVolumeUpdateAPI,
-    ModifiedSellPositionVolumeUpdateAPI,
+    DecreasedBuyPositionVolumeUpdateAPI,
+    DecreasedSellPositionVolumeUpdateAPI,
     ModifiedBuyPositionStopLossUpdateAPI,
     ModifiedSellPositionStopLossUpdateAPI
 )
@@ -55,13 +55,15 @@ class NNFXStrategyAPI(StrategyAPI):
         self._trailing_stop_loss_step_, = self.RiskManagement.TrailingStopLossStep
         self._stagnation_stop_loss_, = self.RiskManagement.StagnationStopLoss
         self._use_stop_loss_ = self._positive_(self._stop_loss_scale_)
+        self._sizing_atr_scale_ = self._stop_loss_scale_ or 0.0
         self._use_scaling_out_ = self._positive_(self._scaling_out_scale_) and self._positive_(self._scaling_out_percentage_)
         self._use_trailing_stop_loss_ = self._positive_(self._trailing_stop_loss_scale_) and self._use_stop_loss_
-        self._managed_risk_ = self._use_stop_loss_ or self._use_scaling_out_ or self._use_trailing_stop_loss_
+        self._use_stagnation_ = self._positive_(self._stagnation_stop_loss_)
+        self._managed_risk_ = self._use_stop_loss_ or self._use_scaling_out_ or self._use_trailing_stop_loss_ or self._use_stagnation_
         self._drawdown_threshold_, = self.MoneyManagement.DrawdownThreshold
         self._drawdown_factor_, = self.MoneyManagement.DrawdownFactor
         self._sizing_mode_ = SizingMode.parse(self.MoneyManagement.SizingMode[0])
-        self._risk_percentage_, = self.MoneyManagement.SizingMax
+        self._risk_percentage_, = self.MoneyManagement.RiskPercentage
         self._last_position_id_: Union[int, None] = None
         self._last_position_atr_: Union[float, None] = None
         self._last_position_trade_type_: Union[Direction, None] = None
@@ -70,9 +72,6 @@ class NNFXStrategyAPI(StrategyAPI):
     @staticmethod
     def _positive_(value: Union[float, None]) -> bool:
         return value is not None and value > 0.0
-
-    def _entry_risk_percentage_(self, update: BarUpdateAPI) -> float:
-        return self._risk_percentage_
 
     def _risk_scale_(self, update: BarUpdateAPI) -> float:
         if self._drawdown_threshold_ <= 0.0: return 1.0
@@ -120,18 +119,18 @@ class NNFXStrategyAPI(StrategyAPI):
         position = update.Portfolio.position(self._last_position_id_)
         volume = calculate_normalized_volume(position.Volume * (1.0 - self._scaling_out_percentage_ / 100), update.Portfolio.Security.Contract)
         if volume >= position.Volume: return [CloseBuyPositionActionAPI(PositionID=self._last_position_id_)]
-        return [ModifyBuyPositionVolumeActionAPI(PositionID=self._last_position_id_, Volume=volume)]
+        return [DecreaseBuyPositionVolumeActionAPI(PositionID=self._last_position_id_, Volume=volume)]
 
     def close_sell_partially_action(self, update: TickUpdateAPI) -> list:
         position = update.Portfolio.position(self._last_position_id_)
         volume = calculate_normalized_volume(position.Volume * (1.0 - self._scaling_out_percentage_ / 100), update.Portfolio.Security.Contract)
         if volume >= position.Volume: return [CloseSellPositionActionAPI(PositionID=self._last_position_id_)]
-        return [ModifySellPositionVolumeActionAPI(PositionID=self._last_position_id_, Volume=volume)]
+        return [DecreaseSellPositionVolumeActionAPI(PositionID=self._last_position_id_, Volume=volume)]
 
-    def breakeven_buy_action(self, update: ModifiedBuyPositionVolumeUpdateAPI) -> list:
+    def breakeven_buy_action(self, update: DecreasedBuyPositionVolumeUpdateAPI) -> list:
         return [ModifyBuyPositionStopLossActionAPI(PositionID=self._last_position_id_, StopLoss=update.Position.EntryPrice.Price)]
 
-    def breakeven_sell_action(self, update: ModifiedSellPositionVolumeUpdateAPI) -> list:
+    def breakeven_sell_action(self, update: DecreasedSellPositionVolumeUpdateAPI) -> list:
         return [ModifySellPositionStopLossActionAPI(PositionID=self._last_position_id_, StopLoss=update.Position.EntryPrice.Price)]
 
     def define_tsl_buy_action(self, update: ModifiedBuyPositionStopLossUpdateAPI) -> list:
@@ -192,8 +191,8 @@ class NNFXStrategyAPI(StrategyAPI):
         waiting_so.on(event=UpdateID.MarginCallSellPosition, to=waiting_open, action=self.undefine_tsl_sell_action, reason="Margin Call on Sell Position")
         waiting_so.on(event=UpdateID.BidAboveTarget, to=waiting_so, action=self.close_buy_partially_action, reason="Hit SO Activation for Buy Position")
         waiting_so.on(event=UpdateID.AskBelowTarget, to=waiting_so, action=self.close_sell_partially_action, reason="Hit SO Activation for Sell Position")
-        waiting_so.on(event=UpdateID.ModifiedBuyPositionVolume, to=waiting_so, action=self.breakeven_buy_action, reason="Closed Partially Buy Position")
-        waiting_so.on(event=UpdateID.ModifiedSellPositionVolume, to=waiting_so, action=self.breakeven_sell_action, reason="Closed Partially Sell Position")
+        waiting_so.on(event=UpdateID.DecreasedBuyPositionVolume, to=waiting_so, action=self.breakeven_buy_action, reason="Closed Partially Buy Position")
+        waiting_so.on(event=UpdateID.DecreasedSellPositionVolume, to=waiting_so, action=self.breakeven_sell_action, reason="Closed Partially Sell Position")
         waiting_so.on(event=UpdateID.ModifiedBuyPositionStopLoss, to=waiting_tsl, action=self.define_tsl_buy_action, reason="Moved Buy Position to Break-Even")
         waiting_so.on(event=UpdateID.ModifiedSellPositionStopLoss, to=waiting_tsl, action=self.define_tsl_sell_action, reason="Moved Sell Position to Break-Even")
         waiting_so.on(event=UpdateID.Shutdown, to=termination, action=None, reason="Safely Terminated")
@@ -236,15 +235,22 @@ class NNFXStrategyAPI(StrategyAPI):
         if not self._use_trailing_stop_loss_:
             waiting_so.on(event=UpdateID.ModifiedBuyPositionStopLoss, to=waiting_close, action=None, reason="Moved Buy Position to Break-Even")
             waiting_so.on(event=UpdateID.ModifiedSellPositionStopLoss, to=waiting_close, action=None, reason="Moved Sell Position to Break-Even")
-        if self._stagnation_stop_loss_:
+        if self._use_stagnation_:
             waiting_so.on(event=UpdateID.BarClosed, to=waiting_so, action=self.stagnation_stop_loss_action, reason=None)
+            if not self._use_scaling_out_:
+                if self._use_trailing_stop_loss_:
+                    waiting_tsl.on(event=UpdateID.BarClosed, to=waiting_tsl, action=self.stagnation_stop_loss_action, reason=None)
+                else:
+                    waiting_close.on(event=UpdateID.BarClosed, to=waiting_close, action=self.stagnation_stop_loss_action, reason=None)
 
         return risk_engine
 
     def calculate_position(self, update: BarUpdateAPI) -> tuple:
         self._last_position_atr_ = update.Technical.ATR.Result.last()
-        sl_pips = self._stop_loss_scale_ * self._last_position_atr_ / update.Portfolio.Security.Contract.PipSize if self._use_stop_loss_ else 0.0
-        size = self._entry_risk_percentage_(update) * self._risk_scale_(update)
+        pip_size = update.Portfolio.Security.Contract.PipSize
+        sl_pips = self._stop_loss_scale_ * self._last_position_atr_ / pip_size if self._use_stop_loss_ else 0.0
+        sizing_pips = self._sizing_atr_scale_ * self._last_position_atr_ / pip_size
+        size = self._risk_percentage_ * self._risk_scale_(update)
         contract = update.Portfolio.Security.Contract
         if self._sizing_mode_ == SizingMode.Volume:
             volume = calculate_normalized_volume(size, contract)
@@ -253,7 +259,7 @@ class NNFXStrategyAPI(StrategyAPI):
             price = update.Bar.CloseTick.Bid.Price
             volume = calculate_normalized_volume(account.Balance * (size / 100.0) / price, contract) if account and account.Balance and price else 0.0
         else:
-            volume = calculate_fixed_fractional_volume(size, sl_pips, update.Portfolio.Account, contract)
+            volume = calculate_fixed_fractional_volume(size, sizing_pips, update.Portfolio.Account, contract)
         return volume, sl_pips
 
     def open_buy_position(self, update: BarUpdateAPI, position_type: PositionType) -> list:
