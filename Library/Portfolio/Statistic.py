@@ -338,8 +338,8 @@ TradeView = {
 }
 
 DealView = {
-    str(TradeAPI.ID.Position): pl.Int64(),
     str(TradeAPI.ID.UID): pl.List(pl.Int64),
+    str(TradeAPI.ID.Position): pl.Int64(),
     str(TradeAPI.ID.Direction): pl.String(),
     str(TradeAPI.ID.Volume): pl.Float64(),
     str(TradeAPI.ID.EntryTimestamp): pl.Datetime(),
@@ -391,9 +391,12 @@ def aggregate_items(df: pl.DataFrame) -> pl.DataFrame:
         return op(pl.col(col)) if col in df.columns else pl.lit(0.0).alias(col)
     def _weighted_(col: str):
         return ((pl.col(col) * pl.col(volume)).sum() / pl.col(volume).sum()).alias(col) if col in df.columns else pl.lit(0.0).alias(col)
+    direction = str(PositionAPI.ID.Direction)
+    bought = pl.col(volume).filter(pl.col(direction) == Direction.Buy.name).sum()
+    sold = pl.col(volume).filter(pl.col(direction) == Direction.Sell.name).sum()
     agg_exprs = [
         pl.col(str(PositionAPI.ID.UID)),
-        pl.col(str(PositionAPI.ID.Direction)).first(),
+        pl.when(bought >= sold).then(pl.lit(Direction.Buy.name)).otherwise(pl.lit(Direction.Sell.name)).alias(direction),
         pl.col(str(PositionAPI.ID.EntryTimestamp)).min(),
         pl.col(str(PositionAPI.ID.EntryPrice)).first(),
         pl.col(volume).sum(),
@@ -457,7 +460,7 @@ def calculate_average(net_value: float, nr_items: int) -> float:
     return net_value / nr_items if nr_items else 0.0
 
 def calculate_expected(winning_perc: float, avg_win: float, losing_perc: float, avg_loss: float) -> float:
-    return (winning_perc / 100.0 * avg_win) - (losing_perc / 100.0 * abs(avg_loss))
+    return (winning_perc / 100.0 * avg_win) + (losing_perc / 100.0 * avg_loss)
 
 def calculate_return(df: pl.DataFrame) -> tuple[float, float]:
     log_ret = str(PositionAPI.ID.LogReturn)
@@ -485,10 +488,12 @@ def calculate_annualized_volatility(vol: float, nr_trades: int, duration_seconds
     return calculate_percentage(value) if pct else value
 
 def calculate_risk_to_reward(avg_win: float, avg_loss: float) -> float:
-    return abs(avg_loss) / avg_win if avg_win else 0.0
+    if avg_win: return abs(avg_loss) / avg_win
+    return math.inf if avg_loss else 0.0
 
 def calculate_profit_factor(win_pnl: float, loss_pnl: float) -> float:
-    return win_pnl / abs(loss_pnl) if loss_pnl else 0.0
+    if loss_pnl: return win_pnl / abs(loss_pnl)
+    return math.inf if win_pnl > 0 else 0.0
 
 def calculate_excursion(initial_balance: float, df: pl.DataFrame, drawdown: bool) -> tuple[float, float, float, float]:
     net_pnl = str(PositionAPI.ID.NetPnL)

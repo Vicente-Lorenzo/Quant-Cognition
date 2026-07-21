@@ -76,10 +76,10 @@ class SessionAPI(DatapointAPI):
             self._security_ = SecurityAPI(UID=security, db=db, autoload=True)
         if isinstance(initial_account, AccountAPI): self._initial_account_ = initial_account
         elif initial_account is not MISSING and initial_account is not None:
-            self._initial_account_ = AccountAPI(UID=initial_account, db=db, autoload=True)
+            self._initial_account_ = AccountAPI(UID=initial_account, db=db, autoload=False, autooverload=False)
         if isinstance(final_account, AccountAPI): self._final_account_ = final_account
         elif final_account is not MISSING and final_account is not None:
-            self._final_account_ = AccountAPI(UID=final_account, db=db, autoload=True)
+            self._final_account_ = AccountAPI(UID=final_account, db=db, autoload=False, autooverload=False)
         if self.UID is None:
             self.UID = self._generate_uid_(self._type_)
         if self.StartTimestamp is None:
@@ -119,7 +119,7 @@ class SessionAPI(DatapointAPI):
     def InitialAccount(self, val: Union[int, AccountAPI, None]) -> None:
         from Library.Portfolio.Account import AccountAPI
         if isinstance(val, AccountAPI): self._initial_account_ = val
-        elif val is not None: self._initial_account_ = AccountAPI(UID=val, db=self._db_, autoload=True)
+        elif val is not None: self._initial_account_ = AccountAPI(UID=val, db=self._db_, autoload=False, autooverload=False)
 
     @property
     @overridefield
@@ -129,7 +129,7 @@ class SessionAPI(DatapointAPI):
     def FinalAccount(self, val: Union[int, AccountAPI, None]) -> None:
         from Library.Portfolio.Account import AccountAPI
         if isinstance(val, AccountAPI): self._final_account_ = val
-        elif val is not None: self._final_account_ = AccountAPI(UID=val, db=self._db_, autoload=True)
+        elif val is not None: self._final_account_ = AccountAPI(UID=val, db=self._db_, autoload=False, autooverload=False)
 
     @property
     def Duration(self) -> Union[float, None]:

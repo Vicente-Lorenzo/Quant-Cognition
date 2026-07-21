@@ -12,6 +12,7 @@ from Library.Portfolio.Order import (
     OrderAPI
 )
 from Library.Portfolio.Position import (
+    PositionMode,
     PositionType,
     PositionAPI
 )
@@ -41,6 +42,7 @@ __all__ = [
     "OrderStatus",
     "TimeInForce",
     "OrderAPI",
+    "PositionMode",
     "PositionType",
     "PositionAPI",
     "TradeAPI",

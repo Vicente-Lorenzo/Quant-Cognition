@@ -185,7 +185,7 @@ class OrderAPI(DatapointAPI):
             self._account_ = AccountAPI(UID=account, db=db, autoload=True)
         if isinstance(position, PositionAPI): self._position_ = position
         elif position is not MISSING and position is not None:
-            self._position_ = PositionAPI(UID=position, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+            self._position_ = PositionAPI(UID=position, db=db, migrate=migrate, autosave=autosave, autoload=False, autooverload=False)
         if isinstance(security, SecurityAPI): self._security_ = security
         elif security is not MISSING and security is not None:
             self._security_ = SecurityAPI(UID=security, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
@@ -240,7 +240,7 @@ class OrderAPI(DatapointAPI):
     @Position.setter
     def Position(self, val: Union[int, PositionAPI, None]) -> None:
         if isinstance(val, PositionAPI): self._position_ = val
-        elif val is not None: self._position_ = PositionAPI(UID=val, db=self._db_, autoload=True)
+        elif val is not None: self._position_ = PositionAPI(UID=val, db=self._db_, autoload=False, autooverload=False)
 
     @property
     @overridefield

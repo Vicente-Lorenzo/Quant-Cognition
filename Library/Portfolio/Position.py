@@ -22,6 +22,10 @@ from Library.Utility.Typing import MISSING
 if TYPE_CHECKING:
     from Library.Portfolio.Order import OrderAPI
 
+class PositionMode(EnumerationAPI):
+    Hedging = 0
+    Netting = 1
+
 class PositionType(EnumerationAPI):
     Normal = 0
     Continuation = 1

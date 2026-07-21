@@ -388,7 +388,11 @@ class PortfolioAPI(DatapointAPI):
     def open_position(self, order_uid: Union[int, None], position: PositionAPI) -> None:
         if order_uid is not None and order_uid in self._orders_:
             del self._orders_[order_uid]
+        existing = self._positions_.get(position.UID)
         self._positions_[position.UID] = position
+        if existing is not None:
+            self._inherit_position_state_(existing, position)
+            self._refresh_target_pnls_(position); return
         base = self._account_.Balance if self._account_ else 0.0
         setattr(position, 'EntryBalance', base)
         position.MidBalance = base
