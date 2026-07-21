@@ -34,3 +34,13 @@ Trend:
   FundamentalManagement: null
   SentimentalManagement: null
   PortfolioManagement: null
+Netting:
+  MoneyManagement: null
+  RiskManagement: null
+  SignalManagement: null
+  TechnicalManagement: null
+  FundamentalManagement: null
+  SentimentalManagement: null
+  PortfolioManagement:
+    PositionMode: [Netting]
+    ProbeSpacing: [3]

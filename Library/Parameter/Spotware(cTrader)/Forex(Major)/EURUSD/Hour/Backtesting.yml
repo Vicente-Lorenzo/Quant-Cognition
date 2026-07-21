@@ -74,6 +74,20 @@ DDPG:
     MOMFast: [ROC, 24]
     MOMMedium: [ROC, 120]
     MOMSlow: [ROC, 480]
+    MAFast: [SMA, 24]
+    MAMedium: [SMA, 120]
+    MASlow: [SMA, 480]
+    ER: [ER, 120]
   FundamentalManagement: null
   SentimentalManagement: null
   PortfolioManagement: null
+Netting:
+  MoneyManagement: null
+  RiskManagement: null
+  SignalManagement: null
+  TechnicalManagement: null
+  FundamentalManagement: null
+  SentimentalManagement: null
+  PortfolioManagement:
+    PositionMode: [Netting]
+    ProbeSpacing: [3]

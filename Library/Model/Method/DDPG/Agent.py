@@ -35,6 +35,13 @@ Extension (NOT in the paper — the "Extended DDPG" variant, default OFF):
     the actor inside the responsive region of the tanh while leaving the optimum
     of a genuinely informative critic essentially unchanged for small lambda.
     With lambda = 0.0 (the default) the exact paper-pure code path runs.
+  - warmup (steps): before `warmup` transitions have been collected the
+    exploratory policy is uniform on [-1, 1] and no gradient steps run, so the
+    replay buffer is seeded with action-diverse experience before the critic
+    shapes the actor (the standard reference-implementation start_steps device,
+    e.g. Spinning Up; it counters the early-commitment path to constant-action
+    collapse). Greedy evaluation (explore=False) is never affected. With
+    warmup = 0 (the default) the exact paper-pure code path runs.
 """
 
 import torch as T
@@ -64,6 +71,7 @@ class DDPGAgentAPI(AgentAPI):
                  gamma: float = 0.99,
                  grad_clip: float = 1.0,
                  actor_regularization: float = 0.0,
+                 warmup: int = 0,
                  seed: Union[int, None] = None):
 
         super().__init__(model="DDPG", path=path)
@@ -76,6 +84,8 @@ class DDPGAgentAPI(AgentAPI):
         self.tau = tau
         self.grad_clip = grad_clip
         self.actor_regularization = actor_regularization
+        self.warmup = warmup
+        self.rng = np.random.default_rng(seed)
 
         self.memory = MemoryAPI(size=memory_size, input_shape=input_shape, action_shape=action_shape, seed=seed)
 
@@ -156,6 +166,10 @@ class DDPGAgentAPI(AgentAPI):
         return self.memory.remember(batch_size)
 
     def decide(self, state, explore: bool = True):
+        # Warmup (see module docstring): uniform exploratory actions until the
+        # buffer holds `warmup` transitions; never applied to greedy evaluation.
+        if explore and self.warmup > 0 and self.memory.counter < self.warmup:
+            return self.rng.uniform(-1.0, 1.0, size=self.actor.action_shape)
         # Algorithm 1: a_t = mu(s_t | theta_mu) + N_t, then bound to [-1, 1].
         # eval()/train() bracket the forward pass; with LayerNorm this is a no-op
         # (no batch statistics) but is kept so a BatchNorm swap stays correct.
@@ -185,8 +199,9 @@ class DDPGAgentAPI(AgentAPI):
                 target_param.copy_(tau * online + (1.0 - tau) * target_param)
 
     def learn(self) -> None:
-        # Wait until the replay buffer holds at least one full minibatch.
-        if self.memory.counter < self.batch_size:
+        # Wait until the replay buffer holds at least one full minibatch and the
+        # warmup transitions have been collected (see module docstring).
+        if self.memory.counter < max(self.batch_size, self.warmup):
             return
 
         # Sample a random minibatch of N transitions from R (Algorithm 1).

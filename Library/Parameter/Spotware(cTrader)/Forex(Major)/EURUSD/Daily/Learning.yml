@@ -37,6 +37,9 @@ DDPG:
     MOMFast: [ROC, 5]
     MOMMedium: [ROC, 21]
     MOMSlow: [ROC, 63]
+    MAFast: [SMA, 10]
+    MAMedium: [SMA, 50]
+    MASlow: [SMA, 200]
   FundamentalManagement: null
   SentimentalManagement: null
   PortfolioManagement: null
