@@ -4,7 +4,7 @@ import json
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Type, Union, TYPE_CHECKING
+from typing import Sequence, Type, Union, TYPE_CHECKING
 
 from Library.Database import BufferAPI
 from Library.Database.Dataframe import pl
@@ -15,7 +15,7 @@ from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.Order import OrderAPI
 from Library.Portfolio.Position import PositionAPI, PositionStatus
 from Library.Portfolio.Session import SessionAPI
-from Library.Portfolio.Statistic import generate_net_report, order_view, position_view, trade_view, deal_view
+from Library.Portfolio.Statistic import generate_benchmark_report, generate_net_report, order_view, position_view, trade_view, deal_view
 from Library.Portfolio.Trade import TradeAPI
 from Library.Protocol.Action import ActionAPI, ActionID, CompleteActionAPI, ShutdownActionAPI
 from Library.Protocol.Update import (
@@ -29,8 +29,10 @@ from Library.Protocol.Update import (
     TickUpdateAPI,
     OpenedBuyPositionUpdateAPI,
     OpenedSellPositionUpdateAPI,
-    ModifiedBuyPositionVolumeUpdateAPI,
-    ModifiedSellPositionVolumeUpdateAPI,
+    DecreasedBuyPositionVolumeUpdateAPI,
+    DecreasedSellPositionVolumeUpdateAPI,
+    IncreasedBuyPositionVolumeUpdateAPI,
+    IncreasedSellPositionVolumeUpdateAPI,
     ModifiedBuyPositionStopLossUpdateAPI,
     ModifiedSellPositionStopLossUpdateAPI,
     ModifiedBuyPositionTakeProfitUpdateAPI,
@@ -133,12 +135,17 @@ class SystemAPI(ServiceAPI, ABC):
                  universe: tuple[int, float, int, int] = (0, 0.0, 0, 0),
                  market: tuple[int, float, int, int] = (0, 0.0, 0, 0),
                  portfolio: tuple[int, float, int, int] = (0, 0.0, 0, 0),
+                 benchmark: Union[str, Sequence, None] = None,
                  report: bool = True,
-                 export: bool = True) -> None:
+                 export: bool = True,
+                 plot: bool = False) -> None:
         super().__init__()
         self._connected_: bool = False
         self._reporting_: bool = report
         self._exporting_: bool = export
+        self._plotting_: bool = plot
+        self._benchmarking_: bool = benchmark is not None
+        self._benchmark_: tuple = tuple(entry.strip() for entry in (benchmark.split(",") if isinstance(benchmark, str) else benchmark or ()) if entry and entry.strip())
         self._strategy_: Type[StrategyAPI] = strategy
         self._security_: SecurityAPI = security
         self._timeframe_: TimeframeAPI = timeframe
@@ -154,6 +161,7 @@ class SystemAPI(ServiceAPI, ABC):
         self.portfolio: Union[PortfolioAPI, None] = None
         self.strategy: Union[StrategyAPI, None] = None
         self.statistics = None
+        self.benchmarks = None
 
         self._universe_: BufferAPI = BufferAPI(types=[SecurityAPI], batch=universe[0], interval=universe[1], workers=universe[2], maxsize=universe[3])
         self._market_: BufferAPI = BufferAPI(types=[TickAPI, BarAPI], batch=market[0], interval=market[1], workers=market[2], maxsize=market[3], bulk=True)
@@ -236,11 +244,112 @@ class SystemAPI(ServiceAPI, ABC):
         except Exception as error:
             self._log_.error(lambda: f"Export Operation: Failed · {error}")
 
+    def _bars_(self) -> list:
+        if self.market is None: return []
+        frame = self.market.dataframe()
+        if frame is None or frame.is_empty(): return []
+        columns = ("Timestamp", "OpenTick.Bid", "HighTick.Bid", "LowTick.Bid", "CloseTick.Bid", "OpenTick.Timestamp")
+        if any(column not in frame.columns for column in columns): return []
+        return list(zip(*(frame[column].to_list() for column in columns)))
+
+    @staticmethod
+    def _curves_(portfolio: PortfolioAPI) -> tuple[list, list]:
+        equity = portfolio.EquityTrack
+        balance = []
+        trades = trade_view(portfolio.Trades)
+        exit_stamp, exit_balance = str(TradeAPI.ID.ExitTimestamp), "ExitBalance"
+        if not trades.is_empty() and exit_stamp in trades.columns and exit_balance in trades.columns:
+            balance = [(stamp, value) for stamp, value in zip(trades[exit_stamp].to_list(), trades[exit_balance].to_list()) if stamp is not None and value is not None]
+        opening = portfolio.InitialBalance
+        if opening is not None and equity: balance.insert(0, (equity[0][0], opening))
+        return equity, balance
+
+    @staticmethod
+    def _label_at_(stamp, bars: list):
+        if stamp is None or not bars: return None
+        low, high = 0, len(bars) - 1
+        if stamp < bars[0][5]: return None
+        while low < high:
+            middle = (low + high + 1) // 2
+            if bars[middle][5] <= stamp: low = middle
+            else: high = middle - 1
+        return bars[low][0]
+
+    def _markers_(self, portfolio: PortfolioAPI) -> list:
+        trades = trade_view(portfolio.Trades)
+        if trades.is_empty(): return []
+        fields = (str(TradeAPI.ID.UID), str(TradeAPI.ID.Direction), str(TradeAPI.ID.EntryTimestamp), str(TradeAPI.ID.ExitTimestamp), str(TradeAPI.ID.EntryPrice), str(TradeAPI.ID.ExitPrice), str(TradeAPI.ID.NetPnL))
+        if any(field not in trades.columns for field in fields): return []
+        bars = self._bars_()
+        return [(row[0], str(row[1]), self._label_at_(row[2], bars), self._label_at_(row[3], bars), row[4], row[5], row[6] or 0.0) for row in zip(*(trades[field].to_list() for field in fields))]
+
+    @staticmethod
+    def _label_(security: SecurityAPI, suffix: Union[str, None] = None) -> str:
+        ticker = security.Ticker if security else None
+        contract = security.Contract if security else None
+        kind = contract.Type if contract else None
+        parts = [str(ticker.UID) if ticker and ticker.UID else "Security"]
+        if ticker and ticker.Description: parts.append(str(ticker.Description))
+        if kind is not None: parts.append(kind.name if hasattr(kind, "name") else str(kind))
+        if suffix: parts.append(suffix)
+        return " · ".join(parts)
+
+    def _benchmarks_(self, start, stop) -> dict:
+        if not self._benchmarking_: return {}
+        benchmarks = {}
+        bars = self._bars_()
+        if bars: benchmarks[self._label_(self._security_, "Buy & Hold")] = [(bar[0], bar[4]) for bar in bars]
+        database = getattr(self, "_db_", None)
+        if not self._benchmark_: return benchmarks
+        if database is None:
+            self._log_.warning(lambda: f"Benchmark Operation: Skipped · Due to no Database connection ({' · '.join(self._benchmark_)})")
+            return benchmarks
+        from Library.Market.Market import MarketAPI
+        from Library.Universe.Provider import ProviderAPI
+        from Library.Universe.Security import SecurityAPI
+        from Library.Universe.Ticker import TickerAPI
+        for spec in self._benchmark_:
+            try:
+                provider_uid, _, ticker_uid = spec.rpartition(":")
+                provider = ProviderAPI(UID=ProviderAPI.normalize(provider_uid), db=database, autoload=True) if provider_uid else self._security_.Provider
+                security = SecurityAPI(Provider=provider, Ticker=TickerAPI(UID=TickerAPI.normalize(ticker_uid), db=database, autoload=True), db=database, autoload=True)
+                frame = MarketAPI.pull_bars(database, security.UID, self._timeframe_.UID, start=start, stop=stop)
+                if frame.is_empty(): raise ValueError(f"No {self._timeframe_.UID} Bars")
+                benchmarks[self._label_(security)] = list(zip(frame["Timestamp"].to_list(), frame["CloseTick.Bid"].to_list()))
+            except Exception as error:
+                self._log_.warning(lambda s=spec, e=error: f"Benchmark Operation: Skipped · {s} · {e}")
+        return benchmarks
+
+    def _plot_(self, portfolio: PortfolioAPI, account: Union[AccountAPI, None], start, stop, benchmarks: dict, tables: dict) -> None:
+        from Library.Utility.Plot import PlotAPI
+        equity, balance = self._curves_(portfolio)
+        ticker = self._security_.Ticker.UID if self._security_ and self._security_.Ticker else "Security"
+        title = f"{self.__class__.__name__} · {self._strategy_.__name__} · {ticker} {self._timeframe_.UID} · {start} → {stop}"
+        plot = PlotAPI(
+            title=title,
+            currency=account.Asset if account is not None and account.Asset else "",
+            bars=self._bars_(),
+            equity=equity,
+            balance=balance,
+            signals=self.strategy.Signals if self.strategy is not None else [],
+            trades=self._markers_(portfolio),
+            benchmarks=benchmarks,
+            directional=(self.strategy.DirectionalEntryThreshold, self.strategy.DirectionalExitThreshold) if self.strategy is not None else None,
+            volumetric=(self.strategy.VolumeEntryThreshold, self.strategy.VolumeExitThreshold) if self.strategy is not None else None,
+            tables=tables)
+        path = plot.render(traceback_root() / "Reports" / "Plots", name=f"{datetime.now():%Y-%m-%d %H-%M-%S} {ticker} {self._strategy_.__name__}")
+        self._log_.info(lambda: f"Plot Operation: Rendered · {path}")
+
     def _report_(self, portfolio: PortfolioAPI, account: Union[AccountAPI, None], start, stop) -> None:
         if portfolio is None: return
         net = generate_net_report(portfolio.Positions, portfolio.Trades, account, start, stop, portfolio.EquityCurve, portfolio.Excursions)
         self.statistics = net
-        if not (self._reporting_ or self._exporting_): return
+        benchmarks = {}
+        if self._benchmarking_:
+            try: benchmarks = self._benchmarks_(start, stop)
+            except Exception as error: self._log_.error(lambda: f"Benchmark Operation: Failed · {error}")
+        self.benchmarks = generate_benchmark_report(portfolio.EquityTrack, benchmarks, start, stop) if self._benchmarking_ else None
+        if not (self._reporting_ or self._exporting_ or self._plotting_): return
         tables = {
             "Orders": order_view(portfolio.Orders),
             "Positions": position_view(portfolio.Positions),
@@ -248,6 +357,10 @@ class SystemAPI(ServiceAPI, ABC):
             "Deals": deal_view(portfolio.Deals),
             "Net": net,
         }
+        if self.benchmarks is not None and not self.benchmarks.is_empty(): tables["Benchmark"] = self.benchmarks
+        if self._plotting_:
+            try: self._plot_(portfolio, account, start, stop, benchmarks, tables)
+            except Exception as error: self._log_.error(lambda: f"Plot Operation: Failed · {error}")
         if self._reporting_:
             for name, table in tables.items():
                 if table.is_empty(): continue
@@ -411,12 +524,16 @@ class SystemAPI(ServiceAPI, ABC):
                     actions += engine.perform(update_id, OpenedBuyPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=self._receive_update_position_()))
                 case UpdateID.OpenedSellPosition:
                     actions += engine.perform(update_id, OpenedSellPositionUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=self._receive_update_position_()))
-                case UpdateID.ModifiedBuyPositionVolume:
+                case UpdateID.DecreasedBuyPositionVolume:
                     pos, trade = self._receive_update_position_trade_(PositionStatus.Opened)
-                    actions += engine.perform(update_id, ModifiedBuyPositionVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
-                case UpdateID.ModifiedSellPositionVolume:
+                    actions += engine.perform(update_id, DecreasedBuyPositionVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
+                case UpdateID.DecreasedSellPositionVolume:
                     pos, trade = self._receive_update_position_trade_(PositionStatus.Opened)
-                    actions += engine.perform(update_id, ModifiedSellPositionVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
+                    actions += engine.perform(update_id, DecreasedSellPositionVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=pos, Trade=trade))
+                case UpdateID.IncreasedBuyPositionVolume:
+                    actions += engine.perform(update_id, IncreasedBuyPositionVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=self._receive_update_position_()))
+                case UpdateID.IncreasedSellPositionVolume:
+                    actions += engine.perform(update_id, IncreasedSellPositionVolumeUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=self._receive_update_position_()))
                 case UpdateID.ModifiedBuyPositionStopLoss:
                     actions += engine.perform(update_id, ModifiedBuyPositionStopLossUpdateAPI(Account=self.account, Security=self.security, Market=self.market, Technical=self.technical, Fundamental=self.fundamental, Sentimental=self.sentimental, Portfolio=self.portfolio, Bar=self._receive_update_bar_(), Position=self._receive_update_position_()))
                 case UpdateID.ModifiedSellPositionStopLoss:
@@ -562,6 +679,8 @@ class SystemAPI(ServiceAPI, ABC):
 
     def deploy(self) -> None:
         if self.strategy is None: return
+        self._strategy_.Recording = self._plotting_
+        self.strategy.Signals = []
         engine = LifecycleAPI(
             system_machine=self.system_management(),
             strategy_machine=self.strategy.strategy_management(),
