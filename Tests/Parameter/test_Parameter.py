@@ -95,6 +95,15 @@ def test_directory_navigation(param_api, tmp_path):
     config = param_api.FolderA.FolderB.Config
     assert config.Val == 1
 
+def test_missing_key_returns_none(param_api):
+    param_api.Present = {"A": 1}
+
+    assert param_api.Present.A == 1
+    assert param_api.Present.Missing is None
+    assert param_api.Present["Missing"] is None
+    assert param_api.Missing is None
+    assert param_api["Missing"] is None
+
 def test_parameter_clone(param_api):
     data = {"A": {"B": 1}}
     param_api.CloneTest = data

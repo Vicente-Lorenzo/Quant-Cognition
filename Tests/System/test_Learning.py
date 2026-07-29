@@ -9,6 +9,7 @@ from Library.Model.Split import SplitAPI
 from Library.Parameter import Parameter
 from Library.Portfolio.Statistic import CALMARRATIO, NETRETURNANNPERC, NET_BUY_AGGREGATED, NET_SELL_AGGREGATED, NET_TOTAL_AGGREGATED, STATISTICS_METRICS_LABEL
 from Library.Strategy.Model.Reward import RewardType
+from Library.Strategy.Strategy import Threshold
 from Library.System.Learning import LearningAPI
 from Library.System.System import SystemAPI
 from Library.Universe.Contract import CommissionType, SpreadType, SwapType
@@ -60,17 +61,15 @@ class _Harness_(LearningAPI):
         self._passes_.append((start, stop, training, mirror))
         self._epochs_seen_ = self._strategy_.Epochs
         agent = self._strategy_.Agent if self._strategy_.Agent is not None else _FakeAgent_()
-        self.strategy = SimpleNamespace(_agent_=agent, _observation_=SimpleNamespace(shape=lambda: 23), _sizing_mode_=SimpleNamespace(name="Percentage"), _sizing_min_=0.0, _sizing_max_=100.0, _entry_threshold_=(-0.4, 0.4), _exit_threshold_=(-0.1, 0.1))
+        exposure = getattr(self, "_exposure_script_", None)
+        longs, shorts = exposure.pop(0) if exposure and not training else (1000000.0, 1000000.0)
+        self.strategy = SimpleNamespace(_agent_=agent, _observation_=SimpleNamespace(shape=lambda: 23), _sizing_mode_=SimpleNamespace(name="Percentage"), _risk_percentage_=1.0, _atr_scale_=1.5, DirectionalEntryThreshold=Threshold(-0.4, 0.4), DirectionalExitThreshold=Threshold(-0.1, 0.1), _long_bars_=longs, _short_bars_=shorts)
         self.portfolio = SimpleNamespace(Equity=10000.0, InitialBalance=10000.0)
         return self._script_.pop(0) if self._script_ else 0.0
 
     def _trades_(self):
         script = getattr(self, "_trades_script_", None)
         return script.pop(0) if script else 1000000.0
-
-    def _directions_(self):
-        script = getattr(self, "_directions_script_", None)
-        return script.pop(0) if script else (1000000.0, 1000000.0)
 
 def _reset_(weights: Path) -> None:
     _FakeAgent_.instances = 0
@@ -212,8 +211,8 @@ def test_manifest_records_configuration(tmp_path):
     assert manifest["TrainFrequency"] == 2 and manifest["GradientSteps"] == 3
     assert manifest["Validation"] == 0 and manifest["Testing"] == 0 and manifest["Seeds"] == 1
     assert manifest["Fitness"] == CALMARRATIO and manifest["Best"] == 0.05 and len(manifest["Results"]) == 1
-    assert manifest["SizingMin"] == 0.0 and manifest["SizingMax"] == 100.0
-    assert manifest["NormalEntryThreshold"] == [-0.4, 0.4] and manifest["NormalExitThreshold"] == [-0.1, 0.1]
+    assert manifest["RiskPercentage"] == 1.0 and manifest["ATRScale"] == 1.5
+    assert manifest["DirectionalEntryThreshold"] == [-0.4, 0.4] and manifest["DirectionalExitThreshold"] == [-0.1, 0.1]
 
 def test_scratch_builds_fresh_agent_per_fold(tmp_path):
     _reset_(tmp_path)
@@ -317,7 +316,7 @@ def test_balance_floor_requires_both_directions(tmp_path):
     _reset_(tmp_path)
     harness = _make_(episodes=3, training=0, validation=6, testing=0, balance=2)
     harness._script_ = [0.0, 0.09, 0.0, 0.01, 0.0, 0.07]
-    harness._directions_script_ = [(9.0, 0.0), (3.0, 4.0), (0.0, 9.0)]
+    harness._exposure_script_ = [(9.0, 0.0), (3.0, 4.0), (0.0, 9.0)]
     harness.run()
     manifest = read_json(tmp_path / "_FakeStrategy_ Manifest.json")
     assert manifest["Best"] == 0.01 and manifest["Balance"] == 2

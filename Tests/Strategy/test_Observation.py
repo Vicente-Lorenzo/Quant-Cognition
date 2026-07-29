@@ -3,6 +3,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 from Library.Database.Dataframe import np
+from Library.Market.Price import Direction
 from Library.Portfolio.Sizing import SizingMode
 from Library.Strategy.Hybrid.DDPG import DDPGNormalizationAPI, DDPGObservationAPI
 from Library.Strategy.Model.Action import ActionAPI
@@ -19,7 +20,7 @@ def _indicator_(value, window=1, previous=None):
     return SimpleNamespace(Result=SimpleNamespace(last=lambda shift=0: value if shift == 0 or previous is None else previous), Window=window)
 
 def _position_(volume, long, entry=10000.0, net=0.0, drawdown=0.0, runup=0.0, uid=1):
-    return SimpleNamespace(Volume=volume, IsLong=long, IsShort=not long, UID=uid, EntryBalance=entry, NetPnL=SimpleNamespace(PnL=net), MaxEquityDrawdownPnL=SimpleNamespace(PnL=drawdown), MaxEquityRunupPnL=SimpleNamespace(PnL=runup))
+    return SimpleNamespace(Volume=volume, Direction=Direction.Buy if long else Direction.Sell, UID=uid, EntryBalance=entry, NetPnL=SimpleNamespace(PnL=net), MaxEquityDrawdownPnL=SimpleNamespace(PnL=drawdown), MaxEquityRunupPnL=SimpleNamespace(PnL=runup))
 
 def _update_(open=1.10, high=1.13, low=1.09, close=1.11, volume=5000.0, atr=0.01, rv=0.008, buys=None, sells=None, balance=10000.0, initial=10000.0, equity=10000.0, drawdown=0.0, runup=0.0, when=datetime(2020, 6, 15, 13, 30, 0), extra=None):
     technical = SimpleNamespace(ATR=_indicator_(atr), RVFast=_indicator_(rv))

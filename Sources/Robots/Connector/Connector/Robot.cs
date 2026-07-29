@@ -444,7 +444,8 @@ public class RobotAPI : IDisposable
             }
             catch (Exception e) { _log_.Debug($"Conversion Probe: Skipped · {name} · {e.Message}"); }
         }
-        throw new Exception($"No conversion symbol found for {from_asset.Name} → {to_asset.Name}");
+        _log_.Warning($"Conversion Operation: Unavailable · {from_asset.Name} → {to_asset.Name} · Defaulting to 1.0");
+        return (Ask: () => 1.0, Bid: () => 1.0);
     }
 
     private xTick CurrentTick()

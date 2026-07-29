@@ -25,7 +25,7 @@ def _update_(buys=None, sells=None, drawdown=0.0, atr=0.01, close=1.0):
     return SimpleNamespace(Bar=bar, Technical=technical, Portfolio=portfolio)
 
 def _strategy_(time_stop=0, threshold=0.0, factor=1.0, mode="Risk", maximum=2.0):
-    money = Parameter({"SizingMode": [mode], "SizingMax": [maximum], "DrawdownThreshold": [threshold], "DrawdownFactor": [factor]}, ".")
+    money = Parameter({"SizingMode": [mode], "RiskPercentage": [maximum], "DrawdownThreshold": [threshold], "DrawdownFactor": [factor]}, ".")
     risk = Parameter({"StopLossScale": [1.5], "ScalingOutScale": [1.0], "ScalingOutPercentage": [50.0], "TrailingStopLossScale": [1.5], "TrailingStopLossStep": [0.25], "StagnationStopLoss": [time_stop]}, ".")
     empty = Parameter({}, ".")
     return NNFXStrategyAPI(money_management=money, risk_management=risk, signal_management=empty, technical_management=empty, fundamental_management=empty, sentimental_management=empty, portfolio_management=empty)
@@ -91,7 +91,7 @@ def test_machine_gains_bar_transition_only_when_enabled():
     assert disabled.state(name="Waiting SO")._transitions_[UpdateID.BarClosed.value] is None
 
 def test_pure_tsl_when_scaling_out_disabled():
-    money = Parameter({"SizingMode": ["Risk"], "SizingMax": [2.0], "DrawdownThreshold": [0.0], "DrawdownFactor": [1.0]}, ".")
+    money = Parameter({"SizingMode": ["Risk"], "RiskPercentage": [2.0], "DrawdownThreshold": [0.0], "DrawdownFactor": [1.0]}, ".")
     risk = Parameter({"StopLossScale": [1.5], "ScalingOutScale": [1.0], "ScalingOutPercentage": [0.0], "TrailingStopLossScale": [1.5], "TrailingStopLossStep": [0.25], "StagnationStopLoss": [0]}, ".")
     strategy = NNFXStrategyAPI(money_management=money, risk_management=risk, signal_management=Parameter({}, "."), technical_management=Parameter({}, "."), fundamental_management=Parameter({}, "."), sentimental_management=Parameter({}, "."), portfolio_management=Parameter({}, "."))
     engine = strategy.risk_management()
@@ -103,7 +103,7 @@ def test_pure_tsl_when_scaling_out_disabled():
     assert abs(actions[0].Bid - (1.0850 + 1.75 * 0.01 + 0.00001)) < 1e-12
 
 def _no_risk_strategy_(mode="Volume", maximum=5000.0):
-    money = Parameter({"SizingMode": [mode], "SizingMax": [maximum], "DrawdownThreshold": [0.0], "DrawdownFactor": [1.0]}, ".")
+    money = Parameter({"SizingMode": [mode], "RiskPercentage": [maximum], "DrawdownThreshold": [0.0], "DrawdownFactor": [1.0]}, ".")
     risk = Parameter({"StopLossScale": [0.0], "ScalingOutScale": [0.0], "ScalingOutPercentage": [0.0], "TrailingStopLossScale": [0.0], "TrailingStopLossStep": [0.0], "StagnationStopLoss": [0]}, ".")
     empty = Parameter({}, ".")
     return NNFXStrategyAPI(money_management=money, risk_management=risk, signal_management=empty, technical_management=empty, fundamental_management=empty, sentimental_management=empty, portfolio_management=empty)
@@ -130,7 +130,7 @@ def test_managed_open_attaches_stop_loss():
     assert actions[-1].StopLoss == 150.0
 
 def _risk_strategy_(stop_loss=1.5, scaling_scale=1.0, scaling_percentage=50.0, trailing=1.5, time_stop=0, mode="Risk", maximum=2.0):
-    money = Parameter({"SizingMode": [mode], "SizingMax": [maximum], "DrawdownThreshold": [0.0], "DrawdownFactor": [1.0]}, ".")
+    money = Parameter({"SizingMode": [mode], "RiskPercentage": [maximum], "DrawdownThreshold": [0.0], "DrawdownFactor": [1.0]}, ".")
     risk = Parameter({"StopLossScale": [stop_loss], "ScalingOutScale": [scaling_scale], "ScalingOutPercentage": [scaling_percentage], "TrailingStopLossScale": [trailing], "TrailingStopLossStep": [0.25], "StagnationStopLoss": [time_stop]}, ".")
     empty = Parameter({}, ".")
     return NNFXStrategyAPI(money_management=money, risk_management=risk, signal_management=empty, technical_management=empty, fundamental_management=empty, sentimental_management=empty, portfolio_management=empty)

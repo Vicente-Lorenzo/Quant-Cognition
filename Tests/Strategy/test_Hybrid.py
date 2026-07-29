@@ -3,15 +3,12 @@ from datetime import datetime
 from types import SimpleNamespace
 
 from Library.Database.Dataframe import np
+from Library.Market.Price import Direction
 from Library.Engine import MachineAPI
 from Library.Parameter import Parameter
-from Library.Protocol.Action import (
-    CloseBuyPositionActionAPI,
-    CloseSellPositionActionAPI,
-    OpenBuyPositionActionAPI,
-    OpenSellPositionActionAPI
-)
+from Library.Protocol.Action import OpenBuyPositionActionAPI, OpenSellPositionActionAPI
 from Library.Strategy.Hybrid.DDPG import DDPGStrategyAPI
+from Library.Strategy.Rule.NNFX import NNFXStrategyAPI
 from Library.Strategy.Model.Reward import RewardType
 from Library.Strategy.Strategy import StrategyType
 
@@ -47,7 +44,7 @@ def _indicator_(value):
     return SimpleNamespace(Result=SimpleNamespace(last=lambda: value))
 
 def _position_(volume, long, uid=1):
-    return SimpleNamespace(Volume=volume, IsLong=long, IsShort=not long, UID=uid, EntryBalance=10000.0, NetPnL=SimpleNamespace(PnL=0.0), MaxEquityDrawdownPnL=SimpleNamespace(PnL=0.0), MaxEquityRunupPnL=SimpleNamespace(PnL=0.0))
+    return SimpleNamespace(Volume=volume, Direction=Direction.Buy if long else Direction.Sell, UID=uid, EntryBalance=10000.0, NetPnL=SimpleNamespace(PnL=0.0), MaxEquityDrawdownPnL=SimpleNamespace(PnL=0.0), MaxEquityRunupPnL=SimpleNamespace(PnL=0.0))
 
 def _update_(buys=None, sells=None, close=1.11, atr=0.01, equity=10000.0):
     technical = SimpleNamespace(ATR=_indicator_(atr), RVFast=_indicator_(0.008))
@@ -71,16 +68,15 @@ def _update_(buys=None, sells=None, close=1.11, atr=0.01, equity=10000.0):
     )
     return SimpleNamespace(Bar=bar, Technical=technical, Portfolio=portfolio)
 
-def _strategy_(sizing_min=0.5, sizing_max=2.0, entry=(-0.4, 0.4), exit=(-0.1, 0.1), delay=0, action=0.0, training=False, neutralize=False):
+def _strategy_(risk=1.0, atr_scale=1.5, entry=None, exit=None, action=0.0, training=False, neutralize=False):
     _FakeDDPG_.Fake = action
     _FakeDDPG_.Agent = None
     _FakeDDPG_.Training = training
     _FakeDDPG_.Reward = RewardType.LogReturn
     _FakeDDPG_.RewardScale = 1.0
-    money = Parameter({"SizingMode": ["Risk"], "SizingMin": [sizing_min], "SizingMax": [sizing_max], "DrawdownThreshold": [0.0], "DrawdownFactor": [1.0]}, ".")
-    risk = Parameter({"StopLossScale": [1.5], "StagnationStopLoss": [0], "ScalingOutScale": [1.0], "ScalingOutPercentage": [50.0], "TrailingStopLossScale": [1.5], "TrailingStopLossStep": [0.25]}, ".")
-    signal = Parameter({"NormalEntryThreshold": list(entry), "NormalExitThreshold": list(exit), "ContinuationEntryThreshold": list(entry), "ContinuationExitThreshold": list(exit), "ContinuationDelay": [delay], "ObservationWindow": [1], "NormalizeWindow": [200], "NeutralizeReward": [neutralize]}, ".")
-    return _FakeDDPG_(money_management=money, risk_management=risk, signal_management=signal, technical_management=_technical_(), fundamental_management=Parameter({}, "."), sentimental_management=Parameter({}, "."), portfolio_management=Parameter({}, "."))
+    money = Parameter({"RiskPercentage": [risk], "ATRScale": [atr_scale]}, ".")
+    signal = Parameter({"DirectionalEntryThreshold": list(entry) if entry else None, "DirectionalExitThreshold": list(exit) if exit else None, "ObservationWindow": [1], "NormalizeWindow": [200], "NeutralizeReward": [neutralize]}, ".")
+    return _FakeDDPG_(money_management=money, risk_management=None, signal_management=signal, technical_management=_technical_(), fundamental_management=Parameter({}, "."), sentimental_management=Parameter({}, "."), portfolio_management=Parameter({}, "."))
 
 def test_strategy_type_registers_four_strategies():
     assert StrategyType.Download.value == 1
@@ -88,115 +84,88 @@ def test_strategy_type_registers_four_strategies():
     assert StrategyType.Trend.value == 3
     assert StrategyType.DDPG.value == 4
 
-def test_strong_long_signal_opens_buy_with_nnfx_sizing():
+def test_signal_maps_to_proportional_target_exposure():
     strategy = _strategy_()
-    actions = strategy._control_(_update_(), 0.7)
+    full = strategy._control_(_update_(), 1.0)
+    assert len(full) == 1 and isinstance(full[0], OpenBuyPositionActionAPI)
+    assert full[0].Volume == 6000.0 and full[0].StopLoss is None
+    partial = _strategy_()._control_(_update_(), 0.7)
+    assert isinstance(partial[0], OpenBuyPositionActionAPI) and partial[0].Volume == 4000.0
+    short = _strategy_()._control_(_update_(), -1.0)
+    assert isinstance(short[0], OpenSellPositionActionAPI) and short[0].Volume == 6000.0
+
+def test_reference_volume_tracks_the_rolling_atr():
+    assert _strategy_()._reference_volume_(_update_(atr=0.01)) == 6000.0
+    assert _strategy_()._reference_volume_(_update_(atr=0.02)) == 3000.0
+    assert _strategy_(risk=2.0)._reference_volume_(_update_(atr=0.01)) == 13000.0
+
+def test_unchanged_signal_still_reduces_when_volatility_rises():
+    strategy = _strategy_()
+    assert strategy._control_(_update_(atr=0.01), 1.0)[0].Volume == 6000.0
+    reduced = strategy._control_(_update_(buys=[_position_(6000.0, True)], atr=0.02), 1.0)
+    assert len(reduced) == 1 and isinstance(reduced[0], OpenSellPositionActionAPI)
+    assert reduced[0].Volume == 3000.0
+
+def test_netting_adjusts_only_the_delta():
+    strategy = _strategy_()
+    actions = strategy._control_(_update_(buys=[_position_(2000.0, True)]), 1.0)
     assert len(actions) == 1 and isinstance(actions[0], OpenBuyPositionActionAPI)
-    assert actions[0].StopLoss == 150.0
+    assert actions[0].Volume == 4000.0
+
+def test_zero_signal_flattens_open_exposure():
+    strategy = _strategy_()
+    actions = strategy._control_(_update_(buys=[_position_(8000.0, True)]), 0.0)
+    assert len(actions) == 1 and isinstance(actions[0], OpenSellPositionActionAPI)
     assert actions[0].Volume == 8000.0
 
-def test_strong_short_signal_opens_sell():
+def test_opposite_signal_flips_through_a_single_oversized_action():
     strategy = _strategy_()
-    actions = strategy._control_(_update_(), -1.0)
+    actions = strategy._control_(_update_(buys=[_position_(8000.0, True)]), -0.7)
     assert len(actions) == 1 and isinstance(actions[0], OpenSellPositionActionAPI)
-    assert actions[0].Volume == 13000.0
+    assert actions[0].Volume == 12000.0
 
-def test_hold_band_is_silent_flat_and_in_position():
+def test_delta_below_volume_minimum_is_silent():
     strategy = _strategy_()
+    assert strategy._control_(_update_(), 0.0) is None
+    assert strategy._control_(_update_(buys=[_position_(4000.0, True)]), 0.7) is None
+
+def test_thresholds_are_disabled_by_default():
+    strategy = _strategy_()
+    assert strategy.DirectionalEntryThreshold == (None, None)
+    assert strategy.DirectionalExitThreshold == (None, None)
+    assert strategy.VolumeEntryThreshold == (None, None)
+    assert strategy.VolumeExitThreshold == (None, None)
+    assert strategy._control_(_update_(), 0.25) is not None
+
+def test_entry_threshold_blocks_signals_inside_the_band():
+    strategy = _strategy_(entry=(-0.4, 0.4))
     assert strategy._control_(_update_(), 0.25) is None
-    assert strategy._control_(_update_(buys=[_position_(5000.0, True)]), 0.25) is None
-    assert strategy._control_(_update_(buys=[_position_(5000.0, True)]), 0.7) is None
+    assert strategy._control_(_update_(buys=[_position_(8000.0, True)]), 0.25) is None
+    assert strategy._control_(_update_(), 0.7) is not None
 
-def test_deadzone_signal_closes_open_position():
+def test_exit_threshold_flattens_inside_the_band():
+    strategy = _strategy_(exit=(-0.1, 0.1))
+    actions = strategy._control_(_update_(buys=[_position_(8000.0, True)]), 0.05)
+    assert len(actions) == 1 and isinstance(actions[0], OpenSellPositionActionAPI)
+    assert actions[0].Volume == 8000.0
+    assert strategy._control_(_update_(), 0.05) is None
+
+def test_one_sided_threshold_constrains_only_that_side():
+    strategy = _strategy_(entry=(None, 0.4))
+    assert strategy.DirectionalEntryThreshold == (None, 0.4)
+    assert strategy._control_(_update_(), 0.25) is None
+    assert isinstance(strategy._control_(_update_(), -0.25)[0], OpenSellPositionActionAPI)
+
+def test_every_position_is_opened_as_normal():
     strategy = _strategy_()
-    strategy._last_position_id_ = 9
-    actions = strategy._control_(_update_(buys=[_position_(5000.0, True, uid=9)]), 0.05)
-    assert len(actions) == 1 and isinstance(actions[0], CloseBuyPositionActionAPI) and actions[0].PositionID == 9
+    assert strategy._control_(_update_(), 0.7)[0].PositionType.name == "Normal"
+    assert strategy._control_(_update_(buys=[_position_(8000.0, True)]), -0.7)[0].PositionType.name == "Normal"
 
-def test_strong_opposite_signal_reverses():
+def test_strategy_owns_no_rule_based_risk_machine():
     strategy = _strategy_()
-    strategy._last_position_id_ = 3
-    actions = strategy._control_(_update_(buys=[_position_(5000.0, True, uid=3)]), -0.9)
-    assert len(actions) == 2
-    assert isinstance(actions[0], CloseBuyPositionActionAPI) and actions[0].PositionID == 3
-    assert isinstance(actions[1], OpenSellPositionActionAPI)
-
-def test_confidence_maps_risk_between_min_and_max():
-    strategy = _strategy_(sizing_min=0.5, sizing_max=2.0)
-    strategy._hybrid_confidence_ = 0.4
-    assert abs(strategy._entry_risk_percentage_(_update_()) - 0.5) < 1e-12
-    strategy._hybrid_confidence_ = 1.0
-    assert abs(strategy._entry_risk_percentage_(_update_()) - 2.0) < 1e-12
-    strategy._hybrid_confidence_ = 0.7
-    assert abs(strategy._entry_risk_percentage_(_update_()) - 1.25) < 1e-12
-    strategy._hybrid_confidence_ = -1.0
-    assert abs(strategy._entry_risk_percentage_(_update_()) - 2.0) < 1e-12
-    strategy._hybrid_confidence_ = -0.7
-    assert abs(strategy._entry_risk_percentage_(_update_()) - 1.25) < 1e-12
-
-def test_fixed_risk_when_min_equals_max():
-    strategy = _strategy_(sizing_min=2.0, sizing_max=2.0)
-    strategy._hybrid_confidence_ = 0.4
-    assert strategy._entry_risk_percentage_(_update_()) == 2.0
-    strategy._hybrid_confidence_ = 1.0
-    assert strategy._entry_risk_percentage_(_update_()) == 2.0
-
-def test_reentry_waits_for_delay_then_continues():
-    strategy = _strategy_(delay=5)
-    opened = strategy._control_(_update_(), 0.7)
-    assert isinstance(opened[0], OpenBuyPositionActionAPI)
-    assert strategy._control_(_update_(), 0.7) is None
-    assert strategy._control_(_update_(), 0.9) is None
-    assert strategy._control_(_update_(), 0.2) is None
-    reopened = strategy._control_(_update_(), 0.7)
-    assert reopened[0].PositionType.name == "Normal"
-
-def test_reversal_allowed_while_disarmed():
-    strategy = _strategy_()
-    strategy._control_(_update_(), 0.7)
-    strategy._last_position_id_ = 5
-    actions = strategy._control_(_update_(buys=[_position_(5000.0, True, uid=5)]), -0.8)
-    assert len(actions) == 2 and isinstance(actions[1], OpenSellPositionActionAPI)
-
-def test_continuation_reenters_after_machine_exit_with_cooldown():
-    strategy = _strategy_(delay=2)
-    opened = strategy._control_(_update_(buys=None), 0.7)
-    assert opened[0].PositionType.name == "Normal"
-    position = [_position_(5000.0, True, uid=1)]
-    assert strategy._control_(_update_(buys=position), 0.7) is None
-    assert strategy._control_(_update_(), 0.7) is None
-    continuation = strategy._control_(_update_(), 0.7)
-    assert isinstance(continuation[0], OpenBuyPositionActionAPI) and continuation[0].PositionType.name == "Continuation"
-
-def test_continuation_immediate_when_delay_zero():
-    strategy = _strategy_()
-    strategy._control_(_update_(), 0.7)
-    continuation = strategy._control_(_update_(), 0.7)
-    assert continuation[0].PositionType.name == "Continuation"
-
-def test_model_exit_rearms_and_next_entry_is_normal():
-    strategy = _strategy_(delay=1)
-    strategy._control_(_update_(), 0.7)
-    strategy._last_position_id_ = 2
-    closed = strategy._control_(_update_(buys=[_position_(5000.0, True, uid=2)]), 0.05)
-    assert isinstance(closed[0], CloseBuyPositionActionAPI)
-    assert strategy._continuation_direction_ == 0
-    reopened = strategy._control_(_update_(), 0.7)
-    assert reopened[0].PositionType.name == "Normal"
-
-def test_reversal_resets_continuation_legs():
-    strategy = _strategy_(delay=1)
-    strategy._control_(_update_(), 0.7)
-    continuation = strategy._control_(_update_(), 0.7)
-    assert continuation[0].PositionType.name == "Continuation"
-    reversal = strategy._control_(_update_(), -0.8)
-    assert isinstance(reversal[0], OpenSellPositionActionAPI) and reversal[0].PositionType.name == "Normal"
-    assert strategy._continuation_direction_ == -1
-
-def test_risk_and_signal_machines_present():
-    strategy = _strategy_()
-    assert isinstance(strategy.risk_management(), MachineAPI)
+    assert strategy.risk_management() is None
     assert isinstance(strategy.signal_management(), MachineAPI)
+    assert not isinstance(strategy, NNFXStrategyAPI)
 
 def test_step_records_transition_reward_and_learns():
     strategy = _strategy_(action=0.5, training=True)
@@ -253,13 +222,12 @@ def test_ddpg_builds_agent_and_regularization_is_parameter_driven():
     from Library.Model import DDPGAgentAPI
     DDPGStrategyAPI.Agent = None
     DDPGStrategyAPI.Training = False
-    money = Parameter({"SizingMode": ["Risk"], "SizingMin": [0.5], "SizingMax": [2.0], "DrawdownThreshold": [0.0], "DrawdownFactor": [1.0]}, ".")
-    risk = Parameter({"StopLossScale": [1.5], "StagnationStopLoss": [0], "ScalingOutScale": [1.0], "ScalingOutPercentage": [50.0], "TrailingStopLossScale": [1.5], "TrailingStopLossStep": [0.25]}, ".")
+    money = Parameter({"RiskPercentage": [1.0], "ATRScale": [1.5]}, ".")
     agent = {"ActorLearningRate": [0.0001], "CriticLearningRate": [0.001], "SoftUpdate": [0.001], "HiddenShape1": [400], "HiddenShape2": [300], "MemorySize": [1000000], "BatchSize": [64], "DiscountFactor": [0.99], "GradientClip": [1.0]}
-    common = {"NormalEntryThreshold": [-0.4, 0.4], "NormalExitThreshold": [-0.1, 0.1], "ContinuationEntryThreshold": [-2.0, 2.0], "ContinuationExitThreshold": [-0.1, 0.1], "ContinuationDelay": [0], "ObservationWindow": [1], "NormalizeWindow": [200]}
+    common = {"DirectionalEntryThreshold": None, "DirectionalExitThreshold": None, "ObservationWindow": [1], "NormalizeWindow": [200]}
     technical = _technical_()
-    ddpg = DDPGStrategyAPI(money_management=money, risk_management=risk, signal_management=Parameter({**common, **agent, "ActorRegularization": [0.0]}, "."), technical_management=technical, fundamental_management=Parameter({}, "."), sentimental_management=Parameter({}, "."), portfolio_management=Parameter({}, "."))
-    rddpg = DDPGStrategyAPI(money_management=money, risk_management=risk, signal_management=Parameter({**common, **agent, "ActorRegularization": [0.01]}, "."), technical_management=technical, fundamental_management=Parameter({}, "."), sentimental_management=Parameter({}, "."), portfolio_management=Parameter({}, "."))
+    ddpg = DDPGStrategyAPI(money_management=money, risk_management=None, signal_management=Parameter({**common, **agent, "ActorRegularization": [0.0]}, "."), technical_management=technical, fundamental_management=Parameter({}, "."), sentimental_management=Parameter({}, "."), portfolio_management=Parameter({}, "."))
+    rddpg = DDPGStrategyAPI(money_management=money, risk_management=None, signal_management=Parameter({**common, **agent, "ActorRegularization": [0.01]}, "."), technical_management=technical, fundamental_management=Parameter({}, "."), sentimental_management=Parameter({}, "."), portfolio_management=Parameter({}, "."))
     assert isinstance(ddpg._agent_, DDPGAgentAPI)
     assert ddpg._agent_.actor_regularization == 0.0 and rddpg._agent_.actor_regularization == 0.01
     assert ddpg._observation_.shape() == 30
