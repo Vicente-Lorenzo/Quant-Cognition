@@ -1,0 +1,23 @@
+{
+  "weights": {
+    "champion": {
+      "actor": "ffcbbf6c3e62d71992ed46a0e0da7de4ef4f0b43f8c5f0c05ec01dfe2a6232de",
+      "critic": "1a89cf282f017e50f4ea5939c56c4318327a08adfed6d2add639f4bdd47d981d",
+      "target_actor": "e584d610b1863ee9a5f923838b4715cebf0c960c2a078e856f3b496390d4b616",
+      "target_critic": "45d7bf9784dda7f56408b970c48a12e5884c089791f869d98a232a9e5e2d74dc"
+    },
+    "replication": {
+      "actor": "ee549e59d10adcba6d947871a6ac607c57f6a5e9e1af01cbcadd0f8f15f6d216",
+      "critic": "cfc6f83efaa9484ec094bcc06c0a547109397a3c3c8f06140cb52f2369438498",
+      "target_actor": "d786b8619a7411146d43f8d9cef6b5fecd327975fd42184c8bae4486e378e3e0",
+      "target_critic": "e63dc32eaab628d3b76661cd6446bb6638d6692be9b66f0ca6ed79df2eadabc1"
+    }
+  },
+  "expected": {
+    "return": 34.02,
+    "regime": 67.0,
+    "long": 66.6,
+    "maxdd": 23.5,
+    "sharpe": 0.275
+  }
+}

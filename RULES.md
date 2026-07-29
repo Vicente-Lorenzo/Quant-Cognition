@@ -7,12 +7,35 @@ A **multi-purpose Quant Trading Framework** built around **cTrader**.
 - **`Sources/` (C#):** cTrader Robots, Indicators, and Plugins bridging to Python via shared memory (named `mmap` + auto-reset Event signaling, single-slot request/response lockstep).
 - **`Tests/` (Python):** Pytest suite mirroring the `Library/` layout.
 - **`Setup/` (Python):** Zero-to-hero provisioning (`Setup/Install.py`) and the registrar for the three standard Scheduler workflows (`Setup` · `Environment` · `Market`).
+- **`Research/` (Python):** Frozen research method + tooling per campaign (see the `Research/` section below).
+
+## CURRENT STATE (verified 2026-07-28)
+
+- **Tests:** 651 passed / 0 failed (`Tests/` less `Spotware`, `Bloomberg`).
+- **Goldens — 6, reference `Reports/2026-07-05 16-47-{18,19,27,28,36,39}`.** Any engine change must keep them byte-identical on `trades/positions/orders/deals` (`net.csv` intentionally differs post-2026-07-05: Annualized labels + Upside/Downside Volatility rows). Strategy `Trend`, auto resolution, `--export`, EUR 10k, tick data: EURUSD {D1 2023, H1 2023, D1 2022-25} = 37 · 1025 · 112 trades; USDJPY {D1 2023, H1 2023, D1 2022-25} = 14 · 709 · 58 trades. **Accuracy floor is data-bound, not a bug:** sub-pip intrabar exit residual and ~0.5%/y swap residual.
+- **Market data:** ticks + bars complete 2012-11 → 2026-06 for **EURUSD and USDJPY only** (~84k H1 bars each). EURJPY partial (validation reference); US500 present. The other five G7 majors have **no data**.
+- **Performance:** warm NNFX H1 year ≈ 1.5s · D1 10y ≈ 3.2s · H1 10y ≈ 25s; Learning frozen-tape replay ≈ 3.12× per pass; cold preload ~12-15 min per 10y dense-tick window (Parquet cache at `~/.cache/cAlgo/preload`). Rejected as measured dead ends: numpy ring-buffer for `SeriesAPI`, mypyc/Cython.
+- **Torch:** 2.13.0+cpu, 24 threads. `Library/__init__.py` preloads `libiomp5md.dll` before MKL and sets `KMP_DUPLICATE_LIB_OK` — **do not delete**. Pin torch in the pip section of `Quant.yml` so `--prune` cannot clobber it.
+- **DRL thesis: delivered and approved.** EURUSD H1 + D1 decisions ⇒ +34.02%/11y vs b&h −2.93%, regime 67.0%, β 0.130. Method locked in `Research/DDPG-EURUSD-H1/REPRODUCE.md`.
 
 ## TOOL-SPECIFIC COMMANDS
 - **Environment:** Use the `Quant` conda environment (`conda run -n Quant <command>`).
 - **Testing:** `conda run -n Quant python -m pytest Tests/ --ignore=Tests/Spotware --ignore=Tests/Bloomberg`.
-- **C# Build:** `dotnet build Sources/`.
+- **C# Build:** build the specific solution, not the `Sources/` folder — e.g. `dotnet build Sources/Robots/Connector/Connector.sln` (Indicators and Plugins have their own `.sln`). After any enum edit run `python -m Setup.Enum` to regenerate `Sources/Robots/Connector/Connector/Enum.cs`, then rebuild and reinstall the `.algo` before a live run (wire-ID mismatches silently mis-decode).
 - **Git:** The project root is a dedicated Git repository. Immediately `git add` any newly created file. **NEVER commit** — stage only; the user always has the final word.
+
+## OPERATIONAL TRAPS (each of these has cost hours)
+
+- **Learning CLI:** `--timeframe Hour` / `Daily` — the *friendly* parameter-tree key, never `H1`/`D1`. A missing key **auto-vivifies an empty node** and fails silently.
+- **Learning verbosity:** never run H1/large-bar Learning at `Info`/`Debug` — per-bar log flood costs ~0.6s/bar (a 9h hang for one episode). Use `Warning` always; spawn workers too.
+- **`LearningAPI._export_`** has a signature collision — run with `export=False`.
+- **Logging:** stdlib `logging.disable()` does nothing here; silence via handler levels (`log.console.set_verbose_level(...)`).
+- **Console encoding:** `·`/`→` crash cp1252 stdout — use `conda run --no-capture-output` and/or `PYTHONIOENCODING=utf-8`, and `sys.stdout.reconfigure(encoding="utf-8")` in standalone scripts.
+- **`QueryAPI` placeholders:** raw SQL cannot use `::type` casts — `::name::` is the interpolation token. Use `CAST(x AS text)` / `to_char(...)`.
+- **BLAS in standalone scripts:** calling `np.corrcoef`/LAPACK without importing `Library` first can abort the process (exit 127) — set `KMP_DUPLICATE_LIB_OK=TRUE` or import `Library` to get the `libiomp5md` preload.
+- **ProcessPool cleanup:** kill worker **children before parents**; orphaned `spawn_main` workers hold ~2 GB each at 0% CPU forever and starve later runs.
+- **`psutil` cmdline filters** match your own `python -c "...script.py..."` probe — exclude `os.getpid()`.
+- **This repo lives under OneDrive** — `shutil.rmtree(..., ignore_errors=True)` can fail silently on sync-locked paths; pass an `onerror` handler and verify with `path.exists()`.
 
 ## CODING PHILOSOPHY
 1. **Precision & Accuracy:** Prioritize correct, working code over speed.
@@ -56,7 +79,7 @@ If structural changes (new folders or modules) are not reflected in this file: n
 ## PROJECT STRUCTURE MAP
 
 ### Python (`Library/`)
-- **`Library/App`**: Versioned Dash framework — `V1/` frozen legacy (critical bugfixes only), `V2/` active. The package root re-exports nothing: consumers pin a version explicitly (`from Library.App.V2 import AppAPI`); versions share zero code. V2 integrates `Library/Auth` opt-in (`AppAPI(auth=..., access=...)`): the router gate enforces `max(app.access, page.access)` per page, anonymous visitors are redirected to `LoginPageAPI` at `/login`, authenticated-but-underprivileged users get the forbidden layout, and the router mirrors the server session into the client `user` store (name label + per-role icon tint). `Table.py` provides the reusable live table — `TableAPI` (fingerprint-gated polling; `_EDITABLE_` adds cell edit/insert/delete write hooks synced to the database).
+- **`Library/App`**: Versioned Dash framework — `V1/` frozen legacy (critical bugfixes only), `V2/` active. The package root re-exports nothing: consumers pin a version explicitly (`from Library.App.V2 import AppAPI`); versions share zero code. V2 integrates `Library/Auth` opt-in (`AppAPI(auth=..., access=...)`): the router gate enforces `max(app.access, page.access)` per page, anonymous visitors are redirected to `LoginPageAPI` at `/login`, authenticated-but-underprivileged users get the forbidden layout, and the router mirrors the server session into the client `user` store (name label + per-role icon tint). `Table.py` provides the reusable live table — `TableAPI` (fingerprint-gated polling; `_EDITABLE_` adds cell edit/insert/delete write hooks synced to the database). `Lightweight.py` is the **TradingView-backed charting + tabling system** and the default for new pages: typed spec dataclasses (`SeriesAPI`/`PaneAPI`/`MarkerAPI`/`LineAPI`/`GlyphAPI`/`SpanAPI`/`DealAPI`/`ColumnAPI`/`SheetAPI`/`WorkspaceAPI`, plus `PointAPI` data helpers — `candles`/`line`/`conform`/`rebase`/`decimate`/`thin`/`cell`) feed `LightweightChartAPI` (multi-pane synced charts: candles/line/area/histogram/bar/baseline, markers, deal map, threshold bands, cross-pane crosshair + range sync) and `LightweightTableAPI` (virtualized grid — only visible rows in the DOM, client-side sort, single/ctrl/shift selection, sheet tabs, row→chart drill-down), composed page-level by `LightweightPageAPI` (same hooks as `TableAPI`: `_columns_`/`_rows_`/`_fingerprint_`/`_detail_base_`/`_actions_`/`_extras_`). Payloads travel in a hidden `<script type="application/json">` carrier (a plain serverside callback on its `children` refreshes it — no clientside bridge needed); selections travel back through a companion store via `set_props`. The vendored library lives at `Assets/lightweight.js` (**v4 API — do not bump to v5**), the renderer at `Assets/Scripts/Lightweight.js` (mount/dispose on a `MutationObserver` because the SPA router swaps content and `on_leave` fires too late), the palette at `Assets/Styles/lightweight.css` as `--lw-*` CSS variables for light and dark. `WorkspaceAPI.document()` emits the same view as a self-contained HTML file. `PageAPI` owns the shared `_icon_`/`toolbar` helpers used by both table systems.
 - **`Library/Auth`**: Server-side authentication + RBAC on the Postgres `Auth` schema. `RoleAPI` (`Public` < `Viewer` < `Editor` < `Moderator` < `Administrator`, `grants()`), `PasswordAPI` (Argon2id hash/verify/rehash), `UserAPI`/`TeamAPI`/`OfficeAPI` datapoints, `IdentityAPI`/`AnonymousAPI` (Flask-Login users), the provider seam (`LocalAuthProviderAPI` · `CloudflareAuthProviderAPI` · `OIDCAuthProviderAPI` — SSO users JIT-provisioned by email as `Viewer`), and `AuthAPI` (installs Flask-Login + `ProxyFix` + hardened cookies; `find`/`locate`/`authenticate`/`login`/`logout`/`provision`/`create`/`touch`/`password`). Zero environment coupling: `AuthAPI(secure=True, secret=None)` constructor params only (no secret ⇒ fresh random per process ⇒ restart forces re-login). Seeding via `Setup/Auth.py`.
 - **`Library/Bloomberg`**: Bloomberg API integration (`HistoricalAPI`, `IntradayAPI`, `ReferenceAPI`, `StreamingAPI`, `QueryAPI`).
 - **`Library/Database`**: Database abstraction layer (`DatabaseAPI`, `DataclassAPI`, `DatapointAPI`, `QueryAPI`, `EnumerationAPI`, dataframe utilities). Oracle, Postgres, and SQL Server subpackages.
@@ -88,6 +111,12 @@ If structural changes (new folders or modules) are not reflected in this file: n
 - **Naming:** `test_<Subject>.py` (e.g., `test_Realtime.py`).
 - **Style:** Same coding rules and density as the main codebase; no docstrings.
 - **Exclusions:** `Tests/Spotware/` (live broker) and `Tests/Bloomberg/` (live Terminal) are excluded from the standard run.
+
+### Research (`Research/`)
+- **Purpose:** freeze the *method* behind a delivered research result so it can be re-run after the framework moves on. One folder per campaign (`Research/DDPG-EURUSD-H1/`).
+- **Contents:** `REPRODUCE.md` (the lock — environment, framework state, exact commands, evaluation protocol, acceptance criteria, verification checklist), the training harness and evaluation script at the root, and per-phase analyses under `Analysis/`.
+- **Not library code.** These are research instruments: `SWEEP_*`/`ROBUST_*` environment knobs are allowed here (the no-environment-variable rule governs `Library/`, not campaign harnesses), and they are exempt from the no-comment rule only where a measured caveat must travel with the code.
+- **Distinct from `Library/Research`** (planned in `TODOS.md` §2), which is the DB-backed run-tracking *module*.
 
 ### Setup (`Setup/`)
 - **One boot entry.** Windows Task Scheduler runs only the master orchestrator (`Quant Scheduler` logon task → `pythonw Scripts/Scheduler.py` → silent tray daemon). The daemon boot-launches the service-bearing workflows (a logon replays `Environment.Cache → Update → Tunnel → Server` in order), supervises services, cron-launches scheduled workflows, and advances manual ones.
