@@ -518,13 +518,11 @@ def calculate_holding_times(df: pl.DataFrame, stop: date) -> tuple[float, float,
     entry_ts = str(PositionAPI.ID.EntryTimestamp)
     exit_ts = str(TradeAPI.ID.ExitTimestamp)
     if df.is_empty() or entry_ts not in df.columns: return 0.0, 0.0, 0.0
-    if exit_ts in df.columns:
-        h_times = df[exit_ts] - df[entry_ts]
-    else:
-        stop_dt = datetime.combine(stop, datetime.min.time()) if isinstance(stop, date) and not isinstance(stop, datetime) else stop
-        h_times = pl.Series([stop_dt] * len(df)) - df[entry_ts]
-    def _days_(td: timedelta) -> float: return td.total_seconds() / 86400.0 if td else 0.0
-    return _days_(h_times.max()), _days_(h_times.mean()), _days_(h_times.min())
+    stop_dt = datetime.combine(stop, datetime.min.time()) if isinstance(stop, date) and not isinstance(stop, datetime) else stop
+    exits = df[exit_ts].fill_null(stop_dt) if exit_ts in df.columns else pl.Series([stop_dt] * len(df))
+    seconds = (exits - df[entry_ts]).dt.total_seconds().clip(lower_bound=0)
+    def _days_(value) -> float: return float(value) / 86400.0 if value is not None else 0.0
+    return _days_(seconds.max()), _days_(seconds.mean()), _days_(seconds.min())
 
 def calculate_ratio(ann_ret_pct: float, risk_pct: float, rfr: float = 0.0) -> float:
     risk_pct = abs(risk_pct) if risk_pct else 1e-2
