@@ -1,0 +1,96 @@
+{
+  "ATRScale": 1.5,
+  "ActionShape": 1,
+  "Activity": 10,
+  "Balance": 300,
+  "Best": 0.0261010579248928,
+  "Continuous": false,
+  "DirectionalEntryThreshold": [
+    -0.0,
+    0.0
+  ],
+  "DirectionalExitThreshold": [
+    -0.0,
+    0.0
+  ],
+  "Episodes": 30,
+  "Epochs": 1,
+  "Final": false,
+  "Fitness": "Calmar Ratio Annualized",
+  "FullRange": {
+    "AccountReturn": -38.569101758547795,
+    "AnnualizedReturn": -3.9022781812541263,
+    "BuyTrades": 12566.0,
+    "Calmar": -0.08567330565360838,
+    "LongBars": 43549.0,
+    "MaxDrawdown": 50.53817699231441,
+    "NetReturn": -35.47887549440365,
+    "SellTrades": 8065.0,
+    "Sharpe": -0.3077145580699585,
+    "ShortBars": 22814.0,
+    "Sortino": -0.43849300963033305,
+    "Start": "2015-01-01T00:00:00",
+    "Stop": "2026-01-01T23:59:59.999999",
+    "Trades": 20631.0
+  },
+  "GradientSteps": 1,
+  "Mirror": true,
+  "MirrorRatio": 0.5,
+  "ObservationShape": 38,
+  "Patience": 99,
+  "Ratio": 0.3,
+  "Results": [
+    {
+      "Folds": [
+        -0.6633963286629472
+      ],
+      "FoldsReturn": [
+        -25.594727812848063
+      ],
+      "Metric": 0.0261010579248928,
+      "Seed": 0,
+      "Test": 0.0261010579248928,
+      "TestReturn": 0.2333838228167906
+    },
+    {
+      "Folds": [
+        0.4252581027836257
+      ],
+      "FoldsReturn": [
+        12.442441373624845
+      ],
+      "Metric": -0.8450403452632385,
+      "Seed": 1,
+      "Test": -0.8450403452632385,
+      "TestReturn": -27.439696006224512
+    },
+    {
+      "Folds": [
+        2.0993404756600382
+      ],
+      "FoldsReturn": [
+        18.204913332273897
+      ],
+      "Metric": -0.8358171197594659,
+      "Seed": 2,
+      "Test": -0.8358171197594659,
+      "TestReturn": -12.77631814237602
+    }
+  ],
+  "Reward": "LogReturn",
+  "RewardScale": 1.0,
+  "RiskPercentage": 1.0,
+  "Rolling": false,
+  "Security": "1",
+  "Seeds": 3,
+  "Start": "2015-01-01T00:00:00",
+  "Stop": "2026-01-01T23:59:59.999999",
+  "Strategy": "DDPGStrategyAPI",
+  "Testing": 12,
+  "Timeframe": "H1",
+  "TrainFrequency": 1,
+  "Training": 0,
+  "Validation": 12,
+  "Weights": "C:\\Users\\Admin\\AppData\\Local\\Temp\\claude\\C--Users-Admin-OneDrive-Documents-cAlgo\\dfaf0be2-e579-4eb0-9df6-25a2c66ff13f\\scratchpad\\m_S1000\\1 H1 DDPGStrategyAPI",
+  "Workers": 3
+}

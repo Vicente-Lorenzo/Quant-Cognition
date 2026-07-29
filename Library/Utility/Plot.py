@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import webbrowser
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Union
 
@@ -27,12 +27,18 @@ class PlotAPI:
     _SHORT_: str = "#ff3b5c"
     _DATUM_: str = "#8a94a6"
     _BAND_: str = "#ffd23d"
+    _ENTRY_: str = "#ffd23d"
+    _EXIT_: str = "#c77dff"
     _FONT_: str = "system-ui, -apple-system, 'Segoe UI', sans-serif"
     _DIGITS_: int = 7
     _ROWS_: int = 500
+    _DEALS_: int = 400
+    _PAD_: float = 1.5
 
     def __init__(self,
                  title: str,
+                 description: Union[str, None] = None,
+                 start: Union[date, datetime, None] = None,
                  currency: str = "EUR",
                  bars: Union[list, None] = None,
                  equity: Union[list, None] = None,
@@ -40,9 +46,14 @@ class PlotAPI:
                  signals: Union[list, None] = None,
                  trades: Union[list, None] = None,
                  benchmarks: Union[dict, None] = None,
-                 thresholds: Union[tuple, None] = None,
+                 directional: Union[tuple, None] = None,
+                 volumetric: Union[tuple, None] = None,
+                 markers: bool = False,
+                 deals: bool = False,
                  tables: Union[dict, None] = None) -> None:
         self._title_ = title
+        self._description_ = description
+        self._rebase_start_ = start
         self._currency_ = currency
         self._bars_ = bars or []
         self._equity_ = equity or []
@@ -50,7 +61,10 @@ class PlotAPI:
         self._signals_ = signals or []
         self._trades_ = trades or []
         self._benchmarks_ = benchmarks or {}
-        self._thresholds_ = thresholds
+        self._directional_ = directional
+        self._volumetric_ = volumetric
+        self._markers_enabled_ = markers
+        self._deals_enabled_ = deals
         self._sheets_ = tables or {}
 
     @staticmethod
@@ -91,18 +105,33 @@ class PlotAPI:
             conformed.append((stamp, current))
         return conformed
 
-    @staticmethod
-    def _anchor_(series: list) -> Union[datetime, None]:
-        starts = [entry[0][0] for entry in series if entry]
-        return max(starts) if starts else None
+    def _before_start_(self, stamp: datetime) -> bool:
+        start = self._rebase_start_
+        if start is None: return False
+        return stamp < start if isinstance(start, datetime) else stamp.date() < start
 
-    @staticmethod
-    def _rebase_(series: list, anchor: Union[datetime, None]) -> list:
-        base = None
-        for stamp, value in series:
-            if value and (anchor is None or stamp <= anchor): base = value
-            elif base is None and value: base = value
-        return [(stamp, 100.0 * value / base if base and value else None) for stamp, value in series]
+    def _rebase_(self, series: list) -> list:
+        base = next((value for stamp, value in series if value and not self._before_start_(stamp)), None)
+        return [(stamp, 100.0 * value / base if base and value and not self._before_start_(stamp) else None) for stamp, value in series]
+
+    def _lines_(self, thresholds: Union[tuple, None]) -> list:
+        if not thresholds: return []
+        entry, exit = thresholds
+        lines = []
+        for bounds, kind, color in ((entry, "Entry", self._ENTRY_), (exit, "Exit", self._EXIT_)):
+            if not bounds: continue
+            lower, upper = bounds
+            if upper is not None: lines.append({"price": float(upper), "color": color, "title": f"Buy {kind}"})
+            if lower is not None: lines.append({"price": float(lower), "color": color, "title": f"Sell {kind}"})
+        return lines
+
+    def _deals_(self) -> list:
+        deals = []
+        for uid, direction, entry, exit, entry_price, exit_price, net in self._trades_[:self._DEALS_]:
+            if entry is None or exit is None or entry_price is None or exit_price is None: continue
+            deals.append({"uid": str(uid), "color": self._UP_ if (net or 0.0) >= 0.0 else self._DOWN_,
+                          "points": [{"time": self._epoch_(entry), "value": entry_price}, {"time": self._epoch_(exit), "value": exit_price}]})
+        return deals
 
     def _markers_(self) -> list:
         markers = []
@@ -125,8 +154,9 @@ class PlotAPI:
         return spans
 
     @staticmethod
-    def _bound_(series: list) -> Union[float, None]:
+    def _bound_(series: list, lines: Union[list, None] = None) -> Union[float, None]:
         extremes = [abs(point["value"]) for point in series if point.get("value") is not None]
+        extremes += [abs(line["price"]) for line in lines or ()]
         return max(extremes) or None if extremes else None
 
     @classmethod
@@ -168,21 +198,25 @@ class PlotAPI:
             {"key": "balance", "name": "Balance", "type": "line", "color": self._BALANCE_, "width": 2, "data": self._line_(self._conform_(self._balance_, spine))},
             {"key": "equity", "name": "Equity", "type": "line", "color": self._EQUITY_, "width": 2, "data": self._line_(self._conform_(self._equity_, spine))}) if series["data"]]
         if self._signals_:
-            raw = self._line_(self._conform_([(stamp, value) for stamp, value, _ in self._signals_], spine))
-            panes.append({"id": "signal", "title": "Signal", "flex": 13, "format": "signal", "bound": self._bound_(raw), "margins": {"top": 0.10, "bottom": 0.10}, "lines": list(self._thresholds_ or ()), "datum": 0.0, "series": [
-                {"key": "signal", "name": "Raw Signal", "type": "line", "color": self._EQUITY_, "width": 2, "data": raw}]})
-            volumes = self._unique_([{"time": self._epoch_(stamp), "value": volume, "color": self._LONG_ if volume > 0 else self._SHORT_} for stamp, _, volume in self._signals_ if volume])
-            panes.append({"id": "volume", "title": "Signal Volume", "flex": 12, "format": "volume", "bound": self._bound_(volumes), "margins": {"top": 0.10, "bottom": 0.10}, "datum": 0.0, "series": [
-                {"key": "volume", "name": "Signal Volume", "type": "histogram", "color": self._LONG_, "data": volumes}]})
+            dsignal = self._line_(self._conform_([(stamp, signal) for stamp, signal, _, _, _ in self._signals_], spine))
+            ddelta = self._line_(self._conform_([(stamp, delta) for stamp, _, delta, _, _ in self._signals_], spine))
+            vsignal = self._line_(self._conform_([(stamp, volume) for stamp, _, _, volume, _ in self._signals_], spine))
+            vdelta = self._line_(self._conform_([(stamp, delta) for stamp, _, _, _, delta in self._signals_], spine))
+            directional = self._lines_(self._directional_)
+            panes.append({"id": "signal", "title": "Direction", "flex": 13, "format": "signal", "bound": self._bound_(dsignal, directional), "margins": {"top": 0.16, "bottom": 0.16}, "lines": directional, "datum": 0.0, "series": [
+                {"key": "dsignal", "name": "Direction Signal", "type": "line", "color": self._EQUITY_, "width": 2, "axis": "right", "toggle": True, "data": dsignal},
+                {"key": "ddelta", "name": "Direction Delta", "type": "line", "color": self._BAND_, "width": 1, "axis": "left", "toggle": True, "visible": False, "data": ddelta}]})
+            volumetric = self._lines_(self._volumetric_)
+            panes.append({"id": "volume", "title": "Volume", "flex": 12, "format": "volume", "bound": self._bound_(vsignal, volumetric), "margins": {"top": 0.16, "bottom": 0.16}, "lines": volumetric, "datum": 0.0, "series": [
+                {"key": "vsignal", "name": "Volume Signal", "type": "line", "color": self._LONG_, "width": 2, "axis": "right", "toggle": True, "data": vsignal},
+                {"key": "vdelta", "name": "Volume Delta", "type": "line", "color": self._SHORT_, "width": 1, "axis": "left", "toggle": True, "visible": False, "data": vdelta}]})
         opening = self._balance_[0][1] if self._balance_ else (self._equity_[0][1] if self._equity_ else None)
         if accounts: panes.append({"id": "accounts", "title": f"Balance & Equity ({self._currency_})", "flex": 17, "format": "value", "datum": opening, "series": accounts})
-        curves = [self._equity_] + [series for series in self._benchmarks_.values() if series]
-        anchor = self._anchor_(curves)
         growth = []
-        if self._equity_: growth.append({"key": "strategy", "name": "Strategy", "type": "line", "color": self._EQUITY_, "width": 2, "data": self._line_(self._conform_(self._rebase_(self._equity_, anchor), spine))})
+        if self._equity_: growth.append({"key": "strategy", "name": "Strategy", "type": "line", "color": self._EQUITY_, "width": 2, "data": self._line_(self._conform_(self._rebase_(self._equity_), spine))})
         for index, (name, series) in enumerate(self._benchmarks_.items()):
             if not series: continue
-            growth.append({"key": f"benchmark{index}", "name": name, "type": "line", "color": self._BENCHMARKS_[index % len(self._BENCHMARKS_)], "width": 2, "data": self._line_(self._conform_(self._rebase_(series, anchor), spine))})
+            growth.append({"key": f"benchmark{index}", "name": name, "type": "line", "color": self._BENCHMARKS_[index % len(self._BENCHMARKS_)], "width": 2, "data": self._line_(self._conform_(self._rebase_(series), spine))})
         if growth: panes.append({"id": "growth", "title": "Growth vs Benchmarks (rebased 100)", "flex": 20, "format": "value", "datum": 100.0, "series": growth})
         return panes
 
@@ -190,7 +224,8 @@ class PlotAPI:
         panes = self._panes_()
         for index, pane in enumerate(panes): pane["last"] = index == len(panes) - 1
         timeline = sorted({point["time"] for pane in panes for series in pane["series"] for point in series["data"]})
-        payload = {"title": self._title_, "currency": self._currency_, "panes": panes, "sheets": self._sheets_payload_(), "spans": self._spans_(), "timeline": [{"time": stamp} for stamp in timeline],
+        payload = {"title": self._title_, "description": self._description_, "currency": self._currency_, "panes": panes, "sheets": self._sheets_payload_(), "spans": self._spans_(), "deals": self._deals_(),
+                   "defaults": {"markers": bool(self._markers_enabled_), "deals": bool(self._deals_enabled_)}, "timeline": [{"time": stamp} for stamp in timeline],
                    "theme": {"plane": self._PLANE_, "surface": self._SURFACE_, "ink": self._INK_, "secondary": self._SECONDARY_,
                              "muted": self._MUTED_, "grid": self._GRID_, "border": self._BORDER_, "up": self._UP_, "down": self._DOWN_, "datum": self._DATUM_, "band": self._BAND_}}
         return _TEMPLATE_.replace("__LIBRARY__", self._LIBRARY_.read_text(encoding="utf-8")).replace("__PAYLOAD__", json.dumps(self._compact_(payload), default=str, separators=(",", ":"))).replace("__FONT__", self._FONT_)
@@ -211,6 +246,11 @@ _TEMPLATE_ = """<!doctype html>
   body { font-family: __FONT__; color: #b8c0cc; display: flex; flex-direction: column; overflow-x: hidden; }
   header { flex: 0 0 auto; padding: 9px 14px; border-bottom: 1px solid #1e2431; background: #0b0e14; position: sticky; top: 0; z-index: 5; }
   h1 { margin: 0; font-size: 14px; font-weight: 600; color: #ffffff; letter-spacing: .01em; }
+  .desc { margin: 3px 0 0; font-size: 11px; color: #8a94a6; line-height: 1.45; }
+  .comment { margin: 6px 0 0; font-size: 11px; color: #d7dde6; line-height: 1.45; min-height: 18px;
+             padding: 4px 8px; border: 1px dashed #2a3242; border-radius: 5px; outline: none; background: #0d1119; }
+  .comment:focus { border-color: #3d9bff; border-style: solid; }
+  .comment:empty::before { content: attr(data-placeholder); color: #5a6472; }
   .bar { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 5px 12px;
          background: #0b0e14; border-bottom: 1px solid #1e2431; overflow-x: auto; scrollbar-width: thin; }
   .chips { display: flex; gap: 5px; flex-wrap: nowrap; }
@@ -242,7 +282,7 @@ _TEMPLATE_ = """<!doctype html>
   .count { font-size: 10px; color: #7b8798; padding: 6px 12px; }
 </style></head>
 <body>
-<header><h1 id="title"></h1></header>
+<header><h1 id="title"></h1><p id="description" class="desc" hidden></p><div id="comment" class="comment" contenteditable="true" spellcheck="false" data-placeholder="Add analysis notes… (saved in this browser)"></div></header>
 <main id="panes"></main>
 <section class="sheets" id="sheets" hidden><div class="bar"><span class="pane-title">Report</span><span class="chips" id="tabs"></span><span class="count" id="count"></span></div><div class="grid" id="grid"></div></section>
 <script>__LIBRARY__</script>
@@ -251,8 +291,16 @@ const DATA = __PAYLOAD__;
 const T = DATA.theme;
 document.getElementById("title").textContent = DATA.title;
 document.title = DATA.title;
+const descEl = document.getElementById("description");
+if (DATA.description) { descEl.textContent = DATA.description; descEl.hidden = false; }
+const commentEl = document.getElementById("comment");
+const commentKey = "quantplot-comment:" + DATA.title;
+try { commentEl.textContent = localStorage.getItem(commentKey) || ""; } catch (e) {}
+commentEl.addEventListener("input", () => { try { localStorage.setItem(commentKey, commentEl.textContent); } catch (e) {} });
 const panesRoot = document.getElementById("panes");
-const charts = [], registry = [], priced = [];
+const charts = [], registry = [], priced = [], dealSeries = [];
+let markersOn = !!(DATA.defaults && DATA.defaults.markers);
+let dealsOn = !!(DATA.defaults && DATA.defaults.deals);
 const fmt = (kind, value) => {
   if (value === undefined || value === null) return "–";
   if (kind === "signal") return value.toFixed(4);
@@ -275,6 +323,7 @@ DATA.panes.forEach((pane) => {
     layout: { background: { type: "solid", color: T.surface }, textColor: T.secondary, fontFamily: getComputedStyle(document.body).fontFamily, fontSize: 11, attributionLogo: false },
     grid: { vertLines: { color: T.grid }, horzLines: { color: T.grid } },
     rightPriceScale: { borderColor: T.border, scaleMargins: pane.margins || { top: 0.10, bottom: 0.08 } },
+    leftPriceScale: { borderColor: T.border, scaleMargins: pane.margins || { top: 0.10, bottom: 0.08 }, visible: (pane.series || []).some((s) => s.axis === "left") },
     timeScale: { borderColor: T.border, timeVisible: true, secondsVisible: false, rightOffset: 4, visible: pane.last, minBarSpacing: 0.02 },
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal,
                  vertLine: { color: T.muted, width: 1, style: 3, labelBackgroundColor: T.border },
@@ -283,41 +332,79 @@ DATA.panes.forEach((pane) => {
     localization: { priceFormatter: (value) => fmt(pane.format, value) }
   });
   charts.push(chart);
-  if (DATA.timeline && DATA.timeline.length) {
-    const backbone = chart.addLineSeries({ lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false });
-    backbone.setData(DATA.timeline);
-  }
-  pane.series.forEach((spec) => {
+  const backboneOptions = { lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false };
+  if (pane.bound) backboneOptions.autoscaleInfoProvider = () => ({ priceRange: { minValue: -pane.bound, maxValue: pane.bound } });
+  const backbone = chart.addLineSeries(backboneOptions);
+  if (DATA.timeline && DATA.timeline.length) backbone.setData(DATA.timeline);
+  chart.__primary__ = backbone;
+  const bandOptions = (level) => ({ price: level.price, color: level.color, lineWidth: 1, lineStyle: 2, title: level.title,
+                                    axisLabelVisible: true, axisLabelColor: level.color, axisLabelTextColor: "#0b0e14" });
+  const datumOptions = { price: pane.datum, color: T.datum, lineWidth: 1, lineStyle: 0, axisLabelVisible: true, axisLabelColor: T.border, axisLabelTextColor: T.ink };
+  let bandOwner = null, bandHandles = [];
+  const bandState = (pane.lines || []).map(() => true);
+  const renderBands = () => {
+    if (!bandOwner) return;
+    bandHandles.forEach((handle) => { try { bandOwner.series.removePriceLine(handle); } catch (error) {} });
+    bandHandles = [];
+    (pane.lines || []).forEach((level, index) => { if (bandState[index]) bandHandles.push(bandOwner.series.createPriceLine(bandOptions(level))); });
+    if (pane.datum !== undefined && pane.datum !== null) bandHandles.push(bandOwner.series.createPriceLine(datumOptions));
+  };
+  (pane.lines || []).forEach((level, index) => {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.innerHTML = '<span class="swatch" style="background:' + level.color + '"></span><span>' + level.title + "</span> <b>" + fmt(pane.format, level.price) + "</b>";
+    chip.onclick = () => { bandState[index] = !bandState[index]; chip.classList.toggle("off", !bandState[index]); renderBands(); };
+    chips.append(chip);
+  });
+  const buildSeries = (spec, type) => {
+    const base = { priceLineVisible: false, lastValueVisible: false, priceScaleId: spec.axis === "left" ? "left" : "right" };
+    if (spec.axis !== "left" && pane.bound) base.autoscaleInfoProvider = () => ({ priceRange: { minValue: -pane.bound, maxValue: pane.bound } });
     let series;
-    const base = { priceLineVisible: false, lastValueVisible: false };
-    if (pane.bound) base.autoscaleInfoProvider = () => ({ priceRange: { minValue: -pane.bound, maxValue: pane.bound } });
-    if (spec.type === "candlestick") {
+    if (type === "candlestick") {
       series = chart.addCandlestickSeries({ ...base, upColor: T.up, downColor: T.down, borderUpColor: T.up, borderDownColor: T.down, wickUpColor: T.up, wickDownColor: T.down });
-    } else if (spec.type === "histogram") {
-      series = chart.addHistogramSeries({ ...base, color: spec.color, priceFormat: { type: "volume" } });
+      series.setData(spec.data);
+    } else if (type === "histogram") {
+      series = chart.addHistogramSeries({ ...base });
+      series.setData(spec.data.map((point) => ({ time: point.time, value: point.value, color: (point.value || 0) >= 0 ? T.up : T.down })));
     } else {
       series = chart.addLineSeries({ ...base, color: spec.color, lineWidth: spec.width || 2, lineType: 0 });
+      series.setData(spec.data);
     }
-    series.setData(spec.data);
-    if (spec.markers && spec.markers.length) { series.__markers__ = spec.markers; series.setMarkers(spec.markers); priced.push(series); }
+    if (spec.markers && spec.markers.length) { series.__markers__ = spec.markers; series.setMarkers(markersOn ? spec.markers : []); }
     if (spec.visible === false) series.applyOptions({ visible: false });
-    if (!chart.__bands__) {
-      chart.__bands__ = true;
-      (pane.lines || []).forEach((level) => series.createPriceLine({ price: level, color: T.band, lineWidth: 1, lineStyle: 2, axisLabelVisible: true, axisLabelColor: T.band, axisLabelTextColor: "#0b0e14", title: "entry" }));
-    }
-    if (pane.datum !== undefined && pane.datum !== null && !chart.__datum__) {
-      chart.__datum__ = true;
-      series.createPriceLine({ price: pane.datum, color: T.datum, lineWidth: 1, lineStyle: 0, axisLabelVisible: true, axisLabelColor: T.border, axisLabelTextColor: T.ink });
-    }
+    return series;
+  };
+  pane.series.forEach((spec) => {
+    const series = buildSeries(spec, spec.type);
+    if (spec.markers && spec.markers.length) priced.push(series);
+    const lookup = new Map();
+    spec.data.forEach((point) => lookup.set(point.time, point.close !== undefined ? point.close : point.value));
+    if (!chart.__lookup__) chart.__lookup__ = lookup;
+    const entry = { series, chart, lookup, format: pane.format, type: spec.type };
+    if (!bandOwner && spec.axis !== "left") { bandOwner = entry; renderBands(); }
     const chip = document.createElement("span");
     chip.className = "chip" + (spec.visible === false ? " off" : "");
     chip.innerHTML = '<span class="swatch" style="background:' + (spec.type === "candlestick" ? T.up : spec.color) + '"></span><span>' + spec.name + "</span> <b></b>";
-    chip.onclick = () => { const on = !(series.options().visible === false); series.applyOptions({ visible: !on }); chip.classList.toggle("off", on); };
+    chip.onclick = () => { const on = !(entry.series.options().visible === false); entry.series.applyOptions({ visible: !on }); chip.classList.toggle("off", on); };
     chips.append(chip);
-    const lookup = new Map();
-    spec.data.forEach((point) => lookup.set(point.time, point.close !== undefined ? point.close : point.value));
-    if (!chart.__primary__) { chart.__primary__ = series; chart.__lookup__ = lookup; }
-    registry.push({ series, chip, chart, lookup, format: pane.format, type: spec.type });
+    entry.chip = chip;
+    registry.push(entry);
+    if (spec.toggle) {
+      let kind = spec.type;
+      const tchip = document.createElement("span");
+      tchip.className = "chip";
+      const paint = () => { tchip.innerHTML = '<span>' + spec.name + "</span> <b>" + (kind === "histogram" ? "▮ Bars" : "▬ Lines") + "</b>"; };
+      paint();
+      tchip.onclick = () => {
+        const visible = entry.series.options().visible !== false;
+        chart.removeSeries(entry.series);
+        kind = kind === "line" ? "histogram" : "line";
+        entry.series = buildSeries({ ...spec, visible: visible ? undefined : false }, kind);
+        if (entry === bandOwner) { bandHandles = []; renderBands(); }
+        paint();
+      };
+      chips.append(tchip);
+    }
   });
   (pane.glyphs || []).forEach((glyph) => {
     const badge = document.createElement("span");
@@ -325,6 +412,28 @@ DATA.panes.forEach((pane) => {
     badge.innerHTML = '<i style="color:' + glyph.color + '">' + glyph.symbol + "</i>" + glyph.name;
     chips.append(badge);
   });
+  if (pane.glyphs && pane.glyphs.length) {
+    if (priced.length) {
+      const mc = document.createElement("span");
+      mc.className = "chip" + (markersOn ? "" : " off");
+      mc.innerHTML = '<span class="swatch" style="background:' + T.secondary + '"></span><span>Markers</span>';
+      mc.onclick = () => { markersOn = !markersOn; priced.forEach((s) => s.setMarkers(markersOn ? s.__markers__ : [])); mc.classList.toggle("off", !markersOn); };
+      chips.append(mc);
+    }
+    if (DATA.deals && DATA.deals.length) {
+      const dc = document.createElement("span");
+      dc.className = "chip" + (dealsOn ? "" : " off");
+      dc.innerHTML = '<span class="swatch" style="background:' + T.up + '"></span><span>Deal Map</span>';
+      dc.onclick = () => { dealsOn = !dealsOn; dealSeries.forEach((l) => l.applyOptions({ visible: dealsOn })); dc.classList.toggle("off", !dealsOn); };
+      chips.append(dc);
+    }
+  }
+});
+(DATA.deals || []).forEach((deal) => {
+  const line = charts[0].addLineSeries({ color: deal.color, lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: dealsOn });
+  line.setData(deal.points);
+  line.setMarkers(deal.points.map((point) => ({ time: point.time, position: "inBar", color: deal.color, shape: "circle", size: 0.6 })));
+  dealSeries.push(line);
 });
 let syncing = false;
 charts.forEach((chart) => {
@@ -359,7 +468,7 @@ if (sheets.length) {
   const clear = () => {
     lines.forEach((entry) => entry.series.removePriceLine(entry.line));
     lines = [];
-    priced.forEach((series) => series.setMarkers(series.__markers__));
+    priced.forEach((series) => series.setMarkers(markersOn ? series.__markers__ : []));
   };
   const select = (keys, row) => {
     clear();

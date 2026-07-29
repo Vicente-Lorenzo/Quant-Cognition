@@ -73,7 +73,8 @@ DDPG:
     ER: [ER, 120]
   FundamentalManagement: null
   SentimentalManagement: null
-  PortfolioManagement: null
+  PortfolioManagement:
+    PositionMode: [Netting]
 Netting:
   MoneyManagement: null
   RiskManagement: null

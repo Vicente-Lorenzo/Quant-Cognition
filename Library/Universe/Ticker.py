@@ -16,6 +16,7 @@ if TYPE_CHECKING: from Library.Database import DatabaseAPI
 
 _FUTURES_PATTERNS_ = (re.compile(r"-F$"), re.compile(r"-[A-Z]{3}\d{2}$"), re.compile(r"[FGHJKMNQUVXZ]\d{1,2}$"), re.compile(r"\d!$"))
 _PREFIX_PATTERN_ = re.compile(r"^[^:]+:")
+_WHITESPACE_PATTERN_ = re.compile(r"\s+")
 _TRIM_PATTERN_ = re.compile(r"[#.+\-_]+$")
 _SUFFIX_LIST_ = sorted([".m", ".micro", ".pro", ".p", ".raw", ".ecn", ".s", ".std", ".i", ".ins", ".z", ".v", ".x", ".plus", "+", "-", "_sb", ".c", ".cfd"], key=len, reverse=True)
 
@@ -57,6 +58,7 @@ class TickerAPI(UniverseAPI):
     @staticmethod
     def normalize(uid: str) -> str:
         uid = _PREFIX_PATTERN_.sub("", uid)
+        uid = _WHITESPACE_PATTERN_.sub("", uid)
         uid = _TRIM_PATTERN_.sub("", uid)
         for pattern in _FUTURES_PATTERNS_: uid = pattern.sub("", uid)
         lower_uid = uid.lower()
