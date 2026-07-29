@@ -4,6 +4,7 @@ from enum import IntFlag
 from typing import Union, ClassVar
 from dataclasses import dataclass
 
+from Library.Market.Price import Direction
 from Library.Protocol.Binary import BinaryAPI
 from Library.Database.Dataclass import DataclassAPI
 from Library.Utility.Enumeration import EnumerationAPI
@@ -76,6 +77,7 @@ class ActionID(EnumerationAPI):
 @dataclass(slots=True)
 class ActionAPI(DataclassAPI):
     ActionID: ClassVar[ActionID]
+    Direction: ClassVar[Direction] = Direction.Neutral
     def serialize(self) -> bytes:
         raise NotImplementedError
 

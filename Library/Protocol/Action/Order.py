@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Union, ClassVar
 from dataclasses import dataclass
 
+from Library.Market.Price import Direction
 from Library.Utility.Typing import cast
 from Library.Protocol.Binary import BinaryAPI
 from Library.Protocol.Action.Action import ActionAPI, ActionID
@@ -10,6 +11,7 @@ from Library.Protocol.Action.Action import ActionAPI, ActionID
 @dataclass(slots=True)
 class OpenBuyStopOrderActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.OpenBuyStopOrder
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'd', 'd', 'D', 'D')
     Volume: float
     StopPrice: float
@@ -25,6 +27,7 @@ class OpenBuyStopOrderActionAPI(ActionAPI):
 @dataclass(slots=True)
 class OpenSellStopOrderActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.OpenSellStopOrder
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'd', 'd', 'D', 'D')
     Volume: float
     StopPrice: float
@@ -40,6 +43,7 @@ class OpenSellStopOrderActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifyBuyStopOrderVolumeActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopOrderVolume
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     OrderID: int
     Volume: float
@@ -49,6 +53,7 @@ class ModifyBuyStopOrderVolumeActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifySellStopOrderVolumeActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopOrderVolume
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     OrderID: int
     Volume: float
@@ -58,6 +63,7 @@ class ModifySellStopOrderVolumeActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifyBuyStopOrderStopPriceActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopOrderStopPrice
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     OrderID: int
     StopPrice: float
@@ -69,6 +75,7 @@ class ModifyBuyStopOrderStopPriceActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifySellStopOrderStopPriceActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopOrderStopPrice
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     OrderID: int
     StopPrice: float
@@ -80,6 +87,7 @@ class ModifySellStopOrderStopPriceActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifyBuyStopOrderStopLossActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopOrderStopLoss
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
     OrderID: int
     StopLoss: Union[float, None]
@@ -91,6 +99,7 @@ class ModifyBuyStopOrderStopLossActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifySellStopOrderStopLossActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopOrderStopLoss
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
     OrderID: int
     StopLoss: Union[float, None]
@@ -102,6 +111,7 @@ class ModifySellStopOrderStopLossActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifyBuyStopOrderTakeProfitActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopOrderTakeProfit
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
     OrderID: int
     TakeProfit: Union[float, None]
@@ -113,6 +123,7 @@ class ModifyBuyStopOrderTakeProfitActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifySellStopOrderTakeProfitActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopOrderTakeProfit
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
     OrderID: int
     TakeProfit: Union[float, None]
@@ -124,6 +135,7 @@ class ModifySellStopOrderTakeProfitActionAPI(ActionAPI):
 @dataclass(slots=True)
 class CloseBuyStopOrderActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.CloseBuyStopOrder
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
     OrderID: int
     def serialize(self) -> bytes:
@@ -132,6 +144,7 @@ class CloseBuyStopOrderActionAPI(ActionAPI):
 @dataclass(slots=True)
 class CloseSellStopOrderActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.CloseSellStopOrder
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
     OrderID: int
     def serialize(self) -> bytes:
@@ -140,6 +153,7 @@ class CloseSellStopOrderActionAPI(ActionAPI):
 @dataclass(slots=True)
 class OpenBuyLimitOrderActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.OpenBuyLimitOrder
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'd', 'd', 'D', 'D')
     Volume: float
     LimitPrice: float
@@ -155,6 +169,7 @@ class OpenBuyLimitOrderActionAPI(ActionAPI):
 @dataclass(slots=True)
 class OpenSellLimitOrderActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.OpenSellLimitOrder
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'd', 'd', 'D', 'D')
     Volume: float
     LimitPrice: float
@@ -170,6 +185,7 @@ class OpenSellLimitOrderActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifyBuyLimitOrderVolumeActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyLimitOrderVolume
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     OrderID: int
     Volume: float
@@ -179,6 +195,7 @@ class ModifyBuyLimitOrderVolumeActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifySellLimitOrderVolumeActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifySellLimitOrderVolume
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     OrderID: int
     Volume: float
@@ -188,6 +205,7 @@ class ModifySellLimitOrderVolumeActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifyBuyLimitOrderLimitPriceActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyLimitOrderLimitPrice
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     OrderID: int
     LimitPrice: float
@@ -199,6 +217,7 @@ class ModifyBuyLimitOrderLimitPriceActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifySellLimitOrderLimitPriceActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifySellLimitOrderLimitPrice
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     OrderID: int
     LimitPrice: float
@@ -210,6 +229,7 @@ class ModifySellLimitOrderLimitPriceActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifyBuyLimitOrderStopLossActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyLimitOrderStopLoss
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
     OrderID: int
     StopLoss: Union[float, None]
@@ -221,6 +241,7 @@ class ModifyBuyLimitOrderStopLossActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifySellLimitOrderStopLossActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifySellLimitOrderStopLoss
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
     OrderID: int
     StopLoss: Union[float, None]
@@ -232,6 +253,7 @@ class ModifySellLimitOrderStopLossActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifyBuyLimitOrderTakeProfitActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyLimitOrderTakeProfit
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
     OrderID: int
     TakeProfit: Union[float, None]
@@ -243,6 +265,7 @@ class ModifyBuyLimitOrderTakeProfitActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifySellLimitOrderTakeProfitActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifySellLimitOrderTakeProfit
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
     OrderID: int
     TakeProfit: Union[float, None]
@@ -254,6 +277,7 @@ class ModifySellLimitOrderTakeProfitActionAPI(ActionAPI):
 @dataclass(slots=True)
 class CloseBuyLimitOrderActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.CloseBuyLimitOrder
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
     OrderID: int
     def serialize(self) -> bytes:
@@ -262,6 +286,7 @@ class CloseBuyLimitOrderActionAPI(ActionAPI):
 @dataclass(slots=True)
 class CloseSellLimitOrderActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.CloseSellLimitOrder
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
     OrderID: int
     def serialize(self) -> bytes:
@@ -270,6 +295,7 @@ class CloseSellLimitOrderActionAPI(ActionAPI):
 @dataclass(slots=True)
 class OpenBuyStopLimitOrderActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.OpenBuyStopLimitOrder
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'd', 'd', 'd', 'D', 'D')
     Volume: float
     StopPrice: float
@@ -287,6 +313,7 @@ class OpenBuyStopLimitOrderActionAPI(ActionAPI):
 @dataclass(slots=True)
 class OpenSellStopLimitOrderActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.OpenSellStopLimitOrder
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'd', 'd', 'd', 'D', 'D')
     Volume: float
     StopPrice: float
@@ -304,6 +331,7 @@ class OpenSellStopLimitOrderActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifyBuyStopLimitOrderVolumeActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopLimitOrderVolume
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     OrderID: int
     Volume: float
@@ -313,6 +341,7 @@ class ModifyBuyStopLimitOrderVolumeActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifySellStopLimitOrderVolumeActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopLimitOrderVolume
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     OrderID: int
     Volume: float
@@ -322,6 +351,7 @@ class ModifySellStopLimitOrderVolumeActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifyBuyStopLimitOrderStopPriceActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopLimitOrderStopPrice
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     OrderID: int
     StopPrice: float
@@ -333,6 +363,7 @@ class ModifyBuyStopLimitOrderStopPriceActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifySellStopLimitOrderStopPriceActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopLimitOrderStopPrice
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     OrderID: int
     StopPrice: float
@@ -344,6 +375,7 @@ class ModifySellStopLimitOrderStopPriceActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifyBuyStopLimitOrderLimitPriceActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopLimitOrderLimitPrice
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     OrderID: int
     LimitPrice: float
@@ -355,6 +387,7 @@ class ModifyBuyStopLimitOrderLimitPriceActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifySellStopLimitOrderLimitPriceActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopLimitOrderLimitPrice
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     OrderID: int
     LimitPrice: float
@@ -366,6 +399,7 @@ class ModifySellStopLimitOrderLimitPriceActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifyBuyStopLimitOrderStopLossActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopLimitOrderStopLoss
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
     OrderID: int
     StopLoss: Union[float, None]
@@ -377,6 +411,7 @@ class ModifyBuyStopLimitOrderStopLossActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifySellStopLimitOrderStopLossActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopLimitOrderStopLoss
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
     OrderID: int
     StopLoss: Union[float, None]
@@ -388,6 +423,7 @@ class ModifySellStopLimitOrderStopLossActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifyBuyStopLimitOrderTakeProfitActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopLimitOrderTakeProfit
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
     OrderID: int
     TakeProfit: Union[float, None]
@@ -399,6 +435,7 @@ class ModifyBuyStopLimitOrderTakeProfitActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifySellStopLimitOrderTakeProfitActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopLimitOrderTakeProfit
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
     OrderID: int
     TakeProfit: Union[float, None]
@@ -410,6 +447,7 @@ class ModifySellStopLimitOrderTakeProfitActionAPI(ActionAPI):
 @dataclass(slots=True)
 class CloseBuyStopLimitOrderActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.CloseBuyStopLimitOrder
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
     OrderID: int
     def serialize(self) -> bytes:
@@ -418,6 +456,7 @@ class CloseBuyStopLimitOrderActionAPI(ActionAPI):
 @dataclass(slots=True)
 class CloseSellStopLimitOrderActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.CloseSellStopLimitOrder
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
     OrderID: int
     def serialize(self) -> bytes:

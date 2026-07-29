@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import ClassVar, TYPE_CHECKING
 from dataclasses import dataclass
 
+from Library.Market.Price import Direction
 from Library.Database.Dataclass import DataclassAPI
 from Library.Utility.Enumeration import EnumerationAPI
 from Library.Portfolio.Account import AccountAPI
@@ -105,6 +106,7 @@ class UpdateID(EnumerationAPI):
 
 @dataclass(slots=True)
 class UpdateAPI(DataclassAPI):
+    Direction: ClassVar[Direction] = Direction.Neutral
     Account: AccountAPI
     Security: SecurityAPI
     Market: MarketAPI

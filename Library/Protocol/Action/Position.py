@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Union, ClassVar
 from dataclasses import dataclass
 
+from Library.Market.Price import Direction
 from Library.Utility.Typing import cast
 from Library.Protocol.Binary import BinaryAPI
 from Library.Portfolio.Position import PositionType
@@ -11,6 +12,7 @@ from Library.Protocol.Action.Action import ActionAPI, ActionID
 @dataclass(slots=True)
 class OpenBuyPositionActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.OpenBuyPosition
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 's', 'd', 'D', 'D')
     PositionType: PositionType
     Volume: float
@@ -26,6 +28,7 @@ class OpenBuyPositionActionAPI(ActionAPI):
 @dataclass(slots=True)
 class OpenSellPositionActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.OpenSellPosition
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 's', 'd', 'D', 'D')
     PositionType: PositionType
     Volume: float
@@ -41,6 +44,7 @@ class OpenSellPositionActionAPI(ActionAPI):
 @dataclass(slots=True)
 class IncreaseBuyPositionVolumeActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.IncreaseBuyPositionVolume
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     PositionID: int
     Volume: float
@@ -50,6 +54,7 @@ class IncreaseBuyPositionVolumeActionAPI(ActionAPI):
 @dataclass(slots=True)
 class IncreaseSellPositionVolumeActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.IncreaseSellPositionVolume
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     PositionID: int
     Volume: float
@@ -59,6 +64,7 @@ class IncreaseSellPositionVolumeActionAPI(ActionAPI):
 @dataclass(slots=True)
 class DecreaseBuyPositionVolumeActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.DecreaseBuyPositionVolume
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     PositionID: int
     Volume: float
@@ -68,6 +74,7 @@ class DecreaseBuyPositionVolumeActionAPI(ActionAPI):
 @dataclass(slots=True)
 class DecreaseSellPositionVolumeActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.DecreaseSellPositionVolume
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     PositionID: int
     Volume: float
@@ -77,6 +84,7 @@ class DecreaseSellPositionVolumeActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifyBuyPositionVolumeActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyPositionVolume
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     PositionID: int
     Volume: float
@@ -86,6 +94,7 @@ class ModifyBuyPositionVolumeActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifySellPositionVolumeActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifySellPositionVolume
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
     PositionID: int
     Volume: float
@@ -95,6 +104,7 @@ class ModifySellPositionVolumeActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifyBuyPositionStopLossActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyPositionStopLoss
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
     PositionID: int
     StopLoss: Union[float, None]
@@ -106,6 +116,7 @@ class ModifyBuyPositionStopLossActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifySellPositionStopLossActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifySellPositionStopLoss
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
     PositionID: int
     StopLoss: Union[float, None]
@@ -117,6 +128,7 @@ class ModifySellPositionStopLossActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifyBuyPositionTakeProfitActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyPositionTakeProfit
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
     PositionID: int
     TakeProfit: Union[float, None]
@@ -128,6 +140,7 @@ class ModifyBuyPositionTakeProfitActionAPI(ActionAPI):
 @dataclass(slots=True)
 class ModifySellPositionTakeProfitActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.ModifySellPositionTakeProfit
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
     PositionID: int
     TakeProfit: Union[float, None]
@@ -139,6 +152,7 @@ class ModifySellPositionTakeProfitActionAPI(ActionAPI):
 @dataclass(slots=True)
 class CloseBuyPositionActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.CloseBuyPosition
+    Direction: ClassVar[Direction] = Direction.Buy
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
     PositionID: int
     def serialize(self) -> bytes:
@@ -147,6 +161,7 @@ class CloseBuyPositionActionAPI(ActionAPI):
 @dataclass(slots=True)
 class CloseSellPositionActionAPI(ActionAPI):
     ActionID: ClassVar[ActionID] = ActionID.CloseSellPosition
+    Direction: ClassVar[Direction] = Direction.Sell
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
     PositionID: int
     def serialize(self) -> bytes:
