@@ -15,7 +15,7 @@ from Library.Database.Dataframe import DataframeAPI, pd, pl
 from Library.Database.Query import QueryAPI
 from Library.Utility.Service import ServiceAPI
 from Library.Utility.Memory import memory_to_string
-from Library.Logging.Handler import HandlerLoggingAPI
+from Library.Logging import LoggingAPI
 from Library.Utility.Path import PathAPI, traceback_package
 from Library.Utility.Typing import MISSING, Missing
 
@@ -124,8 +124,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         self._pool_ = {}
         self._lock_ = threading.RLock()
 
-        defaults = {k: v for k, v in {"database": database, "schema": schema, "table": table}.items() if v is not None}
-        self._log_ = HandlerLoggingAPI(self.__class__.__name__, **defaults)
+        self._log_ = LoggingAPI(*(value for value in (database, schema, table) if value is not None))
 
     @property
     @abstractmethod

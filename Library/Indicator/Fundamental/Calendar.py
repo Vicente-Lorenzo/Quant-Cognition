@@ -8,8 +8,8 @@ from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 from typing import ClassVar, TYPE_CHECKING
 
-from Library.Logging.Handler import HandlerLoggingAPI
-from Library.Logging.Logging import VerboseLevel
+from Library.Logging import LoggingAPI
+from Library.Logging import VerboseLevel
 from Library.Database.Dataframe import pl
 from Library.Database.Database import PrimaryKey
 from Library.Database.Datapoint import DatapointAPI
@@ -199,7 +199,7 @@ class CalendarAPI(DatapointAPI):
 
     @classmethod
     def download(cls, db: DatabaseAPI, start: datetime, stop: datetime, by: str = "Calendar", delay: float = 3.0) -> int:
-        log = HandlerLoggingAPI(Class=cls.__name__)
+        log = LoggingAPI()
         cls(db=db, migrate=True, autosave=False, autoload=False)
         total, week = 0, start - timedelta(days=start.weekday())
         while week <= stop:
@@ -222,9 +222,9 @@ def main() -> int:
     parser.add_argument("--stop", default=None)
     parser.add_argument("--delay", type=float, default=3.0)
     args = parser.parse_args()
-    with HandlerLoggingAPI(Class=CalendarAPI.__name__) as log:
-        log.console.set_verbose_level(VerboseLevel.Info)
-        log.file.set_verbose_level(VerboseLevel.Debug)
+    with LoggingAPI() as log:
+        log.console.set_level(VerboseLevel.Info)
+        log.file.set_level(VerboseLevel.Debug)
         try:
             now = datetime.now()
             start = datetime.strptime(args.start, "%Y-%m-%d") if args.start else now - timedelta(days=6)

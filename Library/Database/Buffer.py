@@ -11,7 +11,7 @@ from typing import Callable, Type, Union, TYPE_CHECKING
 from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
-from Library.Logging.Handler import HandlerLoggingAPI
+from Library.Logging import LoggingAPI
 from Library.Utility.Statistic import Timer
 
 if TYPE_CHECKING:
@@ -49,7 +49,7 @@ class BufferAPI(threading.Thread):
 
         self._db_: Callable[[], DatabaseAPI] = db or (lambda: PostgresDatabaseAPI(database=DatapointAPI.Database))
 
-        self._log_: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="Buffer Management")
+        self._log_: LoggingAPI = LoggingAPI("Buffer Management")
 
         if not self._active_:
             self.add = self._noop_
