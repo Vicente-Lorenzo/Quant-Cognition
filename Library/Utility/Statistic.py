@@ -30,8 +30,8 @@ class Timer:
 def timer(func: Callable):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        from Library.Logging.Handler import HandlerLoggingAPI
-        log = HandlerLoggingAPI()
+        from Library.Logging import LoggingAPI
+        log = LoggingAPI()
         t = Timer()
         t.start()
         result = func(*args, **kwargs)
@@ -43,8 +43,8 @@ def timer(func: Callable):
 def profiler(func: Callable):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        from Library.Logging.Handler import HandlerLoggingAPI
-        log = HandlerLoggingAPI()
+        from Library.Logging import LoggingAPI
+        log = LoggingAPI()
         timestamp = datetime_to_string(datetime.now(), "%Y%m%d-%H%M%S")
         with cProfile.Profile() as pr:
             result = func(*args, **kwargs)

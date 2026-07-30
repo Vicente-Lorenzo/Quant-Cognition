@@ -2,6 +2,7 @@ import os
 import sys
 import shutil
 import subprocess
+from pathlib import Path
 from typing import Union
 from functools import lru_cache
 
@@ -107,6 +108,48 @@ def find_host_port(*, host: str = "localhost", port_min: int = 1024, port_max: i
             rc = probe.connect_ex((host, port))
             if rc != 0: return port
     raise RuntimeError(f"No free port found in range [{port_min}, {port_max}] on {host}")
+
+def find_frame_module(frame) -> Union[str, None]:
+    if frame is None: return None
+    module = frame.f_globals.get("__name__", "")
+    if module and module != "__main__": return module.rsplit(".", 1)[-1]
+    origin = frame.f_globals.get("__file__")
+    return Path(origin).stem if origin else None
+
+def find_frame_class(frame) -> Union[str, None]:
+    if frame is None: return None
+    instance = frame.f_locals.get("self")
+    if instance is not None: return type(instance).__name__
+    owner = frame.f_locals.get("cls")
+    if isinstance(owner, type): return owner.__name__
+    qualname = getattr(frame.f_code, "co_qualname", "")
+    if "." in qualname:
+        prefix = qualname.rsplit(".", 1)[0]
+        if not prefix.endswith("<locals>"): return prefix.rsplit(".", 1)[-1]
+    return find_frame_module(frame)
+
+def find_frame_package(frame, *, package: str = "Library") -> Union[str, None]:
+    if frame is None: return None
+    parts = [part for part in frame.f_globals.get("__name__", "").split(".") if part]
+    if len(parts) >= 2: return parts[1] if parts[0] == package else parts[0]
+    origin = frame.f_globals.get("__file__")
+    if not origin: return None
+    return Path(origin).resolve().parent.name or None
+
+def find_caller_frame(*, depth: int = 0, skip: Union[str, None] = None):
+    frame = sys._getframe(depth + 1)
+    while frame is not None and skip and frame.f_globals.get("__name__", "").startswith(skip):
+        frame = frame.f_back
+    return frame
+
+def find_caller_module(*, depth: int = 0, skip: Union[str, None] = None) -> Union[str, None]:
+    return find_frame_module(find_caller_frame(depth=depth + 1, skip=skip))
+
+def find_caller_class(*, depth: int = 0, skip: Union[str, None] = None) -> Union[str, None]:
+    return find_frame_class(find_caller_frame(depth=depth + 1, skip=skip))
+
+def find_caller_package(*, depth: int = 0, skip: Union[str, None] = None, package: str = "Library") -> Union[str, None]:
+    return find_frame_package(find_caller_frame(depth=depth + 1, skip=skip), package=package)
 
 def terminate(pid: Union[int, None]) -> None:
     import psutil

@@ -19,8 +19,8 @@ class ServiceAPI(ABC):
         self._api_ = api or self
         self._guard_ = None
 
-        from Library.Logging.Handler import HandlerLoggingAPI
-        self._log_: HandlerLoggingAPI = HandlerLoggingAPI(self.__class__.__name__)
+        from Library.Logging import LoggingAPI
+        self._log_: LoggingAPI = LoggingAPI()
 
     @property
     def _parent_(self) -> bool: return self._api_ is self
