@@ -13,7 +13,7 @@ from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Database.Dataframe import pl
 from Library.Market.Market import MarketAPI
 from Library.Portfolio.Statistic import MAXEQUITYDRAWDOWNPERC, NET_TOTAL_AGGREGATED, SHARPERATIO, SORTINORATIO, STATISTICS_METRICS_LABEL
-from Library.Logging import HandlerLoggingAPI, VerboseLevel
+from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Parameter import Parameter
 from Library.Strategy.Hybrid.DDPG import DDPGStrategyAPI
 from Library.System.Backtesting import BacktestingAPI
@@ -68,7 +68,7 @@ def node_for():
     node["PortfolioManagement"] = {"PositionMode": ["Netting"]}
     return node
 
-HandlerLoggingAPI(Class="Robust", Subclass="Eval").set_verbose_level(VerboseLevel.Warning)
+LoggingAPI(Class="Robust", Subclass="Eval").set_level(VerboseLevel.Warning)
 DDPGStrategyAPI.Weights = MODEL
 rows = []
 try:

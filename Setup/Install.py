@@ -10,7 +10,7 @@ from Library.Scheduler.Manager import ManagerAPI
 from Library.Scheduler.Workflow import Kind
 from Library.Scheduler.Task import TaskType
 from Library.Database import PostgresDatabaseAPI
-from Library.Logging import HandlerLoggingAPI
+from Library.Logging import LoggingAPI
 from Library.Utility.Path import traceback_root
 from Setup.Enum import write_all
 from Setup.Auth import setup_auth, seed_admin, ADMIN
@@ -30,6 +30,7 @@ WORKFLOWS = [
         "tasks": [
             {"uid": "Setup.Enums", "name": "Setup Enums", "path": "Setup/Enum.py", "kind": Kind.Scheduled, "description": "Generates the C# Connector enum source from the Python enumerations"},
             {"uid": "Setup.Auth", "name": "Setup Auth", "path": "Setup/Auth.py", "kind": Kind.Scheduled, "description": "Creates the Auth schema (Team · Office · User) and seeds the administrator account"},
+            {"uid": "Setup.Logging", "name": "Setup Logging", "path": "Setup/Logging.py", "kind": Kind.Scheduled, "description": "Creates the Logging schema (Log) holding one durable row per captured log"},
             {"uid": "Setup.Scheduler", "name": "Setup Scheduler", "path": "Setup/Scheduler.py", "kind": Kind.Scheduled, "description": "Creates the Scheduler schema (Workflow · Task · Dependency · Run)"},
             {"uid": "Setup.Universe", "name": "Setup Universe", "path": "Setup/Universe.py", "kind": Kind.Scheduled, "description": "Creates and populates the Universe schema (categories · providers · tickers · contracts · securities · timeframes)"},
             {"uid": "Setup.Market", "name": "Setup Market", "path": "Setup/Market.py", "kind": Kind.Scheduled, "description": "Creates the Market schema (Tick · Bar)"},
@@ -37,7 +38,8 @@ WORKFLOWS = [
             {"uid": "Setup.Indicator", "name": "Setup Indicator", "path": "Setup/Indicator.py", "kind": Kind.Scheduled, "description": "Creates the Indicator schema (Calendar)"}
         ],
         "edges": [
-            ("Setup.Auth", "Setup.Scheduler"),
+            ("Setup.Auth", "Setup.Logging"),
+            ("Setup.Logging", "Setup.Scheduler"),
             ("Setup.Scheduler", "Setup.Universe"),
             ("Setup.Universe", "Setup.Portfolio"),
             ("Setup.Universe", "Setup.Market"),
@@ -51,12 +53,14 @@ WORKFLOWS = [
         "description": "Daily maintenance — refreshes the Quant conda environment then relaunches the always-on tunnel and application server",
         "tasks": [
             {"uid": "Environment.Cache", "name": "Cache Cleanup", "path": "Scripts/Cache.py", "kind": Kind.Scheduled, "description": "Removes Python bytecode and tooling caches plus C# build artifacts across the repository"},
+            {"uid": "Environment.Retention", "name": "Log Retention", "path": "Setup/Retention.py", "kind": Kind.Scheduled, "description": "Prunes expired log files from the temporary folders and expired log rows from the Logging schema"},
             {"uid": "Environment.Update", "name": "Environment Update", "path": "Setup/Environment.py", "kind": Kind.Scheduled, "description": "Syncs the active conda environment to the pinned Quant manifest while the services are suspended"},
             {"uid": "Environment.Tunnel", "name": "Cloudflare Tunnel", "path": "Library/Web/Tunnel.py", "kind": Kind.Service, "description": "Runs the named Cloudflare tunnel exposing the loopback app server to the public edge"},
             {"uid": "Environment.Server", "name": "Application Server", "path": "Library/Web/Tray.py", "kind": Kind.Service, "description": "Serves the Quant Cognition Dash application under waitress with its own system-tray controls"}
         ],
         "edges": [
-            ("Environment.Cache", "Environment.Update"),
+            ("Environment.Cache", "Environment.Retention"),
+            ("Environment.Retention", "Environment.Update"),
             ("Environment.Update", "Environment.Tunnel"),
             ("Environment.Tunnel", "Environment.Server")
         ]
@@ -104,7 +108,7 @@ def schedule_orchestrator():
     subprocess.run(["schtasks", "/Create", "/TN", ORCHESTRATOR, "/TR", command, "/SC", "ONLOGON", "/F"], check=True)
 
 def main(database="Quant", boot=False):
-    with HandlerLoggingAPI(Class="Setup", Subclass="Install") as log:
+    with LoggingAPI() as log:
         try:
             provision(database)
             register(ManagerAPI(database=database))

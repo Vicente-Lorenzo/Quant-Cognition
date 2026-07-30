@@ -7,14 +7,14 @@ for stream in (sys.stdout, sys.stderr):
 from datetime import datetime
 from Library.Database.Dataframe import np, pd
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
-from Library.Logging import HandlerLoggingAPI, VerboseLevel
+from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Market.Market import MarketAPI
 from Library.Universe.Provider import ProviderAPI
 from Library.Universe.Ticker import TickerAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Universe.Timeframe import TimeframeAPI
 
-HandlerLoggingAPI(Class="Ceiling", Subclass="Regime").set_verbose_level(VerboseLevel.Warning)
+LoggingAPI(Class="Ceiling", Subclass="Regime").set_level(VerboseLevel.Warning)
 with PostgresDatabaseAPI(database="Quant") as db:
     tf = TimeframeAPI(UID="H1", db=db, autoload=True)
     p = ProviderAPI(UID="Spotware(cTrader)", db=db, autoload=True)

@@ -11,7 +11,7 @@ import torch
 torch.set_num_threads(int(os.environ.get("SWEEP_THREADS", "6")))
 import yaml
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
-from Library.Logging import HandlerLoggingAPI, VerboseLevel
+from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Parameter import Parameter
 from Library.Strategy.Hybrid.DDPG import DDPGStrategyAPI
 from Library.System.Learning import LearningAPI
@@ -114,7 +114,7 @@ def label(h1, h2, lam, warmup, threshold):
     return f"n{h1}x{h2} {reg} wu{warmup} {thr}{mir}"
 
 def main():
-    HandlerLoggingAPI(Class="Sweep", Subclass="Campaign").set_verbose_level(VerboseLevel[os.environ.get("SWEEP_VERBOSE", "Warning")])
+    LoggingAPI(Class="Sweep", Subclass="Campaign").set_level(VerboseLevel[os.environ.get("SWEEP_VERBOSE", "Warning")])
     spread, commission, swap = costs()
     wroot = os.environ.get("SWEEP_WEIGHTS_ROOT")
     if wroot:

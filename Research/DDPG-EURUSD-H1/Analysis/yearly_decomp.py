@@ -11,7 +11,7 @@ import yaml
 from datetime import datetime
 from Library.Database.Dataframe import np
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
-from Library.Logging import HandlerLoggingAPI, VerboseLevel
+from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Parameter import Parameter
 from Library.Strategy.Hybrid.DDPG import DDPGStrategyAPI
 from Library.System.Backtesting import BacktestingAPI
@@ -59,7 +59,7 @@ def _probe_(self, update, actions, raw=None):
                       float(raw) if raw is not None else float("nan")))
     return outcome
 
-HandlerLoggingAPI(Class="Yearly", Subclass="Decomposition").set_verbose_level(VerboseLevel.Warning)
+LoggingAPI(Class="Yearly", Subclass="Decomposition").set_level(VerboseLevel.Warning)
 DDPGStrategyAPI.Weights = MODEL
 DDPGStrategyAPI._emit_ = _probe_
 try:

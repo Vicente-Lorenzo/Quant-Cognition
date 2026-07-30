@@ -10,7 +10,7 @@ from Library.Auth.Team import TeamAPI
 from Library.Auth.Office import OfficeAPI
 from Library.Auth.User import UserAPI
 from Library.Database import PostgresDatabaseAPI
-from Library.Logging import HandlerLoggingAPI
+from Library.Logging import LoggingAPI
 
 ADMIN = "vicente.aser.lorenzo@gmail.com"
 
@@ -27,7 +27,7 @@ def seed_admin(auth, *, username=ADMIN, email=ADMIN, name="Vicente Lorenzo", pas
     return secret
 
 def main(database="Quant"):
-    with HandlerLoggingAPI(Class="Setup", Subclass="Auth") as log:
+    with LoggingAPI() as log:
         try:
             with PostgresDatabaseAPI(database=database) as db:
                 setup_auth(db)

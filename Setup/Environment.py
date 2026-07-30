@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from Library.Logging import HandlerLoggingAPI
+from Library.Logging import LoggingAPI
 from Library.Utility.Path import traceback_root
 
 def find_manifest() -> Path:
@@ -31,7 +31,7 @@ def update_environment():
     raise FileNotFoundError("Mamba or Conda executable not found")
 
 def main():
-    with HandlerLoggingAPI(Class="Setup", Subclass="Environment") as log:
+    with LoggingAPI() as log:
         try:
             update_environment()
             log.info(lambda: f"Environment Setup: Completed · {find_manifest().name}")

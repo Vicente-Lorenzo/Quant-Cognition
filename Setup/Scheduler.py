@@ -1,8 +1,11 @@
 import sys
+import uuid
+import socket
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from Library.Logging.Log import LogAPI
 from Library.Scheduler.Workflow import WorkflowAPI
 from Library.Scheduler.Task import TaskAPI
 from Library.Scheduler.Dependency import DependencyAPI
@@ -10,8 +13,9 @@ from Library.Scheduler.Cycle import CycleAPI
 from Library.Scheduler.Run import RunAPI
 from Library.Scheduler.Scheduler import SchedulerAPI
 from Library.Database import PostgresDatabaseAPI, QueryAPI
-from Library.Logging import HandlerLoggingAPI
+from Library.Logging import LoggingAPI
 from Setup.Auth import setup_auth
+from Setup.Logging import setup_logging
 
 def setup_notify(db):
     schema, channel = WorkflowAPI.Schema, SchedulerAPI.Channel
@@ -32,7 +36,28 @@ def setup_index(db):
     db.executeone(QueryAPI(f'CREATE INDEX IF NOT EXISTS "Run_Status_idx" ON "{schema}"."{RunAPI.Table}" ("Status")'))
     db.executeone(QueryAPI(f'CREATE INDEX IF NOT EXISTS "Cycle_WID_StartedAt_idx" ON "{schema}"."{CycleAPI.Table}" ("WID", "StartedAt" DESC)'))
 
+def migrate_runs(db):
+    schema, table = RunAPI.Schema, RunAPI.Table
+    pending = db.select(schema=schema, table=table, columns=["UID", "TID", "Log", "StartedAt", "StoppedAt", "Status"], condition='"LID" IS NULL AND "Log" IS NOT NULL')
+    if pending.is_empty(): return 0
+    migrated = 0
+    for row in pending.iter_rows(named=True):
+        source = Path(row["Log"])
+        if not source.is_file(): continue
+        try: content = source.read_text(encoding="utf-8", errors="replace")
+        except OSError: continue
+        record = LogAPI(
+            UID=uuid.uuid4().hex, Source=row["TID"], Level=row["Status"], Host=socket.gethostname(),
+            User=None, Process=None, Path=str(source), Content=content, Records=content.count("\n"),
+            Dropped=0, Truncated=False, StartedAt=row["StartedAt"], StoppedAt=row["StoppedAt"], db=db)
+        record.save(by="Migration")
+        db.execute(QueryAPI(f'UPDATE {db._target_(schema, table)} SET "LID" = :lid: WHERE "UID" = :uid:'), [{"lid": record.UID, "uid": row["UID"]}])
+        migrated += 1
+    db.commit()
+    return migrated
+
 def setup_scheduler(db):
+    setup_logging(db)
     db.create(schema=WorkflowAPI.Schema)
     WorkflowAPI(db=db, migrate=True, autosave=False, autoload=False)
     TaskAPI(db=db, migrate=True, autosave=False, autoload=False)
@@ -41,9 +66,10 @@ def setup_scheduler(db):
     RunAPI(db=db, migrate=True, autosave=False, autoload=False)
     setup_index(db)
     setup_notify(db)
+    migrate_runs(db)
 
 def main(database="Quant"):
-    with HandlerLoggingAPI(Class="Setup", Subclass="Scheduler") as log:
+    with LoggingAPI() as log:
         try:
             with PostgresDatabaseAPI(database=database) as db:
                 setup_auth(db)

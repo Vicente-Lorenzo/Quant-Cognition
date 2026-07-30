@@ -11,7 +11,7 @@ import yaml
 from datetime import datetime
 from Library.Database.Dataframe import np, pd
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
-from Library.Logging import HandlerLoggingAPI, VerboseLevel
+from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Market.Market import MarketAPI
 from Library.Parameter import Parameter
 from Library.Strategy.Hybrid.DDPG import DDPGStrategyAPI
@@ -46,7 +46,7 @@ tm["MARegime"] = ["SMA", 1440]; tm["MAEpoch"] = ["SMA", 2880]
 tm["MACycle"] = ["SMA", 4320]; tm["MAEra"] = ["SMA", 5040]
 node["PortfolioManagement"] = {"PositionMode": ["Netting"]}
 
-HandlerLoggingAPI(Class="Permutation", Subclass="Test").set_verbose_level(VerboseLevel.Warning)
+LoggingAPI(Class="Permutation", Subclass="Test").set_level(VerboseLevel.Warning)
 DDPGStrategyAPI.Weights = MODEL
 try:
     with PostgresDatabaseAPI(database="Quant") as db:

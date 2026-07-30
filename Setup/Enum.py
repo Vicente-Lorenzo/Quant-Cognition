@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from Library.Logging import HandlerLoggingAPI
+from Library.Logging import LoggingAPI
 from Library.Utility.Path import traceback_root
 
 OUTPUT_PATH = traceback_root() / "Sources" / "Robots" / "Connector" / "Connector" / "Enum.cs"
@@ -30,7 +30,7 @@ def write_all() -> Path:
     return write_enum_file([position_block(), strategy_block(), logging_block(), system_block(), update_block(), action_block(), stream_block()])
 
 def main(database="Quant"):
-    with HandlerLoggingAPI(Class="Setup", Subclass="Enums") as log:
+    with LoggingAPI() as log:
         try:
             path = write_all()
             log.info(lambda: f"Enums Setup: Completed · {path.name}")

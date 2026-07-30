@@ -9,7 +9,7 @@ from Library.Portfolio.Position import PositionAPI
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Trade import TradeAPI
 from Library.Database import PostgresDatabaseAPI
-from Library.Logging import HandlerLoggingAPI
+from Library.Logging import LoggingAPI
 
 def _migrate_(db):
     SessionAPI(db=db, migrate=True, autosave=False, autoload=False)
@@ -22,7 +22,7 @@ def populate_portfolio(db):
     _migrate_(db)
 
 def main(database="Quant"):
-    with HandlerLoggingAPI(Class="Setup", Subclass="Portfolio") as log:
+    with LoggingAPI() as log:
         try:
             with PostgresDatabaseAPI(database=database) as db:
                 populate_portfolio(db)

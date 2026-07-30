@@ -5,14 +5,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from Library.Indicator.Fundamental.Calendar import CalendarAPI
 from Library.Database import PostgresDatabaseAPI
-from Library.Logging import HandlerLoggingAPI
+from Library.Logging import LoggingAPI
 
 def setup_indicator(db):
     db.create(schema=CalendarAPI.Schema)
     CalendarAPI(db=db, migrate=True, autosave=False, autoload=False)
 
 def main(database="Quant"):
-    with HandlerLoggingAPI(Class="Setup", Subclass="Indicator") as log:
+    with LoggingAPI() as log:
         try:
             with PostgresDatabaseAPI(database=database) as db:
                 setup_indicator(db)

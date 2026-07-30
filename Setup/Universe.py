@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from Library.Database.Dataframe import pl
 from Library.Database import PostgresDatabaseAPI
-from Library.Logging import HandlerLoggingAPI
+from Library.Logging import LoggingAPI
 from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Ticker import TickerAPI, ContractType
 from Library.Universe.Contract import ContractAPI, PayoffType
@@ -339,7 +339,7 @@ def populate_universe(db):
     UniverseAPI.push_timeframes(db, _stamp_(pl.DataFrame([{str(TimeframeAPI.ID.UID): tf} for tf in timeframes])))
 
 def main(database="Quant"):
-    with HandlerLoggingAPI(Class="Setup", Subclass="Universe") as log:
+    with LoggingAPI() as log:
         try:
             with PostgresDatabaseAPI(database=database) as db:
                 populate_universe(db)

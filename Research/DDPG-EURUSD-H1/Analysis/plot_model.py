@@ -9,7 +9,7 @@ os.chdir(r"C:\Users\Admin\OneDrive\Documents\cAlgo")
 
 import yaml
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
-from Library.Logging import HandlerLoggingAPI, VerboseLevel
+from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Parameter import Parameter
 from Library.Strategy.Hybrid.DDPG import DDPGStrategyAPI
 from Library.System.Backtesting import BacktestingAPI
@@ -56,7 +56,7 @@ if slow != "0":
         tm["MAEra"] = ["SMA", 5040]
 node["PortfolioManagement"] = {"PositionMode": ["Netting"]}
 
-HandlerLoggingAPI(Class="Plot", Subclass="Model").set_verbose_level(VerboseLevel.Warning)
+LoggingAPI(Class="Plot", Subclass="Model").set_level(VerboseLevel.Warning)
 DDPGStrategyAPI.Weights = MODEL
 try:
     with PostgresDatabaseAPI(database="Quant") as db:

@@ -13,6 +13,7 @@ CHAMPION = f"{PAIR}/DDPG THESIS 2026-07-27 [S1000s0 regime67 sharpe0.46]"
 REPLICATION = f"{PAIR}/DDPG REPLICATION 2026-07-28 [E15s3 regime62 short-tilted]"
 BASELINE = HERE / "baseline.json"
 
+_FLOOR_ = 651
 EXPECTED = {"return": 34.02, "regime": 67.0, "long": 66.6, "maxdd": 23.5, "sharpe": 0.275}
 TOLERANCE = {"return": 0.05, "regime": 0.1, "long": 0.1, "maxdd": 0.1, "sharpe": 0.005}
 
@@ -137,7 +138,9 @@ else:
                           cwd=ROOT, encoding="utf-8", errors="replace")
     tail = [l for l in (proc.stdout or "").splitlines() if "passed" in l or "failed" in l]
     summary = tail[-1].strip() if tail else "no summary"
-    ok("pytest 651 passed / 0 failed", "651 passed" in summary and "failed" not in summary, summary)
+    import re as _re
+    passed = int(m.group(1)) if (m := _re.search(r"(\d+) passed", summary)) else 0
+    ok(f"pytest >= {_FLOOR_} passed / 0 failed", passed >= _FLOOR_ and "failed" not in summary, summary)
 
 print("\n" + "=" * 62)
 if failures:
