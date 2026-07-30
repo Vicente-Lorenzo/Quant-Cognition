@@ -14,7 +14,7 @@ from Library.Universe.Ticker import TickerAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Universe.Timeframe import TimeframeAPI
 
-LoggingAPI(Class="Ceiling", Subclass="Regime").set_level(VerboseLevel.Warning)
+LoggingAPI().set_level(VerboseLevel.Warning)
 with PostgresDatabaseAPI(database="Quant") as db:
     tf = TimeframeAPI(UID="H1", db=db, autoload=True)
     p = ProviderAPI(UID="Spotware(cTrader)", db=db, autoload=True)

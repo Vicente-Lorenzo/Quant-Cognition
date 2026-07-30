@@ -68,13 +68,13 @@ def test_output_reaches_stdout(monkeypatch):
     monkeypatch.setattr(sys, "stdout", stream)
     LoggingAPI.console.set_color(False)
     LoggingAPI.console.set_level(VerboseLevel.Debug)
-    LoggingAPI(Class="Screen").info(lambda: "Console Output: Delivered")
+    LoggingAPI("Screen").info(lambda: "Console Output: Delivered")
     assert "Console Output: Delivered" in stream.getvalue()
 
 def test_output_is_resolved_lazily(monkeypatch):
     LoggingAPI.console.set_color(False)
     LoggingAPI.console.set_level(VerboseLevel.Debug)
-    log = LoggingAPI(Class="Screen")
+    log = LoggingAPI("Screen")
     first = io.StringIO()
     monkeypatch.setattr(sys, "stdout", first)
     log.info(lambda: "first stream")
@@ -95,7 +95,7 @@ def test_unencodable_characters_do_not_raise(monkeypatch):
     monkeypatch.setattr(sys, "stdout", stream)
     LoggingAPI.console.set_color(False)
     LoggingAPI.console.set_level(VerboseLevel.Debug)
-    LoggingAPI(Class="Narrow").info(lambda: "Phase Warmup: Completed · Done → ✔")
+    LoggingAPI("Narrow").info(lambda: "Phase Warmup: Completed · Done → ✔")
     assert "Phase Warmup" in stream.getvalue()
 
 def test_write_to_a_broken_stream_never_raises(monkeypatch):
@@ -106,7 +106,7 @@ def test_write_to_a_broken_stream_never_raises(monkeypatch):
         def flush(self): raise OSError("pipe closed")
     monkeypatch.setattr(sys, "stdout", Broken())
     LoggingAPI.console.set_level(VerboseLevel.Debug)
-    LoggingAPI(Class="Broken").info(lambda: "should not raise")
+    LoggingAPI("Broken").info(lambda: "should not raise")
     LoggingAPI.console.flush()
 
 def test_virtual_terminal_probe_never_raises():

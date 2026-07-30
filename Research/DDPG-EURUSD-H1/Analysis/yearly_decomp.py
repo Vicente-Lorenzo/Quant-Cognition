@@ -59,7 +59,7 @@ def _probe_(self, update, actions, raw=None):
                       float(raw) if raw is not None else float("nan")))
     return outcome
 
-LoggingAPI(Class="Yearly", Subclass="Decomposition").set_level(VerboseLevel.Warning)
+LoggingAPI().set_level(VerboseLevel.Warning)
 DDPGStrategyAPI.Weights = MODEL
 DDPGStrategyAPI._emit_ = _probe_
 try:

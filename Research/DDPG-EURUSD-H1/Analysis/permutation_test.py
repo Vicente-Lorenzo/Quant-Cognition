@@ -46,7 +46,7 @@ tm["MARegime"] = ["SMA", 1440]; tm["MAEpoch"] = ["SMA", 2880]
 tm["MACycle"] = ["SMA", 4320]; tm["MAEra"] = ["SMA", 5040]
 node["PortfolioManagement"] = {"PositionMode": ["Netting"]}
 
-LoggingAPI(Class="Permutation", Subclass="Test").set_level(VerboseLevel.Warning)
+LoggingAPI().set_level(VerboseLevel.Warning)
 DDPGStrategyAPI.Weights = MODEL
 try:
     with PostgresDatabaseAPI(database="Quant") as db:

@@ -8,7 +8,7 @@ def test_every_record_from_every_thread_is_written(tmp_path, lines):
     LoggingAPI.file.set_rotation(size=0)
     threads, records = 8, 250
     def worker(index):
-        log = LoggingAPI(Class=f"Worker{index}")
+        log = LoggingAPI(f"Worker{index}")
         for step in range(records): log.info(lambda: f"Worker {index} Record {step}")
     with ThreadPoolExecutor(max_workers=threads) as pool:
         list(pool.map(worker, range(threads)))
@@ -19,7 +19,7 @@ def test_no_line_is_torn_under_concurrency(tmp_path, lines):
     LoggingAPI.file.set_level(VerboseLevel.Debug)
     LoggingAPI.file.set_rotation(size=0)
     def worker(index):
-        log = LoggingAPI(Class=f"Worker{index}")
+        log = LoggingAPI(f"Worker{index}")
         for step in range(200): log.info(lambda: f"BEGIN-{index}-{step}-{'x' * 120}-END")
     with ThreadPoolExecutor(max_workers=8) as pool:
         list(pool.map(worker, range(8)))
@@ -36,7 +36,7 @@ def test_concurrent_level_changes_never_corrupt_state(tmp_path):
             LoggingAPI.console.set_level(VerboseLevel.Debug)
             LoggingAPI.console.set_level(VerboseLevel.Silent)
     def writer():
-        log = LoggingAPI(Class="Writer")
+        log = LoggingAPI("Writer")
         for step in range(2000): log.info(lambda: f"Record {step}")
     flip = threading.Thread(target=flipper, daemon=True)
     flip.start()
@@ -51,7 +51,7 @@ def test_concurrent_rotation_is_safe(tmp_path, lines):
     LoggingAPI.file.set_level(VerboseLevel.Debug)
     LoggingAPI.file.set_rotation(size=2048, count=3)
     def worker(index):
-        log = LoggingAPI(Class=f"Worker{index}")
+        log = LoggingAPI(f"Worker{index}")
         for step in range(300): log.info(lambda: f"Worker {index} Record {step} {'y' * 60}")
     with ThreadPoolExecutor(max_workers=6) as pool:
         list(pool.map(worker, range(6)))
@@ -62,13 +62,13 @@ def test_concurrent_instances_keep_their_own_tags(tmp_path, lines):
     LoggingAPI.file.set_level(VerboseLevel.Debug)
     LoggingAPI.file.set_rotation(size=0)
     def worker(index):
-        log = LoggingAPI(Class=f"Tag{index}")
+        log = LoggingAPI(f"Tag{index}")
         for _ in range(100): log.info(lambda: "message")
     with ThreadPoolExecutor(max_workers=6) as pool:
         list(pool.map(worker, range(6)))
     LoggingAPI.file.flush()
     for index in range(6):
-        assert sum(1 for line in lines() if f"Tag{index} - Tests - message" in line) == 100
+        assert sum(1 for line in lines() if f"test_Concurrency - Tag{index} - message" in line) == 100
 
 def test_shared_sink_state_is_visible_across_threads(tmp_path):
     LoggingAPI.file.set_level(VerboseLevel.Silent)

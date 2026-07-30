@@ -9,6 +9,10 @@ from dataclasses import dataclass, field, InitVar
 from Library.Utility.Typing import contains
 from Library.Utility.Runtime import is_notebook, find_notebook
 
+def inspect_temporary(*folders: str, builder: type[PurePath] = Path) -> Union[PurePath, Path]:
+    import tempfile
+    return builder(tempfile.gettempdir()).joinpath(*folders)
+
 def inspect_separator(*, builder: type[PurePath] = Path) -> str:
     return str(builder("a", "b"))[1]
 

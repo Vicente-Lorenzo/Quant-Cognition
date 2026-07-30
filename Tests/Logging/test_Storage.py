@@ -56,7 +56,7 @@ def test_level_below_the_cap_is_honored(storage):
 def test_cap_means_routine_traffic_never_reaches_it(storage):
     storage.set_level(VerboseLevel.Debug)
     record = _attach_(storage)
-    log = LoggingAPI(Class="Capped")
+    log = LoggingAPI("Capped")
     log.debug(lambda: "debug")
     log.info(lambda: "info")
     log.alert(lambda: "alert")
@@ -69,13 +69,13 @@ def test_cap_means_routine_traffic_never_reaches_it(storage):
 def test_inert_until_attached(storage):
     storage.set_level(VerboseLevel.Warning)
     assert storage.Attached is False
-    LoggingAPI(Class="Detached").error(lambda: "goes nowhere")
+    LoggingAPI("Detached").error(lambda: "goes nowhere")
     assert storage.Records == 0
 
 def test_records_are_accumulated_and_flushed(storage):
     storage.set_level(VerboseLevel.Warning)
     record = _attach_(storage)
-    log = LoggingAPI(Class="Accumulate")
+    log = LoggingAPI("Accumulate")
     for index in range(10): log.error(lambda: f"Record {index}")
     time.sleep(0.3)
     assert storage.Records == 10
@@ -84,7 +84,7 @@ def test_records_are_accumulated_and_flushed(storage):
 def test_flush_is_batched_not_per_record(storage):
     storage.set_level(VerboseLevel.Warning)
     record = _attach_(storage, interval=0.2)
-    log = LoggingAPI(Class="Batched")
+    log = LoggingAPI("Batched")
     for index in range(50): log.error(lambda: f"Record {index}")
     time.sleep(0.5)
     assert storage.Records == 50
@@ -93,7 +93,7 @@ def test_flush_is_batched_not_per_record(storage):
 def test_writes_do_not_block_the_caller(storage):
     storage.set_level(VerboseLevel.Warning)
     _attach_(storage, interval=5.0)
-    log = LoggingAPI(Class="NonBlocking")
+    log = LoggingAPI("NonBlocking")
     start = time.perf_counter()
     for index in range(1000): log.error(lambda: f"Record {index}")
     assert time.perf_counter() - start < 1.0
@@ -102,7 +102,7 @@ def test_queue_overflow_is_counted_not_raised(storage):
     storage.set_level(VerboseLevel.Warning)
     storage._record_ = FakeRecordAPI()
     storage._queue_.maxsize = 5
-    log = LoggingAPI(Class="Overflow")
+    log = LoggingAPI("Overflow")
     for index in range(50): log.error(lambda: f"Record {index}")
     assert storage.Dropped > 0
 
@@ -110,7 +110,7 @@ def test_content_limit_marks_truncated(storage):
     storage.set_level(VerboseLevel.Warning)
     storage.set_limit(200)
     record = _attach_(storage)
-    log = LoggingAPI(Class="Truncate")
+    log = LoggingAPI("Truncate")
     for index in range(50): log.error(lambda: f"Record {index} {'x' * 40}")
     time.sleep(0.3)
     assert storage.Truncated is True
@@ -120,7 +120,7 @@ def test_records_counted_even_when_truncated(storage):
     storage.set_level(VerboseLevel.Warning)
     storage.set_limit(100)
     _attach_(storage)
-    log = LoggingAPI(Class="Truncate")
+    log = LoggingAPI("Truncate")
     for index in range(20): log.error(lambda: f"Record {index} {'x' * 40}")
     time.sleep(0.3)
     assert storage.Records == 20
@@ -130,7 +130,7 @@ def test_reentrancy_guard_drops_records_from_the_writer(storage):
     storage._record_ = FakeRecordAPI()
     storage._guard_.busy = True
     try:
-        LoggingAPI(Class="Reentrant").error(lambda: "from the writer thread")
+        LoggingAPI("Reentrant").error(lambda: "from the writer thread")
         assert storage._queue_.qsize() == 0
     finally:
         storage._guard_.busy = False
@@ -138,7 +138,7 @@ def test_reentrancy_guard_drops_records_from_the_writer(storage):
 def test_detach_performs_a_final_flush(storage):
     storage.set_level(VerboseLevel.Warning)
     record = _attach_(storage, interval=10.0)
-    LoggingAPI(Class="Final").error(lambda: "last record")
+    LoggingAPI("Final").error(lambda: "last record")
     storage.detach()
     assert "last record" in record.Content
     assert record.StoppedAt is not None
@@ -153,7 +153,7 @@ def test_detach_is_idempotent(storage):
 def test_detach_clears_the_queue(storage):
     storage.set_level(VerboseLevel.Warning)
     storage._record_ = FakeRecordAPI()
-    LoggingAPI(Class="Leftover").error(lambda: "queued")
+    LoggingAPI("Leftover").error(lambda: "queued")
     storage.detach()
     assert storage._queue_.empty()
 
@@ -162,7 +162,7 @@ def test_failing_save_never_propagates(storage):
     record = _attach_(storage)
     def explode(*args, **kwargs): raise RuntimeError("database gone")
     record.save = explode
-    LoggingAPI(Class="Broken").error(lambda: "should not raise")
+    LoggingAPI("Broken").error(lambda: "should not raise")
     time.sleep(0.3)
 
 def test_failing_save_does_not_kill_the_writer(storage):
@@ -170,7 +170,7 @@ def test_failing_save_does_not_kill_the_writer(storage):
     record = _attach_(storage)
     def explode(*args, **kwargs): raise RuntimeError("database gone")
     record.save = explode
-    LoggingAPI(Class="Broken").error(lambda: "first")
+    LoggingAPI("Broken").error(lambda: "first")
     time.sleep(0.2)
     assert storage._thread_.is_alive()
 

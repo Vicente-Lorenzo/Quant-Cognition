@@ -68,7 +68,7 @@ def node_for():
     node["PortfolioManagement"] = {"PositionMode": ["Netting"]}
     return node
 
-LoggingAPI(Class="Robust", Subclass="Eval").set_level(VerboseLevel.Warning)
+LoggingAPI().set_level(VerboseLevel.Warning)
 DDPGStrategyAPI.Weights = MODEL
 rows = []
 try:

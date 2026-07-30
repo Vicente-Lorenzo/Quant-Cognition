@@ -16,14 +16,14 @@ def _measure_(operation) -> float:
 def test_gated_records_are_cheap(tmp_path):
     LoggingAPI.console.set_level(VerboseLevel.Silent)
     LoggingAPI.file.set_level(VerboseLevel.Silent)
-    log = LoggingAPI(Class="Bench")
+    log = LoggingAPI("Bench")
     assert _measure_(lambda: log.debug(lambda: "Phase Warmup: Completed")) < 1200
 
 def test_emitted_records_are_cheap(tmp_path):
     LoggingAPI.console.set_level(VerboseLevel.Silent)
     LoggingAPI.file.set_level(VerboseLevel.Debug)
     LoggingAPI.file.set_rotation(size=0)
-    log = LoggingAPI(Class="Bench")
+    log = LoggingAPI("Bench")
     assert _measure_(lambda: log.debug(lambda: "Phase Warmup: Completed")) < 8000
 
 def test_timestamp_is_cheap():
@@ -31,7 +31,7 @@ def test_timestamp_is_cheap():
     assert _measure_(lambda: stamp(moment)) < 2000
 
 def test_gated_is_faster_than_emitted(tmp_path):
-    log = LoggingAPI(Class="Bench")
+    log = LoggingAPI("Bench")
     LoggingAPI.console.set_level(VerboseLevel.Silent)
     LoggingAPI.file.set_level(VerboseLevel.Debug)
     LoggingAPI.file.set_rotation(size=0)
@@ -41,9 +41,9 @@ def test_gated_is_faster_than_emitted(tmp_path):
     assert gated < emitted
 
 def test_timestamp_cache_is_reused():
-    from Library.Logging import Logger
+    from Library.Logging import LoggerAPI
     moment = 1_700_000_000.5
     stamp(moment)
-    before = Logger._PREFIX_
+    before = LoggerAPI.Prefix
     stamp(moment + 0.100)
-    assert Logger._PREFIX_ is before
+    assert LoggerAPI.Prefix is before

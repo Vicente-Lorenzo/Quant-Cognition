@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Any, NamedTuple, Union, TYPE_CHECKING
 
 from Library.Engine import MachineAPI
-from Library.Logging import HandlerLoggingAPI
+from Library.Logging import LoggingAPI
 from Library.Protocol.Action import Stream, OpenBuyPositionActionAPI, OpenSellPositionActionAPI
 from Library.Protocol.Update import (
     UpdateID,
@@ -81,7 +81,10 @@ class StrategyAPI(ABC):
         self.VolumeEntryThreshold: Threshold = self._threshold_("VolumeEntryThreshold")
         self.VolumeExitThreshold: Threshold = self._threshold_("VolumeExitThreshold")
         self.Signals: list = []
-        self._log_: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="Strategy Management")
+        self._long_bars_: int = 0
+        self._short_bars_: int = 0
+        self._previous_signal_: Union[float, None] = None
+        self._log_: LoggingAPI = LoggingAPI("Strategy Management")
 
     @staticmethod
     def _type_name_(obj: Any) -> str:
@@ -105,10 +108,22 @@ class StrategyAPI(ABC):
         if not actions: return 0.0
         return sum(action.Direction.value * (action.Volume or 0.0) for action in actions if isinstance(action, (OpenBuyPositionActionAPI, OpenSellPositionActionAPI)))
 
+    @staticmethod
+    def _net_exposure_(update: BarUpdateAPI) -> float:
+        portfolio = update.Portfolio
+        if portfolio is None: return 0.0
+        return sum(position.Volume for position in portfolio.BuyPositions) - sum(position.Volume for position in portfolio.SellPositions)
+
     def _emit_(self, update: BarUpdateAPI, actions: Union[list, None], raw: Union[float, None] = None) -> Union[list, None]:
+        delta = self._signed_volume_(actions)
+        exposure = self._net_exposure_(update) + delta
+        if exposure > 0.0: self._long_bars_ += 1
+        elif exposure < 0.0: self._short_bars_ += 1
         if not self.Recording: return actions
-        volume = self._signed_volume_(actions)
-        self.Signals.append((update.Bar.Timestamp.DateTime, raw if raw is not None else (volume > 0.0) - (volume < 0.0), volume))
+        signal = raw if raw is not None else float((exposure > 0.0) - (exposure < 0.0))
+        previous = self._previous_signal_
+        self._previous_signal_ = signal
+        self.Signals.append((update.Bar.Timestamp.DateTime, signal, signal - previous if previous is not None else 0.0, exposure, delta))
         return actions
 
     def _log_opened_(self, update: Union[OpenedBuyPositionUpdateAPI, OpenedSellPositionUpdateAPI]) -> None:

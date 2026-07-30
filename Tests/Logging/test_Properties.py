@@ -60,30 +60,30 @@ def test_file_negative_retention_is_clamped(tmp_path):
 def test_file_size_tracks_writes(tmp_path):
     LoggingAPI.file.set_level(VerboseLevel.Debug)
     LoggingAPI.file.set_rotation(size=0)
-    LoggingAPI(Class="Sizer").info(lambda: "measured")
+    LoggingAPI("Sizer").info(lambda: "measured")
     assert LoggingAPI.file.Size > 0
 
 def test_facade_class_tags_property_mirrors_state():
     LoggingAPI.set_class_tags("EURUSD", "H1")
-    assert LoggingAPI(Class="X").ClassTags == LoggingAPI._class_tags_ == ("EURUSD", "H1")
+    assert LoggingAPI("X").ClassTags == LoggingAPI._class_tags_ == ("EURUSD", "H1")
 
 def test_facade_instance_tags_property_mirrors_state():
-    log = LoggingAPI(Class="Engine", Subclass="Backtesting")
-    assert log.InstanceTags == log._instance_tags_ == ("Engine", "Backtesting")
+    log = LoggingAPI("Engine", "Backtesting")
+    assert log.InstanceTags == log._instance_tags_ == ("test_Properties", "Engine", "Backtesting")
 
 def test_facade_depth_property_mirrors_state():
-    log = LoggingAPI(Class="Depth")
+    log = LoggingAPI("Depth")
     assert log.Depth == 0
     with log:
         assert log.Depth == 1
-        with LoggingAPI(Class="Inner"):
+        with LoggingAPI("Inner"):
             assert log.Depth == 2
     assert log.Depth == 0
 
 def test_class_tags_precede_instance_tags_in_output(recorder):
     recorder.set_level(VerboseLevel.Debug)
     LoggingAPI.set_class_tags("SHARED")
-    log = LoggingAPI(Class="Own")
+    log = LoggingAPI("Own")
     log.info(lambda: "message")
     line = recorder.written[0]
     assert line.index("SHARED") < line.index("Info") < line.index("Own")
@@ -91,8 +91,8 @@ def test_class_tags_precede_instance_tags_in_output(recorder):
 def test_shared_sinks_are_class_attributes():
     assert isinstance(LoggingAPI.console, ConsoleAPI)
     assert isinstance(LoggingAPI.file, FileAPI)
-    assert LoggingAPI(Class="A").console is LoggingAPI(Class="B").console
-    assert LoggingAPI(Class="A").file is LoggingAPI(Class="B").file
+    assert LoggingAPI("A").console is LoggingAPI("B").console
+    assert LoggingAPI("A").file is LoggingAPI("B").file
 
 def test_shared_sinks_are_registered_once():
     assert LoggerAPI.Registry.count(LoggingAPI.console) == 1
@@ -100,7 +100,7 @@ def test_shared_sinks_are_registered_once():
 
 def test_bridge_logger_property():
     from Library.Logging import BridgeAPI
-    log = LoggingAPI(Class="Bridged")
+    log = LoggingAPI("Bridged")
     assert BridgeAPI(log).Logger is log
 
 def test_sink_names_are_declared():

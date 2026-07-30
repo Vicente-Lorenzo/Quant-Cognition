@@ -4,19 +4,19 @@ import webbrowser
 
 from waitress import create_server
 
-from Library.Logging import HandlerLoggingAPI, VerboseLevel
-from Library.Utility.Path import traceback_root
+from Library.Logging import LoggingAPI, VerboseLevel
+from Library.Logging.File import FileAPI
 from Library.Utility.Runtime import tail_terminal
 from Library.Web.Serve import build, main as headless
 
 class TrayAPI:
 
     _URL_ = "https://quantcognition.com"
-    _LOG_ = traceback_root() / "Logs" / "Web.log"
+    _LOG_ = FileAPI.folder() / "Web.log"
 
     def __init__(self) -> None:
         import pystray
-        self._log_ = HandlerLoggingAPI(Class=type(self).__name__)
+        self._log_ = LoggingAPI()
         self._debug_ = False
         self._verbose_ = True
         self._running_ = False
@@ -54,7 +54,7 @@ class TrayAPI:
 
     def _toggle_(self, icon=None, item=None) -> None:
         self._verbose_ = not self._verbose_
-        self._log_.console.set_verbose_level(VerboseLevel.Debug if self._verbose_ else VerboseLevel.Info)
+        self._log_.console.set_level(VerboseLevel.Debug if self._verbose_ else VerboseLevel.Info)
 
     def _mode_(self, icon=None, item=None) -> None:
         self._debug_ = not self._debug_
@@ -97,9 +97,9 @@ def main() -> None:
     handle = TrayAPI._LOG_.open("w", buffering=1, encoding="utf-8-sig")
     sys.stdout = handle
     sys.stderr = handle
-    log = HandlerLoggingAPI(Class=TrayAPI.__name__)
-    log.console.set_verbose_level(VerboseLevel.Debug)
-    log.file.set_verbose_level(VerboseLevel.Debug)
+    log = LoggingAPI()
+    log.console.set_level(VerboseLevel.Debug)
+    log.file.set_level(VerboseLevel.Debug)
     try:
         tray = TrayAPI()
     except Exception as error:

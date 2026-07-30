@@ -19,8 +19,8 @@ def test_default_directory_carries_no_product_name():
     assert "Quant" not in str(LoggingAPI.file.Directory)
 
 def test_default_directory_is_portable():
-    assert FileAPI._temporary_().is_absolute()
-    assert FileAPI._FOLDER_ == "Logs"
+    assert FileAPI.folder().is_absolute()
+    assert FileAPI.Folder == "Logs"
 
 def test_explicit_path_persists_outside_temp(tmp_path):
     LoggingAPI.file.set_path(tmp_path)
@@ -71,7 +71,7 @@ def test_origin_uses_the_entry_point_stem(monkeypatch):
 
 def test_writes_land_in_the_file(tmp_path, lines):
     LoggingAPI.file.set_level(VerboseLevel.Debug)
-    log = LoggingAPI(Class="Writer")
+    log = LoggingAPI("Writer")
     log.info(lambda: "First Line: Written")
     assert any("First Line: Written" in line for line in lines())
 
@@ -79,19 +79,19 @@ def test_directory_is_created_on_demand(tmp_path):
     target = tmp_path / "nested" / "deeper"
     LoggingAPI.file.set_path(target)
     LoggingAPI.file.set_level(VerboseLevel.Debug)
-    LoggingAPI(Class="Maker").info(lambda: "created")
+    LoggingAPI("Maker").info(lambda: "created")
     LoggingAPI.file.flush()
     assert target.exists()
 
 def test_file_is_utf8_and_survives_special_characters(tmp_path, lines):
     LoggingAPI.file.set_level(VerboseLevel.Debug)
-    LoggingAPI(Class="Unicode").info(lambda: "Phase Warmup: Completed · 1.20s → Done · ✔")
+    LoggingAPI("Unicode").info(lambda: "Phase Warmup: Completed · 1.20s → Done · ✔")
     assert any("·" in line and "→" in line and "✔" in line for line in lines())
 
 def test_file_uses_unix_newlines(tmp_path):
     LoggingAPI.file.set_level(VerboseLevel.Debug)
-    LoggingAPI(Class="Newline").info(lambda: "line one")
-    LoggingAPI(Class="Newline").info(lambda: "line two")
+    LoggingAPI("Newline").info(lambda: "line one")
+    LoggingAPI("Newline").info(lambda: "line two")
     LoggingAPI.file.flush()
     raw = LoggingAPI.file.Path.read_bytes()
     assert b"\r\n" not in raw
@@ -99,7 +99,7 @@ def test_file_uses_unix_newlines(tmp_path):
 
 def test_appends_across_reopen(tmp_path, lines):
     LoggingAPI.file.set_level(VerboseLevel.Debug)
-    log = LoggingAPI(Class="Append")
+    log = LoggingAPI("Append")
     log.info(lambda: "before")
     LoggingAPI.file.close()
     log.info(lambda: "after")
@@ -111,13 +111,13 @@ def test_format_contains_all_fields(tmp_path):
 
 def test_file_format_has_no_ansi(tmp_path, lines):
     LoggingAPI.file.set_level(VerboseLevel.Debug)
-    LoggingAPI(Class="Plain").error(lambda: "no colors here")
+    LoggingAPI("Plain").error(lambda: "no colors here")
     assert all("\033" not in line for line in lines())
 
 def test_rotation_creates_backups(tmp_path):
     LoggingAPI.file.set_level(VerboseLevel.Debug)
     LoggingAPI.file.set_rotation(size=512, count=3)
-    log = LoggingAPI(Class="Rotate")
+    log = LoggingAPI("Rotate")
     for index in range(200): log.info(lambda: f"Rotation Line {index}: {'x' * 40}")
     LoggingAPI.file.flush()
     assert Path(f"{LoggingAPI.file.Path}.1").exists()
@@ -125,7 +125,7 @@ def test_rotation_creates_backups(tmp_path):
 def test_rotation_respects_the_backup_count(tmp_path):
     LoggingAPI.file.set_level(VerboseLevel.Debug)
     LoggingAPI.file.set_rotation(size=256, count=2)
-    log = LoggingAPI(Class="Rotate")
+    log = LoggingAPI("Rotate")
     for index in range(400): log.info(lambda: f"Rotation Line {index}: {'x' * 40}")
     LoggingAPI.file.flush()
     assert not Path(f"{LoggingAPI.file.Path}.3").exists()
@@ -133,7 +133,7 @@ def test_rotation_respects_the_backup_count(tmp_path):
 def test_rotation_zero_count_truncates(tmp_path):
     LoggingAPI.file.set_level(VerboseLevel.Debug)
     LoggingAPI.file.set_rotation(size=256, count=0)
-    log = LoggingAPI(Class="Truncate")
+    log = LoggingAPI("Truncate")
     for index in range(200): log.info(lambda: f"Line {index}: {'x' * 40}")
     LoggingAPI.file.flush()
     assert not Path(f"{LoggingAPI.file.Path}.1").exists()
@@ -142,7 +142,7 @@ def test_rotation_zero_count_truncates(tmp_path):
 def test_rotation_disabled_when_size_is_zero(tmp_path):
     LoggingAPI.file.set_level(VerboseLevel.Debug)
     LoggingAPI.file.set_rotation(size=0)
-    log = LoggingAPI(Class="NoRotate")
+    log = LoggingAPI("NoRotate")
     for index in range(200): log.info(lambda: f"Line {index}: {'x' * 40}")
     LoggingAPI.file.flush()
     assert not Path(f"{LoggingAPI.file.Path}.1").exists()
@@ -150,7 +150,7 @@ def test_rotation_disabled_when_size_is_zero(tmp_path):
 def test_size_tracking_resets_after_rotation(tmp_path):
     LoggingAPI.file.set_level(VerboseLevel.Debug)
     LoggingAPI.file.set_rotation(size=512, count=2)
-    log = LoggingAPI(Class="Rotate")
+    log = LoggingAPI("Rotate")
     for index in range(200): log.info(lambda: f"Line {index}: {'x' * 40}")
     LoggingAPI.file.flush()
     assert LoggingAPI.file.Size < 512 + 200
@@ -163,7 +163,7 @@ def test_retention_prunes_old_files(tmp_path):
     os.utime(stale, (ancient, ancient))
     LoggingAPI.file.set_retention(days=30)
     LoggingAPI.file.set_level(VerboseLevel.Debug)
-    LoggingAPI(Class="Prune").info(lambda: "trigger open")
+    LoggingAPI("Prune").info(lambda: "trigger open")
     LoggingAPI.file.flush()
     assert not stale.exists()
 
@@ -173,7 +173,7 @@ def test_retention_keeps_recent_files(tmp_path):
     recent.write_text("new", encoding="utf-8")
     LoggingAPI.file.set_retention(days=30)
     LoggingAPI.file.set_level(VerboseLevel.Debug)
-    LoggingAPI(Class="Prune").info(lambda: "trigger open")
+    LoggingAPI("Prune").info(lambda: "trigger open")
     LoggingAPI.file.flush()
     assert recent.exists()
 
@@ -185,7 +185,7 @@ def test_retention_zero_disables_pruning(tmp_path):
     os.utime(stale, (ancient, ancient))
     LoggingAPI.file.set_retention(days=0)
     LoggingAPI.file.set_level(VerboseLevel.Debug)
-    LoggingAPI(Class="Keep").info(lambda: "trigger open")
+    LoggingAPI("Keep").info(lambda: "trigger open")
     LoggingAPI.file.flush()
     assert stale.exists()
 
@@ -197,7 +197,7 @@ def test_retention_ignores_foreign_extensions(tmp_path):
     os.utime(other, (ancient, ancient))
     LoggingAPI.file.set_retention(days=1)
     LoggingAPI.file.set_level(VerboseLevel.Debug)
-    LoggingAPI(Class="Keep").info(lambda: "trigger open")
+    LoggingAPI("Keep").info(lambda: "trigger open")
     LoggingAPI.file.flush()
     assert other.exists()
 
@@ -213,7 +213,7 @@ def test_lock_blocks_destination_changes(tmp_path):
 
 def test_changing_path_reopens_on_the_new_target(tmp_path, lines):
     LoggingAPI.file.set_level(VerboseLevel.Debug)
-    log = LoggingAPI(Class="Move")
+    log = LoggingAPI("Move")
     log.info(lambda: "first location")
     moved = tmp_path / "moved"
     LoggingAPI.file.set_path(moved)

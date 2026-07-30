@@ -56,7 +56,7 @@ if slow != "0":
         tm["MAEra"] = ["SMA", 5040]
 node["PortfolioManagement"] = {"PositionMode": ["Netting"]}
 
-LoggingAPI(Class="Plot", Subclass="Model").set_level(VerboseLevel.Warning)
+LoggingAPI().set_level(VerboseLevel.Warning)
 DDPGStrategyAPI.Weights = MODEL
 try:
     with PostgresDatabaseAPI(database="Quant") as db:

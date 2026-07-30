@@ -114,7 +114,7 @@ def label(h1, h2, lam, warmup, threshold):
     return f"n{h1}x{h2} {reg} wu{warmup} {thr}{mir}"
 
 def main():
-    LoggingAPI(Class="Sweep", Subclass="Campaign").set_level(VerboseLevel[os.environ.get("SWEEP_VERBOSE", "Warning")])
+    LoggingAPI().set_level(VerboseLevel[os.environ.get("SWEEP_VERBOSE", "Warning")])
     spread, commission, swap = costs()
     wroot = os.environ.get("SWEEP_WEIGHTS_ROOT")
     if wroot:

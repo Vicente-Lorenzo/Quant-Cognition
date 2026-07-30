@@ -61,21 +61,22 @@ def test_identity_matches_writing_it_by_hand():
     class HandWrittenAPI:
         def __init__(self):
             self.automatic = LoggingAPI()
-            self.manual = LoggingAPI(Class=type(self).__name__)
+            self.manual = LoggingAPI(type(self).__name__)
     subject = HandWrittenAPI()
     assert subject.automatic.InstanceTags[0] == subject.manual.InstanceTags[0] == "HandWrittenAPI"
 
-def test_explicit_class_overrides_derivation():
-    assert LoggingAPI(Class="Explicit").InstanceTags[0] == "Explicit"
+def test_given_tags_follow_the_derived_owner():
+    assert LoggingAPI("Explicit").InstanceTags == ("test_Identify", "Explicit")
 
-def test_explicit_subclass_overrides_derivation():
-    assert LoggingAPI(Subclass="Explicit").InstanceTags[1] == "Explicit"
+def test_given_tags_replace_the_derived_subsystem():
+    assert LoggingAPI().InstanceTags[1] == "Tests"
+    assert LoggingAPI("Explicit").InstanceTags[1] == "Explicit"
 
 def test_identify_false_leaves_both_absent():
     assert LoggingAPI(identify=False).InstanceTags == ()
 
 def test_identify_false_keeps_explicit_tags():
-    assert LoggingAPI(Class="A", Subclass="B", identify=False).InstanceTags == ("A", "B")
+    assert LoggingAPI("A", "B", identify=False).InstanceTags == ("A", "B")
 
 def test_identify_false_keeps_positional_tags():
     assert LoggingAPI("Extra", identify=False).InstanceTags == ("Extra",)

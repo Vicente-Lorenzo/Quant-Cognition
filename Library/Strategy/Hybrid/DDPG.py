@@ -9,13 +9,14 @@ from Library.Engine import MachineAPI
 from Library.Indicator.Indicator import parse_technical
 from Library.Indicator.Technical.Technical import TechnicalType
 from Library.Portfolio import PositionType
-from Library.Portfolio.Sizing import SizingMode
+from Library.Portfolio.Sizing import SizingMode, calculate_fixed_fractional_volume, calculate_normalized_volume
+from Library.Protocol.Action import Stream, OpenBuyPositionActionAPI, OpenSellPositionActionAPI
 from Library.Protocol.Update import UpdateID, BarUpdateAPI
 from Library.Strategy.Model.Action import ActionAPI
 from Library.Strategy.Model.Normalizer import NormalizerAPI
 from Library.Strategy.Model.Observation import ObservationAPI
 from Library.Strategy.Model.Reward import RewardAPI, RewardType
-from Library.Strategy.Rule.NNFX import NNFXStrategyAPI
+from Library.Strategy.Strategy import StrategyAPI
 from Library.Utility.Math import EPSILON
 
 if TYPE_CHECKING:
@@ -86,19 +87,25 @@ class DDPGObservationAPI(ObservationAPI):
       Market (6)    — bar geometry and microstructure, Bid series. Gap/High/Low/Close as
                       vol-scaled log-moves vs the previous close; Volume as ln(1 + V);
                       Spread as the relative quote spread of the close tick.
-      Indicator     — dimensionless technicals: ATR/Close, the RV_fast level, and the
-                      volatility regime ln(RV_fast / RV_slow); then one momentum feature
+      Indicator     — dimensionless technicals: ATR/Close, the RV_fast level, the
+                      volatility regime ln(RV_fast / RV_slow), and the Efficiency Ratio
+                      (net move over summed absolute moves, bounded [0, 1], bypass — it
+                      separates trending from ranging regimes); then one momentum feature
                       per momentum indicator (value / (RV_fast * sqrt(lookback))) and one
-                      overlap feature per overlap indicator ((Close - value) / ATR).
+                      feature pair per overlap indicator: the distance
+                      (Close - value) / ATR and the differential slope
+                      (value - value_prev) / ATR (the trend state and its drift).
     """
 
     _REALIZED_FAST_ = "RVFast"
     _REALIZED_SLOW_ = "RVSlow"
     _ATR_ = "ATR"
+    _EFFICIENCY_ = "ER"
 
-    def __init__(self, action: ActionAPI, momentum_features: tuple, overlap_features: tuple, normalize_window: int, window: int) -> None:
+    def __init__(self, action: ActionAPI, momentum_features: tuple, overlap_features: tuple, normalize_window: int, window: int, account: bool = True) -> None:
         super().__init__(normalizer=DDPGNormalizationAPI(normalize_window), window=window)
         self._action_ = action
+        self._account_state_ = account
         self._momentum_features_ = tuple(momentum_features)
         self._overlap_features_ = tuple(overlap_features)
         self._previous_close_: Union[float, None] = None
@@ -111,7 +118,7 @@ class DDPGObservationAPI(ObservationAPI):
         self._position_bars_ = 0
 
     def _frame_size_(self) -> int:
-        return 8 + 4 + 5 + 6 + 3 + len(self._momentum_features_) + len(self._overlap_features_)
+        return 8 + (4 if self._account_state_ else 0) + (5 if self._account_state_ else 1) + 6 + 4 + len(self._momentum_features_) + 2 * len(self._overlap_features_)
 
     @staticmethod
     def _indicator_(update: BarUpdateAPI, name: str):
@@ -148,6 +155,7 @@ class DDPGObservationAPI(ObservationAPI):
             self._position_uid_ = None
             self._position_bars_ = 0
             features.append((0.0, False))
+            if not self._account_state_: return
             features.append((0.0, True))
             features.append((0.0, True))
             features.append((0.0, True))
@@ -158,13 +166,14 @@ class DDPGObservationAPI(ObservationAPI):
             self._position_bars_ = 1
         else:
             self._position_bars_ += 1
-        signed = position.Volume if position.IsLong else -position.Volume
+        signed = position.Direction.value * position.Volume
         maximum = self._action_.maximum_volume(update)
         entry = position.EntryBalance or 0.0
         net = position.NetPnL.PnL if position.NetPnL and position.NetPnL.PnL is not None else 0.0
         drawdown = position.MaxEquityDrawdownPnL.PnL if position.MaxEquityDrawdownPnL and position.MaxEquityDrawdownPnL.PnL is not None else 0.0
         runup = position.MaxEquityRunupPnL.PnL if position.MaxEquityRunupPnL and position.MaxEquityRunupPnL.PnL is not None else 0.0
         features.append((max(-1.0, min(1.0, signed / maximum)) if maximum else 0.0, False))
+        if not self._account_state_: return
         features.append((net / entry if entry else 0.0, True))
         features.append((drawdown / entry if entry else 0.0, True))
         features.append((runup / entry if entry else 0.0, True))
@@ -203,6 +212,8 @@ class DDPGObservationAPI(ObservationAPI):
         features.append((scale / close_price if scale and close_price and close_price > 0.0 else 0.0, True))
         features.append((realized if realized and realized > 0.0 else 0.0, True))
         features.append((math.log(realized / realized_slow) if realized and realized > 0.0 and realized_slow and realized_slow > 0.0 else 0.0, False))
+        efficiency = self._indicator_(update, self._EFFICIENCY_)
+        features.append((efficiency if efficiency is not None else 0.0, False))
         for name in self._momentum_features_:
             indicator = getattr(update.Technical, name, None)
             momentum = indicator.Result.last() if indicator is not None else None
@@ -211,18 +222,23 @@ class DDPGObservationAPI(ObservationAPI):
         for name in self._overlap_features_:
             indicator = getattr(update.Technical, name, None)
             average = indicator.Result.last() if indicator is not None else None
-            features.append(((close_price - average) / scale if (average is not None and math.isfinite(average) and scale) else 0.0, True))
+            previous = indicator.Result.last(1) if indicator is not None else None
+            valid = average is not None and math.isfinite(average) and scale
+            features.append(((close_price - average) / scale if valid else 0.0, True))
+            features.append(((average - previous) / scale if valid and previous is not None and math.isfinite(previous) else 0.0, True))
 
     def _features_(self, update: BarUpdateAPI) -> list:
         features: list = []
         self._timestamp_features_(update, features)
-        self._account_features_(update, features)
+        if self._account_state_: self._account_features_(update, features)
         self._position_features_(update, features)
         self._market_features_(update, features)
         self._indicator_features_(update, features)
         return features
 
-class DDPGStrategyAPI(NNFXStrategyAPI):
+class DDPGStrategyAPI(StrategyAPI):
+
+    Subscription = Stream.All & ~Stream.Tick
 
     Agent: Union[AgentAPI, None] = None
     Weights: Union[Path, None] = None
@@ -248,31 +264,46 @@ class DDPGStrategyAPI(NNFXStrategyAPI):
                  sentimental_management: Parameter,
                  portfolio_management: Parameter) -> None:
         super().__init__(money_management, risk_management, signal_management, technical_management, fundamental_management, sentimental_management, portfolio_management)
-        self._entry_threshold_ = tuple(self.SignalManagement.NormalEntryThreshold)
-        self._exit_threshold_ = tuple(self.SignalManagement.NormalExitThreshold)
-        self._continuation_entry_ = tuple(self.SignalManagement.ContinuationEntryThreshold)
-        self._continuation_exit_ = tuple(self.SignalManagement.ContinuationExitThreshold)
-        self._continuation_delay_, = self.SignalManagement.ContinuationDelay
-        self._sizing_min_, = self.MoneyManagement.SizingMin
-        self._sizing_max_, = self.MoneyManagement.SizingMax
+        self._risk_percentage_, = self.MoneyManagement.RiskPercentage
+        self._atr_scale_, = self.MoneyManagement.ATRScale
         weights = self.SignalManagement.Weights
         self._configured_weights_ = weights[0] if weights else None
+        neutralize = self.SignalManagement.NeutralizeReward
+        self._neutralize_reward_ = bool(neutralize[0]) if neutralize else False
+        neutralize_scale = self.SignalManagement.NeutralizeScale
+        self._neutralize_scale_ = float(neutralize_scale[0]) if neutralize_scale else 1.0
+        turnover = self.SignalManagement.TurnoverCost
+        self._turnover_cost_ = float(turnover[0]) if turnover else 0.0
+        smoothing = self.SignalManagement.SignalSmoothing
+        self._signal_smoothing_ = float(smoothing[0]) if smoothing else 0.0
+        interval = self.SignalManagement.DecisionInterval
+        self._decision_interval_ = max(1, int(interval[0])) if interval else 1
+        schedule = self.SignalManagement.DecisionSchedule
+        self._decision_schedule_ = str(schedule[0]).upper() if schedule else None
+        rebalance = self.SignalManagement.RebalanceThreshold
+        self._rebalance_threshold_ = float(rebalance[0]) if rebalance else 0.0
+        account = self.SignalManagement.AccountFeatures
+        self._account_features_enabled_ = bool(account[0]) if account else True
         momentum, overlap = self._observation_features_()
         self._action_ = ActionAPI(mode=SizingMode.Balance, maximum=self._EXPOSURE_REFERENCE_, deadzone=0.0)
-        self._observation_ = DDPGObservationAPI(action=self._action_, momentum_features=momentum, overlap_features=overlap, normalize_window=self.SignalManagement.NormalizeWindow[0], window=self.SignalManagement.ObservationWindow[0])
-        self._reward_ = RewardAPI(kind=self.Reward, scale=self.RewardScale, clip=self.RewardClip)
+        self._observation_ = DDPGObservationAPI(action=self._action_, momentum_features=momentum, overlap_features=overlap, normalize_window=self.SignalManagement.NormalizeWindow[0], window=self.SignalManagement.ObservationWindow[0], account=self._account_features_enabled_)
+        scale = self.SignalManagement.RewardScale
+        clip = self.SignalManagement.RewardClip
+        self._reward_ = RewardAPI(kind=self.Reward, scale=float(scale[0]) if scale else self.RewardScale, clip=float(clip[0]) if clip else self.RewardClip)
         self._agent_: AgentAPI = self.Agent if self.Agent is not None else self._create_agent_((self._observation_.shape(),), self._ACTION_SHAPE_)
         if self.Agent is None and not self.Training and (self.Weights is not None or self._configured_weights_ is not None):
             self._agent_.load()
         self._previous_observation_ = None
         self._previous_action_ = None
         self._previous_equity_: Union[float, None] = None
+        self._previous_bar_close_: Union[float, None] = None
+        self._previous_exposure_: float = 0.0
+        self._smoothed_signal_: Union[float, None] = None
+        self._current_action_ = None
+        self._pending_reward_: float = 0.0
+        self._decision_index_: int = 0
+        self._decision_bucket_ = None
         self._step_index_: int = 0
-        self._hybrid_confidence_: float = 0.0
-        self._armed_: bool = True
-        self._continuation_direction_: int = 0
-        self._continuation_leg_: bool = False
-        self._flat_bars_: int = 0
 
     def _observation_features_(self) -> tuple:
         technical = parse_technical(self.TechnicalManagement.data)
@@ -300,6 +331,7 @@ class DDPGStrategyAPI(NNFXStrategyAPI):
             gamma=self.SignalManagement.DiscountFactor[0],
             grad_clip=self.SignalManagement.GradientClip[0],
             actor_regularization=self.SignalManagement.ActorRegularization[0],
+            warmup=self.SignalManagement.WarmupSteps[0] if self.SignalManagement.WarmupSteps else 0,
             seed=self.Seed
         )
 
@@ -308,78 +340,95 @@ class DDPGStrategyAPI(NNFXStrategyAPI):
         if self._configured_weights_ is not None: return Path(self._configured_weights_)
         return self._DEFAULT_WEIGHTS_
 
-    def _entry_risk_percentage_(self, update: BarUpdateAPI) -> float:
-        entry_low, entry_high = self._entry_threshold_
-        confidence = self._hybrid_confidence_
-        if confidence > 0.0:
-            span = 1.0 - entry_high
-            fraction = (confidence - entry_high) / span if span > 0.0 else 1.0
-        else:
-            span = 1.0 + entry_low
-            fraction = (entry_low - confidence) / span if span > 0.0 else 1.0
-        fraction = min(1.0, max(0.0, fraction))
-        return self._sizing_min_ + fraction * (self._sizing_max_ - self._sizing_min_)
+    def _exposure_(self, update: BarUpdateAPI) -> float:
+        return sum(position.Volume for position in update.Portfolio.BuyPositions) - sum(position.Volume for position in update.Portfolio.SellPositions)
 
-    def _continuation_allowed_(self, sign: int) -> bool:
-        if self._continuation_direction_ != sign: return False
-        return self._flat_bars_ >= self._continuation_delay_
+    def _reference_volume_(self, update: BarUpdateAPI) -> float:
+        atr = update.Technical.ATR.Result.last()
+        contract = update.Portfolio.Security.Contract
+        if not atr or atr <= 0.0 or not contract or not contract.PipSize: return 0.0
+        return calculate_fixed_fractional_volume(self._risk_percentage_, self._atr_scale_ * atr / contract.PipSize, update.Portfolio.Account, contract)
+
+    def _target_(self, update: BarUpdateAPI, action: float) -> Union[float, None]:
+        if self._neutral_(action, self.DirectionalEntryThreshold): return None
+        reference = self._reference_volume_(update)
+        if not reference: return None
+        return reference * max(-1.0, min(1.0, action))
 
     def _control_(self, update: BarUpdateAPI, action: float) -> Union[list, None]:
-        entry_low, entry_high = self._entry_threshold_
-        continuation_low, continuation_high = self._continuation_entry_
-        buys = update.Portfolio.BuyPositions
-        sells = update.Portfolio.SellPositions
-        self._flat_bars_ = self._flat_bars_ + 1 if not buys and not sells else 0
-        if entry_low < action < entry_high:
-            self._armed_ = True
-        if not buys and (action >= entry_high or action >= continuation_high):
-            if action >= entry_high and (self._armed_ or sells or self._continuation_direction_ < 0):
-                self._armed_ = False
-                self._hybrid_confidence_ = action
-                self._continuation_direction_ = 1
-                self._continuation_leg_ = False
-                return self.open_buy_position(update, PositionType.Normal)
-            if action >= continuation_high and self._continuation_allowed_(1):
-                self._hybrid_confidence_ = action
-                self._continuation_leg_ = True
-                return self.open_buy_position(update, PositionType.Continuation)
-            return None
-        if not sells and (action <= entry_low or action <= continuation_low):
-            if action <= entry_low and (self._armed_ or buys or self._continuation_direction_ > 0):
-                self._armed_ = False
-                self._hybrid_confidence_ = action
-                self._continuation_direction_ = -1
-                self._continuation_leg_ = False
-                return self.open_sell_position(update, PositionType.Normal)
-            if action <= continuation_low and self._continuation_allowed_(-1):
-                self._hybrid_confidence_ = action
-                self._continuation_leg_ = True
-                return self.open_sell_position(update, PositionType.Continuation)
-            return None
-        exit_low, exit_high = self._continuation_exit_ if self._continuation_leg_ and (buys or sells) else self._exit_threshold_
-        if exit_low < action < exit_high:
-            if buys:
-                self._continuation_direction_ = 0
-                return self.close_buy_position(update)
-            if sells:
-                self._continuation_direction_ = 0
-                return self.close_sell_position(update)
+        if self._neutral_(action, self.DirectionalExitThreshold) and self._exposure_(update): target = 0.0
+        else: target = self._target_(update, action)
+        if target is None: return None
+        contract = update.Portfolio.Security.Contract
+        delta = target - self._exposure_(update)
+        floor = contract.VolumeMin
+        if self._rebalance_threshold_ > 0.0:
+            reference = self._reference_volume_(update)
+            if reference: floor = max(floor, self._rebalance_threshold_ * abs(reference))
+        volume = calculate_normalized_volume(abs(delta), contract)
+        if abs(delta) < floor or not volume: return None
+        return [OpenBuyPositionActionAPI(PositionType=PositionType.Normal, Volume=volume, StopLoss=None, TakeProfit=None)] if delta > 0.0 else \
+               [OpenSellPositionActionAPI(PositionType=PositionType.Normal, Volume=volume, StopLoss=None, TakeProfit=None)]
+
+    def risk_management(self) -> None:
         return None
+
+    def _hedge_(self, update: BarUpdateAPI, close: float) -> float:
+        if not self._neutralize_reward_: return 0.0
+        held = self._previous_exposure_
+        previous_close = self._previous_bar_close_
+        if not held or not previous_close or not close or previous_close <= 0.0 or close <= 0.0: return 0.0
+        return self._neutralize_scale_ * held * math.log(close / previous_close)
+
+    def _turnover_(self, update: BarUpdateAPI, close: float) -> float:
+        if self._turnover_cost_ <= 0.0: return 0.0
+        return self._turnover_cost_ * abs(self._held_exposure_(update, close) - self._previous_exposure_)
+
+    def _held_exposure_(self, update: BarUpdateAPI, close: float) -> float:
+        equity = update.Portfolio.Equity
+        if not equity or not close: return 0.0
+        return self._exposure_(update) * close / equity
+
+    def _bucket_(self, update: BarUpdateAPI) -> Union[tuple, None]:
+        if not self._decision_schedule_: return None
+        moment = update.Bar.Timestamp.DateTime
+        if self._decision_schedule_ == "W1": return moment.isocalendar()[:2]
+        if self._decision_schedule_ == "D1": return (moment.year, moment.month, moment.day)
+        span = 4 if self._decision_schedule_ == "H4" else 8 if self._decision_schedule_ == "H8" else 12 if self._decision_schedule_ == "H12" else 1
+        return (moment.year, moment.month, moment.day, moment.hour // span)
 
     def _step_(self, update: BarUpdateAPI) -> Union[list, None]:
         observation = self._observation_.encode(update)
         equity = update.Portfolio.Equity
+        close = update.Bar.CloseTick.Bid.Price
         if self.Training and self._previous_observation_ is not None:
-            reward = self._reward_.reward(equity, self._previous_equity_)
-            self._agent_.memorize(self._previous_observation_, self._previous_action_, reward, observation, False)
-            self._step_index_ += 1
-            if self._step_index_ % self.TrainFrequency == 0:
-                for _ in range(self.GradientSteps): self._agent_.learn()
-        action = self._agent_.decide(observation, explore=self.Training)
-        self._previous_observation_ = observation
-        self._previous_action_ = action
+            self._pending_reward_ += self._reward_.reward(equity, self._previous_equity_, self._hedge_(update, close) + self._turnover_(update, close))
+        bucket = self._bucket_(update)
+        decide = bucket != self._decision_bucket_ if bucket is not None else self._decision_index_ % self._decision_interval_ == 0
+        if decide:
+            self._decision_bucket_ = bucket
+            if self.Training and self._previous_observation_ is not None:
+                self._agent_.memorize(self._previous_observation_, self._previous_action_, self._pending_reward_, observation, False)
+                self._step_index_ += 1
+                if self._step_index_ % self.TrainFrequency == 0:
+                    for _ in range(self.GradientSteps): self._agent_.learn()
+            self._pending_reward_ = 0.0
+            action = self._agent_.decide(observation, explore=self.Training)
+            self._previous_observation_ = observation
+            self._previous_action_ = action
+            self._current_action_ = action
+        else:
+            action = self._current_action_
+        self._decision_index_ += 1
         self._previous_equity_ = equity
-        return self._control_(update, float(action[0]))
+        self._previous_bar_close_ = close
+        self._previous_exposure_ = self._held_exposure_(update, close)
+        signal = float(action[0])
+        if self._signal_smoothing_ > 0.0:
+            previous = self._smoothed_signal_
+            signal = signal if previous is None else previous + self._signal_smoothing_ * (signal - previous)
+            self._smoothed_signal_ = signal
+        return self._emit_(update, self._control_(update, signal), signal)
 
     def _initialize_(self, _: Any) -> None:
         self._agent_.reset()
@@ -388,6 +437,13 @@ class DDPGStrategyAPI(NNFXStrategyAPI):
         self._previous_observation_ = None
         self._previous_action_ = None
         self._previous_equity_ = None
+        self._previous_bar_close_ = None
+        self._previous_exposure_ = 0.0
+        self._smoothed_signal_ = None
+        self._current_action_ = None
+        self._pending_reward_ = 0.0
+        self._decision_index_ = 0
+        self._decision_bucket_ = None
         self._step_index_ = 0
 
     def signal_management(self) -> MachineAPI:
