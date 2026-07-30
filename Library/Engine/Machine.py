@@ -4,7 +4,7 @@ from typing import Any, Union
 from dataclasses import dataclass, field
 
 from Library.Database.Dataclass import DataclassAPI
-from Library.Logging import HandlerLoggingAPI
+from Library.Logging import LoggingAPI
 from Library.Engine.State import StateAPI
 
 @dataclass(slots=True)
@@ -14,10 +14,10 @@ class MachineAPI(DataclassAPI):
     At: Union[StateAPI, None] = field(default=None, init=False)
 
     _states_: dict[str, StateAPI] = field(default_factory=dict, init=False, repr=False)
-    _log_: Union[HandlerLoggingAPI, None] = field(default=None, init=False, repr=False)
+    _log_: Union[LoggingAPI, None] = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        self._log_ = HandlerLoggingAPI(Class=type(self).__name__, Subclass=self.Name)
+        self._log_ = LoggingAPI(self.Name)
 
     def state(self, name: str, end: bool = False) -> StateAPI:
         existing = self._states_.get(name)
