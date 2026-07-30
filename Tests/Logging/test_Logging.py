@@ -1,0 +1,272 @@
+import pytest
+
+from Library.Logging import LoggingAPI, LoggerAPI, VerboseLevel
+
+def test_lambda_is_not_called_when_gated(recorder):
+    calls = []
+    recorder.set_level(VerboseLevel.Warning)
+    LoggingAPI.console.set_level(VerboseLevel.Silent)
+    LoggingAPI.file.set_level(VerboseLevel.Silent)
+    log = LoggingAPI(Class="Lazy")
+    log.debug(lambda: calls.append(1) or "never built")
+    log.info(lambda: calls.append(1) or "never built")
+    log.alert(lambda: calls.append(1) or "never built")
+    assert calls == []
+
+def test_lambda_is_called_when_accepted(recorder):
+    calls = []
+    recorder.set_level(VerboseLevel.Debug)
+    log = LoggingAPI(Class="Lazy")
+    log.debug(lambda: calls.append(1) or "built")
+    assert calls == [1]
+
+def test_lambda_is_called_exactly_once_for_many_sinks(recorder):
+    calls = []
+    recorder.set_level(VerboseLevel.Debug)
+    LoggingAPI.console.set_level(VerboseLevel.Debug)
+    LoggingAPI.file.set_level(VerboseLevel.Debug)
+    log = LoggingAPI(Class="Once")
+    log.debug(lambda: calls.append(1) or "built")
+    assert calls == [1]
+    assert len(recorder.written) == 1
+
+def test_plain_string_content_is_accepted(recorder):
+    recorder.set_level(VerboseLevel.Debug)
+    log = LoggingAPI(Class="Plain")
+    log.info("Plain Message: Delivered")
+    assert "Plain Message: Delivered" in recorder.written[0]
+
+@pytest.mark.parametrize("method,level", [
+    ("debug", VerboseLevel.Debug), ("info", VerboseLevel.Info), ("alert", VerboseLevel.Alert),
+    ("warning", VerboseLevel.Warning), ("error", VerboseLevel.Error), ("exception", VerboseLevel.Exception)])
+def test_every_level_method_emits_its_level(recorder, method, level):
+    recorder.set_level(VerboseLevel.Debug)
+    log = LoggingAPI(Class="Levels")
+    getattr(log, method)(lambda: "message")
+    assert recorder.formatted[0][0] is level
+
+def test_gating_is_per_level(recorder):
+    recorder.set_level(VerboseLevel.Warning)
+    log = LoggingAPI(Class="Gate")
+    log.debug(lambda: "dropped")
+    log.info(lambda: "dropped")
+    log.alert(lambda: "dropped")
+    log.warning(lambda: "kept")
+    log.error(lambda: "kept")
+    log.exception(lambda: "kept")
+    assert len(recorder.written) == 3
+
+def test_silent_sink_receives_nothing(recorder):
+    recorder.set_level(VerboseLevel.Silent)
+    log = LoggingAPI(Class="Silent")
+    for method in ("debug", "info", "alert", "warning", "error", "exception"):
+        getattr(log, method)(lambda: "message")
+    assert recorder.written == []
+
+def test_per_sink_levels_route_independently(recorder, lines):
+    LoggingAPI.console.set_level(VerboseLevel.Silent)
+    LoggingAPI.file.set_level(VerboseLevel.Debug)
+    recorder.set_level(VerboseLevel.Error)
+    log = LoggingAPI(Class="Routing")
+    log.debug(lambda: "debug only to file")
+    log.error(lambda: "error to both")
+    assert len(recorder.written) == 1
+    assert "error to both" in recorder.written[0]
+    assert len(lines()) == 2
+
+def test_writing_to_a_single_sink_directly(recorder):
+    recorder.set_level(VerboseLevel.Debug)
+    recorder.write(VerboseLevel.Info, "moment", "", "", "direct")
+    assert recorder.written == ["moment - Info - direct"]
+
+def test_class_tags_appear_before_level(recorder):
+    recorder.set_level(VerboseLevel.Debug)
+    LoggingAPI.set_class_tags("EURUSD", "H1")
+    log = LoggingAPI(Class="Tagged")
+    log.info(lambda: "message")
+    assert recorder.written[0].startswith("")
+    assert " - EURUSD - H1 - Info - Tagged - Tests - message" in recorder.written[0]
+
+def test_class_tags_are_shared_across_instances(recorder):
+    recorder.set_level(VerboseLevel.Debug)
+    first = LoggingAPI(Class="First")
+    LoggingAPI.set_class_tags("SHARED")
+    second = LoggingAPI(Class="Second")
+    first.info(lambda: "a")
+    second.info(lambda: "b")
+    assert "SHARED" in recorder.written[0]
+    assert "SHARED" in recorder.written[1]
+
+def test_clear_class_tags(recorder):
+    recorder.set_level(VerboseLevel.Debug)
+    LoggingAPI.set_class_tags("GONE")
+    LoggingAPI.clear_class_tags()
+    log = LoggingAPI(Class="Cleared")
+    log.info(lambda: "message")
+    assert "GONE" not in recorder.written[0]
+
+def test_set_class_tags_ignores_empty_call(recorder):
+    LoggingAPI.set_class_tags("KEPT")
+    LoggingAPI.set_class_tags()
+    assert LoggingAPI._class_tags_ == ("KEPT",)
+
+def test_instance_tags_appear_after_level(recorder):
+    recorder.set_level(VerboseLevel.Debug)
+    log = LoggingAPI(Class="Engine", Subclass="Backtesting")
+    log.info(lambda: "message")
+    assert " - Info - Engine - Backtesting - message" in recorder.written[0]
+
+def test_instance_tags_are_independent(recorder):
+    recorder.set_level(VerboseLevel.Debug)
+    first = LoggingAPI(Class="Alpha")
+    second = LoggingAPI(Class="Beta")
+    first.info(lambda: "a")
+    second.info(lambda: "b")
+    assert "Alpha" in recorder.written[0] and "Beta" not in recorder.written[0]
+    assert "Beta" in recorder.written[1] and "Alpha" not in recorder.written[1]
+
+def test_class_and_subclass_are_default_tags(recorder):
+    log = LoggingAPI(Class="Explicit", Subclass="Purpose")
+    assert log.InstanceTags == ("Explicit", "Purpose")
+
+def test_class_is_derived_when_omitted(recorder):
+    log = LoggingAPI()
+    assert log.InstanceTags == ("test_Logging", "Tests")
+
+def test_identify_can_be_disabled(recorder):
+    log = LoggingAPI(identify=False)
+    assert log.InstanceTags == ()
+
+def test_identify_disabled_still_honors_explicit_tags(recorder):
+    log = LoggingAPI(Class="Manual", Subclass="Purpose", identify=False)
+    assert log.InstanceTags == ("Manual", "Purpose")
+
+def test_explicit_class_overrides_derivation(recorder):
+    log = LoggingAPI(Class="Override")
+    assert log.InstanceTags[0] == "Override"
+
+def test_positional_and_named_extra_tags(recorder):
+    log = LoggingAPI("Extra", Class="C", Subclass="S", Region="EU")
+    assert log.InstanceTags == ("C", "S", "Extra", "EU")
+
+def test_set_instance_tags_replaces_tags(recorder):
+    log = LoggingAPI(Class="Old")
+    log.set_instance_tags(Class="New", Subclass="Fresh")
+    assert log.InstanceTags == ("New", "Fresh")
+
+def test_empty_tags_are_dropped(recorder):
+    log = LoggingAPI(Class="Only", Subclass="", identify=False)
+    assert log.InstanceTags == ("Only",)
+
+def test_none_subclass_is_still_derived(recorder):
+    log = LoggingAPI(Class="Only", Subclass=None)
+    assert log.InstanceTags == ("Only", "Tests")
+
+def test_facade_set_level_applies_to_both_shared_sinks():
+    log = LoggingAPI(Class="Both")
+    log.set_level(VerboseLevel.Alert)
+    assert LoggingAPI.console.Level is VerboseLevel.Alert
+    assert LoggingAPI.file.Level is VerboseLevel.Alert
+
+def test_facade_reset_level(recorder):
+    LoggingAPI.console.set_level(VerboseLevel.Warning, default=True)
+    LoggingAPI.file.set_level(VerboseLevel.Error, default=True)
+    log = LoggingAPI(Class="Reset")
+    log.set_level(VerboseLevel.Debug)
+    log.reset_level()
+    assert LoggingAPI.console.Level is VerboseLevel.Warning
+    assert LoggingAPI.file.Level is VerboseLevel.Error
+
+def test_configuration_survives_new_instances(recorder):
+    LoggingAPI(Class="Setup").set_level(VerboseLevel.Alert)
+    assert LoggingAPI(Class="Later").console.Level is VerboseLevel.Alert
+
+def test_with_statement_locks_configuration(recorder):
+    log = LoggingAPI(Class="Master")
+    log.set_level(VerboseLevel.Warning)
+    with log:
+        nested = LoggingAPI(Class="Nested")
+        nested.set_level(VerboseLevel.Debug)
+        assert LoggingAPI.console.Level is VerboseLevel.Warning
+        assert LoggingAPI.file.Level is VerboseLevel.Warning
+
+def test_with_statement_unlocks_on_exit(recorder):
+    log = LoggingAPI(Class="Master")
+    with log:
+        pass
+    log.set_level(VerboseLevel.Debug)
+    assert LoggingAPI.console.Level is VerboseLevel.Debug
+
+def test_nested_with_only_outermost_governs(recorder):
+    log = LoggingAPI(Class="Master")
+    log.set_level(VerboseLevel.Warning)
+    with log:
+        with LoggingAPI(Class="Inner"):
+            pass
+        assert LoggingAPI.console.Locked is True
+    assert LoggingAPI.console.Locked is False
+
+def test_with_statement_does_not_suppress_exceptions(recorder):
+    log = LoggingAPI(Class="Raises")
+    with pytest.raises(ValueError):
+        with log:
+            raise ValueError("must propagate")
+
+def test_with_statement_returns_self(recorder):
+    log = LoggingAPI(Class="Self")
+    with log as entered:
+        assert entered is log
+
+def test_guard_logs_and_reraises(recorder):
+    recorder.set_level(VerboseLevel.Debug)
+    log = LoggingAPI(Class="Guard")
+    @log.guard
+    def failing():
+        raise RuntimeError("inner failure")
+    with pytest.raises(RuntimeError):
+        failing()
+    joined = "\n".join(recorder.written)
+    assert "Failed @ failing" in joined
+    assert "RuntimeError: inner failure" in joined
+
+def test_guard_returns_value_on_success(recorder):
+    log = LoggingAPI(Class="Guard")
+    @log.guard
+    def working():
+        return 42
+    assert working() == 42
+
+def test_guard_preserves_function_metadata(recorder):
+    log = LoggingAPI(Class="Guard")
+    @log.guard
+    def named():
+        return None
+    assert named.__name__ == "named"
+
+def test_log_method_with_explicit_level(recorder):
+    recorder.set_level(VerboseLevel.Debug)
+    log = LoggingAPI(Class="Explicit")
+    log.log(VerboseLevel.Warning, lambda: "explicit level")
+    assert recorder.formatted[0][0] is VerboseLevel.Warning
+
+def test_log_method_with_silent_is_dropped(recorder):
+    recorder.set_level(VerboseLevel.Debug)
+    log = LoggingAPI(Class="Explicit")
+    log.log(VerboseLevel.Silent, lambda: "dropped")
+    assert recorder.written == []
+
+def test_critical_maps_to_exception(recorder):
+    recorder.set_level(VerboseLevel.Debug)
+    log = LoggingAPI(Class="Critical")
+    log.critical(lambda: "critical")
+    assert recorder.formatted[0][0] is VerboseLevel.Exception
+
+def test_flush_and_close_are_safe_without_open(recorder):
+    log = LoggingAPI(Class="Lifecycle")
+    log.flush()
+    log.close()
+
+def test_open_opens_every_sink(recorder):
+    log = LoggingAPI(Class="Lifecycle")
+    log.open()
+    assert recorder._opened_ is True

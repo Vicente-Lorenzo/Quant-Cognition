@@ -5,6 +5,7 @@
 *.claude/
 *.antigravitycli/
 *__pycache__/
+*.pytest_cache/
 
 *bin/
 *obj/

@@ -1,35 +1,46 @@
 # TODOS — Quant Trading Framework
 
 The single planning file. `RULES.md` holds conventions and verified state only; nothing here belongs
-there. Ordered — item 1 is current.
+there. Ordered — item 2 is current.
 
 ---
 
-## 1. Logging refactor ← CURRENT
+## 1. Logging refactor — DONE 2026-07-30
 
-Deep refactor + optimization of `Library/Logging`. Declared by the user 2026-07-14 as "the silent
-killer"; picked up now because it is self-contained and fast.
+Delivered. `Library/Logging` went from 12 files / 1031 lines to 6 files, and from 0 tests to 237.
 
-**Measured problems**
+| | before | after |
+|---|---|---|
+| suppressed record | 271 ns | **128 ns** |
+| emitted record | 4961 ns | **1188 ns** |
+| timestamp render | 1990 ns | **234 ns** |
+| 100k-record CPU-bound workload | 0.532 s | 0.452 s |
 
-- **Buffer-until-exit design.** `FileLoggingAPI`/`BufferLoggingAPI` accumulate into a class-level RAM
-  deque drained only at `__exit__`. Patched with an `is_entered()` guard in `FileLoggingAPI.output`
-  for the never-exiting daemon, but the architecture stands — a week-long run buffers everything.
-- **Class-level state everywhere.** Verbose levels, tags, buffers and enter/exit flags are all
-  classmethod/class-attribute (per-subclass singletons), so instances share state. Confusing
-  double-negative flags (`enable_entering` sets the flag False). `HandlerLoggingAPI` fans out to four
-  handler instances whose calls all hit class state.
-- **Hot-path cost ~0.3 s per H1-year** at Debug console verbosity. Every `log()` takes two locks
-  (global + class) even when the message is filtered out, and `build()` assembles the string per call.
-- **V1 couples to the buffering.** `Library/App/V1/App.py` polls `web.stream()` on an *un-entered*
-  `WebLoggingAPI`; any refactor must preserve poll-drain semantics or migrate that consumer.
+**What shipped** — `Level` · `Logger` · `Console` · `File` · `Storage` · `Logging`, with `Log.py`
+holding the `Logging.Log` datapoint. Dead sinks (Web · Email · Bucket · Report · Buffer · Telegram)
+deleted; the V1 terminal tab that consumed `web.stream()` removed. `LoggingAPI` subclasses
+`logging.Logger`, so it interoperates with third-party code while its own level methods bypass the
+stdlib record machinery. Files land in `tempfile.gettempdir()/Logs/<entry-point>.log` with rotation
+and retention. `Environment.Retention` sweeps expired files and rows daily.
 
-**Constraints** — preserve the RULES §LOGGING conventions exactly (message format, ` · ` separators,
-state-transition arrows, Debug/Info split, tags via `type(self).__name__`, and the symmetric
-`log.console` / `log.file` verbose declarations in entry points).
+**Two measured findings worth keeping**
 
-**Approach** — profile first (`cProfile` cumulative + tottime on an H1 year) to confirm the 0.3 s/y
-figure and locate the real cost before touching the architecture.
+- **Threads lose to the GIL for local sinks.** A CPU-bound Python thread starves a concurrent writer
+  253x, and a drain thread fell 93k records behind. Making the *formatter* cheap (cached-second
+  timestamp, 5.5x) beat making the write *asynchronous* on wall clock, with no queue and no backlog.
+  Async is therefore a per-sink property: console and file are synchronous, `StorageAPI` is not,
+  because a 50-200 us database insert is the one case where blocking is worse.
+- **stdlib cannot be the hot path.** `LogRecord.__init__` alone costs 2097 ns with every tuning knob
+  off, and `QueueHandler.prepare()` formats on the calling thread. Subclassing `logging.Logger` while
+  bypassing `_log`/`makeRecord`/`handle` gives interoperation at 247 ns.
+
+**Two real bugs fixed on the way** — `with log:` returned a truthy value from `__exit__` and was
+therefore *swallowing exceptions* (`Setup/Logging.py` used that pattern); and timestamps truncated
+instead of rounding, so `.123` rendered as `.122`.
+
+**Remaining, optional** — `StorageAPI` is implemented and unit-tested against a fake record but has
+not yet been exercised against a live Postgres run end to end; the Scheduler currently writes its
+durable rows through `ExecutorAPI._open_log_`/`_close_log_` rather than through the sink.
 
 ---
 
