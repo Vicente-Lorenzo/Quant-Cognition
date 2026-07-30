@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Union, ClassVar, TYPE_CHECKING
 
 from Library.Auth.User import UserAPI
+from Library.Logging.Log import LogAPI
 from Library.Engine.Machine import MachineAPI
 from Library.Scheduler.Task import TaskAPI
 from Library.Scheduler.Cycle import CycleAPI
@@ -57,6 +58,7 @@ class RunAPI(DatapointAPI):
     PID: Union[int, None] = None
     Auditor: Union[str, None] = None
     Log: Union[str, None] = None
+    LID: Union[str, None] = None
     StartedAt: Union[datetime, None] = None
     StoppedAt: Union[datetime, None] = None
     Heartbeat: Union[datetime, None] = None
@@ -76,6 +78,7 @@ class RunAPI(DatapointAPI):
             self.ID.PID: pl.Int64(),
             self.ID.Auditor: ForeignKey(pl.String, reference=f'"{UserAPI.Schema}"."{UserAPI.Table}"("{UserAPI.ID.UID}")'),
             self.ID.Log: pl.String(),
+            self.ID.LID: ForeignKey(pl.String, reference=f'"{LogAPI.Schema}"."{LogAPI.Table}"("{LogAPI.ID.UID}") ON DELETE SET NULL'),
             self.ID.StartedAt: pl.Datetime(),
             self.ID.StoppedAt: pl.Datetime(),
             self.ID.Heartbeat: pl.Datetime(),

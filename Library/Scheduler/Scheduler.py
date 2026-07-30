@@ -8,7 +8,7 @@ from typing import Union
 
 from croniter import croniter
 
-from Library.Logging import HandlerLoggingAPI
+from Library.Logging import LoggingAPI
 from Library.Utility.Runtime import terminate
 from Library.Scheduler.Workflow import WorkflowAPI, Kind
 from Library.Scheduler.Task import TaskAPI
@@ -40,7 +40,7 @@ class SchedulerAPI:
         self._started_ = datetime.now()
         self._launch_ = None
         self._listener_ = None
-        self._log_ = HandlerLoggingAPI(Class=type(self).__name__, Subclass=database)
+        self._log_ = LoggingAPI(database)
 
     def _listen_(self) -> Union[PostgresDatabaseAPI, None]:
         try:

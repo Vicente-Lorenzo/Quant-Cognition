@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Union
 
-from Library.Logging import HandlerLoggingAPI
+from Library.Logging import LoggingAPI
 from Library.Utility.Runtime import terminate
 from Library.Scheduler.Workflow import WorkflowAPI, Kind
 from Library.Scheduler.Task import TaskAPI
@@ -22,7 +22,7 @@ class ManagerAPI:
 
     def __init__(self, *, database: str = "Quant") -> None:
         self._database_ = database
-        self._log_ = HandlerLoggingAPI(Class=type(self).__name__, Subclass=database)
+        self._log_ = LoggingAPI(database)
 
     @staticmethod
     def _clean_(fields: dict) -> dict:

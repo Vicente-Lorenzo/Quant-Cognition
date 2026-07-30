@@ -5,7 +5,7 @@ from argparse import ArgumentParser, Namespace, SUPPRESS
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from Library.Logging import HandlerLoggingAPI, VerboseLevel
+from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Utility.Typing import MISSING
 from Library.Scheduler.Workflow import Kind, WorkflowAPI
 from Library.Scheduler.Task import TaskAPI, TaskType
@@ -195,9 +195,9 @@ def main() -> None:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"): stream.reconfigure(encoding="utf-8", errors="replace")
     args = _parse_()
-    log = HandlerLoggingAPI(Class=ManagerAPI.__name__, Subclass="Management")
-    log.console.set_verbose_level(VerboseLevel[args.console])
-    log.file.set_verbose_level(VerboseLevel[args.file])
+    log = LoggingAPI("Management")
+    log.console.set_level(VerboseLevel[args.console])
+    log.file.set_level(VerboseLevel[args.file])
     if args.resource == "serve":
         SchedulerAPI(database=args.database).start()
         return

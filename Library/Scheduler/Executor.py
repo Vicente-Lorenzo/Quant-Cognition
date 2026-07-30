@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sys
 import time
-import tempfile
+import socket
 import uuid
 import subprocess
 from pathlib import Path
@@ -12,8 +12,9 @@ from typing import Union
 
 import psutil
 
-from Library.Logging import HandlerLoggingAPI
-from Library.Utility.Path import traceback_root
+from Library.Logging import LoggingAPI
+from Library.Logging.Log import LogAPI
+from Library.Utility.Path import inspect_temporary, traceback_root
 from Library.Scheduler.Workflow import Kind
 from Library.Scheduler.Task import TaskAPI, TaskType
 from Library.Scheduler.Run import RunAPI, RunEvent, RunStatus
@@ -24,11 +25,40 @@ class ExecutorAPI:
     _POLL_: float = 0.2
     _HEARTBEAT_: float = 15.0
     _ROOT_: str = str(traceback_root())
-    _RUNS_: str = str(Path(tempfile.gettempdir()) / "Quant" / "Runs")
+    RUNS: str = str(inspect_temporary("Quant", "Runs"))
+    _CONTENT_: int = 8 * 1024 * 1024
 
     def __init__(self, *, database: str = "Quant") -> None:
         self._database_ = database
-        self._log_ = HandlerLoggingAPI(Class=type(self).__name__, Subclass=database)
+        self._log_ = LoggingAPI(database)
+
+    def _open_log_(self, run: RunAPI, task: TaskAPI, path: str) -> Union[str, None]:
+        try:
+            with PostgresDatabaseAPI(database=self._database_) as db:
+                record = LogAPI(
+                    UID=uuid.uuid4().hex, Source=task.Name, Level=RunStatus.Running.name, Host=socket.gethostname(),
+                    User=run.Auditor, Process=run.PID, Path=path, Content="", Records=0, Dropped=0,
+                    Truncated=False, StartedAt=datetime.now(), db=db)
+                record.save(by="Scheduler")
+                return record.UID
+        except Exception as error:
+            self._log_.debug(lambda: f"Run Log Open: Failed · {error}")
+            return None
+
+    def _close_log_(self, run: RunAPI, path: str) -> None:
+        if run.LID is None: return
+        try:
+            source = Path(path)
+            content = source.read_text(encoding="utf-8", errors="replace") if source.exists() else ""
+            with PostgresDatabaseAPI(database=self._database_) as db:
+                record = LogAPI(UID=run.LID, db=db, autoload=True)
+                record.Level, record.Records = run.Status, content.count("\n")
+                record.Truncated = len(content) > self._CONTENT_
+                record.Content = content[:self._CONTENT_]
+                record.StoppedAt = datetime.now()
+                record.save(by="Scheduler")
+        except Exception as error:
+            self._log_.debug(lambda: f"Run Log Close: Failed · {error}")
 
     @staticmethod
     def _command_(kind: TaskType, path: str) -> list[str]:
@@ -87,8 +117,9 @@ class ExecutorAPI:
         run.Status, run.StartedAt, run.Heartbeat = machine.At.Name, started, started
         self._persist_(run)
         self._log_.info(lambda: f"Run Launch: Started ({task.Name}) · {label} · {task.Path}")
-        Path(self._RUNS_).mkdir(parents=True, exist_ok=True)
-        log = str(Path(self._RUNS_) / f"{run.UID}.log")
+        Path(self.RUNS).mkdir(parents=True, exist_ok=True)
+        log = str(Path(self.RUNS) / f"{run.UID}.log")
+        run.LID = self._open_log_(run, task, log)
         peak, beat = 0, started
         with open(log, "wb") as sink:
             process = subprocess.Popen(self._command_(artifact, task.Path), cwd=self._ROOT_, env=self._environment_(), stdout=sink, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
@@ -110,6 +141,7 @@ class ExecutorAPI:
         elif retry < (task.MaxRetry or 0): machine.perform(RunEvent.Retry, None)
         else: machine.perform(RunEvent.RequireReview if task.RequiresReview else RunEvent.Fail, None)
         run.Status, run.StoppedAt, run.Duration, run.Memory, run.ExitCode, run.Log = machine.At.Name, stopped, (stopped - started).total_seconds(), peak, exit_code, log
+        self._close_log_(run, log)
         self._persist_(run)
         self._log_.info(lambda: f"Run Finish: {run.Status} ({task.Name}) · {run.Duration:.2f}s · {peak / 1048576:.1f} MB · Exit {exit_code}")
         return run

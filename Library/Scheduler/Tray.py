@@ -2,19 +2,20 @@ import sys
 import threading
 import subprocess
 
-from Library.Logging import HandlerLoggingAPI, VerboseLevel
+from Library.Logging import LoggingAPI, VerboseLevel
+from Library.Logging.File import FileAPI
 from Library.Utility.Path import traceback_root
 from Library.Utility.Runtime import tail_terminal
 from Library.Scheduler.Serve import build
 
 class TrayAPI:
 
-    _LOG_ = traceback_root() / "Logs" / "Scheduler.log"
+    _LOG_ = FileAPI.folder() / "Scheduler.log"
     _LAUNCHER_ = traceback_root() / "Scripts" / "Scheduler.py"
 
     def __init__(self) -> None:
         import pystray
-        self._log_ = HandlerLoggingAPI(Class=type(self).__name__)
+        self._log_ = LoggingAPI()
         self._verbose_ = True
         self._running_ = False
         self._scheduler_ = None
@@ -48,7 +49,7 @@ class TrayAPI:
 
     def _toggle_(self, icon=None, item=None) -> None:
         self._verbose_ = not self._verbose_
-        self._log_.console.set_verbose_level(VerboseLevel.Debug if self._verbose_ else VerboseLevel.Info)
+        self._log_.console.set_level(VerboseLevel.Debug if self._verbose_ else VerboseLevel.Info)
 
     def _launch_(self, icon=None, item=None) -> None:
         self._scheduler_ = build()
@@ -76,9 +77,9 @@ class TrayAPI:
         self._icon_.run()
 
 def main() -> None:
-    log = HandlerLoggingAPI(Class=TrayAPI.__name__)
-    log.console.set_verbose_level(VerboseLevel.Debug)
-    log.file.set_verbose_level(VerboseLevel.Debug)
+    log = LoggingAPI()
+    log.console.set_level(VerboseLevel.Debug)
+    log.file.set_level(VerboseLevel.Debug)
     try:
         tray = TrayAPI()
     except Exception as error:
