@@ -2,8 +2,7 @@ import time
 
 import pytest
 
-from Library.Logging import LoggingAPI, VerboseLevel
-from Library.Logging.Logger import stamp
+from Library.Logging import LoggerAPI, LoggingAPI, VerboseLevel
 
 _RUNS_: int = 20000
 
@@ -28,7 +27,7 @@ def test_emitted_records_are_cheap(tmp_path):
 
 def test_timestamp_is_cheap():
     moment = time.time()
-    assert _measure_(lambda: stamp(moment)) < 2000
+    assert _measure_(lambda: LoggerAPI.stamp(moment)) < 2000
 
 def test_gated_is_faster_than_emitted(tmp_path):
     log = LoggingAPI("Bench")
@@ -43,7 +42,7 @@ def test_gated_is_faster_than_emitted(tmp_path):
 def test_timestamp_cache_is_reused():
     from Library.Logging import LoggerAPI
     moment = 1_700_000_000.5
-    stamp(moment)
+    LoggerAPI.stamp(moment)
     before = LoggerAPI.Prefix
-    stamp(moment + 0.100)
+    LoggerAPI.stamp(moment + 0.100)
     assert LoggerAPI.Prefix is before

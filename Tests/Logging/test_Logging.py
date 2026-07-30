@@ -79,36 +79,36 @@ def test_writing_to_a_single_sink_directly(recorder):
     recorder.write(VerboseLevel.Info, "moment", "", "", "direct")
     assert recorder.written == ["moment - Info - direct"]
 
-def test_class_tags_appear_before_level(recorder):
+def test_shared_tags_appear_before_level(recorder):
     recorder.set_level(VerboseLevel.Debug)
-    LoggingAPI.set_class_tags("EURUSD", "H1")
+    LoggingAPI.set_shared_tags("EURUSD", "H1")
     log = LoggingAPI("Tagged")
     log.info(lambda: "message")
     assert recorder.written[0].startswith("")
     assert " - EURUSD - H1 - Info - test_Logging - Tagged - message" in recorder.written[0]
 
-def test_class_tags_are_shared_across_instances(recorder):
+def test_shared_tags_are_shared_across_instances(recorder):
     recorder.set_level(VerboseLevel.Debug)
     first = LoggingAPI("First")
-    LoggingAPI.set_class_tags("SHARED")
+    LoggingAPI.set_shared_tags("SHARED")
     second = LoggingAPI("Second")
     first.info(lambda: "a")
     second.info(lambda: "b")
     assert "SHARED" in recorder.written[0]
     assert "SHARED" in recorder.written[1]
 
-def test_clear_class_tags(recorder):
+def test_clear_shared_tags(recorder):
     recorder.set_level(VerboseLevel.Debug)
-    LoggingAPI.set_class_tags("GONE")
-    LoggingAPI.clear_class_tags()
+    LoggingAPI.set_shared_tags("GONE")
+    LoggingAPI.clear_shared_tags()
     log = LoggingAPI("Cleared")
     log.info(lambda: "message")
     assert "GONE" not in recorder.written[0]
 
-def test_set_class_tags_ignores_empty_call(recorder):
-    LoggingAPI.set_class_tags("KEPT")
-    LoggingAPI.set_class_tags()
-    assert LoggingAPI._class_tags_ == ("KEPT",)
+def test_set_shared_tags_ignores_empty_call(recorder):
+    LoggingAPI.set_shared_tags("KEPT")
+    LoggingAPI.set_shared_tags()
+    assert LoggingAPI._shared_tags_ == ("KEPT",)
 
 def test_instance_tags_appear_after_level(recorder):
     recorder.set_level(VerboseLevel.Debug)

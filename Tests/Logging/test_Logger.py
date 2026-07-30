@@ -156,19 +156,16 @@ def test_format_failure_never_propagates(recorder):
     recorder.write(VerboseLevel.Info, "moment", "", "", "message")
 
 def test_stamp_is_millisecond_precise():
-    from Library.Logging.Logger import stamp
-    assert stamp(1_700_000_000.0).endswith(".000")
-    assert stamp(1_700_000_000.123).endswith(".123")
-    assert stamp(1_700_000_000.999).endswith(".999")
+    assert LoggerAPI.stamp(1_700_000_000.0).endswith(".000")
+    assert LoggerAPI.stamp(1_700_000_000.123).endswith(".123")
+    assert LoggerAPI.stamp(1_700_000_000.999).endswith(".999")
 
 def test_stamp_never_overflows_milliseconds():
-    from Library.Logging.Logger import stamp
     for fraction in (0.0, 0.4999, 0.9999, 0.99999999):
-        assert len(stamp(1_700_000_000 + fraction).split(".")[-1]) == 3
+        assert len(LoggerAPI.stamp(1_700_000_000 + fraction).split(".")[-1]) == 3
 
 def test_stamp_advances_across_seconds():
-    from Library.Logging.Logger import stamp
-    first = stamp(1_700_000_000.5)
-    second = stamp(1_700_000_001.5)
+    first = LoggerAPI.stamp(1_700_000_000.5)
+    second = LoggerAPI.stamp(1_700_000_001.5)
     assert first != second
     assert first.split(".")[0] != second.split(".")[0]

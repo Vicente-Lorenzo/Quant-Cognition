@@ -1,6 +1,5 @@
 import sys
 import time
-import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -9,8 +8,9 @@ from Library.Logging import LoggingAPI
 from Library.Logging.File import FileAPI
 from Library.Logging.Log import LogAPI
 from Library.Database import PostgresDatabaseAPI
+from Library.Scheduler.Executor import ExecutorAPI
 
-_FOLDERS_: tuple = (FileAPI._temporary_(), Path(tempfile.gettempdir()) / "Quant" / "Runs")
+_FOLDERS_: tuple = (FileAPI.folder(), Path(ExecutorAPI.RUNS))
 _PATTERNS_: tuple = ("*.log", "*.log.*")
 _DAYS_: int = 30
 

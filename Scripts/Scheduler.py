@@ -1,12 +1,12 @@
 import sys
-import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 if sys.stdout is None or sys.stderr is None:
-    _sink_ = Path(tempfile.gettempdir()) / "Logs" / "Scheduler.log"
+    from Library.Logging.File import FileAPI
+    _sink_ = FileAPI.folder() / "Scheduler.log"
     _sink_.parent.mkdir(parents=True, exist_ok=True)
     _handle_ = _sink_.open("w", buffering=1, encoding="utf-8-sig")
     sys.stdout = _handle_

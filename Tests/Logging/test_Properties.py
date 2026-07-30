@@ -63,9 +63,9 @@ def test_file_size_tracks_writes(tmp_path):
     LoggingAPI("Sizer").info(lambda: "measured")
     assert LoggingAPI.file.Size > 0
 
-def test_facade_class_tags_property_mirrors_state():
-    LoggingAPI.set_class_tags("EURUSD", "H1")
-    assert LoggingAPI("X").ClassTags == LoggingAPI._class_tags_ == ("EURUSD", "H1")
+def test_facade_shared_tags_property_mirrors_state():
+    LoggingAPI.set_shared_tags("EURUSD", "H1")
+    assert LoggingAPI("X").SharedTags == LoggingAPI._shared_tags_ == ("EURUSD", "H1")
 
 def test_facade_instance_tags_property_mirrors_state():
     log = LoggingAPI("Engine", "Backtesting")
@@ -80,9 +80,9 @@ def test_facade_depth_property_mirrors_state():
             assert log.Depth == 2
     assert log.Depth == 0
 
-def test_class_tags_precede_instance_tags_in_output(recorder):
+def test_shared_tags_precede_instance_tags_in_output(recorder):
     recorder.set_level(VerboseLevel.Debug)
-    LoggingAPI.set_class_tags("SHARED")
+    LoggingAPI.set_shared_tags("SHARED")
     log = LoggingAPI("Own")
     log.info(lambda: "message")
     line = recorder.written[0]
