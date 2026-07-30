@@ -3,7 +3,7 @@ import torch.nn as nn
 from pathlib import Path
 from abc import ABC, abstractmethod
 
-from Library.Logging import HandlerLoggingAPI
+from Library.Logging import LoggingAPI
 
 class NetworkAPI(nn.Module, ABC):
 
@@ -14,7 +14,7 @@ class NetworkAPI(nn.Module, ABC):
 
         self._path = path
         self._file = path / model / role
-        self._log: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="Network Management")
+        self._log: LoggingAPI = LoggingAPI("Network Management")
 
     @abstractmethod
     def init(self) -> None:

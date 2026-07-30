@@ -3,7 +3,7 @@ from pathlib import Path
 from abc import ABC, abstractmethod
 
 from Library.Database.Dataframe import np
-from Library.Logging import HandlerLoggingAPI
+from Library.Logging import LoggingAPI
 
 class AgentAPI(ABC):
 
@@ -11,7 +11,7 @@ class AgentAPI(ABC):
         super().__init__()
         self._model = model
         self._path = path
-        self._log: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="Agent Management")
+        self._log: LoggingAPI = LoggingAPI("Agent Management")
 
     @abstractmethod
     def save(self) -> None:
