@@ -1,5 +1,6 @@
 import sys
 from os import getcwd
+from tempfile import gettempdir
 from typing import Union
 from sys import _getframe
 from pathlib import PurePath, Path
@@ -10,8 +11,7 @@ from Library.Utility.Typing import contains
 from Library.Utility.Runtime import is_notebook, find_notebook
 
 def inspect_temporary(*folders: str, builder: type[PurePath] = Path) -> Union[PurePath, Path]:
-    import tempfile
-    return builder(tempfile.gettempdir()).joinpath(*folders)
+    return builder(gettempdir()).joinpath(*folders)
 
 def inspect_separator(*, builder: type[PurePath] = Path) -> str:
     return str(builder("a", "b"))[1]
