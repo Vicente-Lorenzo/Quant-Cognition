@@ -47,10 +47,6 @@ class AppAPI:
     GLOBAL_EXPORT_ID: Union[ComponentID, dict] = ComponentID()
     GLOBAL_EXPORT_DOWNLOAD_ID: Union[ComponentID, dict] = ComponentID()
 
-    GLOBAL_TERMINAL_ID: Union[ComponentID, dict] = ComponentID()
-    GLOBAL_TERMINAL_ARROW_ID: Union[ComponentID, dict] = ComponentID()
-    GLOBAL_TERMINAL_BUTTON_ID: Union[ComponentID, dict] = ComponentID()
-    GLOBAL_TERMINAL_COLLAPSE_ID: Union[ComponentID, dict] = ComponentID()
     GLOBAL_NOTIFICATION_ID: Union[ComponentID, dict] = ComponentID()
 
     GLOBAL_ENTER_ASYNC_ID: Union[ComponentID, dict] = ComponentID()
@@ -104,7 +100,6 @@ class AppAPI:
                  proxy: str = None,
                  anchor: str = None,
                  debug: bool = False,
-                 terminal_limit: int = 100,
                  notification_limit: int = 10,
                  notification_duration: Union[int, None] = 5000,
                  notification_dismissable: bool = True,
@@ -113,7 +108,7 @@ class AppAPI:
                  medium_frequency_interval: int = 60 * 1000,
                  low_frequency_interval: int = 60 * 60 * 1000) -> None:
 
-        self._log_ = HandlerLoggingAPI(AppAPI.__name__)
+        self._log_ = LoggingAPI()
 
         self._name_: str = name
         self._log_.debug(lambda: f"Defined Name = {self._name_}")
@@ -174,8 +169,6 @@ class AppAPI:
 
         self._debug_: bool = debug
         self._log_.debug(lambda: f"Defined Debug = {self._debug_}")
-        self._terminal_limit_: int = terminal_limit
-        self._log_.debug(lambda: f"Defined Terminal Limit = {self._terminal_limit_}")
         self._notification_limit_: int = notification_limit
         self._log_.debug(lambda: f"Defined Notification Limit = {self._notification_limit_}")
         self._notification_duration_: Union[int, None] = notification_duration
@@ -240,10 +233,6 @@ class AppAPI:
         self.GLOBAL_EXPORT_ID: dict = self.register(type="button", name="export")
         self.GLOBAL_EXPORT_DOWNLOAD_ID: dict = self.register(type="download", name="export")
 
-        self.GLOBAL_TERMINAL_ID: dict = self.register(type="card", name="terminal")
-        self.GLOBAL_TERMINAL_ARROW_ID: dict = self.register(type="icon", name="terminal")
-        self.GLOBAL_TERMINAL_BUTTON_ID: dict = self.register(type="button", name="terminal")
-        self.GLOBAL_TERMINAL_COLLAPSE_ID: dict = self.register(type="collapse", name="terminal")
         self.GLOBAL_NOTIFICATION_ID: dict = self.register(type="div", name="notification")
 
         self.GLOBAL_ENTER_ASYNC_ID: dict = self.register(type="asyncer", name="enter")
@@ -450,13 +439,6 @@ class AppAPI:
                     label=[IconAPI(icon="bi bi-trash"), TextAPI(text="  Clean & Reset  ")],
                     asyncer=self.GLOBAL_CLEAN_RESET_ASYNC_ID
                 ).build(),
-                *ButtonAPI(
-                    id=self.GLOBAL_TERMINAL_BUTTON_ID, background="primary",
-                    label=[IconAPI(icon="bi bi-terminal"), TextAPI(text="  Terminal  "), IconAPI(icon="bi bi-caret-down-fill", id=self.GLOBAL_TERMINAL_ARROW_ID)]
-                ).build(),
-                dbc.Collapse(dbc.Card(dbc.CardBody([
-                    html.Pre([], id=self.GLOBAL_TERMINAL_ID)
-                ]), className="panel", color="dark", inverse=True), id=self.GLOBAL_TERMINAL_COLLAPSE_ID, is_open=False)
             ], className="right"),
         ], className="footer")
 
@@ -1048,17 +1030,6 @@ class AppAPI:
         self._log_.info(lambda: f"Global Local Storage: {data if data else 'Empty'}")
         if not data: self._injector_.on_clean_local.increment()
 
-    @clientside_callback(
-        Output(GLOBAL_TERMINAL_COLLAPSE_ID, "is_open"),
-        Output(GLOBAL_TERMINAL_ARROW_ID, "className"),
-        Input(GLOBAL_TERMINAL_BUTTON_ID, "n_clicks"),
-        State(GLOBAL_TERMINAL_COLLAPSE_ID, "is_open"),
-        State(GLOBAL_TERMINAL_ARROW_ID, "className"),
-        on_click=InjectionType.Hidden
-    )
-    def _global_async_terminal_button_callback_(self):
-        return self.asset(path="Callbacks/Collapse.js", url=False)
-
     @staticmethod
     def _global_async_stream_callback_(logs: list[Component], elements: list[Component], limit: int):
         if not logs: raise PreventUpdate
@@ -1068,14 +1039,6 @@ class AppAPI:
         overflow = len(elements) + len(logs) - limit
         for _ in range(overflow): del patch[0]
         return patch
-
-    @serverside_callback(
-        Output(GLOBAL_TERMINAL_ID, "children"),
-        Input(GLOBAL_HIGH_FREQUENCY_INTERVAL_ID, "n_intervals"),
-        State(GLOBAL_TERMINAL_ID, "children")
-    )
-    def _global_async_terminal_stream_callback_(self, _, terminal: list[Component]):
-        return self._global_async_stream_callback_(logs=self._log_.web.stream(), elements=terminal, limit=self._terminal_limit_)
 
     @clientside_callback(
         Output(GLOBAL_MODAL_ID, "is_open"),
