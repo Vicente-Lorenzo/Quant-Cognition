@@ -1,4 +1,6 @@
 .DS_Store
+*bin/
+*obj/
 *.idea/
 *.venv/
 *.vscode/
@@ -6,9 +8,7 @@
 *.antigravitycli/
 *__pycache__/
 *.pytest_cache/
-
-*bin/
-*obj/
+*.playwright-mcp/
 
 *API/
 *Data/
