@@ -1,10 +1,12 @@
 ﻿import oracledb
 from typing import Union, Callable, Any
+from typing_extensions import Self
 from collections.abc import Sequence
 
 from Library.Database.Dataframe import pl
 from Library.Database.Query import QueryAPI
 from Library.Database.Database import DatabaseAPI, IdentityKey, PrimaryKey, ForeignKey
+from Library.Utility.Typing import MISSING, Missing
 
 class OracleDatabaseAPI(DatabaseAPI):
     """
@@ -190,6 +192,57 @@ class OracleDatabaseAPI(DatabaseAPI):
 
     def _limit_(self, sql: str, limit: int) -> str:
         return f"{sql} FETCH FIRST {limit} ROWS ONLY"
+
+    def realign(self, *,
+                database: Union[str, None, Missing] = MISSING,
+                schema: Union[str, None, Missing] = MISSING,
+                table: Union[str, None, Missing] = MISSING,
+                source: Union[str, None] = None) -> Self:
+        if not source or not table: return self
+        sql = ("SELECT c.constraint_name AS name, c.owner AS holder_schema, c.table_name AS holder_table, "
+               "c.delete_rule AS deletion, "
+               "(SELECT LISTAGG('\"' || k.column_name || '\"', ', ') WITHIN GROUP (ORDER BY k.position) "
+               "FROM all_cons_columns k WHERE k.owner = c.owner AND k.constraint_name = c.constraint_name) AS holders, "
+               "(SELECT LISTAGG('\"' || k.column_name || '\"', ', ') WITHIN GROUP (ORDER BY k.position) "
+               "FROM all_cons_columns k WHERE k.owner = r.owner AND k.constraint_name = r.constraint_name) AS targets "
+               "FROM all_constraints c JOIN all_constraints r ON r.owner = c.r_owner AND r.constraint_name = c.r_constraint_name "
+               "WHERE c.constraint_type = 'R' AND r.table_name = :realign_source:")
+        frame = self.executeone(QueryAPI(sql), database=database, admin=False, realign_source=source).fetchall(legacy=False)
+        target = self._target_(schema, table)
+        for row in self._records_(frame):
+            owner = self._target_(row["holder_schema"], row["holder_table"])
+            clause = f'FOREIGN KEY ({row["holders"]}) REFERENCES {target} ({row["targets"]})'
+            if row["deletion"] and row["deletion"] != "NO ACTION": clause += f' ON DELETE {row["deletion"]}'
+            self.executeone(QueryAPI(f'ALTER TABLE {owner} DROP CONSTRAINT "{row["name"]}"'), database=database, admin=False)
+            self.executeone(QueryAPI(f'ALTER TABLE {owner} ADD CONSTRAINT "{row["name"]}" {clause}'), database=database, admin=False)
+            self._log_.alert(lambda r=row: f"Realign Operation: Repointed {r['name']} · To {table}")
+        return self
+
+    def _ordinals_(self, *,
+                   database: Union[str, None, Missing] = MISSING,
+                   schema: Union[str, None, Missing] = MISSING,
+                   table: Union[str, None, Missing] = MISSING) -> list:
+        frame = self.executeone(QueryAPI("SELECT column_name FROM all_tab_columns WHERE owner = :order_schema: "
+                                         "AND table_name = :order_table: ORDER BY column_id"),
+                                database=database, admin=False, order_schema=schema, order_table=table).fetchall(legacy=False)
+        return [next(iter(row.values())) for row in self._records_(frame)]
+
+    def _carry_(self, *,
+                database: Union[str, None, Missing] = MISSING,
+                schema: Union[str, None, Missing] = MISSING,
+                table: Union[str, None, Missing] = MISSING,
+                columns: str = "",
+                source: str = "") -> str:
+        target = self._target_(schema, table)
+        insert = f"INSERT INTO {target} ({columns}) SELECT {columns} FROM {source}"
+        alter = f"""'ALTER TABLE {target} MODIFY ("' || generated || '" GENERATED """
+        return ("DECLARE generated VARCHAR2(128); BEGIN "
+                "BEGIN SELECT column_name INTO generated FROM all_tab_identity_cols "
+                f"WHERE owner = '{schema}' AND table_name = '{table}' AND generation_type = 'ALWAYS' AND ROWNUM = 1; "
+                "EXCEPTION WHEN NO_DATA_FOUND THEN generated := NULL; END; "
+                f"IF generated IS NOT NULL THEN EXECUTE IMMEDIATE {alter}BY DEFAULT AS IDENTITY)'; END IF; "
+                f"EXECUTE IMMEDIATE '{insert}'; "
+                f"IF generated IS NOT NULL THEN EXECUTE IMMEDIATE {alter}ALWAYS AS IDENTITY)'; END IF; END;")
 
     def _check_(self, structure: Union[dict, None] = None) -> str:
         structure = structure if structure is not None else self._STRUCTURE_

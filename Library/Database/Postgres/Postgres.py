@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 from Library.Database.Dataframe import pl
 from Library.Database.Query import QueryAPI
-from Library.Database.Database import DatabaseAPI, IdentityKey, PrimaryKey, ForeignKey
+from Library.Database.Database import DatabaseAPI
 from Library.Utility.Typing import MISSING, Missing
 
 class PostgresDatabaseAPI(DatabaseAPI):
@@ -260,6 +260,31 @@ class PostgresDatabaseAPI(DatabaseAPI):
         for _ in self._connection_.notifies(timeout=timeout, stop_after=1):
             return True
         return False
+
+    def realign(self, *,
+                database: Union[str, None, Missing] = MISSING,
+                schema: Union[str, None, Missing] = MISSING,
+                table: Union[str, None, Missing] = MISSING,
+                source: Union[str, None] = None) -> Self:
+        if not source or not table: return self
+        frame = self.select(database=database, schema="pg_catalog", table="pg_constraint",
+                            columns='conname AS name, CAST(CAST(conrelid AS regclass) AS text) AS owner, pg_get_constraintdef(oid) AS definition',
+                            condition="contype = 'f' AND CAST(CAST(confrelid AS regclass) AS text) LIKE :realign_source:",
+                            parameters={"realign_source": f"%{source}%"})
+        for row in self._records_(frame):
+            definition = row["definition"].replace(f'"{source}"', f'"{table}"')
+            self.executeone(QueryAPI(f'ALTER TABLE {row["owner"]} DROP CONSTRAINT "{row["name"]}"'), database=database, admin=False)
+            self.executeone(QueryAPI(f'ALTER TABLE {row["owner"]} ADD CONSTRAINT "{row["name"]}" {definition}'), database=database, admin=False)
+            self._log_.alert(lambda r=row: f"Realign Operation: Repointed {r['name']} · To {table}")
+        return self
+
+    def _carry_(self, *,
+                database: Union[str, None, Missing] = MISSING,
+                schema: Union[str, None, Missing] = MISSING,
+                table: Union[str, None, Missing] = MISSING,
+                columns: str = "",
+                source: str = "") -> str:
+        return f"INSERT INTO {self._target_(schema, table)} ({columns}) OVERRIDING SYSTEM VALUE SELECT {columns} FROM {source}"
 
     def _fingerprint_(self, *,
                       database: Union[str, Sequence, None, Missing] = MISSING,

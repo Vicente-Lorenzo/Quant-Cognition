@@ -47,13 +47,13 @@ class AuthAPI:
         return manager
 
     def _select_(self, condition: str, parameters: dict) -> Union[UserAPI, None]:
-        with PostgresDatabaseAPI(database=self._database_) as db:
+        with PostgresDatabaseAPI.attach(database=self._database_) as db:
             frame = db.select(schema=self.Schema, table=self.Table, condition=condition, parameters=parameters, limit=1, legacy=False)
         if frame.is_empty(): return None
         return UserAPI.parse(frame.row(0, named=True))
 
     def _update_(self, assignment: str, parameters: dict) -> None:
-        with PostgresDatabaseAPI(database=self._database_) as db:
+        with PostgresDatabaseAPI.attach(database=self._database_) as db:
             sql = f'UPDATE {db._target_(self.Schema, self.Table)} SET {assignment} WHERE "UID" = :key:'
             db.execute(QueryAPI(sql), [parameters])
 
@@ -113,7 +113,7 @@ class AuthAPI:
                role: Union[str, int, RoleAPI] = RoleAPI.Viewer,
                provider: str = "Local",
                active: bool = True) -> UserAPI:
-        with PostgresDatabaseAPI(database=self._database_) as db:
+        with PostgresDatabaseAPI.attach(database=self._database_) as db:
             user = UserAPI(db=db, UID=username, Email=email, Name=name,
                            Password=PasswordAPI.hash(password) if password else None,
                            Role=RoleAPI.coerce(role, RoleAPI.Viewer), Provider=provider,

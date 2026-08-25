@@ -1,6 +1,7 @@
 ﻿import re
 import pymssql
 from typing import Union, Callable, Any
+from typing_extensions import Self
 from collections.abc import Sequence
 
 from Library.Database.Dataframe import pl
@@ -200,6 +201,41 @@ class MicrosoftDatabaseAPI(DatabaseAPI):
 
     def _identity_(self) -> str:
         return " IDENTITY(1, 1)"
+
+    def realign(self, *,
+                database: Union[str, None, Missing] = MISSING,
+                schema: Union[str, None, Missing] = MISSING,
+                table: Union[str, None, Missing] = MISSING,
+                source: Union[str, None] = None) -> Self:
+        if not source or not table: return self
+        columns = ("(SELECT STRING_AGG(QUOTENAME(c.name), ', ') WITHIN GROUP (ORDER BY k.constraint_column_id) "
+                   "FROM sys.foreign_key_columns k JOIN sys.columns c ON c.object_id = k.{0}_object_id AND c.column_id = k.{0}_column_id "
+                   "WHERE k.constraint_object_id = f.object_id)")
+        sql = ("SELECT f.name AS name, "
+               "QUOTENAME(SCHEMA_NAME(p.schema_id)) + '.' + QUOTENAME(p.name) AS owner, "
+               f"{columns.format('parent')} AS holders, {columns.format('referenced')} AS targets, "
+               "f.delete_referential_action_desc AS deletion, f.update_referential_action_desc AS updation "
+               "FROM sys.foreign_keys f JOIN sys.objects p ON p.object_id = f.parent_object_id "
+               "JOIN sys.objects r ON r.object_id = f.referenced_object_id WHERE r.name = :realign_source:")
+        frame = self.executeone(QueryAPI(sql), database=database, admin=False, realign_source=source).fetchall(legacy=False)
+        target = self._target_(schema, table)
+        for row in self._records_(frame):
+            clause = f'FOREIGN KEY ({row["holders"]}) REFERENCES {target} ({row["targets"]})'
+            clause += f' ON DELETE {row["deletion"].replace("_", " ")} ON UPDATE {row["updation"].replace("_", " ")}'
+            self.executeone(QueryAPI(f'ALTER TABLE {row["owner"]} DROP CONSTRAINT [{row["name"]}]'), database=database, admin=False)
+            self.executeone(QueryAPI(f'ALTER TABLE {row["owner"]} ADD CONSTRAINT [{row["name"]}] {clause}'), database=database, admin=False)
+            self._log_.alert(lambda r=row: f"Realign Operation: Repointed {r['name']} · To {table}")
+        return self
+
+    def _carry_(self, *,
+                database: Union[str, None, Missing] = MISSING,
+                schema: Union[str, None, Missing] = MISSING,
+                table: Union[str, None, Missing] = MISSING,
+                columns: str = "",
+                source: str = "") -> str:
+        target = self._target_(schema, table)
+        guard = f"IF OBJECTPROPERTY(OBJECT_ID('{target}'), 'TableHasIdentity') = 1 SET IDENTITY_INSERT {target}"
+        return f"{guard} ON; INSERT INTO {target} ({columns}) SELECT {columns} FROM {source}; {guard} OFF;"
 
     def _fingerprint_(self, *,
                       database: Union[str, Sequence, None, Missing] = MISSING,

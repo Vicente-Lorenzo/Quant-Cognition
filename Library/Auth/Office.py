@@ -19,8 +19,8 @@ class OfficeAPI(DatapointAPI):
     Address: Union[str, None] = None
     ZipCode: Union[str, None] = None
     City: Union[str, None] = None
-    Country: Union[str, None] = None
     Region: Union[str, None] = None
+    Country: Union[str, None] = None
 
     @property
     def Structure(self) -> dict:
@@ -30,7 +30,7 @@ class OfficeAPI(DatapointAPI):
             self.ID.Address: pl.String(),
             self.ID.ZipCode: pl.String(),
             self.ID.City: pl.String(),
-            self.ID.Country: pl.String(),
             self.ID.Region: pl.String(),
+            self.ID.Country: pl.String(),
             **super().Structure
         }

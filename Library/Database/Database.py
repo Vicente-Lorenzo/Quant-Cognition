@@ -4,6 +4,8 @@ import time
 import uuid
 import datetime
 import threading
+import contextvars
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing_extensions import Self
 from abc import ABC, abstractmethod
@@ -52,6 +54,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
     _ADMIN_: Union[str, None] = None
     _PARAMETER_TOKEN_: Callable[[int], str] | None = None
     _PARAMETER_LIMIT_: int = 1000
+    _SCOPES_: contextvars.ContextVar = contextvars.ContextVar("_SCOPES_", default=None)
 
     _PYTHON_DATATYPE_MAPPING_: dict = {
         bytes: pl.Binary,
@@ -121,6 +124,8 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         self._connection_ = None
         self._transaction_ = None
         self._cursor_ = None
+        self._origin_ = None
+        self._borrowed_ = False
         self._pool_ = {}
         self._lock_ = threading.RLock()
 
@@ -142,8 +147,15 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
     @abstractmethod
     def _driver_(self, admin: bool) -> Any: raise NotImplementedError
 
+    def _borrow_(self, admin: bool) -> Any:
+        origin = self._origin_
+        if admin or origin is None or not self.autocommited() or not origin.connected(): return None
+        return origin._connection_ if origin._link_ == self._link_ else None
+
     def _connect_(self, admin: bool = False) -> None:
-        self._connection_ = self._driver_(admin=admin or self._admin_)
+        shared = self._borrow_(admin)
+        self._borrowed_ = shared is not None
+        self._connection_ = shared if self._borrowed_ else self._driver_(admin=admin or self._admin_)
         self._transaction_ = False
         self._cursor_ = self._connection_.cursor()
 
@@ -154,8 +166,9 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
             self._cursor_.close()
             self._cursor_ = None
         if self._connection_ is not None:
-            self._connection_.close()
+            if not self._borrowed_: self._connection_.close()
             self._connection_ = None
+            self._borrowed_ = False
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
         if exc_type or exc_val or exc_tb: self.rollback()
@@ -215,10 +228,18 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         ql, qr = self._quote_
         return ", ".join(f"{ql}{c}{qr}" for c in columns)
 
+    @staticmethod
+    def _records_(frame: Union[pd.DataFrame, pl.DataFrame]) -> list:
+        return frame.to_dicts() if hasattr(frame, "to_dicts") else frame.to_dict("records")
+
     @property
     def _params_(self) -> dict:
         keys = ["_host_", "_port_", "_user_", "_password_", "_admin_", "_database_", "_schema_", "_table_", "_legacy_", "_migrate_", "_autocommit_"]
         return {k.strip("_"): v for k, v in self.__dict__.items() if k in keys}
+
+    @property
+    def _link_(self) -> tuple:
+        return self._host_, self._port_, self._user_, self._password_, self._admin_, self._database_, self._autocommit_
 
     @property
     def _hash_(self) -> int:
@@ -372,6 +393,48 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         """Checks if a table structure is defined."""
         return self._STRUCTURE_ is not None
 
+    @classmethod
+    @contextmanager
+    def scope(cls, **params) -> Any:
+        """
+        Binds one connection to the enclosing block, for every attach() nested inside it to reuse.
+        :param params: Connection parameters, as passed to the constructor.
+        :return: A context manager yielding the bound instance.
+
+        A caller that makes several calls in a row otherwise pays a fresh connection for each, and a
+        connection is the expensive part by an order of magnitude — the server builds a backend
+        process for it. Scoping one to the unit of work spends that once. The binding lives in a
+        context variable, so concurrent requests never see each other's connection, and it is
+        released when the block exits — a connection is never reused across scopes, which is what
+        keeps the count bounded by work in flight rather than by uptime.
+
+        The binding is lazy: the connection opens on the first attach() that needs it, so wrapping a
+        unit of work that turns out to touch nothing costs nothing.
+        """
+        db = cls(**params)
+        scopes = {**(cls._SCOPES_.get() or {}), (cls, db._link_): db}
+        token = cls._SCOPES_.set(scopes)
+        try: yield db
+        finally:
+            cls._SCOPES_.reset(token)
+            db.disconnect()
+
+    @classmethod
+    @contextmanager
+    def attach(cls, **params) -> Any:
+        """
+        Yields the connection an enclosing scope() bound, or opens one for this block when there is none.
+        :param params: Connection parameters, as passed to the constructor.
+        :return: A context manager yielding a connected instance.
+        """
+        db = cls(**params)
+        scoped = (cls._SCOPES_.get() or {}).get((cls, db._link_))
+        if scoped is not None:
+            if scoped.disconnected(): scoped.connect()
+            yield scoped
+            return
+        with db as opened: yield opened
+
     def clone(self, **kwargs) -> Self:
         """
         Creates and returns a clone of the database instance with updated parameters.
@@ -391,6 +454,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
                 return self._pool_[key]
             self._log_.debug(lambda: "Clone Operation: Created (Added to pool)")
             clone = self.__class__(**params)
+            clone._origin_ = self
             self._pool_[key] = clone
             return clone
 
@@ -706,6 +770,10 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         :param table: Target table.
         :param structure: The expected table structure.
         :return: True if differences exist, False otherwise.
+
+        Column order counts as a difference. A declaration states the order its columns should be
+        read in, so a table whose physical order has drifted from it is out of date even when every
+        column is present with the right type.
         """
         routed = self._route_("diff", database, schema, table, structure=structure)
         if isinstance(routed, list): return any(routed)
@@ -724,7 +792,40 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         self._log_.debug(lambda: f"Diff Operation: Checking {table} Structure")
         db = self.executeone(self._CHECK_STRUCTURE_QUERY_, definitions=definitions, **kwargs, admin=False)
         empty = db.fetchall(legacy=False).is_empty()
-        return not empty
+        if not empty: return True
+        return self.disordered(database=database, schema=schema, table=table, structure=structure)
+
+    def disordered(self, *,
+                   database: Union[str, None, Missing] = MISSING,
+                   schema: Union[str, None, Missing] = MISSING,
+                   table: Union[str, None, Missing] = MISSING,
+                   structure: Union[dict, None, Missing] = MISSING) -> bool:
+        """
+        Checks whether the physical column order has drifted from the declared order.
+        :param database: Target database.
+        :param schema: Target schema.
+        :param table: Target table.
+        :param structure: The expected table structure.
+        :return: True when the table lists its columns in a different order than the structure declares.
+
+        Reads the standard information schema, which every driver exposing one orders by the same
+        ordinal. A driver without one overrides this with its own catalog.
+        """
+        structure = structure if structure is not MISSING else self._STRUCTURE_
+        if not structure or not table: return False
+        actual = self._ordinals_(database=database, schema=schema, table=table)
+        declared = [str(column) for column in structure]
+        return bool(actual) and actual != declared
+
+    def _ordinals_(self, *,
+                   database: Union[str, None, Missing] = MISSING,
+                   schema: Union[str, None, Missing] = MISSING,
+                   table: Union[str, None, Missing] = MISSING) -> list:
+        """Lists the columns of a table in the physical order the driver stores them in."""
+        frame = self.select(database=database, schema="information_schema", table="columns", columns="column_name",
+                            condition="table_schema = :order_schema: AND table_name = :order_table: ORDER BY ordinal_position",
+                            parameters={"order_schema": schema, "order_table": table})
+        return [next(iter(row.values())) for row in self._records_(frame)]
 
     def sessions(self, *,
                database: Union[str, Sequence, None, Missing] = MISSING,
@@ -972,14 +1073,110 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
                     original_table = self._table_
                     self.refactor(database=database, schema=schema, table=table, name=temp_table)
                     if original_table == table: self._table_ = original_table
-                    self.create(database=database, schema=schema, table=table, structure=structure_val)
-                    target = self._target_(schema, table)
-                    target_temp = self._target_(schema, temp_table)
-                    cols_str = self._quoted_(*common)
-                    self.executeone(QueryAPI(f"INSERT INTO {target} ({cols_str}) SELECT {cols_str} FROM {target_temp}"), database=database, schema=schema, table=table, admin=False)
-                    self.delete(database=database, schema=schema, table=temp_table)
+                    try:
+                        self.create(database=database, schema=schema, table=table, structure=structure_val)
+                        target_temp = self._target_(schema, temp_table)
+                        cols_str = self._quoted_(*common)
+                        carry = self._carry_(database=database, schema=schema, table=table, columns=cols_str, source=target_temp)
+                        self.executeone(QueryAPI(carry), database=database, schema=schema, table=table, admin=False)
+                        moved = self.count(database=database, schema=schema, table=table)
+                        kept = self.count(database=database, schema=schema, table=temp_table)
+                        if moved != kept:
+                            raise RuntimeError(f"Migrate Operation: Refused to drop {temp_table} · {moved} of {kept} rows copied")
+                        self.realign(database=database, schema=schema, table=table, source=temp_table)
+                        self.discard(database=database, schema=schema, table=temp_table)
+                    except Exception:
+                        self.revert(database=database, schema=schema, table=table, source=temp_table)
+                        raise
                     self._log_.alert(lambda: f"Migrate Operation: Migrated {table} Table")
         return self
+
+    def realign(self, *,
+                database: Union[str, None, Missing] = MISSING,
+                schema: Union[str, None, Missing] = MISSING,
+                table: Union[str, None, Missing] = MISSING,
+                source: Union[str, None] = None) -> Self:
+        """
+        Re-points foreign keys that followed a table through a rebuild.
+
+        Renaming a table carries its dependents with it, so every inbound key ends up referencing the
+        temporary copy the rebuild is about to drop. Left alone the drop fails, or worse succeeds and
+        takes referential integrity with it. Each driver reads its own catalog to find those keys.
+        """
+        return self
+
+    def discard(self, *,
+                database: Union[str, None, Missing] = MISSING,
+                schema: Union[str, None, Missing] = MISSING,
+                table: Union[str, None, Missing] = MISSING) -> Self:
+        """
+        Drops a table without cascading, so anything still depending on it refuses the drop.
+        :param database: Target database.
+        :param schema: Target schema.
+        :param table: Target table.
+        :return: Self reference.
+
+        `delete()` cascades, which is right when the intent is to remove a table and everything tied
+        to it. A rebuild has the opposite intent: the temporary copy must go, and a foreign key still
+        pointing at it means realign() missed one. Cascading there destroys that key silently and
+        leaves the database referentially poorer than it started; refusing says so instead.
+        """
+        self.executeone(QueryAPI(f"DROP TABLE {self._target_(schema, table)}"), database=database, schema=schema, table=table, admin=False)
+        self._log_.alert(lambda: f"Discard Operation: Dropped {table} Table")
+        return self
+
+    def revert(self, *,
+               database: Union[str, None, Missing] = MISSING,
+               schema: Union[str, None, Missing] = MISSING,
+               table: Union[str, None, Missing] = MISSING,
+               source: Union[str, None] = None) -> Self:
+        """
+        Puts a failed rebuild back the way it was, restoring the original table under its own name.
+        :param database: Target database.
+        :param schema: Target schema.
+        :param table: Target table.
+        :param source: The temporary copy holding the original rows.
+        :return: Self reference.
+
+        Without this a failure leaves the rows stranded in a temporary table nobody will look for and
+        the declared name owned by a half-filled copy. Foreign keys track a table by identity rather
+        than by name, so renaming the original back also restores every key that followed it.
+        """
+        if not source or not table: return self
+        try:
+            if self.exists(database=database, schema=schema, table=table):
+                self.discard(database=database, schema=schema, table=table)
+            self.refactor(database=database, schema=schema, table=source, name=table)
+            self._log_.alert(lambda: f"Revert Operation: Restored {table} Table ({source})")
+        except Exception as error:
+            self._log_.error(lambda error=error: f"Revert Operation: Failed · {error}")
+            self._log_.error(lambda: f"Revert Operation: Rows remain in {source} · Restore it manually before retrying")
+        return self
+
+    def _carry_(self, *,
+                database: Union[str, None, Missing] = MISSING,
+                schema: Union[str, None, Missing] = MISSING,
+                table: Union[str, None, Missing] = MISSING,
+                columns: str = "",
+                source: str = "") -> str:
+        """
+        Builds the statement a rebuild copies rows across with.
+
+        A generated identity column rejects an explicit value, and each driver lifts that differently:
+        one takes a clause inside the insert, another a session switch around it. Returning the whole
+        statement keeps whatever a driver needs in a single execution, so a switch cannot be stranded
+        on a connection the insert never sees.
+        """
+        return f"INSERT INTO {self._target_(schema, table)} ({columns}) SELECT {columns} FROM {source}"
+
+    def count(self, *,
+              database: Union[str, None, Missing] = MISSING,
+              schema: Union[str, None, Missing] = MISSING,
+              table: Union[str, None, Missing] = MISSING) -> int:
+        """Counts the rows a table currently holds."""
+        frame = self.executeone(QueryAPI(f"SELECT COUNT(*) FROM {self._target_(schema, table)}"), database=database, schema=schema, table=table, admin=False).fetchall(legacy=False)
+        records = self._records_(frame)
+        return int(next(iter(records[0].values()))) if records else 0
 
     def add(self, *,
                database: Union[str, Sequence, None, Missing] = MISSING,
