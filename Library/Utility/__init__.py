@@ -1,5 +1,3 @@
-from Library.Utility.Chart import gantt
-from Library.Utility.Image import image
 from Library.Utility.Statistic import (
     Timer,
     timer,
@@ -129,13 +127,10 @@ from Library.Utility.IO import (
     copy,
     smartlink
 )
-from Library.Utility.Plot import PlotAPI
 from Library.Utility.Service import ServiceAPI
 from Library.Utility.Remote import RemoteAPI
 
 __all__ = [
-    "gantt",
-    "image",
     "Timer", "timer", "profiler",
     "formatize", "stylize", "htmlize", "HtmlAPI",
     "MISSING",
@@ -163,7 +158,6 @@ __all__ = [
     "is_readable", "is_writable",
     "mkdir", "remove", "read_text", "write_text", "read_json", "write_json",
     "symlink", "hardlink", "copy", "smartlink",
-    "PlotAPI",
     "ServiceAPI",
     "RemoteAPI"
 ]

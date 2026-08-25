@@ -164,6 +164,13 @@ def terminate(pid: Union[int, None]) -> None:
         try: process.kill()
         except psutil.Error: pass
 
+def open_browser(url) -> None:
+    if os.name == "nt" and shutil.which("explorer"):
+        subprocess.Popen(["explorer.exe", str(url)])
+        return
+    import webbrowser
+    webbrowser.open(str(url))
+
 def tail_terminal(file) -> None:
     tail = f"Get-Content -LiteralPath '{file}' -Wait -Tail 200 -Encoding UTF8"
     if shutil.which("wt"): subprocess.Popen(["wt", "powershell", "-NoExit", "-Command", tail])

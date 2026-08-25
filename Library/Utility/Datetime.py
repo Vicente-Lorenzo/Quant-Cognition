@@ -5,6 +5,7 @@ from dateutil.relativedelta import relativedelta, weekday
 from Library.Utility.Enumeration import EnumerationAPI
 
 EPOCH: Final[datetime] = datetime(1970, 1, 1)
+HORIZON: Final[datetime] = datetime(2014, 1, 1)
 MILLISECOND: Final[timedelta] = timedelta(milliseconds=1)
 MICROSECOND: Final[timedelta] = timedelta(microseconds=1)
 
