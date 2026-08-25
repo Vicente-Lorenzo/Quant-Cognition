@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING, Union
 
 from Library.Database.Dataframe import pl
 from Library.Indicator.Indicator import IndicatorMode
-from Library.Indicator.Technical.Baseline.MA import MovingAverageType, MovingAverageAPI
-from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
+from Library.Indicator.Technical.Baseline.MA import MOVING, MovingAverageAPI, MovingAverageType
+from Library.Indicator.Technical.Technical import MODE, TechnicalAPI, TechnicalType, WINDOW
 
 if TYPE_CHECKING:
     from Library.Market.Market import MarketAPI
@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 class TripleMovingAverageAPI(TechnicalAPI):
 
     Type = TechnicalType.Baseline
+    Parameters = (WINDOW, MOVING, MODE)
 
     def __init__(self, name: str, window: int, type: MovingAverageType, mode: IndicatorMode) -> None:
         super().__init__(name=name, window=window, mode=mode)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from Library.Indicator.Indicator import IndicatorMode
-from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
+from Library.Indicator.Technical.Technical import MODE, TechnicalAPI, TechnicalType
 
 if TYPE_CHECKING:
     from Library.Market.Market import MarketAPI
@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 class FalseFalseAPI(TechnicalAPI):
 
     Type = TechnicalType.Other
+    Parameters = (MODE,)
 
     def __init__(self, name: str, mode: IndicatorMode) -> None:
         super().__init__(name=name, window=0, mode=mode)

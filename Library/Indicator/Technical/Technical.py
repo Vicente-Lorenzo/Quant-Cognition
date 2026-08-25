@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from typing import ClassVar, TYPE_CHECKING, Union
+from dataclasses import dataclass, replace
+from typing import Any, Callable, ClassVar, TYPE_CHECKING, Union
+
+from typing_extensions import Self
 
 from Library.Database.Dataframe import pl
 from Library.Indicator.Indicator import IndicatorMode
@@ -19,9 +22,40 @@ class TechnicalType(EnumerationAPI):
     Pattern = 5
     Other = 6
 
+@dataclass(frozen=True, kw_only=True)
+class SlotAPI:
+
+    name: str
+    default: Any = None
+    parser: Union[Callable, None] = None
+    ladder: tuple = ()
+
+    def cast(self, value: Any) -> Any:
+        return self.parser(value) if self.parser is not None else value
+
+    def revised(self, **changes) -> Self:
+        return replace(self, **changes)
+
+WINDOW = SlotAPI(name="window", default=14, ladder=((5, 100, 5), (-8, 8, 2), (-3, 3, 1)))
+PERIOD = SlotAPI(name="window", default=14, ladder=((5, 50, 5), (-4, 4, 2), (-2, 2, 1)))
+FAST = SlotAPI(name="fast_window", default=5, ladder=((2, 30, 2), (-4, 4, 1)))
+SLOW = SlotAPI(name="slow_window", default=20, ladder=((10, 100, 5), (-8, 8, 2), (-3, 3, 1)))
+MODE = SlotAPI(name="mode", default=IndicatorMode.Off, parser=IndicatorMode.parse)
+
 class TechnicalAPI:
 
     Type: ClassVar[TechnicalType] = TechnicalType.Other
+    Parameters: ClassVar[tuple] = ()
+
+    @classmethod
+    def admits(cls, values: dict) -> bool:
+        return True
+
+    @classmethod
+    def compose(cls, name: str, config: list) -> TechnicalAPI:
+        values = {slot.name: slot.cast(config[position] if len(config) > position else slot.default)
+                  for position, slot in enumerate(cls.Parameters, start=1)}
+        return cls(name=name, **values)
 
     def __init__(self, name: str, window: int, mode: IndicatorMode, **indicators) -> None:
         self.Name: str = name

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
 from Library.Indicator.Indicator import IndicatorMode
-from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
+from Library.Indicator.Technical.Technical import MODE, SlotAPI, TechnicalAPI, TechnicalType, WINDOW
 from Library.Utility.Enumeration import EnumerationAPI
 
 if TYPE_CHECKING:
@@ -18,9 +18,12 @@ class MovingAverageType(EnumerationAPI):
     Triangular = 4
     Kaufman = 5
 
+MOVING = SlotAPI(name="type", default=MovingAverageType.Exponential, parser=MovingAverageType.parse)
+
 class MovingAverageAPI(TechnicalAPI):
 
     Type = TechnicalType.Baseline
+    Parameters = (WINDOW, MOVING, MODE)
 
     def __init__(self, name: str, window: int, type: MovingAverageType, mode: IndicatorMode) -> None:
         super().__init__(name=name, window=window, mode=mode)

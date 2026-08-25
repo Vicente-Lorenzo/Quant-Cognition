@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from Library.Indicator.Indicator import IndicatorMode
-from Library.Indicator.Technical.Baseline.MA import MovingAverageAPI, MovingAverageType
-from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
+from Library.Indicator.Technical.Baseline.MA import MOVING, MovingAverageAPI, MovingAverageType
+from Library.Indicator.Technical.Technical import FAST, MODE, SLOW, TechnicalAPI, TechnicalType
 
 if TYPE_CHECKING:
     from Library.Market.Market import MarketAPI
@@ -12,6 +12,11 @@ if TYPE_CHECKING:
 class MovingAverageCrossAPI(TechnicalAPI):
 
     Type = TechnicalType.Overlap
+    Parameters = (FAST, SLOW, MOVING, MODE)
+
+    @classmethod
+    def admits(cls, values: dict) -> bool:
+        return values["fast_window"] < values["slow_window"]
 
     def __init__(self, name: str, fast_window: int, slow_window: int, type: MovingAverageType, mode: IndicatorMode) -> None:
         super().__init__(name=name, window=slow_window, mode=mode)

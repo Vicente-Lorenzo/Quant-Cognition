@@ -42,9 +42,9 @@ class CalendarAPI(DatapointAPI):
 
     UID: int | None = None
     Timestamp: datetime | None = None
-    Event: int | None = None
     Currency: str | None = None
     Country: str | None = None
+    Event: int | None = None
     Title: str | None = None
     Impact: str | None = None
     Actual: str | None = None
@@ -63,9 +63,9 @@ class CalendarAPI(DatapointAPI):
         return {
             self.ID.UID: PrimaryKey(pl.Int64),
             self.ID.Timestamp: pl.Datetime(),
-            self.ID.Event: pl.Int64(),
             self.ID.Currency: pl.String(),
             self.ID.Country: pl.String(),
+            self.ID.Event: pl.Int64(),
             self.ID.Title: pl.String(),
             self.ID.Impact: pl.String(),
             self.ID.Actual: pl.String(),

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Union
 
 from Library.Database.Dataframe import np, pl
-from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
+from Library.Indicator.Technical.Technical import MODE, TechnicalAPI, TechnicalType, WINDOW
 
 if TYPE_CHECKING:
     from Library.Market.Market import MarketAPI
@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 class WeightedMovingAverageAPI(TechnicalAPI):
 
     Type = TechnicalType.Baseline
+    Parameters = (WINDOW, MODE)
 
     @staticmethod
     def _weighted_(values: np.ndarray, window: int) -> np.ndarray:

@@ -4,7 +4,7 @@ import math
 from typing import TYPE_CHECKING, Union
 
 from Library.Database.Dataframe import pl
-from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
+from Library.Indicator.Technical.Technical import MODE, TechnicalAPI, TechnicalType, WINDOW
 
 if TYPE_CHECKING:
     from Library.Market.Market import MarketAPI
@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 class TriangularMovingAverageAPI(TechnicalAPI):
 
     Type = TechnicalType.Baseline
+    Parameters = (WINDOW, MODE)
 
     @staticmethod
     def _batch_(series: pl.Series, window: int) -> pl.Series:

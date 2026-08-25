@@ -4,7 +4,7 @@ import math
 from typing import TYPE_CHECKING, Union
 
 from Library.Database.Dataframe import pl
-from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
+from Library.Indicator.Technical.Technical import MODE, PERIOD, TechnicalAPI, TechnicalType
 
 if TYPE_CHECKING:
     from Library.Market.Market import MarketAPI
@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 class RealizedVolatilityAPI(TechnicalAPI):
 
     Type = TechnicalType.Volatility
+    Parameters = (PERIOD.revised(default=16), MODE)
 
     def _extract_(self, market: MarketAPI) -> Union[pl.Series, pl.DataFrame]:
         return market.CloseTicks.Price.tail()
