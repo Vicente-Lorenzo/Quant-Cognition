@@ -73,11 +73,9 @@ class ContractAPI(UniverseAPI):
     Table: ClassVar[str] = "Contract"
 
     UID: Union[int, None] = None
-    Type: Union[ContractType, str, None] = None
-
     Ticker: InitVar[Union[str, TickerAPI, None]] = field(default=MISSING)
     Provider: InitVar[Union[str, ProviderAPI, None]] = field(default=MISSING)
-
+    Type: Union[ContractType, str, None] = None
     Digits: Union[int, None] = None
     PointSize: Union[float, None] = None
     PipSize: Union[float, None] = None
@@ -85,15 +83,15 @@ class ContractAPI(UniverseAPI):
     VolumeMin: Union[float, None] = None
     VolumeMax: Union[float, None] = None
     VolumeStep: Union[float, None] = None
-    Commission: Union[float, None] = None
     CommissionMode: Union[CommissionMode, str, None] = None
+    Commission: Union[float, None] = None
+    SwapMode: Union[SwapMode, str, None] = None
     SwapLong: Union[float, None] = None
     SwapShort: Union[float, None] = None
-    SwapMode: Union[SwapMode, str, None] = None
+    SwapPeriod: int = 24
     SwapExtraDay: Union[Weekday, str, None] = None
     SwapSummerTime: int = 22
     SwapWinterTime: int = 21
-    SwapPeriod: int = 24
     Variant: Union[VariantType, str, None] = None
     Payoff: Union[PayoffType, str, None] = None
     Strike: Union[float, None] = None
@@ -117,15 +115,15 @@ class ContractAPI(UniverseAPI):
             self.ID.VolumeMin: pl.Float64(),
             self.ID.VolumeMax: pl.Float64(),
             self.ID.VolumeStep: pl.Float64(),
-            self.ID.Commission: pl.Float64(),
             self.ID.CommissionMode: pl.String(),
+            self.ID.Commission: pl.Float64(),
+            self.ID.SwapMode: pl.String(),
             self.ID.SwapLong: pl.Float64(),
             self.ID.SwapShort: pl.Float64(),
-            self.ID.SwapMode: pl.String(),
+            self.ID.SwapPeriod: pl.Int32(),
             self.ID.SwapExtraDay: pl.String(),
             self.ID.SwapSummerTime: pl.Int32(),
             self.ID.SwapWinterTime: pl.Int32(),
-            self.ID.SwapPeriod: pl.Int32(),
             self.ID.Variant: pl.String(),
             self.ID.Payoff: pl.String(),
             self.ID.Strike: pl.Float64(),

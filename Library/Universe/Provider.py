@@ -34,17 +34,17 @@ class ProviderAPI(DatapointAPI):
     Table: ClassVar[str] = "Provider"
 
     UID: Union[str, None] = None
-    Platform: Union[Platform, str, None] = None
     Name: Union[str, None] = None
     Abbreviation: Union[str, None] = None
+    Platform: Union[Platform, str, None] = None
 
     @property
     def Structure(self) -> dict:
         return {
             self.ID.UID: PrimaryKey(pl.String),
-            self.ID.Platform: pl.String(),
             self.ID.Name: pl.String(),
             self.ID.Abbreviation: pl.String(),
+            self.ID.Platform: pl.String(),
             **super().Structure
         }
 
