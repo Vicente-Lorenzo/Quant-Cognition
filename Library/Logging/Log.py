@@ -31,13 +31,13 @@ class LogAPI(DatapointAPI):
     Host: Union[str, None] = None
     User: Union[str, None] = None
     Process: Union[int, None] = None
-    Path: Union[str, None] = None
-    Content: Union[str, None] = None
+    StartedAt: Union[datetime, None] = None
+    StoppedAt: Union[datetime, None] = None
     Records: Union[int, None] = None
     Dropped: Union[int, None] = None
     Truncated: Union[bool, None] = None
-    StartedAt: Union[datetime, None] = None
-    StoppedAt: Union[datetime, None] = None
+    Path: Union[str, None] = None
+    Content: Union[str, None] = None
 
     @property
     def Structure(self) -> dict:
@@ -49,13 +49,13 @@ class LogAPI(DatapointAPI):
             self.ID.Host: pl.String(),
             self.ID.User: pl.String(),
             self.ID.Process: pl.Int64(),
-            self.ID.Path: pl.String(),
-            self.ID.Content: pl.String(),
+            self.ID.StartedAt: pl.Datetime(),
+            self.ID.StoppedAt: pl.Datetime(),
             self.ID.Records: pl.Int64(),
             self.ID.Dropped: pl.Int64(),
             self.ID.Truncated: pl.Boolean(),
-            self.ID.StartedAt: pl.Datetime(),
-            self.ID.StoppedAt: pl.Datetime(),
+            self.ID.Path: pl.String(),
+            self.ID.Content: pl.String(),
             **super().Structure
         }
 

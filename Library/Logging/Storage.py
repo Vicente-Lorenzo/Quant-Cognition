@@ -23,14 +23,14 @@ class StorageAPI(LoggerAPI):
     Unlike the console and file sinks this one talks to a remote service, so a single insert costs
     orders of magnitude more than a local append. Three properties keep that affordable. Records are
     handed to a bounded queue and written by a background thread, so a caller never waits on the
-    database. The accepted level is capped at Warning, so routine Debug and Info traffic can never
-    reach it. Content accumulates in memory and is flushed on a cadence, so a busy log costs a
+    database. The level defaults to Warning, so routine Debug and Info traffic does not reach it unless
+    it is asked for explicitly. Content accumulates in memory and is flushed on a cadence, so a busy log costs a
     periodic update instead of an insert per line.
 
     The sink is inert until attach() is called and reverts to inert on detach().
     """
 
-    _CAP_: VerboseLevel = VerboseLevel.Warning
+    _DEFAULT_: VerboseLevel = VerboseLevel.Warning
     _LIMIT_: int = 8 * 1024 * 1024
     _INTERVAL_: float = 2.0
     _CAPACITY_: int = 100000
@@ -136,12 +136,10 @@ class StorageAPI(LoggerAPI):
         """
         Sets the accepted level, clamped so the sink can never accept routine traffic.
 
-        Anything more verbose than Warning is silently reduced to Warning; that ceiling is what
+        The level defaults to Warning and a more verbose one may be set deliberately; the queue is what
         keeps a remote sink from being handed a Debug firehose.
         """
-        level = VerboseLevel.resolve(level)
-        if level.value > self._CAP_.value: level = self._CAP_
-        super().set_level(level, default=default, force=force)
+        super().set_level(VerboseLevel.resolve(level), default=default, force=force)
 
     def set_interval(self, interval: float) -> None:
         """Sets the flush cadence in seconds."""
