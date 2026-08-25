@@ -123,6 +123,9 @@ public class Connector : Robot
     [Parameter("File", Group = "Logging Management", DefaultValue = VerboseLevel.Debug)]
     public VerboseLevel File { get; set; }
 
+    [Parameter("Storage", Group = "Logging Management", DefaultValue = VerboseLevel.Warning)]
+    public VerboseLevel Storage { get; set; }
+
     [Parameter("Profile", Group = "Logging Management", DefaultValue = false)]
     public bool Profile { get; set; }
 
@@ -141,6 +144,9 @@ public class Connector : Robot
     [Parameter("Plot", Group = "Reporting Management", DefaultValue = false)]
     public bool Plot { get; set; }
 
+    [Parameter("Description", Group = "Reporting Management", DefaultValue = "")]
+    public string Description { get; set; }
+
     private RobotAPI _robot_api_;
 
     protected override void OnStart()
@@ -151,14 +157,14 @@ public class Connector : Robot
             VerificationMode.Manual => VerificationCount,
             _ => 1,
         };
-        _robot_api_ = new RobotAPI(this, Console, File, Strategy, Environment, Database, verification, Accuracy,
+        _robot_api_ = new RobotAPI(this, Console, File, Storage, Strategy, Environment, Database, verification, Accuracy,
             TickStream, BarStream, OrderStream, PositionStream, TradeStream,
             TickDelayMode, TickDelayCount, BarDelayMode, BarDelayCount, OrderDelayMode, OrderDelayCount,
             PositionDelayMode, PositionDelayCount, TradeDelayMode, TradeDelayCount,
             UniverseBuffering, UniverseBatch, UniverseInterval, UniverseWorkers, UniverseMaxsize,
             MarketBuffering, MarketBatch, MarketInterval, MarketWorkers, MarketMaxsize,
             PortfolioBuffering, PortfolioBatch, PortfolioInterval, PortfolioWorkers, PortfolioMaxsize,
-            Benchmark, BenchmarkTickers, Report, Export, Plot, Profile);
+            Benchmark, BenchmarkTickers, Report, Export, Plot, Profile, Description);
     }
 
     protected override void OnStop()

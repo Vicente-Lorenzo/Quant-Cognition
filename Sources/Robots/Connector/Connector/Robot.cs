@@ -54,6 +54,7 @@ public class RobotAPI : IDisposable
 
     private readonly VerboseLevel _console_;
     private readonly VerboseLevel _file_;
+    private readonly VerboseLevel _storage_;
     private readonly StrategyType _strategy_;
 
     private readonly EnvironmentType _environment_;
@@ -108,6 +109,7 @@ public class RobotAPI : IDisposable
     private readonly bool _export_;
     private readonly bool _plot_;
     private readonly bool _profile_;
+    private readonly string _description_;
     private readonly SystemMode _system_mode_;
 
     private readonly Dictionary<int, LastPositionData> _positions_;
@@ -138,7 +140,7 @@ public class RobotAPI : IDisposable
     private long _trades_sent_;
     private long _actions_received_;
 
-    public RobotAPI(Robot algo, VerboseLevel console, VerboseLevel file, StrategyType strategy,
+    public RobotAPI(Robot algo, VerboseLevel console, VerboseLevel file, VerboseLevel storage, StrategyType strategy,
                     EnvironmentType environment, DatabaseType database, int verification, AccuracyMode accuracy,
                     TickStreamMode tick_stream, BarStreamMode bar_stream, OrderStreamMode order_stream,
                     PositionStreamMode position_stream, TradeStreamMode trade_stream,
@@ -148,11 +150,12 @@ public class RobotAPI : IDisposable
                     BufferingMode universe_buffering, int universe_batch, double universe_interval, int universe_workers, int universe_maxsize,
                     BufferingMode market_buffering, int market_batch, double market_interval, int market_workers, int market_maxsize,
                     BufferingMode portfolio_buffering, int portfolio_batch, double portfolio_interval, int portfolio_workers, int portfolio_maxsize,
-                    bool benchmark, string benchmark_tickers, bool report, bool export, bool plot, bool profile)
+                    bool benchmark, string benchmark_tickers, bool report, bool export, bool plot, bool profile, string description)
     {
         _robot_ = algo;
         _console_ = console;
         _file_ = file;
+        _storage_ = storage;
         _strategy_ = strategy;
 
         _log_ = new Logging(_robot_, "Strategy", console);
@@ -199,6 +202,7 @@ public class RobotAPI : IDisposable
         _export_ = export;
         _plot_ = plot;
         _profile_ = profile;
+        _description_ = description;
 
         _log_.Debug($"Streams: Tick {_tick_stream_} · Bar {_bar_stream_} · Order {_order_stream_} · Position {_position_stream_} · Trade {_trade_stream_}");
 
@@ -322,7 +326,9 @@ public class RobotAPI : IDisposable
         var export_arg = _export_ ? " --export" : "";
         var plot_arg = _plot_ ? " --plot" : "";
         var profile_arg = _profile_ ? " --profile" : "";
-        var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{benchmark_arg}{universe_args}{market_args}{portfolio_args}{report_arg}{export_arg}{plot_arg}{profile_arg}";
+        var description = _description_ == null ? "" : _description_.Trim();
+        var description_arg = description.Length == 0 ? "" : $" --description \"{description}\"";
+        var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --storage \"{_storage_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{benchmark_arg}{universe_args}{market_args}{portfolio_args}{report_arg}{export_arg}{plot_arg}{profile_arg}{description_arg}";
         var inner_cmd = $"cd /d \"{base_directory}\" && conda run --no-capture-output -n {_environment_} python -m Library.System.Main {script_args}";
         _log_.Debug($"Activation Operation: Launching Python · {_environment_} · {script_args}");
         SpawnTerminal(inner_cmd);
