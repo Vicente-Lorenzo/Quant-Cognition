@@ -27,17 +27,14 @@ class TickAPI(DatapointAPI):
     UID: Union[int, None] = field(default=None, kw_only=True)
     Security: InitVar[Union[int, str, SecurityAPI, None]] = field(default=MISSING)
     Timestamp: InitVar[Union[datetime, TimestampAPI, None]] = field(default=MISSING)
-
     Ask: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
     Mid: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
     Bid: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
-
+    Volume: Union[float, None] = None
     AskBaseConversion: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
     BidBaseConversion: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
     AskQuoteConversion: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
     BidQuoteConversion: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
-
-    Volume: Union[float, None] = None
 
     _security_: Union[SecurityAPI, None] = field(default=None, init=False, repr=False)
     _timestamp_: Union[TimestampAPI, None] = field(default=None, init=False, repr=False)
@@ -58,11 +55,11 @@ class TickAPI(DatapointAPI):
             self.ID.Ask: pl.Float64(),
             self.ID.Mid: pl.Float64(),
             self.ID.Bid: pl.Float64(),
+            self.ID.Volume: pl.Float64(),
             self.ID.AskBaseConversion: pl.Float64(),
             self.ID.BidBaseConversion: pl.Float64(),
             self.ID.AskQuoteConversion: pl.Float64(),
             self.ID.BidQuoteConversion: pl.Float64(),
-            self.ID.Volume: pl.Float64(),
             **super().Structure
         }
 
