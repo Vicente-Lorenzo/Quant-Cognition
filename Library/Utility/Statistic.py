@@ -40,17 +40,22 @@ def timer(func: Callable):
         return result
     return wrapper
 
-def profiler(func: Callable):
+PROFILES: str = "Profiles"
+
+def profiler(func: Callable, destination=True):
     @wraps(func)
     def wrapper(*args, **kwargs):
         from Library.Logging import LoggingAPI
+        from Library.Utility.Path import inspect_destination
         log = LoggingAPI()
         timestamp = datetime_to_string(datetime.now(), "%Y%m%d-%H%M%S")
         with cProfile.Profile() as pr:
             result = func(*args, **kwargs)
-        ps = pstats.Stats(pr, stream=io.StringIO())
-        snapshot_path = f"profile-{timestamp}.pstat"
-        ps.dump_stats(snapshot_path)
-        log.warning(lambda: f"Profile @ {func.__name__}: Snapshot {snapshot_path}")
+        stats = pstats.Stats(pr, stream=io.StringIO())
+        folder = inspect_destination(destination, PROFILES)
+        folder.mkdir(parents=True, exist_ok=True)
+        snapshot = folder / f"profile-{timestamp}.pstat"
+        stats.dump_stats(str(snapshot))
+        log.warning(lambda: f"Profile @ {func.__name__}: Snapshot {snapshot}")
         return result
     return wrapper
