@@ -43,7 +43,6 @@ class TimeInForce(EnumerationAPI):
 @dataclass
 class OrderAPI(DatapointAPI):
 
-    Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = PortfolioAPI.Schema
     Table: ClassVar[str] = "Order"
 

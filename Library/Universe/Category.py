@@ -13,7 +13,6 @@ if TYPE_CHECKING: from Library.Database.Database import DatabaseAPI
 @dataclass
 class CategoryAPI(DatapointAPI):
 
-    Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = UniverseAPI.Schema
     Table: ClassVar[str] = "Category"
 

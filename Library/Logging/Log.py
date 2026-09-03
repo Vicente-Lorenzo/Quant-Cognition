@@ -21,7 +21,6 @@ class LogAPI(DatapointAPI):
     referenced through Path.
     """
 
-    Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = "Logging"
     Table: ClassVar[str] = "Log"
 

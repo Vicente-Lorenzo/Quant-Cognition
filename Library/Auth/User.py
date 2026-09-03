@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from dataclasses import dataclass
-from typing import Union, ClassVar, TYPE_CHECKING
+from typing import Union, ClassVar
 
 from Library.Auth.Role import RoleAPI
 from Library.Auth.Team import TeamAPI
@@ -11,14 +11,12 @@ from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Database import PrimaryKey, ForeignKey
 
-if TYPE_CHECKING: from Library.Database.Database import DatabaseAPI
-
 @dataclass
 class UserAPI(DatapointAPI):
 
-    Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = "Auth"
     Table: ClassVar[str] = "User"
+    ENUMS: ClassVar[dict] = {"Role": RoleAPI}
 
     UID: Union[str, None] = None
     Office: Union[str, None] = None
@@ -54,15 +52,6 @@ class UserAPI(DatapointAPI):
             self.ID.LastLogin: pl.Datetime(),
             **super().Structure
         }
-
-    def __post_init__(self,
-                      db: Union[DatabaseAPI, None],
-                      migrate: bool,
-                      autosave: bool,
-                      autoload: bool,
-                      autooverload: bool) -> None:
-        self.Role = RoleAPI.parse(self.Role)
-        super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     def authority(self) -> RoleAPI:
         return RoleAPI.coerce(self.Role)

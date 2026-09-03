@@ -20,7 +20,6 @@ if TYPE_CHECKING:
 @dataclass
 class CalendarAPI(DatapointAPI):
 
-    Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = "Indicator"
     Table: ClassVar[str] = "Calendar"
 

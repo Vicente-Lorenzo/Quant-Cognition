@@ -10,7 +10,6 @@ from Library.Database.Datapoint import DatapointAPI
 @dataclass
 class OfficeAPI(DatapointAPI):
 
-    Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = "Auth"
     Table: ClassVar[str] = "Office"
 

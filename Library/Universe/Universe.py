@@ -20,7 +20,6 @@ if TYPE_CHECKING:
 @dataclass(kw_only=True)
 class UniverseAPI(DatapointAPI):
 
-    Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = "Universe"
     Table: ClassVar[str] = "Universe"
 

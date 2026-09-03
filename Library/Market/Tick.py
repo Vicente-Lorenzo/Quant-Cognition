@@ -20,7 +20,6 @@ class TickAPI(DatapointAPI):
 
     _MS_BITS_: ClassVar[int] = 42
 
-    Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = MarketAPI.Schema
     Table: ClassVar[str] = "Tick"
 

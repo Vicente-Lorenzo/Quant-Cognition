@@ -37,7 +37,6 @@ class PositionStatus(EnumerationAPI):
 @dataclass
 class PositionAPI(DatapointAPI):
 
-    Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = PortfolioAPI.Schema
     Table: ClassVar[str] = "Position"
 

@@ -29,7 +29,6 @@ class Platform(EnumerationAPI):
 @dataclass
 class ProviderAPI(DatapointAPI):
 
-    Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = UniverseAPI.Schema
     Table: ClassVar[str] = "Provider"
 

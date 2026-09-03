@@ -26,7 +26,6 @@ if TYPE_CHECKING:
 @dataclass(kw_only=True)
 class PortfolioAPI(DatapointAPI):
 
-    Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = "Portfolio"
     Table: ClassVar[str] = "Portfolio"
 

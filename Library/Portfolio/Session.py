@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 @dataclass
 class SessionAPI(DatapointAPI):
 
-    Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = PortfolioAPI.Schema
     Table: ClassVar[str] = "Session"
 

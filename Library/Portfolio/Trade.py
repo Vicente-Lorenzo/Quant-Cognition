@@ -23,7 +23,6 @@ from Library.Utility.Typing import MISSING
 @dataclass
 class TradeAPI(PositionAPI):
 
-    Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = PortfolioAPI.Schema
     Table: ClassVar[str] = "Trade"
 

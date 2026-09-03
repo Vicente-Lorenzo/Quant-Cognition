@@ -19,7 +19,6 @@ from Library.Utility.Typing import MISSING
 @dataclass
 class BarAPI(DatapointAPI):
 
-    Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = MarketAPI.Schema
     Table: ClassVar[str] = "Bar"
 

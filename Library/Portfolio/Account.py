@@ -34,7 +34,6 @@ class Environment(EnumerationAPI):
 @dataclass
 class AccountAPI(DatapointAPI):
 
-    Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = PortfolioAPI.Schema
     Table: ClassVar[str] = "Account"
 
