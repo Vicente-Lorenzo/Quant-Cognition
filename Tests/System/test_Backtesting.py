@@ -4,6 +4,7 @@ from datetime import datetime
 
 from Library.Database.Dataframe import np
 from Library.Market.Price import Direction
+from Library.Logging import LoggingAPI, VerboseLevel
 from Library.System.Backtesting import BacktestingAPI, DatasetAPI
 from Library.Protocol.Update import UpdateID
 from Library.Universe.Contract import CommissionType, CommissionMode, SpreadType, SwapType, SwapMode
@@ -274,9 +275,10 @@ class _LogStub_:
 class _FakeArr_:
     size = 7
 
-def _preload_stub_():
+def _preload_stub_(window: int = 20):
     engine = object.__new__(BacktestingAPI)
     engine._injected_ = None
+    engine._window_ = window
     engine._security_ = type("S", (), {"UID": 1})()
     engine._timeframe_ = type("T", (), {"UID": "D1"})()
     engine._start_ = datetime(2023, 1, 1)
@@ -287,6 +289,7 @@ def _preload_stub_():
 
 def test_preload_cache_reuses_across_instances(monkeypatch):
     BacktestingAPI._PRELOAD_CACHE_.clear()
+    BacktestingAPI._TAPE_CACHE_.clear()
     monkeypatch.setattr(BacktestingAPI, "_DISK_CACHE_", False)
     bars = [object()]
     monkeypatch.setattr(BacktestingAPI, "_load_bars_", lambda self: (None, bars, None))
@@ -303,6 +306,25 @@ def test_preload_cache_reuses_across_instances(monkeypatch):
     third._preload_()
     assert len(calls) == 2
     BacktestingAPI._PRELOAD_CACHE_.clear()
+
+def test_preload_rebuilds_per_window_but_loads_the_tape_once(monkeypatch):
+    BacktestingAPI._PRELOAD_CACHE_.clear()
+    BacktestingAPI._TAPE_CACHE_.clear()
+    monkeypatch.setattr(BacktestingAPI, "_DISK_CACHE_", False)
+    bars = [object()]
+    windows = []
+    monkeypatch.setattr(BacktestingAPI, "_load_bars_", lambda self: (windows.append(self._window_), (None, bars, None))[1])
+    tapes = []
+    monkeypatch.setattr(BacktestingAPI, "_load_frames_", lambda self, b: (tapes.append(1), (_FakeArr_(), _FakeArr_(), _FakeArr_(), None, [], {}))[1])
+    narrow, wide = _preload_stub_(20), _preload_stub_(30)
+    narrow._preload_()
+    wide._preload_()
+    assert windows == [20, 30]
+    assert narrow._dataset_ is not wide._dataset_
+    assert len(tapes) == 1
+    assert narrow._dataset_.TickTimestamps is wide._dataset_.TickTimestamps
+    BacktestingAPI._PRELOAD_CACHE_.clear()
+    BacktestingAPI._TAPE_CACHE_.clear()
 
 def test_preload_injects_dataset_without_loading(monkeypatch):
     BacktestingAPI._PRELOAD_CACHE_.clear()
@@ -342,3 +364,35 @@ def test_auto_fee_types_resolve_to_accurate():
     assert engine._commission_type_ == CommissionType.Accurate
     assert engine._swap_type_ == SwapType.Accurate
     assert engine._resolution_arg_ is MISSING
+
+def _artifact_stub_(report=False, export=False, plot=False) -> BacktestingAPI:
+    engine = object.__new__(BacktestingAPI)
+    engine._reporting_, engine._exporting_, engine._plotting_ = report, export, plot
+    engine._log_ = LoggingAPI()
+    return engine
+
+def test_deliverables_scopes_the_flags_and_restores_them():
+    engine = _artifact_stub_()
+    with engine.deliverables(True, True, False):
+        assert (engine._reporting_, engine._exporting_, engine._plotting_) == (True, True, False)
+    assert (engine._reporting_, engine._exporting_, engine._plotting_) == (False, False, False)
+
+def test_deliverables_restores_even_when_the_block_raises():
+    engine = _artifact_stub_()
+    with pytest.raises(RuntimeError):
+        with engine.deliverables(True, True, True): raise RuntimeError("boom")
+    assert (engine._reporting_, engine._exporting_, engine._plotting_) == (False, False, False)
+
+def test_quieted_lowers_both_sinks_when_nothing_is_delivered():
+    engine = _artifact_stub_()
+    console, file = engine._log_.console.Level, engine._log_.file.Level
+    with engine.quieted():
+        assert engine._log_.console.Level == VerboseLevel.Warning
+        assert engine._log_.file.Level == VerboseLevel.Warning
+    assert (engine._log_.console.Level, engine._log_.file.Level) == (console, file)
+
+def test_quieted_stays_transparent_while_delivering():
+    engine = _artifact_stub_(report=True)
+    console, file = engine._log_.console.Level, engine._log_.file.Level
+    with engine.quieted():
+        assert (engine._log_.console.Level, engine._log_.file.Level) == (console, file)

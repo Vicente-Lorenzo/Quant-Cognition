@@ -2,7 +2,7 @@ import math
 from datetime import datetime, timezone
 
 from Library.Database.Dataframe import pl
-from Library.Indicator.Indicator import IndicatorMode, parse_technical
+from Library.Indicator.Indicator import IndicatorAPI, IndicatorMode
 from Library.Indicator.Technical.Technical import TechnicalAPI
 from Library.Indicator.Technical.Volatility.RV import RealizedVolatilityAPI
 from Library.Market.Market import MarketAPI
@@ -41,7 +41,7 @@ def _indicator_(market, window=2):
     return tech
 
 def test_parse_registers_rv():
-    tech = parse_technical({"Vol": ["RV", 20]})
+    tech = IndicatorAPI.parse_technical({"Vol": ["RV", 20]})
     assert hasattr(tech, "Vol")
     assert isinstance(tech.Vol, RealizedVolatilityAPI)
     assert tech.Vol.Window == 20

@@ -39,32 +39,40 @@ def _attach_(sink, interval=0.05):
     sink._thread_.start()
     return sink._record_
 
-def test_level_is_capped_at_warning(storage):
-    storage.set_level(VerboseLevel.Debug)
-    assert storage.Level is VerboseLevel.Warning
-    storage.set_level(VerboseLevel.Info)
-    assert storage.Level is VerboseLevel.Warning
-    storage.set_level(VerboseLevel.Alert)
-    assert storage.Level is VerboseLevel.Warning
+def test_warning_is_the_default_not_a_ceiling(storage):
+    assert StorageAPI._DEFAULT_ is VerboseLevel.Warning
 
-def test_level_below_the_cap_is_honored(storage):
+def test_a_deliberate_level_is_honored_in_both_directions(storage):
+    storage.set_level(VerboseLevel.Debug)
+    assert storage.Level is VerboseLevel.Debug
+    storage.set_level(VerboseLevel.Info)
+    assert storage.Level is VerboseLevel.Info
     storage.set_level(VerboseLevel.Error)
     assert storage.Level is VerboseLevel.Error
     storage.set_level(VerboseLevel.Exception)
     assert storage.Level is VerboseLevel.Exception
 
-def test_cap_means_routine_traffic_never_reaches_it(storage):
-    storage.set_level(VerboseLevel.Debug)
+def test_the_default_level_keeps_routine_traffic_out(storage):
+    storage.set_level(StorageAPI._DEFAULT_)
     record = _attach_(storage)
-    log = LoggingAPI("Capped")
+    log = LoggingAPI("Defaulted")
     log.debug(lambda: "debug")
     log.info(lambda: "info")
-    log.alert(lambda: "alert")
     log.warning(lambda: "warning")
     time.sleep(0.3)
     assert "warning" in record.Content
     assert "debug" not in record.Content
     assert "info" not in record.Content
+
+def test_a_verbose_level_may_be_asked_for(storage):
+    storage.set_level(VerboseLevel.Debug)
+    record = _attach_(storage)
+    log = LoggingAPI("Verbose")
+    log.debug(lambda: "debug")
+    log.info(lambda: "info")
+    time.sleep(0.3)
+    assert "debug" in record.Content
+    assert "info" in record.Content
 
 def test_inert_until_attached(storage):
     storage.set_level(VerboseLevel.Warning)

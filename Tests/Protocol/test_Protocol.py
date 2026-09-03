@@ -260,26 +260,8 @@ def test_position_close_carries_trade():
     update = StopLossBuyPositionUpdateAPI(Account=None, Security=None, Market=None, Technical=None, Fundamental=None, Sentimental=None, Portfolio=None, Bar=None, Position=None, Trade=None)
     assert hasattr(update, "Trade")
 
-def _connector_enum_(name: str) -> dict:
-    from pathlib import Path
-    source = Path(__file__).resolve().parents[2] / "Sources" / "Robots" / "Connector" / "Connector" / "Enum.cs"
-    if not source.exists(): return {}
-    members, inside = {}, False
-    for line in source.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if stripped.startswith("public enum "): inside = stripped.split()[2] == name; continue
-        if inside and stripped.startswith("}"): break
-        if inside and "=" in stripped:
-            member, _, value = stripped.rstrip(",").partition("=")
-            members[member.strip()] = int(value.strip())
-    return members
+def test_update_id_matches_connector_enum(connector_enums):
+    assert connector_enums["UpdateID"] == {member.name: member.value for member in UpdateID}
 
-def test_update_id_matches_connector_enum():
-    connector = _connector_enum_("UpdateID")
-    if not connector: return
-    assert connector == {member.name: member.value for member in UpdateID}
-
-def test_action_id_matches_connector_enum():
-    connector = _connector_enum_("ActionID")
-    if not connector: return
-    assert connector == {member.name: member.value for member in ActionID}
+def test_action_id_matches_connector_enum(connector_enums):
+    assert connector_enums["ActionID"] == {member.name: member.value for member in ActionID}

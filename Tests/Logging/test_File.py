@@ -8,10 +8,11 @@ import pytest
 
 from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Logging.File import FileAPI
+from Library.Utility.Path import inspect_temporary
 
-def test_default_directory_is_the_system_temp(tmp_path):
+def test_default_directory_is_the_temporary_tier(tmp_path):
     LoggingAPI.file.set_path(None)
-    assert LoggingAPI.file.Directory == Path(tempfile.gettempdir()) / "Logs"
+    assert LoggingAPI.file.Directory == inspect_temporary("Logs")
     assert LoggingAPI.file.Temporary is True
 
 def test_default_directory_carries_no_product_name():

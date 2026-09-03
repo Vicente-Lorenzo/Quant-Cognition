@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from Library.Database.Dataframe import pl
 from Library.Model.Split import SplitAPI
-from Library.Parameter import Parameter
+from Library.Utility.Parameter import Parameter
 from Library.Portfolio.Statistic import CALMARRATIO, NETRETURNANNPERC, NET_BUY_AGGREGATED, NET_SELL_AGGREGATED, NET_TOTAL_AGGREGATED, STATISTICS_METRICS_LABEL
 from Library.Strategy.Model.Reward import RewardType
 from Library.Strategy.Strategy import Threshold

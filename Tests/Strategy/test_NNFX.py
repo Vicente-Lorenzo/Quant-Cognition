@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from Library.Parameter import Parameter
+from Library.Utility.Parameter import Parameter
 from Library.Portfolio.Position import PositionType
 from Library.Protocol.Action import CloseBuyPositionActionAPI
 from Library.Protocol.Update import UpdateID

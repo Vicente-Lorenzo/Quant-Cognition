@@ -1,6 +1,6 @@
 import pytest
 from Library.Database.Dataframe import pl
-from Library.Indicator.Indicator import IndicatorMode, parse_technical
+from Library.Indicator.Indicator import IndicatorAPI, IndicatorMode
 from Library.Indicator.Technical.Technical import TechnicalAPI
 from Library.Indicator.Technical.Baseline.MA import MovingAverageType
 from Library.Indicator.Technical.Baseline.SMA import SimpleMovingAverageAPI
@@ -19,7 +19,7 @@ def test_parse_technical():
         "ShortDMA": ["DMA", 5, "Exponential", 1],
         "LongTMA": ["TMA", 20, "Simple", 0]
     }
-    tech = parse_technical(config)
+    tech = IndicatorAPI.parse_technical(config)
     assert hasattr(tech, "ShortDMA")
     assert hasattr(tech, "LongTMA")
     assert tech.ShortDMA.Window == 5

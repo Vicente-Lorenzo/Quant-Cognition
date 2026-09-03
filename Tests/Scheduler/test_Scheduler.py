@@ -523,6 +523,42 @@ def test_service_supervises_and_pauses(scheduler):
     assert "svc2-update" not in [tid for tid, _ in active.spawned]
     assert suspended.spawned == []
 
+class _Resident_:
+
+    pid = 4242
+
+    def poll(self):
+        return None
+
+def test_service_suspension_closes_the_run_as_success(scheduler):
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        WorkflowAPI(UID="wf-susp", Name="Susp", Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID="susp-update", Name="Update", Owner="owner", WID="wf-susp", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID="susp-tunnel", Name="Tunnel", Owner="owner", WID="wf-susp", Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, db=conn).save(by="Test")
+        RunAPI(UID="susp-run", TID="susp-tunnel", Status="Running", Retry=0, PID=4242, StartedAt=datetime.now(), Heartbeat=datetime.now(), db=conn).save(by="Test")
+    sched = RecordingSchedulerAPI(database=DATABASE)
+    sched._services_["susp-tunnel"] = _Resident_()
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-susp"]
+        sched._service_(conn, members, {"wf-susp"}, datetime.now())
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        run = RunAPI(UID="susp-run", db=conn, autoload=True)
+    assert run.Status == RunStatus.Success.name
+    assert run.StoppedAt is not None
+    assert run.Duration is not None
+
+def test_service_crash_is_not_laundered_into_success(scheduler):
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        TaskAPI(UID="susp-crash", Name="Crashed", Owner="owner", Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, RetryDelay=0, db=conn).save(by="Test")
+        RunAPI(UID="susp-crash-run", TID="susp-crash", Status="Running", Retry=0, StartedAt=datetime.now(), Heartbeat=datetime.now(), db=conn).save(by="Test")
+    sched = RecordingSchedulerAPI(database=DATABASE)
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        members = [task for task in sched._tasks_(conn) if task["UID"] == "susp-crash"]
+        sched._service_(conn, members, set(), datetime.now())
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        run = RunAPI(UID="susp-crash-run", db=conn, autoload=True)
+    assert run.Status == RunStatus.Running.name
+
 def test_service_crash_cap(scheduler):
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         TaskAPI(UID="svc-flaky", Name="Flaky", Owner="owner", Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, MaxRetry=1, RetryDelay=0, db=conn).save(by="Test")

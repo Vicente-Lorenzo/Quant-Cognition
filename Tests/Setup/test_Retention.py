@@ -2,7 +2,6 @@ import os
 import time
 from pathlib import Path
 
-import pytest
 
 from Setup.Retention import prune_files, _DAYS_
 
@@ -34,17 +33,29 @@ def test_prunes_rotated_backups(tmp_path):
     removed, _ = prune_files(folders=(tmp_path,), days=30)
     assert removed == 3
 
-def test_ignores_foreign_extensions(tmp_path):
-    other = tmp_path / "Report.csv"
-    other.write_text("data", encoding="utf-8")
-    _age_(other, 400)
+def test_prunes_every_extension_the_framework_writes(tmp_path):
+    for name in ("Report.csv", "Plot.html", "Trace.pstat", "Run.log"):
+        candidate = tmp_path / name
+        candidate.write_text("data", encoding="utf-8")
+        _age_(candidate, 400)
     removed, _ = prune_files(folders=(tmp_path,), days=30)
-    assert removed == 0
-    assert other.exists()
+    assert removed == 4
+    assert not any(tmp_path.iterdir())
 
-def test_ignores_directories(tmp_path):
-    nested = tmp_path / "Nested.log"
+def test_prunes_stale_export_subfolders(tmp_path):
+    nested = tmp_path / "2020-01-01 run"
     nested.mkdir()
+    (nested / "trades.csv").write_text("data", encoding="utf-8")
+    _age_(nested / "trades.csv", 400)
+    _age_(nested, 400)
+    removed, _ = prune_files(folders=(tmp_path,), days=30)
+    assert removed == 1
+    assert not nested.exists()
+
+def test_keeps_a_folder_with_fresh_content(tmp_path):
+    nested = tmp_path / "active run"
+    nested.mkdir()
+    (nested / "trades.csv").write_text("data", encoding="utf-8")
     _age_(nested, 400)
     removed, _ = prune_files(folders=(tmp_path,), days=30)
     assert removed == 0

@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from Library.Parameter import ParameterAPI
+from Library.Utility.Parameter import Parameter
 from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.Order import OrderAPI
 from Library.Portfolio.Position import PositionAPI
@@ -16,7 +16,7 @@ from Library.Market.Tick import TickAPI
 from Library.Market.Bar import BarAPI
 
 def _make_system_(market: tuple = (100, 60.0, 1, 64), portfolio: tuple = (100, 60.0, 1, 64), system: SystemType = SystemType.Live, database: str = "Quant", **kwargs) -> RealtimeAPI:
-    p = ParameterAPI()
+    p = Parameter({}, "test.yml")
     system = RealtimeAPI(
         system=system,
         strategy=DownloadStrategyAPI,

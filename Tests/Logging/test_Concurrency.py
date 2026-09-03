@@ -13,7 +13,7 @@ def test_every_record_from_every_thread_is_written(tmp_path, lines):
     with ThreadPoolExecutor(max_workers=threads) as pool:
         list(pool.map(worker, range(threads)))
     LoggingAPI.file.flush()
-    assert len(lines()) == threads * records
+    assert len([line for line in lines() if "Record" in line and "Worker" in line]) == threads * records
 
 def test_no_line_is_torn_under_concurrency(tmp_path, lines):
     LoggingAPI.file.set_level(VerboseLevel.Debug)
@@ -24,7 +24,9 @@ def test_no_line_is_torn_under_concurrency(tmp_path, lines):
     with ThreadPoolExecutor(max_workers=8) as pool:
         list(pool.map(worker, range(8)))
     LoggingAPI.file.flush()
-    for line in lines():
+    written = [line for line in lines() if "BEGIN-" in line]
+    assert len(written) == 8 * 200
+    for line in written:
         assert line.count("BEGIN-") == 1
         assert line.endswith("-END")
 

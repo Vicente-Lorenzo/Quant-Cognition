@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from Library.Database.Dataframe import np
 from Library.Market.Price import Direction
 from Library.Engine import MachineAPI
-from Library.Parameter import Parameter
+from Library.Utility.Parameter import Parameter
 from Library.Protocol.Action import OpenBuyPositionActionAPI, OpenSellPositionActionAPI
 from Library.Strategy.Hybrid.DDPG import DDPGStrategyAPI
 from Library.Strategy.Rule.NNFX import NNFXStrategyAPI
@@ -81,8 +81,8 @@ def _strategy_(risk=1.0, atr_scale=1.5, entry=None, exit=None, action=0.0, train
 def test_strategy_type_registers_four_strategies():
     assert StrategyType.Download.value == 1
     assert StrategyType.NNFX.value == 2
-    assert StrategyType.Trend.value == 3
-    assert StrategyType.DDPG.value == 4
+    assert StrategyType.DDPG.value == 3
+    assert StrategyType.Trend.value == 4
 
 def test_signal_maps_to_proportional_target_exposure():
     strategy = _strategy_()

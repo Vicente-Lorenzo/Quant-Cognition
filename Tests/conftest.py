@@ -10,6 +10,7 @@ from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Universe.Universe import UniverseAPI
 from Library.Market.Market import MarketAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
+from Setup.Enum import OUTPUT_PATH
 @pytest.fixture(scope="session")
 def db():
     admin = PostgresDatabaseAPI(admin=True)
@@ -67,3 +68,15 @@ def market(db, universe):
     db.migrate(schema=MarketAPI.Schema, table=TickAPI.Table, structure=TickAPI(db=None).Structure)
     db.migrate(schema=MarketAPI.Schema, table=BarAPI.Table, structure=BarAPI(db=None).Structure)
     return {"tick_table": f'"{TickAPI.Schema}"."{TickAPI.Table}"', "bar_table": f'"{BarAPI.Schema}"."{BarAPI.Table}"'}
+@pytest.fixture(scope="session")
+def connector_enums() -> dict:
+    if not OUTPUT_PATH.is_file(): pytest.skip("Generated C# enum not present")
+    blocks, name = {}, None
+    for line in OUTPUT_PATH.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("public enum "): name = stripped.split()[2]; blocks[name] = {}
+        elif name and stripped.startswith("}"): name = None
+        elif name and "=" in stripped:
+            member, _, value = stripped.rstrip(",").partition("=")
+            blocks[name][member.strip()] = int(value.strip())
+    return blocks

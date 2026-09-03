@@ -1,14 +1,13 @@
-from pathlib import Path
-
 import pytest
 
 from Library.Scheduler import WorkflowAPI, TaskAPI, DependencyAPI, CycleAPI, RunAPI, CoordinatorAPI, ManagerAPI
 from Library.Auth import UserAPI
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
+from Library.Utility.Path import traceback_root
 from Setup.Install import bootstrap, register, WORKFLOWS
 
 DATABASE = "Tests"
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = traceback_root()
 
 def test_definitions_are_acyclic_dags():
     uids = [task["uid"] for workflow in WORKFLOWS for task in workflow["tasks"]]

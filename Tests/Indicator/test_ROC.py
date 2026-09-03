@@ -2,7 +2,7 @@ import math
 from datetime import datetime, timezone
 
 from Library.Database.Dataframe import pl
-from Library.Indicator.Indicator import IndicatorMode, parse_technical
+from Library.Indicator.Indicator import IndicatorAPI, IndicatorMode
 from Library.Indicator.Technical.Momentum.ROC import RateOfChangeAPI
 from Library.Market.Market import MarketAPI
 
@@ -52,6 +52,6 @@ def test_stream_matches_batch():
     assert abs(roc.Result.last() - math.log(1.13 / 1.09)) < 1e-12
 
 def test_parse_technical_builds_roc():
-    technical = parse_technical({"MOM24": ["ROC", 24]})
+    technical = IndicatorAPI.parse_technical({"MOM24": ["ROC", 24]})
     indicator = getattr(technical, "MOM24", None)
     assert isinstance(indicator, RateOfChangeAPI) and indicator.Window == 24

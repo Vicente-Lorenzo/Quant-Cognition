@@ -1,11 +1,6 @@
-import re
-from pathlib import Path
-
 import pytest
 
 from Library.Logging import VerboseLevel
-
-_ENUM_ = Path(__file__).resolve().parents[2] / "Sources" / "Robots" / "Connector" / "Connector" / "Enum.cs"
 
 def test_members_and_values():
     assert [(level.name, level.value) for level in VerboseLevel] == [
@@ -61,10 +56,5 @@ def test_resolve_rejects_unsupported_type():
     with pytest.raises(TypeError):
         VerboseLevel.resolve(3.5)
 
-@pytest.mark.skipif(not _ENUM_.exists(), reason="Generated C# enum not present")
-def test_parity_with_generated_csharp_enum():
-    text = _ENUM_.read_text(encoding="utf-8", errors="replace")
-    block = re.search(r"public enum VerboseLevel\s*\{(.*?)\}", text, re.S)
-    assert block is not None
-    pairs = re.findall(r"(\w+)\s*=\s*(\d+)", block.group(1))
-    assert [(name, int(value)) for name, value in pairs] == [(level.name, level.value) for level in VerboseLevel]
+def test_parity_with_generated_csharp_enum(connector_enums):
+    assert list(connector_enums["VerboseLevel"].items()) == [(level.name, level.value) for level in VerboseLevel]

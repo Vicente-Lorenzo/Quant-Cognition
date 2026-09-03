@@ -1,3 +1,5 @@
+import pytest
+
 from Library.Universe.Timeframe import TimeframeAPI
 def test_timeframe_normalize_exact_matches():
     assert TimeframeAPI.normalize("DAILY") == "D1"
@@ -72,3 +74,41 @@ def test_timeframe_comparison():
     assert (h1 == TimeframeAPI(UID="H1")) is True
     assert (h1 == d1) is False
     assert (h1 == "H1") is False
+
+FAMILIES = {
+    "H1": ("Hour", "HOUR", "hourly", "Hourly", "H", "1H", "H1", "h1", "60", "60M", "60m"),
+    "D1": ("Daily", "DAILY", "DAY", "Day", "D", "1D", "D1", "d1"),
+    "M1": ("Minute", "MINUTELY", "Minutely", "M", "1M", "M1", "m1"),
+    "MN1": ("Monthly", "MONTHLY", "MONTH", "Month", "MN", "1MN", "MN1", "mn1"),
+    "W1": ("Weekly", "WEEKLY", "WEEK", "Week", "W", "1W", "W1", "w1"),
+    "Y1": ("Yearly", "YEARLY", "YEAR", "Y", "1Y", "Y1"),
+    "S1": ("Secondly", "SECOND", "S", "1S", "S1"),
+    "T1": ("Tick", "TICKS", "T", "1T", "T1"),
+}
+
+@pytest.mark.parametrize("canonical, variants", sorted(FAMILIES.items()))
+def test_every_spelling_of_a_timeframe_collapses_to_one_uid(canonical, variants):
+    assert {TimeframeAPI.normalize(variant) for variant in variants} == {canonical}
+
+@pytest.mark.parametrize("canonical", sorted(FAMILIES))
+def test_normalize_is_idempotent(canonical):
+    assert TimeframeAPI.normalize(TimeframeAPI.normalize(canonical)) == canonical
+
+@pytest.mark.parametrize("prefixed, suffixed, canonical", [
+    ("4H", "H4", "H4"), ("15M", "M15", "M15"), ("3D", "D3", "D3"),
+    ("2W", "W2", "W2"), ("3MN", "MN3", "MN3"), ("12H", "H12", "H12"),
+])
+def test_a_multiple_reads_the_same_either_way_round(prefixed, suffixed, canonical):
+    assert TimeframeAPI.normalize(prefixed) == canonical
+    assert TimeframeAPI.normalize(suffixed) == canonical
+
+def test_whitespace_and_case_never_change_the_answer():
+    assert TimeframeAPI.normalize("  daily  ") == "D1"
+    assert TimeframeAPI.normalize("HoUr") == "H1"
+
+def test_distinct_timeframes_stay_distinct():
+    assert len({TimeframeAPI.normalize(uid) for uid in ("H1", "H4", "M1", "M15", "D1", "D3", "W1", "MN1")}) == 8
+
+def test_nothing_normalizes_to_nothing():
+    assert TimeframeAPI.normalize(None) == ""
+    assert TimeframeAPI.normalize("") == ""
