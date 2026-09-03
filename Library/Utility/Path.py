@@ -1,5 +1,5 @@
 import sys
-from os import getcwd
+from os import environ, getcwd
 from tempfile import gettempdir
 from typing import Union
 from sys import _getframe
@@ -10,8 +10,28 @@ from dataclasses import dataclass, field, InitVar
 from Library.Utility.Typing import contains
 from Library.Utility.Runtime import is_notebook, find_notebook
 
+def inspect_application() -> str:
+    return traceback_root().name
+
+def inspect_root(builder: type[PurePath] = Path) -> Union[PurePath, Path]:
+    if sys.platform == "win32": home = builder(environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    elif sys.platform == "darwin": home = builder(Path.home() / "Library" / "Application Support")
+    else: home = builder(Path.home() / ".local" / "share")
+    return home / inspect_application()
+
 def inspect_temporary(*folders: str, builder: type[PurePath] = Path) -> Union[PurePath, Path]:
-    return builder(gettempdir()).joinpath(*folders)
+    return inspect_root(builder).joinpath("Temp", *folders)
+
+def inspect_persistent(*folders: str, builder: type[PurePath] = Path) -> Union[PurePath, Path]:
+    return inspect_root(builder).joinpath("Data", *folders)
+
+def inspect_cached(*folders: str, builder: type[PurePath] = Path) -> Union[PurePath, Path]:
+    return inspect_root(builder).joinpath("Cache", *folders)
+
+def inspect_destination(value, *folders: str, builder: type[PurePath] = Path) -> Union[PurePath, Path, None]:
+    if value is None or value is False: return None
+    if value is True: return inspect_temporary(*folders, builder=builder)
+    return builder(str(value))
 
 def inspect_separator(*, builder: type[PurePath] = Path) -> str:
     return str(builder("a", "b"))[1]
