@@ -822,9 +822,14 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
                    schema: Union[str, None, Missing] = MISSING,
                    table: Union[str, None, Missing] = MISSING) -> list:
         """Lists the columns of a table in the physical order the driver stores them in."""
-        frame = self.select(database=database, schema="information_schema", table="columns", columns="column_name",
-                            condition="table_schema = :order_schema: AND table_name = :order_table: ORDER BY ordinal_position",
-                            parameters={"order_schema": schema, "order_table": table})
+        frame = self.select(
+            database=database,
+            schema="information_schema",
+            table="columns",
+            columns="column_name",
+            condition="table_schema = :order_schema: AND table_name = :order_table: ORDER BY ordinal_position",
+            parameters={"order_schema": schema, "order_table": table}
+        )
         return [next(iter(row.values())) for row in self._records_(frame)]
 
     def sessions(self, *,

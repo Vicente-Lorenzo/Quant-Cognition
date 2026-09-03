@@ -18,10 +18,11 @@ def main() -> None:
     parser.add_argument("--cycle", default=None)
     parser.add_argument("--retry", type=int, default=0)
     parser.add_argument("--manual", action="store_true")
+    parser.add_argument("--arguments", default=None)
     parser.add_argument("--database", default="Quant")
     arguments = parser.parse_args()
     task = load(arguments.database, arguments.tid)
-    ExecutorAPI(database=arguments.database).run(task, cycle=arguments.cycle, retry=arguments.retry, manual=arguments.manual)
+    ExecutorAPI(database=arguments.database).run(task, cycle=arguments.cycle, retry=arguments.retry, manual=arguments.manual, arguments=arguments.arguments)
 
 if __name__ == "__main__":
     main()

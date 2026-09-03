@@ -1,17 +1,18 @@
 import sys
 import threading
+import os
 import subprocess
 
 from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Logging.File import FileAPI
 from Library.Utility.Path import traceback_root
-from Library.Utility.Runtime import tail_terminal
+from Library.Utility.Runtime import tail_terminal, windowless
 from Library.Scheduler.Serve import build
 
 class TrayAPI:
 
     _LOG_ = FileAPI.folder() / "Scheduler.log"
-    _LAUNCHER_ = traceback_root() / "Scripts" / "Scheduler.py"
+    _LAUNCHER_ = traceback_root() / "Script" / "Scheduler.py"
 
     def __init__(self) -> None:
         import pystray
@@ -65,7 +66,7 @@ class TrayAPI:
 
     def _restart_(self, icon=None, item=None) -> None:
         self._shutdown_()
-        subprocess.Popen([sys.executable, str(self._LAUNCHER_)], cwd=str(traceback_root()))
+        subprocess.Popen([sys.executable, str(self._LAUNCHER_)], cwd=str(traceback_root()), **windowless())
         self._icon_.stop()
 
     def _quit_(self, icon, item) -> None:

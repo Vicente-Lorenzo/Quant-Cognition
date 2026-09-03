@@ -10,7 +10,7 @@ from Library.Scheduler.Workflow import WorkflowAPI, Kind
 from Library.Scheduler.Task import TaskAPI
 from Library.Scheduler.Dependency import DependencyAPI
 from Library.Scheduler.Cycle import CycleAPI
-from Library.Scheduler.Run import RunAPI, RunStatus, RunEvent
+from Library.Scheduler.Run import RunAPI, RunStatus, RunEvent, RetentionLevel
 from Library.Scheduler.Executor import ExecutorAPI
 from Library.Scheduler.Coordinator import CoordinatorAPI
 from Library.Database import PostgresDatabaseAPI, QueryAPI
@@ -24,36 +24,50 @@ class ManagerAPI:
         self._database_ = database
         self._log_ = LoggingAPI(database)
 
+    def scope(self):
+        return PostgresDatabaseAPI.scope(database=self._database_)
+
     @staticmethod
     def _clean_(fields: dict) -> dict:
         return {key: value for key, value in fields.items() if value is not None}
 
     def _select_(self, schema: str, table: str, condition: Union[str, None] = None, parameters: Union[dict, None] = None, order: Union[str, None] = None, limit: Union[int, None] = None) -> list[dict]:
-        with PostgresDatabaseAPI(database=self._database_) as db:
+        with PostgresDatabaseAPI.attach(database=self._database_) as db:
             frame = db.select(schema=schema, table=table, condition=condition, order=order, limit=limit, parameters=parameters, legacy=False)
         return frame.to_dicts()
 
+    def _one_(self, model, uid: str) -> Union[dict, None]:
+        rows = self._select_(model.Schema, model.Table, '"UID" = :uid:', {"uid": uid}, limit=1)
+        return rows[0] if rows else None
+
+    def _recent_(self, model, key: str) -> dict:
+        with PostgresDatabaseAPI.attach(database=self._database_) as db:
+            frame = db.executeone(QueryAPI(f'SELECT DISTINCT ON ("{key}") "{key}", "Status" FROM {db._target_(model.Schema, model.Table)} ORDER BY "{key}", "StartedAt" DESC'), schema=model.Schema, table=model.Table).fetchall(legacy=False)
+        return {row[key]: row["Status"] for row in frame.to_dicts()}
+
     def fingerprint(self, schema: str, *tables: str, condition: Union[str, None] = None, parameters: Union[dict, None] = None) -> str:
-        with PostgresDatabaseAPI(database=self._database_) as db:
+        with PostgresDatabaseAPI.attach(database=self._database_) as db:
             return "·".join(db.fingerprint(schema=schema, table=table, condition=condition, parameters=parameters) for table in tables)
 
     def _delete_(self, schema: str, table: str, condition: str, parameters: dict) -> None:
-        with PostgresDatabaseAPI(database=self._database_) as db:
+        with PostgresDatabaseAPI.attach(database=self._database_) as db:
             db.execute(QueryAPI(f'DELETE FROM {db._target_(schema, table)} WHERE {condition}'), [parameters])
 
-    def _erase_(self, schema: str, table: str, uid: str, columns: list) -> None:
-        with PostgresDatabaseAPI(database=self._database_) as db:
-            sets = ", ".join(f'"{column}" = NULL' for column in columns)
-            db.execute(QueryAPI(f'UPDATE {db._target_(schema, table)} SET {sets} WHERE "UID" = :uid:'), [{"uid": uid}])
+    def _erase_(self, model, uid: str, row: dict, fields: dict) -> None:
+        cleared = [name for name, value in fields.items() if value is None and row.get(name) is not None]
+        if not cleared: return
+        with PostgresDatabaseAPI.attach(database=self._database_) as db:
+            sets = ", ".join(f'"{column}" = NULL' for column in cleared)
+            db.execute(QueryAPI(f'UPDATE {db._target_(model.Schema, model.Table)} SET {sets} WHERE "UID" = :uid:'), [{"uid": uid}])
 
     def _save_(self, datapoint) -> None:
-        with PostgresDatabaseAPI(database=self._database_) as db:
+        with PostgresDatabaseAPI.attach(database=self._database_) as db:
             datapoint._db_ = db
             datapoint.save(by="Manager")
         datapoint._db_ = None
 
-    def _spawn_(self, tid: str, cycle: Union[str, None] = None, retry: int = 0, manual: bool = False) -> None:
-        ExecutorAPI.spawn(tid, database=self._database_, cycle=cycle, retry=retry, manual=manual)
+    def _spawn_(self, tid: str, cycle: Union[str, None] = None, retry: int = 0, manual: bool = False, arguments: Union[str, None] = None) -> None:
+        ExecutorAPI.spawn(tid, database=self._database_, cycle=cycle, retry=retry, manual=manual, arguments=arguments)
 
     @staticmethod
     def _coherent_(kind, schedule: Union[str, None]) -> None:
@@ -78,8 +92,7 @@ class ManagerAPI:
         if not CoordinatorAPI.fits(row["Schedule"], schedule): raise ValueError(f"Task schedule '{schedule}' does not fit inside workflow schedule '{row['Schedule']}'")
 
     def task(self, uid: str) -> Union[dict, None]:
-        rows = self._select_(TaskAPI.Schema, TaskAPI.Table, '"UID" = :uid:', {"uid": uid}, limit=1)
-        return rows[0] if rows else None
+        return self._one_(TaskAPI, uid)
 
     def tasks(self, *, workflow: Union[str, None, Missing] = MISSING, enabled: Union[bool, Missing] = MISSING) -> list[dict]:
         conditions, parameters = [], {}
@@ -89,7 +102,7 @@ class ManagerAPI:
         return self._select_(TaskAPI.Schema, TaskAPI.Table, " AND ".join(conditions) or None, parameters or None, order='"UID" ASC')
 
     def create_task(self, **fields) -> TaskAPI:
-        task = TaskAPI(**{**TaskAPI.DEFAULTS, **self._clean_(fields)})
+        task = TaskAPI(**{**TaskAPI.Defaults, **self._clean_(fields)})
         self._lawful_(task)
         self._save_(task)
         self._log_.info(lambda: f"Task Create: Saved ({task.UID}) · {task.Name}")
@@ -101,8 +114,7 @@ class ManagerAPI:
         task = TaskAPI(**{**self._clean_(row), **fields})
         self._lawful_(task)
         self._save_(task)
-        cleared = [name for name, value in fields.items() if value is None and row.get(name) is not None]
-        if cleared: self._erase_(TaskAPI.Schema, TaskAPI.Table, uid, cleared)
+        self._erase_(TaskAPI, uid, row, fields)
         self._log_.info(lambda: f"Task Update: Saved ({uid})")
         return task
 
@@ -120,15 +132,15 @@ class ManagerAPI:
     def disable_task(self, uid: str) -> bool:
         return self.update_task(uid, Enabled=False) is not None
 
-    def run_task(self, uid: str, *, wait: bool = False) -> Union[RunAPI, None]:
+    def run_task(self, uid: str, *, wait: bool = False, arguments: Union[str, None] = None) -> Union[RunAPI, None]:
         row = self.task(uid)
         if row is None or Kind.parse(row["Kind"]) is Kind.Service: return None
         cid = None
         if row["WID"] is not None:
             cycles = self.cycles(workflow=row["WID"], limit=1)
             if cycles and cycles[0]["Status"] in self._OPEN_: cid = cycles[0]["UID"]
-        if wait: return ExecutorAPI(database=self._database_).run(TaskAPI(**self._clean_(row)), cycle=cid, manual=True)
-        self._spawn_(uid, cycle=cid, manual=True)
+        if wait: return ExecutorAPI(database=self._database_).run(TaskAPI(**self._clean_(row)), cycle=cid, manual=True, arguments=arguments)
+        self._spawn_(uid, cycle=cid, manual=True, arguments=arguments)
         self._log_.info(lambda: f"Task Run: Dispatched ({uid})")
         return None
 
@@ -156,8 +168,7 @@ class ManagerAPI:
         return run
 
     def workflow(self, uid: str) -> Union[dict, None]:
-        rows = self._select_(WorkflowAPI.Schema, WorkflowAPI.Table, '"UID" = :uid:', {"uid": uid}, limit=1)
-        return rows[0] if rows else None
+        return self._one_(WorkflowAPI, uid)
 
     def workflows(self, *, enabled: Union[bool, Missing] = MISSING) -> list[dict]:
         conditions, parameters = [], {}
@@ -165,7 +176,7 @@ class ManagerAPI:
         return self._select_(WorkflowAPI.Schema, WorkflowAPI.Table, " AND ".join(conditions) or None, parameters or None, order='"UID" ASC')
 
     def create_workflow(self, **fields) -> WorkflowAPI:
-        fields = {**WorkflowAPI.DEFAULTS, **self._clean_(fields)}
+        fields = {**WorkflowAPI.Defaults, **self._clean_(fields)}
         if not fields.get("Kind"): fields["Kind"] = Kind.Scheduled.name if fields.get("Schedule") else Kind.Manual.name
         workflow = WorkflowAPI(**fields)
         self._coherent_(workflow.Kind, workflow.Schedule)
@@ -184,15 +195,14 @@ class ManagerAPI:
             for member in members:
                 if member["Schedule"] and not CoordinatorAPI.fits(workflow.Schedule, member["Schedule"]): raise ValueError(f"Task schedule '{member['Schedule']}' of '{member['UID']}' does not fit inside workflow schedule '{workflow.Schedule}'")
         self._save_(workflow)
-        cleared = [name for name, value in fields.items() if value is None and row.get(name) is not None]
-        if cleared: self._erase_(WorkflowAPI.Schema, WorkflowAPI.Table, uid, cleared)
+        self._erase_(WorkflowAPI, uid, row, fields)
         self._log_.info(lambda: f"Workflow Update: Saved ({uid})")
         return workflow
 
     def delete_workflow(self, uid: str) -> bool:
         if self.workflow(uid) is None: return False
         self._delete_(DependencyAPI.Schema, DependencyAPI.Table, '"WID" = :uid:', {"uid": uid})
-        with PostgresDatabaseAPI(database=self._database_) as db:
+        with PostgresDatabaseAPI.attach(database=self._database_) as db:
             db.execute(QueryAPI(f'UPDATE {db._target_(TaskAPI.Schema, TaskAPI.Table)} SET "WID" = NULL WHERE "WID" = :uid:'), [{"uid": uid}])
             db.execute(QueryAPI(f'UPDATE {db._target_(RunAPI.Schema, RunAPI.Table)} SET "CID" = NULL WHERE "CID" IN (SELECT "UID" FROM {db._target_(CycleAPI.Schema, CycleAPI.Table)} WHERE "WID" = :uid:)'), [{"uid": uid}])
         self._delete_(CycleAPI.Schema, CycleAPI.Table, '"WID" = :uid:', {"uid": uid})
@@ -210,7 +220,7 @@ class ManagerAPI:
         if self.workflow(uid) is None: return None
         members = self.tasks(workflow=uid, enabled=True)
         rows = {member["UID"]: member for member in members if Kind.parse(member["Kind"]) is Kind.Scheduled}
-        with PostgresDatabaseAPI(database=self._database_) as db:
+        with PostgresDatabaseAPI.attach(database=self._database_) as db:
             edges = CoordinatorAPI.edges(db, uid)
             cid = uuid.uuid4().hex
             CycleAPI(UID=cid, WID=uid, Kind=Kind.Manual.name, Status=RunStatus.Running.name, StartedAt=datetime.now(), db=db).save(by="Manager")
@@ -221,8 +231,7 @@ class ManagerAPI:
         return cid
 
     def cycle(self, uid: str) -> Union[dict, None]:
-        rows = self._select_(CycleAPI.Schema, CycleAPI.Table, '"UID" = :uid:', {"uid": uid}, limit=1)
-        return rows[0] if rows else None
+        return self._one_(CycleAPI, uid)
 
     def cycles(self, *, workflow: Union[str, Missing] = MISSING, limit: Union[int, None] = None) -> list[dict]:
         conditions, parameters = [], {}
@@ -233,7 +242,7 @@ class ManagerAPI:
         return self._select_(DependencyAPI.Schema, DependencyAPI.Table, '"WID" = :uid:', {"uid": uid})
 
     def link(self, uid: str, predecessor: str, successor: str) -> Union[DependencyAPI, None]:
-        with PostgresDatabaseAPI(database=self._database_) as db:
+        with PostgresDatabaseAPI.attach(database=self._database_) as db:
             dependency = CoordinatorAPI.link(db, uid, predecessor, successor, by="Manager")
         if dependency is not None: self._log_.info(lambda: f"Workflow Link: Added ({uid}) · {predecessor} → {successor}")
         return dependency
@@ -244,13 +253,21 @@ class ManagerAPI:
         return True
 
     def run(self, uid: str) -> Union[dict, None]:
-        rows = self._select_(RunAPI.Schema, RunAPI.Table, '"UID" = :uid:', {"uid": uid}, limit=1)
-        return rows[0] if rows else None
+        return self._one_(RunAPI, uid)
+
+    def delete_run(self, uid: str) -> bool:
+        row = self.run(uid)
+        if row is None: return False
+        if row["Status"] in RunAPI.Active: return False
+        self._delete_(RunAPI.Schema, RunAPI.Table, '"UID" = :uid:', {"uid": uid})
+        self._log_.info(lambda: f"Run Delete: Removed ({uid})")
+        return True
 
     def latest(self) -> dict:
-        with PostgresDatabaseAPI(database=self._database_) as db:
-            frame = db.executeone(QueryAPI(f'SELECT DISTINCT ON ("TID") "TID", "Status" FROM {db._target_(RunAPI.Schema, RunAPI.Table)} ORDER BY "TID", "StartedAt" DESC'), schema=RunAPI.Schema, table=RunAPI.Table).fetchall(legacy=False)
-        return {row["TID"]: row["Status"] for row in frame.to_dicts()}
+        return self._recent_(RunAPI, "TID")
+
+    def cycled(self) -> dict:
+        return self._recent_(CycleAPI, "WID")
 
     def runs(self, *, task: Union[str, Missing] = MISSING, cycle: Union[str, None, Missing] = MISSING, status: Union[str, Missing] = MISSING, limit: Union[int, None] = None) -> list[dict]:
         conditions, parameters = [], {}
@@ -259,6 +276,26 @@ class ManagerAPI:
         elif cycle is not MISSING: conditions, parameters = conditions + ['"CID" = :cid:'], {**parameters, "cid": cycle}
         if status is not MISSING and status is not None: conditions, parameters = conditions + ['"Status" = :status:'], {**parameters, "status": status}
         return self._select_(RunAPI.Schema, RunAPI.Table, " AND ".join(conditions) or None, parameters or None, order='"StartedAt" DESC', limit=limit)
+
+    def retain(self, uid: str, *, level: Union[str, RetentionLevel] = RetentionLevel.Persistent) -> bool:
+        row = self.run(uid)
+        if row is None: return False
+        resolved = level if isinstance(level, RetentionLevel) else RetentionLevel.parse(level)
+        with PostgresDatabaseAPI.attach(database=self._database_) as db:
+            db.execute(QueryAPI(f'UPDATE {db._target_(RunAPI.Schema, RunAPI.Table)} SET "Retention" = :retention: WHERE "UID" = :uid:'), [{"retention": resolved.name, "uid": uid}])
+        if row["Status"] not in RunAPI.Active: self._settle_(uid, resolved)
+        self._log_.info(lambda: f"Retain Run: Marked {resolved.name} ({uid})")
+        return True
+
+    def _settle_(self, uid: str, level: RetentionLevel) -> None:
+        try: ExecutorAPI.relocate(uid, level is not RetentionLevel.Temporary)
+        except Exception as error:
+            self._log_.warning(lambda: f"Retain Run: Unmoved ({uid}) · {error}")
+
+    def retained(self) -> set:
+        condition = '"Retention" IN (:persistent:, :favorite:)'
+        parameters = {"persistent": RetentionLevel.Persistent.name, "favorite": RetentionLevel.Favorite.name}
+        return {row["UID"] for row in self._select_(RunAPI.Schema, RunAPI.Table, condition, parameters)}
 
     def cancel(self, uid: str, *, failure: bool = False, by: Union[str, None] = None) -> bool:
         row = self.run(uid)
@@ -275,14 +312,14 @@ class ManagerAPI:
         return True
 
     def approve(self, uid: str, by: Union[str, None] = None) -> bool:
-        with PostgresDatabaseAPI(database=self._database_) as db:
+        with PostgresDatabaseAPI.attach(database=self._database_) as db:
             run = RunAPI(UID=uid, db=db, autoload=True)
             resolved = run.accept(by) if run.Status is not None else False
         if resolved: self._log_.info(lambda: f"Run Approve: Accepted ({uid}) · {by}")
         return resolved
 
     def reject(self, uid: str, by: Union[str, None] = None) -> bool:
-        with PostgresDatabaseAPI(database=self._database_) as db:
+        with PostgresDatabaseAPI.attach(database=self._database_) as db:
             run = RunAPI(UID=uid, db=db, autoload=True)
             resolved = run.reject(by) if run.Status is not None else False
         if resolved: self._log_.info(lambda: f"Run Reject: Rejected ({uid}) · {by}")

@@ -20,6 +20,7 @@ class DatapointAPI(DataclassAPI):
     Database: ClassVar[str] = "Quant"
     Schema: ClassVar[str]
     Table: ClassVar[str]
+    Enums: ClassVar[dict] = {}
 
     _LOADING_: ClassVar[local] = local()
 
@@ -51,6 +52,8 @@ class DatapointAPI(DataclassAPI):
                       autosave: bool,
                       autoload: bool,
                       autooverload: bool) -> None:
+        if self.Enums:
+            for name, enumeration in self.Enums.items(): setattr(self, name, enumeration.parse(getattr(self, name)))
         self._db_, self._migrate_, self._autosave_, self._autoload_, self._autooverload_ = db, migrate, autosave, autoload, autooverload
         if self._db_ is not None:
             if self._migrate_: self._db_.migrate(schema=self.Schema, table=self.Table, structure=self.Structure)
@@ -101,10 +104,7 @@ class DatapointAPI(DataclassAPI):
             data = {k: v for k, v in self.dict(include_fields=True, include_initvar_fields=False, include_properties=False, include_override_fields=True).items() if v is not None and v is not MISSING and k[0].isupper()}
             if natural_key and all(data.get(k) is not None for k in natural_key):
                 insert_data = {k: v for k, v in data.items() if k not in identity_cols}
-                result = self._db_.upsert(
-                    schema=self.Schema, table=self.Table, data=insert_data, key=natural_key,
-                    returning=identity_cols if identity_cols else None
-                )
+                result = self._db_.upsert(schema=self.Schema, table=self.Table, data=insert_data, key=natural_key, returning=identity_cols if identity_cols else None)
                 if identity_cols and hasattr(result, "is_empty") and not result.is_empty():
                     row = result.row(0, named=True)
                     for col in identity_cols:

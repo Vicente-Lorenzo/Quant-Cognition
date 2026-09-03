@@ -1039,9 +1039,14 @@ def generate_benchmark_report(equity: Union[list, None], benchmarks: Union[dict,
             continue
         reference = daily_series(spine, aligned)
         cadence = len(sampled) / (calculate_duration_seconds(start, stop) / (trading_days * 86400.0)) if calculate_duration_seconds(start, stop) else 0.0
-        relative = _relative_metrics_(sampled, reference, cadence or strategy["_periods_"], risk_free,
-                                      annual=strategy.get(BENCHMARK_ANNUALIZEDRETURN, 0.0) / 100.0,
-                                      reference=metrics.get(BENCHMARK_ANNUALIZEDRETURN, 0.0) / 100.0)
+        relative = _relative_metrics_(
+            sampled,
+            reference,
+            cadence or strategy["_periods_"],
+            risk_free,
+            annual=strategy.get(BENCHMARK_ANNUALIZEDRETURN, 0.0) / 100.0,
+            reference=metrics.get(BENCHMARK_ANNUALIZEDRETURN, 0.0) / 100.0
+        )
         relative[BENCHMARK_EXCESSRETURN] = (strategy["_total_"] - metrics["_total_"]) * 100.0
         rows.append({BENCHMARK_LABEL: label, **{column: metrics.get(column, relative.get(column)) for column in columns}})
     return pl.DataFrame(rows)

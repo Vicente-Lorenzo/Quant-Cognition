@@ -16,7 +16,7 @@ class UserAPI(DatapointAPI):
 
     Schema: ClassVar[str] = "Auth"
     Table: ClassVar[str] = "User"
-    ENUMS: ClassVar[dict] = {"Role": RoleAPI}
+    Enums: ClassVar[dict] = {"Role": RoleAPI}
 
     UID: Union[str, None] = None
     Office: Union[str, None] = None

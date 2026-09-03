@@ -12,7 +12,6 @@ from Library.Database.Database import ForeignKey
 @dataclass
 class DependencyAPI(DatapointAPI):
 
-    Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = WorkflowAPI.Schema
     Table: ClassVar[str] = "Dependency"
 

@@ -101,10 +101,21 @@ class StorageAPI(LoggerAPI):
         self.detach()
         self._db_ = db
         self._record_ = LogAPI(
-            UID=os.urandom(16).hex(), Source=source or self._source_(), Level=self._level_.name,
-            Host=self._host_(), User=self._user_(), Process=os.getpid(),
-            Path=str(path) if path is not None else None, Content="", Records=0, Dropped=0,
-            Truncated=False, StartedAt=datetime.now(), db=db, migrate=migrate)
+            UID=os.urandom(16).hex(),
+            Source=source or self._source_(),
+            Level=self._level_.name,
+            Host=self._host_(),
+            User=self._user_(),
+            Process=os.getpid(),
+            Path=str(path) if path is not None else None,
+            Content="",
+            Records=0,
+            Dropped=0,
+            Truncated=False,
+            StartedAt=datetime.now(),
+            db=db,
+            migrate=migrate
+        )
         self._record_.save()
         self._buffer_, self._length_, self._records_, self._dropped_, self._truncated_ = [], 0, 0, 0, False
         self._signal_.clear()

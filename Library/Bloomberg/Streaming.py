@@ -30,8 +30,7 @@ class StreamingAPI(ServiceAPI):
         try:
             self.connect()
             if self._api_.remote():
-                self._api_._listen_("stream", securities, fields, limit=limit,
-                                    callback=lambda update: callback(self._api_.deserialize(update, legacy)))
+                self._api_._listen_("stream", securities, fields, limit=limit, callback=lambda update: callback(self._api_.deserialize(update, legacy)))
                 return
             count = 0
             for update in self._api_._stream_(securities, fields, legacy):

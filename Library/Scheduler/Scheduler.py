@@ -179,7 +179,10 @@ class SchedulerAPI:
             if kinds[uid] is not Kind.Service: continue
             running = self._alive_(uid)
             if task["WID"] in paused:
-                if running: self._terminate_(self._services_[uid].pid); self._log_.info(lambda task=task: f"Service Suspend: Stopped ({task['Name']}) · Maintenance")
+                if running:
+                    self._terminate_(self._services_[uid].pid)
+                    self._suspend_(db, uid, now)
+                    self._log_.info(lambda task=task: f"Service Suspend: Stopped ({task['Name']}) · Maintenance")
                 self._services_.pop(uid, None)
                 continue
             if running: continue
@@ -242,6 +245,28 @@ class SchedulerAPI:
             failed.save(by="Reset")
         self._record_(db, cycle, RunStatus.Failure.name, now, "Reset")
         self._log_.warning(lambda cycle=cycle: f"Cycle Reset: Failure ({cycle['UID']}) · Due to overrun")
+
+    def _suspend_(self, db: PostgresDatabaseAPI, tid: str, now: datetime) -> None:
+        row = self._latest_(db, tid)
+        if row is None or row["Status"] not in RunAPI.Busy: return
+        duration = (now - row["StartedAt"]).total_seconds() if row["StartedAt"] else None
+        suspended = RunAPI(
+            UID=row["UID"],
+            CID=row["CID"],
+            TID=row["TID"],
+            Kind=row["Kind"],
+            ExitCode=row["ExitCode"],
+            Retry=row["Retry"],
+            PID=row["PID"],
+            Log=row["Log"],
+            StartedAt=row["StartedAt"],
+            StoppedAt=now,
+            Duration=duration,
+            Heartbeat=row["Heartbeat"],
+            db=db
+        )
+        suspended.Status = RunStatus.Success.name
+        suspended.save(by="Suspend")
 
     def _advance_(self, db: PostgresDatabaseAPI, workflow: dict, members: list[dict], edges: list, now: datetime, budget: int) -> int:
         launch = self._launch_ is not None and workflow["UID"] in self._launch_

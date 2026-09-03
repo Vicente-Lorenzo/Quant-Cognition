@@ -12,7 +12,6 @@ from Library.Database.Datapoint import DatapointAPI
 @dataclass
 class CycleAPI(DatapointAPI):
 
-    Database: ClassVar[str] = DatapointAPI.Database
     Schema: ClassVar[str] = WorkflowAPI.Schema
     Table: ClassVar[str] = "Cycle"
 

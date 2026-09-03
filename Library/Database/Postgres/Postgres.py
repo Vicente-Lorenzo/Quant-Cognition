@@ -267,10 +267,14 @@ class PostgresDatabaseAPI(DatabaseAPI):
                 table: Union[str, None, Missing] = MISSING,
                 source: Union[str, None] = None) -> Self:
         if not source or not table: return self
-        frame = self.select(database=database, schema="pg_catalog", table="pg_constraint",
-                            columns='conname AS name, CAST(CAST(conrelid AS regclass) AS text) AS owner, pg_get_constraintdef(oid) AS definition',
-                            condition="contype = 'f' AND CAST(CAST(confrelid AS regclass) AS text) LIKE :realign_source:",
-                            parameters={"realign_source": f"%{source}%"})
+        frame = self.select(
+            database=database,
+            schema="pg_catalog",
+            table="pg_constraint",
+            columns='conname AS name, CAST(CAST(conrelid AS regclass) AS text) AS owner, pg_get_constraintdef(oid) AS definition',
+            condition="contype = 'f' AND CAST(CAST(confrelid AS regclass) AS text) LIKE :realign_source:",
+            parameters={"realign_source": f"%{source}%"}
+        )
         for row in self._records_(frame):
             definition = row["definition"].replace(f'"{source}"', f'"{table}"')
             self.executeone(QueryAPI(f'ALTER TABLE {row["owner"]} DROP CONSTRAINT "{row["name"]}"'), database=database, admin=False)
@@ -290,10 +294,14 @@ class PostgresDatabaseAPI(DatabaseAPI):
                       database: Union[str, Sequence, None, Missing] = MISSING,
                       schema: Union[str, Sequence, None, Missing] = MISSING,
                       table: Union[str, Sequence, None, Missing] = MISSING) -> Union[str, None]:
-        frame = self.select(database=database, schema="pg_catalog", table="pg_stat_all_tables",
-                            columns="COALESCE(n_tup_ins, 0) + COALESCE(n_tup_upd, 0) + COALESCE(n_tup_del, 0)",
-                            condition='schemaname = :fingerprint_schema: AND relname = :fingerprint_table:',
-                            parameters={"fingerprint_schema": schema, "fingerprint_table": table})
+        frame = self.select(
+            database=database,
+            schema="pg_catalog",
+            table="pg_stat_all_tables",
+            columns="COALESCE(n_tup_ins, 0) + COALESCE(n_tup_upd, 0) + COALESCE(n_tup_del, 0)",
+            condition='schemaname = :fingerprint_schema: AND relname = :fingerprint_table:',
+            parameters={"fingerprint_schema": schema, "fingerprint_table": table}
+        )
         records = frame.to_dicts() if hasattr(frame, "to_dicts") else frame.to_dict("records")
         if records: return str(next(iter(records[0].values())))
         return None

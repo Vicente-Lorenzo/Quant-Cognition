@@ -114,9 +114,15 @@ class AuthAPI:
                provider: str = "Local",
                active: bool = True) -> UserAPI:
         with PostgresDatabaseAPI.attach(database=self._database_) as db:
-            user = UserAPI(db=db, UID=username, Email=email, Name=name,
-                           Password=PasswordAPI.hash(password) if password else None,
-                           Role=RoleAPI.coerce(role, RoleAPI.Viewer), Provider=provider,
-                           Active=active)
+            user = UserAPI(
+                db=db,
+                UID=username,
+                Email=email,
+                Name=name,
+                Password=PasswordAPI.hash(password) if password else None,
+                Role=RoleAPI.coerce(role, RoleAPI.Viewer),
+                Provider=provider,
+                Active=active
+            )
             user.save(by=provider)
         return user
