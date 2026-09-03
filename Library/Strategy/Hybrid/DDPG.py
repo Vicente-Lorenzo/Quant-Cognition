@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Any, Union, TYPE_CHECKING
+from typing import ClassVar, Any, Union, TYPE_CHECKING
 
 from Library.Database.Dataframe import np
 from Library.Engine import MachineAPI
-from Library.Indicator.Indicator import parse_technical
+from Library.Indicator.Indicator import IndicatorAPI
 from Library.Indicator.Technical.Technical import TechnicalType
 from Library.Portfolio import PositionType
 from Library.Portfolio.Sizing import SizingMode, calculate_fixed_fractional_volume, calculate_normalized_volume
@@ -18,9 +18,10 @@ from Library.Strategy.Model.Observation import ObservationAPI
 from Library.Strategy.Model.Reward import RewardAPI, RewardType
 from Library.Strategy.Strategy import StrategyAPI
 from Library.Utility.Math import EPSILON
+from Library.Utility.Path import inspect_persistent
 
 if TYPE_CHECKING:
-    from Library.Parameter import Parameter
+    from Library.Utility.Parameter import Parameter
     from Library.Model.Core.Agent import AgentAPI
 
 class DDPGNormalizationAPI(NormalizerAPI):
@@ -238,6 +239,89 @@ class DDPGObservationAPI(ObservationAPI):
 
 class DDPGStrategyAPI(StrategyAPI):
 
+    Defaults: ClassVar[dict] = {
+        "Realtime": {
+            'FundamentalManagement': None,
+            'MoneyManagement': {
+                'ATRScale': [1.5],
+                'RiskPercentage': [1.0],
+            },
+            'PortfolioManagement': None,
+            'RiskManagement': None,
+            'SentimentalManagement': None,
+            'SignalManagement': {
+                'ActorLearningRate': [0.0001],
+                'ActorRegularization': [0.01],
+                'BatchSize': [64],
+                'CriticLearningRate': [0.001],
+                'DirectionalEntryThreshold': None,
+                'DirectionalExitThreshold': None,
+                'DiscountFactor': [0.99],
+                'GradientClip': [1.0],
+                'HiddenShape1': [400],
+                'HiddenShape2': [300],
+                'MemorySize': [1000000],
+                'NormalizeWindow': [200],
+                'ObservationWindow': [1],
+                'SoftUpdate': [0.001],
+                'VolumeEntryThreshold': None,
+                'VolumeExitThreshold': None,
+            },
+            'TechnicalManagement': {
+                'ATR': ['ATR', 14],
+                'ER': ['ER', 21],
+                'MAFast': ['SMA', 5],
+                'MAMedium': ['SMA', 21],
+                'MASlow': ['SMA', 63],
+                'MOMFast': ['ROC', 5],
+                'MOMMedium': ['ROC', 21],
+                'MOMSlow': ['ROC', 63],
+                'RVFast': ['RV', 16],
+                'RVSlow': ['RV', 63],
+            },
+        },
+        "Learning": {
+            'FundamentalManagement': None,
+            'MoneyManagement': {
+                'ATRScale': [1.5],
+                'RiskPercentage': [1.0],
+            },
+            'PortfolioManagement': None,
+            'RiskManagement': None,
+            'SentimentalManagement': None,
+            'SignalManagement': {
+                'ActorLearningRate': [0.0001],
+                'ActorRegularization': [0.01],
+                'BatchSize': [64],
+                'CriticLearningRate': [0.001],
+                'DirectionalEntryThreshold': None,
+                'DirectionalExitThreshold': None,
+                'DiscountFactor': [0.99],
+                'GradientClip': [1.0],
+                'HiddenShape1': [400],
+                'HiddenShape2': [300],
+                'MemorySize': [1000000],
+                'NormalizeWindow': [200],
+                'ObservationWindow': [1],
+                'SoftUpdate': [0.001],
+                'VolumeEntryThreshold': None,
+                'VolumeExitThreshold': None,
+            },
+            'TechnicalManagement': {
+                'ATR': ['ATR', 14],
+                'ER': ['ER', 21],
+                'MAFast': ['SMA', 5],
+                'MAMedium': ['SMA', 21],
+                'MASlow': ['SMA', 63],
+                'MOMFast': ['ROC', 5],
+                'MOMMedium': ['ROC', 21],
+                'MOMSlow': ['ROC', 63],
+                'RVFast': ['RV', 16],
+                'RVSlow': ['RV', 63],
+            },
+        },
+    }
+
     Subscription = Stream.All & ~Stream.Tick
 
     Agent: Union[AgentAPI, None] = None
@@ -253,7 +337,7 @@ class DDPGStrategyAPI(StrategyAPI):
 
     _ACTION_SHAPE_: int = 1
     _EXPOSURE_REFERENCE_: float = 100.0
-    _DEFAULT_WEIGHTS_: Path = Path.home() / ".cache" / "cAlgo" / "models"
+    _DEFAULT_WEIGHTS_: Path = inspect_persistent("Models")
 
     def __init__(self,
                  money_management: Parameter,
@@ -285,7 +369,8 @@ class DDPGStrategyAPI(StrategyAPI):
         account = self.SignalManagement.AccountFeatures
         self._account_features_enabled_ = bool(account[0]) if account else True
         momentum, overlap = self._observation_features_()
-        self._action_ = ActionAPI(mode=SizingMode.Balance, maximum=self._EXPOSURE_REFERENCE_, deadzone=0.0)
+        reference = self.SignalManagement.ExposureReference
+        self._action_ = ActionAPI(mode=SizingMode.Balance, maximum=float(reference[0]) if reference else self._EXPOSURE_REFERENCE_, deadzone=0.0)
         self._observation_ = DDPGObservationAPI(action=self._action_, momentum_features=momentum, overlap_features=overlap, normalize_window=self.SignalManagement.NormalizeWindow[0], window=self.SignalManagement.ObservationWindow[0], account=self._account_features_enabled_)
         scale = self.SignalManagement.RewardScale
         clip = self.SignalManagement.RewardClip
@@ -306,7 +391,7 @@ class DDPGStrategyAPI(StrategyAPI):
         self._step_index_: int = 0
 
     def _observation_features_(self) -> tuple:
-        technical = parse_technical(self.TechnicalManagement.data)
+        technical = IndicatorAPI.parse_technical(self.TechnicalManagement.data)
         momentum, overlap = [], []
         for name in self.TechnicalManagement.data:
             indicator = getattr(technical, name, None)

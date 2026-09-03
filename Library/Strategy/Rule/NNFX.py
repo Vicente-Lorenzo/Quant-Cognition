@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Union, TYPE_CHECKING
+from typing import ClassVar, Any, Union, TYPE_CHECKING
 
 from Library.Engine.Machine import MachineAPI
 from Library.Market.Price import Direction
@@ -33,9 +33,11 @@ from Library.Protocol.Update import (
 from Library.Strategy.Strategy import StrategyAPI
 
 if TYPE_CHECKING:
-    from Library.Parameter import Parameter
+    from Library.Utility.Parameter import Parameter
 
 class NNFXStrategyAPI(StrategyAPI):
+
+    Defaults: ClassVar[dict] = {}
 
     Subscription = Stream.All & ~Stream.Tick
 

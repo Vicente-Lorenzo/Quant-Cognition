@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Union, TYPE_CHECKING
+from typing import ClassVar, Union, TYPE_CHECKING
 
 from Library.Engine import MachineAPI
 from Library.Indicator.Indicator import IndicatorMode
@@ -10,9 +10,63 @@ from Library.Protocol.Update import UpdateID, BarUpdateAPI
 from Library.Strategy.Rule.NNFX import NNFXStrategyAPI
 
 if TYPE_CHECKING:
-    from Library.Parameter import Parameter
+    from Library.Utility.Parameter import Parameter
 
 class TrendStrategyAPI(NNFXStrategyAPI):
+
+    Defaults: ClassVar[dict] = {
+        "Realtime": {
+            'FundamentalManagement': None,
+            'MoneyManagement': {
+                'DrawdownFactor': [1.0],
+                'DrawdownThreshold': [0.0],
+                'RiskPercentage': [1.0],
+                'SizingMode': ['Risk'],
+            },
+            'PortfolioManagement': None,
+            'RiskManagement': {
+                'ScalingOutPercentage': [50.0],
+                'ScalingOutScale': [1.0],
+                'StagnationStopLoss': [0],
+                'StopLossScale': [1.5],
+                'TrailingStopLossScale': [1.5],
+                'TrailingStopLossStep': [0.25],
+            },
+            'SentimentalManagement': None,
+            'SignalManagement': {
+                'BaselineMode': ['Signal', False, 'Signal'],
+                'DirectionalEntryThreshold': None,
+                'DirectionalExitThreshold': None,
+                'Filter1Mode': ['Filter', False, False],
+                'Filter2Mode': ['Filter', False, False],
+                'VolumeEntryThreshold': None,
+                'VolumeExitThreshold': None,
+                'VolumeMode': ['Filter', False, False],
+            },
+            'TechnicalManagement': {
+                'ATR': ['ATR', 14],
+                'Baseline': ['SMA', 20],
+                'Filter1': ['TT'],
+                'Filter2': ['TT'],
+                'Volume': ['TT'],
+            },
+        },
+        "Optimization": {
+            'FundamentalManagement': None,
+            'MoneyManagement': {
+                'RiskPercentage': [[0.5, 1.0, 1.5, 2.0]],
+            },
+            'PortfolioManagement': None,
+            'RiskManagement': {
+                'StopLossScale': [[1.0, 1.5, 2.0, 2.5]],
+            },
+            'SentimentalManagement': None,
+            'SignalManagement': None,
+            'TechnicalManagement': {
+                'Baseline': [['SMA', 'EMA'], ['Auto']],
+            },
+        },
+    }
 
     def __init__(self,
                  money_management: Parameter,

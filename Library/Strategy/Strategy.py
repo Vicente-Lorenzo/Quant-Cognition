@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from abc import ABC, abstractmethod
-from typing import Any, NamedTuple, Union, TYPE_CHECKING
+from typing import Any, ClassVar, NamedTuple, Union, TYPE_CHECKING
 
 from Library.Engine import MachineAPI
 from Library.Logging import LoggingAPI
@@ -37,14 +38,13 @@ from Library.Protocol.Update import (
 from Library.Utility.Enumeration import EnumerationAPI
 
 if TYPE_CHECKING:
-    from Library.Parameter import Parameter
+    from Library.Utility.Parameter import Parameter
 
 class StrategyType(EnumerationAPI):
     Download = 1
     NNFX = 2
-    Trend = 3
-    DDPG = 4
-    Netting = 5
+    DDPG = 3
+    Trend = 4
 
 class Transform(NamedTuple):
     Market: bool = True
@@ -60,6 +60,29 @@ class StrategyAPI(ABC):
     Transform = Transform()
     Subscription = Stream.All
     Recording: bool = False
+    Defaults: ClassVar[dict] = {}
+
+    _EQUIVALENT_: ClassVar[dict] = {"Backtesting": "Realtime", "Realtime": "Backtesting"}
+    _INHERITS_: ClassVar[dict] = {"Backtesting": "Realtime"}
+
+    @classmethod
+    def key(cls) -> str:
+        return cls.__name__.removesuffix("StrategyAPI")
+
+    @classmethod
+    def lineage(cls, kind: str) -> tuple:
+        chain, cursor = [], kind
+        while cursor is not None and cursor not in chain:
+            chain.append(cursor)
+            cursor = cls._INHERITS_.get(cursor)
+        return tuple(reversed(chain))
+
+    @classmethod
+    def defaults(cls, kind: str) -> dict:
+        table = cls.Defaults
+        if kind in table: return deepcopy(table[kind])
+        alias = cls._EQUIVALENT_.get(kind)
+        return deepcopy(table[alias]) if alias in table else {}
 
     def __init__(self,
                  money_management: Parameter,
