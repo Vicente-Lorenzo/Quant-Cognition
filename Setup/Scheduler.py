@@ -16,6 +16,7 @@ from Library.Database import PostgresDatabaseAPI, QueryAPI
 from Library.Logging import LoggingAPI
 from Setup.Auth import setup_auth
 from Setup.Logging import setup_logging
+from Setup.Task import migrate
 
 def setup_notify(db):
     schema, channel = WorkflowAPI.Schema, SchedulerAPI.Channel
@@ -59,11 +60,7 @@ def migrate_runs(db):
 def setup_scheduler(db):
     setup_logging(db)
     db.create(schema=WorkflowAPI.Schema)
-    WorkflowAPI(db=db, migrate=True, autosave=False, autoload=False)
-    TaskAPI(db=db, migrate=True, autosave=False, autoload=False)
-    DependencyAPI(db=db, migrate=True, autosave=False, autoload=False)
-    CycleAPI(db=db, migrate=True, autosave=False, autoload=False)
-    RunAPI(db=db, migrate=True, autosave=False, autoload=False)
+    migrate(db, WorkflowAPI, TaskAPI, DependencyAPI, CycleAPI, RunAPI)
     setup_index(db)
     setup_notify(db)
     migrate_runs(db)

@@ -11,14 +11,13 @@ from Library.Auth.Office import OfficeAPI
 from Library.Auth.User import UserAPI
 from Library.Database import PostgresDatabaseAPI
 from Library.Logging import LoggingAPI
+from Setup.Task import migrate
 
 ADMIN = "vicente.aser.lorenzo@gmail.com"
 
 def setup_auth(db):
     db.create(schema=AuthAPI.Schema)
-    TeamAPI(db=db, migrate=True, autosave=False, autoload=False)
-    OfficeAPI(db=db, migrate=True, autosave=False, autoload=False)
-    UserAPI(db=db, migrate=True, autosave=False, autoload=False)
+    migrate(db, TeamAPI, OfficeAPI, UserAPI)
 
 def seed_admin(auth, *, username=ADMIN, email=ADMIN, name="Vicente Lorenzo", password=None):
     if auth.find(username) is not None: return None

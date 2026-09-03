@@ -8,29 +8,15 @@ from Library.Portfolio.Order import OrderAPI
 from Library.Portfolio.Position import PositionAPI
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Trade import TradeAPI
-from Library.Database import PostgresDatabaseAPI
 from Library.Logging import LoggingAPI
-
-def _migrate_(db):
-    SessionAPI(db=db, migrate=True, autosave=False, autoload=False)
-    AccountAPI(db=db, migrate=True, autosave=False, autoload=False)
-    OrderAPI(db=db, migrate=True, autosave=False, autoload=False)
-    PositionAPI(db=db, migrate=True, autosave=False, autoload=False)
-    TradeAPI(db=db, migrate=True, autosave=False, autoload=False)
+from Setup.Task import migrate, provision
 
 def populate_portfolio(db):
-    _migrate_(db)
+    migrate(db, SessionAPI, AccountAPI, OrderAPI, PositionAPI, TradeAPI)
 
 def main(database="Quant"):
     with LoggingAPI() as log:
-        try:
-            with PostgresDatabaseAPI(database=database) as db:
-                populate_portfolio(db)
-            log.info(lambda: "Portfolio Setup: Completed · Schema + 5 Tables")
-            return 0
-        except Exception as error:
-            log.exception(lambda: f"Portfolio Setup: Failed · Due to {error}")
-            return 1
+        return provision(log, "Portfolio", populate_portfolio, database=database, detail="Schema + 5 Tables")
 
 if __name__ == "__main__":
     raise SystemExit(main())

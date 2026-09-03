@@ -6,26 +6,19 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from Library.Logging import LoggingAPI
 from Library.Logging import VerboseLevel
 from Library.Logging.Log import LogAPI
-from Library.Database import PostgresDatabaseAPI
 from Setup.Enum import enum_block
+from Setup.Task import migrate, provision
 
 def logging_block() -> str:
-    return enum_block("VerboseLevel", [(v.name, v.value) for v in VerboseLevel])
+    return enum_block("VerboseLevel", VerboseLevel)
 
 def setup_logging(db):
     db.create(schema=LogAPI.Schema)
-    LogAPI(db=db, migrate=True, autosave=False, autoload=False)
+    migrate(db, LogAPI)
 
 def main(database="Quant"):
     with LoggingAPI() as log:
-        try:
-            with PostgresDatabaseAPI(database=database) as db:
-                setup_logging(db)
-            log.info(lambda: f"Logging Setup: Completed · {LogAPI.Schema}.{LogAPI.Table}")
-            return 0
-        except Exception as error:
-            log.exception(lambda: f"Logging Setup: Failed · Due to {error}")
-            return 1
+        return provision(log, "Logging", setup_logging, database=database, detail=f"{LogAPI.Schema}.{LogAPI.Table}")
 
 if __name__ == "__main__":
     raise SystemExit(main())

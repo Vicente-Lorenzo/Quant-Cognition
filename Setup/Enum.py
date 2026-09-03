@@ -8,8 +8,8 @@ from Library.Utility.Path import traceback_root
 
 OUTPUT_PATH = traceback_root() / "Sources" / "Robots" / "Connector" / "Connector" / "Enum.cs"
 
-def enum_block(name: str, members, flags: bool = False) -> str:
-    body = "\n".join(f"        {member} = {value}," for member, value in members)
+def enum_block(name: str, enumeration, flags: bool = False) -> str:
+    body = "\n".join(f"        {member.name} = {member.value}," for member in enumeration)
     attribute = "    [System.Flags]\n" if flags else ""
     return f"{attribute}    public enum {name}\n    {{\n{body}\n    }}"
 

@@ -1,33 +1,32 @@
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from Library.Logging import LoggingAPI
-from Library.Logging.File import FileAPI
 from Library.Logging.Log import LogAPI
 from Library.Database import PostgresDatabaseAPI
+from Library.Logging.File import FileAPI
 from Library.Scheduler.Executor import ExecutorAPI
+from Library.System.System import SystemAPI
+from Library.Utility.File import PruneAPI
+from Library.Utility.Path import inspect_cached, inspect_temporary
+from Library.Utility.Statistic import PROFILES
 
-_FOLDERS_: tuple = (FileAPI.folder(), Path(ExecutorAPI.RUNS))
-_PATTERNS_: tuple = ("*.log", "*.log.*")
 _DAYS_: int = 30
 
-def prune_files(folders=_FOLDERS_, days: int = _DAYS_) -> tuple[int, int]:
-    horizon, removed, reclaimed = time.time() - days * 86400, 0, 0
-    for folder in folders:
-        if not folder.is_dir(): continue
-        for pattern in _PATTERNS_:
-            for candidate in folder.glob(pattern):
-                try:
-                    if not candidate.is_file() or candidate.stat().st_mtime >= horizon: continue
-                    reclaimed += candidate.stat().st_size
-                    candidate.unlink()
-                    removed += 1
-                except OSError:
-                    continue
-    return removed, reclaimed
+def temporaries() -> tuple:
+    root = inspect_temporary()
+    declared = tuple(inspect_temporary(name) for name in (FileAPI.Folder, ExecutorAPI.Folder, SystemAPI.Exports, SystemAPI.Plots, PROFILES))
+    if not root.is_dir(): return declared
+    return tuple(dict.fromkeys((*declared, *(entry for entry in root.iterdir() if entry.is_dir()))))
+
+def caches() -> tuple:
+    root = inspect_cached()
+    return tuple(entry for entry in root.iterdir() if entry.is_dir()) if root.is_dir() else ()
+
+def prune_files(folders=None, days: int = _DAYS_) -> tuple[int, int]:
+    return PruneAPI.prune(folders if folders is not None else (*temporaries(), *caches()), days=days)
 
 def prune_records(database: str = "Quant", days: int = _DAYS_) -> int:
     with PostgresDatabaseAPI(database=database) as db:

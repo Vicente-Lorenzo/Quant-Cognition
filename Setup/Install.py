@@ -1,4 +1,5 @@
 import sys
+import os
 import subprocess
 from argparse import ArgumentParser
 from pathlib import Path
@@ -54,13 +55,15 @@ WORKFLOWS = [
         "tasks": [
             {"uid": "Environment.Cache", "name": "Cache Cleanup", "path": "Scripts/Cache.py", "kind": Kind.Scheduled, "description": "Removes Python bytecode and tooling caches plus C# build artifacts across the repository"},
             {"uid": "Environment.Retention", "name": "Log Retention", "path": "Setup/Retention.py", "kind": Kind.Scheduled, "description": "Prunes expired log files from the temporary folders and expired log rows from the Logging schema"},
+            {"uid": "Environment.Version", "name": "Version Check", "path": "Setup/Version.py", "kind": Kind.Scheduled, "description": "Reports when a vendored frontend library has a newer release upstream — never upgrades automatically"},
             {"uid": "Environment.Update", "name": "Environment Update", "path": "Setup/Environment.py", "kind": Kind.Scheduled, "description": "Syncs the active conda environment to the pinned Quant manifest while the services are suspended"},
             {"uid": "Environment.Tunnel", "name": "Cloudflare Tunnel", "path": "Library/Web/Tunnel.py", "kind": Kind.Service, "description": "Runs the named Cloudflare tunnel exposing the loopback app server to the public edge"},
             {"uid": "Environment.Server", "name": "Application Server", "path": "Library/Web/Tray.py", "kind": Kind.Service, "description": "Serves the Quant Cognition Dash application under waitress with its own system-tray controls"}
         ],
         "edges": [
             ("Environment.Cache", "Environment.Retention"),
-            ("Environment.Retention", "Environment.Update"),
+            ("Environment.Retention", "Environment.Version"),
+            ("Environment.Version", "Environment.Update"),
             ("Environment.Update", "Environment.Tunnel"),
             ("Environment.Tunnel", "Environment.Server")
         ]
@@ -73,6 +76,12 @@ WORKFLOWS = [
         ],
         "edges": []
     }
+]
+
+STANDALONE = [
+    {"uid": "Research.Backtesting", "name": "Backtesting", "path": "Library/System/Main.py", "description": "Runs the Python trading engine over a historical period and writes its report export and plot"},
+    {"uid": "Research.Optimization", "name": "Optimization", "path": "Library/System/Main.py", "description": "Sweeps a parameter space over walk-forward folds and re-runs the elected candidate"},
+    {"uid": "Research.Learning", "name": "Learning", "path": "Library/System/Main.py", "description": "Trains a deep reinforcement learning agent and promotes its weights"},
 ]
 
 def bootstrap(database="Quant"):
@@ -98,20 +107,33 @@ def register(manager):
         for task in workflow["tasks"]:
             service = task["kind"] is Kind.Service
             manager.create_task(UID=task["uid"], Name=task["name"], Owner=OWNER, WID=workflow["uid"], Type=TaskType.Python, Kind=task["kind"], Path=task["path"], Description=task["description"], Enabled=True, MaxRetry=0, RetryDelay=15 if service else 0, RequiresApproval=False, RequiresReview=False, Waits=True, Tolerates=workflow["tolerates"])
-        for predecessor, successor in workflow["edges"]:
+        wanted = {(predecessor, successor) for predecessor, successor in workflow["edges"]}
+        for predecessor, successor in wanted:
             manager.link(workflow["uid"], predecessor, successor)
+        for row in manager.dependencies(workflow["uid"]):
+            edge = (row["Predecessor"], row["Successor"])
+            if edge not in wanted: manager.unlink(workflow["uid"], *edge)
+
+def enlist(manager):
+    for task in STANDALONE:
+        manager.create_task(UID=task["uid"], Name=task["name"], Owner=OWNER, WID=None, Type=TaskType.Python, Kind=Kind.Manual,
+                            Path=task["path"], Description=task["description"], Enabled=True, MaxRetry=0, RetryDelay=0,
+                            RequiresApproval=False, RequiresReview=False, Waits=True, Tolerates=True)
 
 def schedule_orchestrator():
     pythonw = Path(sys.executable).with_name("pythonw.exe")
     interpreter = pythonw if pythonw.exists() else Path(sys.executable)
     command = f'"{interpreter}" "{LAUNCHER}"'
-    subprocess.run(["schtasks", "/Create", "/TN", ORCHESTRATOR, "/TR", command, "/SC", "ONLOGON", "/F"], check=True)
+    subprocess.run(["schtasks", "/Create", "/TN", ORCHESTRATOR, "/TR", command, "/SC", "ONLOGON", "/RL", "HIGHEST", "/F"], check=True,
+                   **({"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}))
 
 def main(database="Quant", boot=False):
     with LoggingAPI() as log:
         try:
             provision(database)
-            register(ManagerAPI(database=database))
+            manager = ManagerAPI(database=database)
+            register(manager)
+            enlist(manager)
         except Exception as error:
             log.exception(lambda: f"Install Setup: Failed · Due to {error}")
             return 1
