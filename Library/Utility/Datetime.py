@@ -78,6 +78,13 @@ def seconds_to_string(seconds: float) -> str:
         result.append(f"{round(milliseconds * 1000)} milliseconds")
     return " ".join(result)
 
+def seconds_to_clock(seconds: Union[int, float, None]) -> str:
+    if seconds is None or seconds < 0: return "--:--"
+    seconds = int(seconds)
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes:02d}:{seconds:02d}"
+
 def weekday_shift_datetime(wd: Weekday, shift: int, today: Union[datetime, None] = None) -> datetime:
     today = today if today is not None else datetime.today()
     shift = shift - 1 if today.weekday() > wd.value else shift
