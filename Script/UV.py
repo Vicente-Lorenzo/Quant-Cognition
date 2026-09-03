@@ -1,9 +1,7 @@
 import subprocess
-from pathlib import Path
 
-from Cache import clean
+from Cache import ROOT, clean, windowless
 
-ROOT = Path(__file__).resolve().parent.parent
 REQUIREMENTS = ROOT / "Requirements.txt"
 
 def main():
@@ -11,7 +9,7 @@ def main():
     if not REQUIREMENTS.is_file():
         print(f"UV Update: Skipped · {REQUIREMENTS.name} Absent · Use Conda.py for the Quant environment")
         return 0
-    subprocess.run(["uv", "pip", "install", "--system", "--upgrade", "-r", str(REQUIREMENTS)], check=True)
+    subprocess.run(["uv", "pip", "install", "--system", "--upgrade", "-r", str(REQUIREMENTS)], check=True, **windowless())
     print(f"UV Update: Completed · {REQUIREMENTS.name}")
     return 0
 

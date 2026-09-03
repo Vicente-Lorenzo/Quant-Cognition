@@ -151,6 +151,9 @@ def find_caller_class(*, depth: int = 0, skip: Union[str, None] = None) -> Union
 def find_caller_package(*, depth: int = 0, skip: Union[str, None] = None, package: str = "Library") -> Union[str, None]:
     return find_frame_package(find_caller_frame(depth=depth + 1, skip=skip), package=package)
 
+def windowless() -> dict:
+    return {"creationflags": subprocess.CREATE_NO_WINDOW} if is_windows() else {}
+
 def terminate(pid: Union[int, None]) -> None:
     import psutil
     if pid is None: return

@@ -20,7 +20,8 @@ def main():
         import subprocess
         if "--relaunched" in sys.argv: raise
         conda = os.environ.get("CONDA_EXE", "conda")
-        return subprocess.run([conda, "run", "-n", "Quant", "--no-capture-output", "python", str(Path(__file__).resolve()), "--relaunched"], cwd=str(ROOT)).returncode
+        return subprocess.run([conda, "run", "-n", "Quant", "--no-capture-output", "python", str(Path(__file__).resolve()), "--relaunched"], cwd=str(ROOT),
+                          **({"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {})).returncode
     return serve()
 
 if __name__ == "__main__":
