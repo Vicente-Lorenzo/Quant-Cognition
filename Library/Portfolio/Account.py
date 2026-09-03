@@ -39,18 +39,18 @@ class AccountAPI(DatapointAPI):
     Table: ClassVar[str] = "Account"
 
     UID: Union[int, None] = None
-    Timestamp: Union[datetime, None] = None
     Session: InitVar[Union[str, SessionAPI, None]] = field(default=MISSING)
     Provider: InitVar[Union[str, ProviderAPI, None]] = field(default=MISSING)
     Number: Union[int, None] = None
+    Timestamp: Union[datetime, None] = None
     Environment: InitVar[Union[Environment, str, None]] = field(default=MISSING)
     AccountType: InitVar[Union[AccountType, str, None]] = field(default=MISSING)
     MarginMode: InitVar[Union[MarginMode, str, None]] = field(default=MISSING)
     Asset: Union[str, None] = None
+    Leverage: Union[float, None] = None
     Balance: Union[float, None] = None
     Equity: Union[float, None] = None
     Credit: Union[float, None] = None
-    Leverage: Union[float, None] = None
     MarginUsed: Union[float, None] = None
     MarginFree: Union[float, None] = None
     MarginLevel: Union[float, None] = None
@@ -67,18 +67,18 @@ class AccountAPI(DatapointAPI):
         from Library.Portfolio.Session import SessionAPI
         return {
             self.ID.UID: IdentityKey(pl.Int64),
-            self.ID.Timestamp: PrimaryKey(pl.Datetime),
             self.ID.Session: ForeignKey(pl.String, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")', primary=True),
             self.ID.Provider: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{ProviderAPI.Table}"("{ProviderAPI.ID.UID}")'),
             self.ID.Number: pl.Int64(),
+            self.ID.Timestamp: PrimaryKey(pl.Datetime),
             self.ID.Environment: pl.String(),
             self.ID.AccountType: pl.String(),
             self.ID.MarginMode: pl.String(),
             self.ID.Asset: pl.String(),
+            self.ID.Leverage: pl.Float64(),
             self.ID.Balance: pl.Float64(),
             self.ID.Equity: pl.Float64(),
             self.ID.Credit: pl.Float64(),
-            self.ID.Leverage: pl.Float64(),
             self.ID.MarginUsed: pl.Float64(),
             self.ID.MarginFree: pl.Float64(),
             self.ID.MarginLevel: pl.Float64(),

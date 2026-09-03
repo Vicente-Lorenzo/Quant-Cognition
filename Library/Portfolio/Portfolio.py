@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from Library.Portfolio.Position import PositionAPI
     from Library.Portfolio.Trade import TradeAPI
     from Library.Market.Bar import BarAPI
-    from Library.Parameter import Parameter
+    from Library.Utility.Parameter import Parameter
     from Library.Universe.Security import SecurityAPI
 
 @dataclass(kw_only=True)

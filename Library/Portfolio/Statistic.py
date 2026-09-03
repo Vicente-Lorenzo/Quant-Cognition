@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from datetime import date, timedelta, datetime
+from datetime import date, datetime
 from typing import Union, TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
@@ -569,7 +569,7 @@ def equity_curve_ratios(curve: Union[list, None], start: date, stop: date, tradi
     sterling = annualized_return / mean_drawdown if mean_drawdown > 0.0 else 0.0
     return {SHARPERATIO: sharpe, SORTINORATIO: sortino, CALMARRATIO: calmar, STERLINGRATIO: sterling}
 
-def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.DataFrame) -> dict:
+def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.DataFrame, risk_free: float = 0.0) -> dict:
     points = str(PositionAPI.ID.Points)
     pips = str(PositionAPI.ID.Pips)
     net_pnl = str(PositionAPI.ID.NetPnL)
@@ -644,10 +644,11 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
 
     max_hold, avg_hold, min_hold = calculate_holding_times(df, stop)
 
-    sharpe = calculate_sharpe(net_ret_annualized_pct, net_vol_annualized_pct)
-    sortino = calculate_sortino(net_ret_annualized_pct, down_vol_annualized_pct)
-    calmar = calculate_calmar(net_ret_annualized_pct, max_dd_pct)
-    sterling = calculate_sterling(net_ret_annualized_pct, mean_dd_pct)
+    rfr = risk_free * 100.0
+    sharpe = calculate_sharpe(net_ret_annualized_pct, net_vol_annualized_pct, rfr)
+    sortino = calculate_sortino(net_ret_annualized_pct, down_vol_annualized_pct, rfr)
+    calmar = calculate_calmar(net_ret_annualized_pct, max_dd_pct, rfr)
+    sterling = calculate_sterling(net_ret_annualized_pct, mean_dd_pct, rfr)
 
     return {
         TOTALTRADESVALUE: total_n,
@@ -732,12 +733,12 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
         STERLINGRATIO: sterling
     }
 
-def dependent_metrics(initial_balance: float, start: date, stop: date, df: pl.DataFrame, buy_col: str, sell_col: str, total_col: str, equity: Union[dict, None] = None, ratios: Union[dict, None] = None, override: Union[dict, None] = None) -> pl.DataFrame:
+def dependent_metrics(initial_balance: float, start: date, stop: date, df: pl.DataFrame, buy_col: str, sell_col: str, total_col: str, equity: Union[dict, None] = None, ratios: Union[dict, None] = None, override: Union[dict, None] = None, risk_free: float = 0.0) -> pl.DataFrame:
     net_pnl = str(PositionAPI.ID.NetPnL)
     buy_df, sell_df = split_buy_sell(df)
-    buy_metrics = independent_metrics(initial_balance, start, stop, buy_df)
-    sell_metrics = independent_metrics(initial_balance, start, stop, sell_df)
-    total_metrics = independent_metrics(initial_balance, start, stop, df)
+    buy_metrics = independent_metrics(initial_balance, start, stop, buy_df, risk_free)
+    sell_metrics = independent_metrics(initial_balance, start, stop, sell_df, risk_free)
+    total_metrics = independent_metrics(initial_balance, start, stop, df, risk_free)
 
     cur_win_streak = cur_loss_streak = 0
     max_win_streak = max_loss_streak = 0
@@ -883,7 +884,7 @@ def _equity_excursion_(excursions: dict) -> dict:
         MEANEQUITYRUNUPPERC: excursions["mean_runup"] * 100.0
     }
 
-def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, account: Union[AccountAPI, None], start: date, stop: date, equity_curve: Union[list, None] = None, excursions: Union[dict, None] = None) -> pl.DataFrame:
+def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, account: Union[AccountAPI, None], start: date, stop: date, equity_curve: Union[list, None] = None, excursions: Union[dict, None] = None, risk_free: float = 0.0) -> pl.DataFrame:
     initial_balance = (account.Balance if account is not None else 0.0) or 0.0
     safe_positions = _safe_df_(positions_df)
     safe_trades = _safe_df_(trades_df)
@@ -901,8 +902,8 @@ def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, acc
     mean_drawdown = excursions["mean_drawdown"] if excursions else None
     ratios = equity_curve_ratios(equity_curve, start, stop, max_drawdown=max_drawdown, mean_drawdown=mean_drawdown)
     override = _equity_excursion_(excursions) if excursions else None
-    ind_df = dependent_metrics(initial_balance, start, stop, ind, NET_BUY_INDIVIDUAL, NET_SELL_INDIVIDUAL, NET_TOTAL_INDIVIDUAL, equity, ratios, override)
-    agg_df = dependent_metrics(initial_balance, start, stop, agg, NET_BUY_AGGREGATED, NET_SELL_AGGREGATED, NET_TOTAL_AGGREGATED, equity, ratios, override)
+    ind_df = dependent_metrics(initial_balance, start, stop, ind, NET_BUY_INDIVIDUAL, NET_SELL_INDIVIDUAL, NET_TOTAL_INDIVIDUAL, equity, ratios, override, risk_free)
+    agg_df = dependent_metrics(initial_balance, start, stop, agg, NET_BUY_AGGREGATED, NET_SELL_AGGREGATED, NET_TOTAL_AGGREGATED, equity, ratios, override, risk_free)
     labels_df = pl.DataFrame({STATISTICS_METRICS_LABEL: Metrics})
     return pl.concat([labels_df, ind_df, agg_df], how="horizontal_extend")
 
@@ -914,6 +915,7 @@ BENCHMARK_MAXDRAWDOWN = "Max Drawdown (%)"
 BENCHMARK_CORRELATION = "Correlation"
 BENCHMARK_ALPHA = "Alpha Annualized (%)"
 BENCHMARK_BETA = "Beta"
+BENCHMARK_ALPHASIGNIFICANCE = "Alpha t-Statistic"
 BENCHMARK_TRACKINGERROR = "Tracking Error Annualized (%)"
 BENCHMARK_INFORMATIONRATIO = "Information Ratio"
 BENCHMARK_EXCESSRETURN = "Excess Return (%)"
@@ -933,7 +935,7 @@ def align_series(spine: list, series: list) -> list:
 def series_returns(values: list) -> list:
     return [(values[i] / values[i - 1] - 1.0) if values[i - 1] and values[i] is not None and values[i - 1] is not None else None for i in range(1, len(values))]
 
-def _standalone_metrics_(values: list, start: date, stop: date, trading_days: int = 365) -> dict:
+def _standalone_metrics_(values: list, start: date, stop: date, trading_days: int = 365, risk_free: float = 0.0) -> dict:
     clean = [value for value in values if value]
     if len(clean) < 2: return {}
     returns = [value for value in series_returns(values) if value is not None]
@@ -955,10 +957,11 @@ def _standalone_metrics_(values: list, start: date, stop: date, trading_days: in
     drawdown_mean = drawdown_sum / len(clean)
     downside = math.sqrt(sum(value ** 2 for value in returns if value < 0.0) / count) if count else 0.0
     annualize = math.sqrt(periods) if periods > 0.0 else 0.0
-    sharpe = (mean / deviation) * annualize if deviation > EPSILON and periods > 0.0 else 0.0
-    sortino = (mean / downside) * annualize if downside > EPSILON and periods > 0.0 else 0.0
-    calmar = annualized / drawdown_max if drawdown_max > EPSILON else 0.0
-    sterling = annualized / drawdown_mean if drawdown_mean > EPSILON else 0.0
+    rate = ((1.0 + risk_free) ** (1.0 / periods) - 1.0) if periods > 0.0 and risk_free else 0.0
+    sharpe = ((mean - rate) / deviation) * annualize if deviation > EPSILON and periods > 0.0 else 0.0
+    sortino = ((mean - rate) / downside) * annualize if downside > EPSILON and periods > 0.0 else 0.0
+    calmar = (annualized - risk_free) / drawdown_max if drawdown_max > EPSILON else 0.0
+    sterling = (annualized - risk_free) / drawdown_mean if drawdown_mean > EPSILON else 0.0
     return {
         BENCHMARK_TOTALRETURN: total_return * 100.0, BENCHMARK_ANNUALIZEDRETURN: annualized * 100.0,
         BENCHMARK_VOLATILITY: deviation * annualize * 100.0 if periods > 0.0 else 0.0,
@@ -967,10 +970,20 @@ def _standalone_metrics_(values: list, start: date, stop: date, trading_days: in
         "_periods_": periods, "_total_": total_return
     }
 
-def _relative_metrics_(strategy: list, benchmark: list, periods: float) -> dict:
+def daily_series(spine: list, values: list) -> list:
+    closes = {}
+    for stamp, value in zip(spine, values):
+        if value is None: continue
+        moment = getattr(stamp, "date", None)
+        closes[moment() if callable(moment) else stamp] = value
+    return [closes[key] for key in sorted(closes)]
+
+def _relative_metrics_(strategy: list, benchmark: list, periods: float, risk_free: float = 0.0,
+                       annual: float = None, reference: float = None) -> dict:
     pairs = [(first, second) for first, second in zip(series_returns(strategy), series_returns(benchmark)) if first is not None and second is not None]
     count = len(pairs)
     if count < 2: return {}
+    rate = ((1.0 + risk_free) ** (1.0 / periods) - 1.0) if periods > 0.0 and risk_free else 0.0
     strategy_returns = [first for first, _ in pairs]
     benchmark_returns = [second for _, second in pairs]
     strategy_mean = sum(strategy_returns) / count
@@ -981,7 +994,12 @@ def _relative_metrics_(strategy: list, benchmark: list, periods: float) -> dict:
     deviation = math.sqrt(strategy_variance * benchmark_variance)
     correlation = covariance / deviation if deviation > EPSILON else 0.0
     beta = covariance / benchmark_variance if benchmark_variance > EPSILON else 0.0
-    alpha = (strategy_mean - beta * benchmark_mean) * periods
+    excess = (strategy_mean - rate) - beta * (benchmark_mean - rate)
+    alpha = (annual - (risk_free + beta * (reference - risk_free))) if annual is not None and reference is not None else excess * periods
+    residuals = [(first - rate) - excess - beta * (second - rate) for first, second in pairs]
+    residual_mean = sum(residuals) / count
+    residual_deviation = math.sqrt(sum((value - residual_mean) ** 2 for value in residuals) / (count - 1))
+    significance = excess / (residual_deviation / math.sqrt(count)) if residual_deviation > EPSILON else 0.0
     differences = [first - second for first, second in pairs]
     difference_mean = sum(differences) / count
     difference_deviation = math.sqrt(sum((value - difference_mean) ** 2 for value in differences) / (count - 1))
@@ -995,29 +1013,35 @@ def _relative_metrics_(strategy: list, benchmark: list, periods: float) -> dict:
         return (sum(first for first, _ in sample) / len(sample)) / reference * 100.0 if abs(reference) > EPSILON else None
     return {
         BENCHMARK_CORRELATION: correlation, BENCHMARK_BETA: beta, BENCHMARK_ALPHA: alpha * 100.0,
+        BENCHMARK_ALPHASIGNIFICANCE: significance,
         BENCHMARK_TRACKINGERROR: tracking * 100.0, BENCHMARK_INFORMATIONRATIO: information,
         BENCHMARK_UPSIDECAPTURE: capture(upside), BENCHMARK_DOWNSIDECAPTURE: capture(downside)
     }
 
-def generate_benchmark_report(equity: Union[list, None], benchmarks: Union[dict, None], start: date, stop: date, trading_days: int = 365) -> pl.DataFrame:
+def generate_benchmark_report(equity: Union[list, None], benchmarks: Union[dict, None], start: date, stop: date, trading_days: int = 365, risk_free: float = 0.0) -> pl.DataFrame:
     if not equity or len(equity) < 2: return pl.DataFrame()
     spine = [stamp for stamp, _ in equity]
     values = [value for _, value in equity]
-    strategy = _standalone_metrics_(values, start, stop, trading_days)
+    sampled = daily_series(spine, values)
+    strategy = _standalone_metrics_(values, start, stop, trading_days, risk_free)
     if not strategy: return pl.DataFrame()
     columns = [BENCHMARK_TOTALRETURN, BENCHMARK_ANNUALIZEDRETURN, BENCHMARK_VOLATILITY, BENCHMARK_MAXDRAWDOWN,
                SHARPERATIO, SORTINORATIO, CALMARRATIO, STERLINGRATIO,
-               BENCHMARK_CORRELATION, BENCHMARK_ALPHA, BENCHMARK_BETA,
+               BENCHMARK_CORRELATION, BENCHMARK_ALPHA, BENCHMARK_ALPHASIGNIFICANCE, BENCHMARK_BETA,
                BENCHMARK_TRACKINGERROR, BENCHMARK_INFORMATIONRATIO,
                BENCHMARK_EXCESSRETURN, BENCHMARK_UPSIDECAPTURE, BENCHMARK_DOWNSIDECAPTURE]
     rows = [{BENCHMARK_LABEL: "Strategy", **{column: strategy.get(column) for column in columns}}]
     for label, series in (benchmarks or {}).items():
         aligned = align_series(spine, series)
-        metrics = _standalone_metrics_(aligned, start, stop, trading_days)
+        metrics = _standalone_metrics_(aligned, start, stop, trading_days, risk_free)
         if not metrics:
             rows.append({BENCHMARK_LABEL: label, **{column: None for column in columns}})
             continue
-        relative = _relative_metrics_(values, aligned, strategy["_periods_"])
+        reference = daily_series(spine, aligned)
+        cadence = len(sampled) / (calculate_duration_seconds(start, stop) / (trading_days * 86400.0)) if calculate_duration_seconds(start, stop) else 0.0
+        relative = _relative_metrics_(sampled, reference, cadence or strategy["_periods_"], risk_free,
+                                      annual=strategy.get(BENCHMARK_ANNUALIZEDRETURN, 0.0) / 100.0,
+                                      reference=metrics.get(BENCHMARK_ANNUALIZEDRETURN, 0.0) / 100.0)
         relative[BENCHMARK_EXCESSRETURN] = (strategy["_total_"] - metrics["_total_"]) * 100.0
         rows.append({BENCHMARK_LABEL: label, **{column: metrics.get(column, relative.get(column)) for column in columns}})
     return pl.DataFrame(rows)
