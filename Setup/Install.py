@@ -13,6 +13,7 @@ from Library.Scheduler.Task import TaskType
 from Library.Database import PostgresDatabaseAPI
 from Library.Logging import LoggingAPI
 from Library.Utility.Path import traceback_root
+from Library.Utility.Runtime import windowless
 from Setup.Enum import write_all
 from Setup.Auth import setup_auth, seed_admin, ADMIN
 from Setup.Scheduler import setup_scheduler
@@ -23,7 +24,7 @@ from Setup.Indicator import setup_indicator
 
 OWNER = ADMIN
 ORCHESTRATOR = "Quant Scheduler"
-LAUNCHER = str(traceback_root() / "Scripts" / "Scheduler.py")
+LAUNCHER = str(traceback_root() / "Script" / "Scheduler.py")
 WORKFLOWS = [
     {
         "uid": "Setup", "name": "Setup", "schedule": None, "kind": Kind.Manual, "tolerates": False,
@@ -53,7 +54,7 @@ WORKFLOWS = [
         "uid": "Environment", "name": "Environment", "schedule": "0 4 * * *", "kind": Kind.Scheduled, "tolerates": True,
         "description": "Daily maintenance — refreshes the Quant conda environment then relaunches the always-on tunnel and application server",
         "tasks": [
-            {"uid": "Environment.Cache", "name": "Cache Cleanup", "path": "Scripts/Cache.py", "kind": Kind.Scheduled, "description": "Removes Python bytecode and tooling caches plus C# build artifacts across the repository"},
+            {"uid": "Environment.Cache", "name": "Cache Cleanup", "path": "Script/Cache.py", "kind": Kind.Scheduled, "description": "Removes Python bytecode and tooling caches plus C# build artifacts across the repository"},
             {"uid": "Environment.Retention", "name": "Log Retention", "path": "Setup/Retention.py", "kind": Kind.Scheduled, "description": "Prunes expired log files from the temporary folders and expired log rows from the Logging schema"},
             {"uid": "Environment.Version", "name": "Version Check", "path": "Setup/Version.py", "kind": Kind.Scheduled, "description": "Reports when a vendored frontend library has a newer release upstream — never upgrades automatically"},
             {"uid": "Environment.Update", "name": "Environment Update", "path": "Setup/Environment.py", "kind": Kind.Scheduled, "description": "Syncs the active conda environment to the pinned Quant manifest while the services are suspended"},
@@ -125,7 +126,7 @@ def schedule_orchestrator():
     interpreter = pythonw if pythonw.exists() else Path(sys.executable)
     command = f'"{interpreter}" "{LAUNCHER}"'
     subprocess.run(["schtasks", "/Create", "/TN", ORCHESTRATOR, "/TR", command, "/SC", "ONLOGON", "/RL", "HIGHEST", "/F"], check=True,
-                   **({"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}))
+                   **windowless())
 
 def main(database="Quant", boot=False):
     with LoggingAPI() as log:

@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from Library.Logging import LoggingAPI
 from Library.Utility.Path import traceback_root
+from Library.Utility.Runtime import windowless
 
 _TIMEOUT_: int = 10
 _SOLVE_: int = 600
@@ -45,7 +46,7 @@ def plan(root: Path = None, timeout: int = _SOLVE_) -> tuple:
             raw = subprocess.run([manager, "env", "update", "--name", "Quant", "--file", str(find_manifest()),
                                   "--prune", "--dry-run", "--json"],
                                  capture_output=True, text=True, timeout=timeout, env=environment,
-                                 **({"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}))
+                                 **windowless())
         except FileNotFoundError:
             continue
         except subprocess.TimeoutExpired:
