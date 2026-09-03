@@ -397,22 +397,14 @@ class AppAPI:
     def __init_footer_layout__(self) -> Component:
         return html.Div(children=[
             html.Div(children=[
+                *ButtonAPI(id=self.GLOBAL_SIDEBAR_BUTTON_ID, background="primary", label=[IconAPI(icon="bi bi-layout-sidebar-inset")]).build(),
                 *ButtonAPI(
-                    id=self.GLOBAL_SIDEBAR_BUTTON_ID, background="primary",
-                    label=[IconAPI(icon="bi bi-layout-sidebar-inset")]
-                ).build(),
-                *ButtonAPI(
-                    id=self.GLOBAL_CONTACTS_BUTTON_ID, background="primary",
+                    id=self.GLOBAL_CONTACTS_BUTTON_ID,
+                    background="primary",
                     label=[IconAPI(icon="bi bi-caret-down-fill", id=self.GLOBAL_CONTACTS_ARROW_ID), TextAPI(text="  Contacts  "), IconAPI(icon="bi bi-question-circle")]
                 ).build(),
-                *ButtonAPI(
-                    id=self.GLOBAL_IMPORT_ID, upload=self.GLOBAL_IMPORT_UPLOAD_ID, background="warning",
-                    label=[TextAPI(text="Import Snapshot  "), IconAPI(icon="bi bi-upload")]
-                ).build(),
-                *ButtonAPI(
-                    id=self.GLOBAL_EXPORT_ID, download=self.GLOBAL_EXPORT_DOWNLOAD_ID, background="warning",
-                    label=[TextAPI(text="Export Snapshot  "), IconAPI(icon="bi bi-download")]
-                ).build(),
+                *ButtonAPI(id=self.GLOBAL_IMPORT_ID, upload=self.GLOBAL_IMPORT_UPLOAD_ID, background="warning", label=[TextAPI(text="Import Snapshot  "), IconAPI(icon="bi bi-upload")]).build(),
+                *ButtonAPI(id=self.GLOBAL_EXPORT_ID, download=self.GLOBAL_EXPORT_DOWNLOAD_ID, background="warning", label=[TextAPI(text="Export Snapshot  "), IconAPI(icon="bi bi-download")]).build(),
                 dbc.Collapse(dbc.Card(dbc.CardBody([
                     html.Div(children=[html.B("Team: "), html.Span(self._team_)]),
                     html.Div(children=[html.B("Contact: "), html.A(self._contact_, href=f"mailto:{self._contact_}")])
@@ -420,22 +412,26 @@ class AppAPI:
             ], className="left"),
             html.Div(children=[
                 *ButtonAPI(
-                    id=self.GLOBAL_CLEAN_MEMORY_BUTTON_ID, background="danger",
+                    id=self.GLOBAL_CLEAN_MEMORY_BUTTON_ID,
+                    background="danger",
                     label=[IconAPI(icon="bi bi-eraser-fill"), TextAPI(text="  Clean Memory  ")],
                     asyncer=self.GLOBAL_CLEAN_MEMORY_ASYNC_ID
                 ).build(),
                 *ButtonAPI(
-                    id=self.GLOBAL_CLEAN_SESSION_BUTTON_ID, background="danger",
+                    id=self.GLOBAL_CLEAN_SESSION_BUTTON_ID,
+                    background="danger",
                     label=[IconAPI(icon="bi bi-eraser-fill"), TextAPI(text="  Clean Session  ")],
                     asyncer=self.GLOBAL_CLEAN_SESSION_ASYNC_ID
                 ).build(),
                 *ButtonAPI(
-                    id=self.GLOBAL_CLEAN_LOCAL_BUTTON_ID, background="danger",
+                    id=self.GLOBAL_CLEAN_LOCAL_BUTTON_ID,
+                    background="danger",
                     label=[IconAPI(icon="bi bi-eraser-fill"), TextAPI(text="  Clean Local  ")],
                     asyncer=self.GLOBAL_CLEAN_LOCAL_ASYNC_ID
                 ).build(),
                 *ButtonAPI(
-                    id=self.GLOBAL_CLEAN_RESET_BUTTON_ID, background="danger",
+                    id=self.GLOBAL_CLEAN_RESET_BUTTON_ID,
+                    background="danger",
                     label=[IconAPI(icon="bi bi-trash"), TextAPI(text="  Clean & Reset  ")],
                     asyncer=self.GLOBAL_CLEAN_RESET_ASYNC_ID
                 ).build(),
