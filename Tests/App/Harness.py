@@ -10,8 +10,7 @@ class HarnessPageAPI(PageAPI):
 class HarnessAppAPI(AppAPI):
 
     def __init__(self, **kwargs) -> None:
-        super().__init__(name="Harness", title="Harness", team="Team", contact="team@harness.test",
-                         host="127.0.0.1", port=8099, motto=["Keep going"], auth=None, **kwargs)
+        super().__init__(name="Harness", title="Harness", team="Team", contact="team@harness.test", host="127.0.0.1", port=8099, motto=["Keep going"], auth=None, **kwargs)
 
     def pages(self) -> None:
         self.link(HarnessPageAPI(app=self, path="/alpha", button="Alpha", icon="bi bi-a-circle"))

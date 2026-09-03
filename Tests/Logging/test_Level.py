@@ -23,8 +23,7 @@ def test_standard_mapping_is_severity_descending():
 
 def test_standard_is_inverse_of_verbosity():
     levels = [level for level in VerboseLevel]
-    assert [level.Standard for level in sorted(levels, key=lambda item: item.value)] == sorted(
-        [level.Standard for level in levels], reverse=True)
+    assert [level.Standard for level in sorted(levels, key=lambda item: item.value)] == sorted([level.Standard for level in levels], reverse=True)
 
 @pytest.mark.parametrize("value,expected", [
     (0, VerboseLevel.Debug), (10, VerboseLevel.Debug), (15, VerboseLevel.Debug),

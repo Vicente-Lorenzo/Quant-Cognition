@@ -109,11 +109,7 @@ def test_stop_limit_sell_order_sets_sell_side(spotware):
     assert sent.tradeSide == 2
 def test_market_order_passes_sl_tp_and_flags(spotware):
     spotware._responses_.append(_execution(order_id=51))
-    spotware.execution.market_order("BUY", symbol=1, volume=1000,
-                                    stop_loss=1.0, take_profit=1.5,
-                                    label="L", comment="C",
-                                    client_order_id="CID",
-                                    trailing=True, guaranteed=True)
+    spotware.execution.market_order("BUY", symbol=1, volume=1000, stop_loss=1.0, take_profit=1.5, label="L", comment="C", client_order_id="CID", trailing=True, guaranteed=True)
     sent = spotware._sent_[0]
     assert sent.stopLoss == pytest.approx(1.0)
     assert sent.takeProfit == pytest.approx(1.5)
@@ -124,8 +120,7 @@ def test_market_order_passes_sl_tp_and_flags(spotware):
     assert sent.guaranteedStopLoss is True
 def test_modify_order_sends_amend_request(spotware):
     spotware._responses_.append(_execution(order_id=61))
-    spotware.execution.modify_order(order=61, volume=2000, limit_price=1.25,
-                                    stop_loss=1.0, take_profit=1.5, trailing=True)
+    spotware.execution.modify_order(order=61, volume=2000, limit_price=1.25, stop_loss=1.0, take_profit=1.5, trailing=True)
     sent = spotware._sent_[0]
     assert type(sent).__name__ == "ProtoOAAmendOrderReq"
     assert sent.orderId == 61

@@ -2,8 +2,7 @@ from Library.App.V2.Workspace import WorkspaceAPI
 from Library.App.V2.Lightweight import LightweightChartAPI, LightweightTableAPI
 
 def test_chart_component_builds_host_and_carrier():
-    built = LightweightChartAPI(id={"name": "chart"}, carrier={"name": "carrier"}, selection={"name": "state"},
-                                workspace="demo", payload=WorkspaceAPI(title="W")).build()
+    built = LightweightChartAPI(id={"name": "chart"}, carrier={"name": "carrier"}, selection={"name": "state"}, workspace="demo", payload=WorkspaceAPI(title="W")).build()
     host = built[0]
     assert host.__dict__["data-workspace"] == "demo"
     assert host.__dict__["data-role"] == "chart"

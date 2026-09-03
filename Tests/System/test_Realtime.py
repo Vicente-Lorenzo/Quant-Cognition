@@ -200,11 +200,7 @@ def test_receive_update_exception_returns_reason(realtime_system):
 def test_receive_update_security_updates_and_returns_security(realtime_system):
     security_codec = realtime_system._binary_security_
     # UpdateID (1 byte) is stripped by _binary_security_.unpack when offset=1
-    realtime_system._last_update_data_ = b'\x00' + security_codec.pack(
-        "EUR", "USD", 5, 0.00001, 0.0001, 100000.0,
-        1000.0, 10000000.0, 1000.0, 30.0, 1,
-        -1.5, -1.2, 0, 3
-    )
+    realtime_system._last_update_data_ = b'\x00' + security_codec.pack("EUR", "USD", 5, 0.00001, 0.0001, 100000.0, 1000.0, 10000000.0, 1000.0, 30.0, 1, -1.5, -1.2, 0, 3)
     from Library.Universe.Contract import CommissionMode, SwapMode
     from Library.Utility.Datetime import Weekday
     from Library.Universe.Ticker import TickerAPI

@@ -48,9 +48,21 @@ def migrate_runs(db):
         try: content = source.read_text(encoding="utf-8", errors="replace")
         except OSError: continue
         record = LogAPI(
-            UID=uuid.uuid4().hex, Source=row["TID"], Level=row["Status"], Host=socket.gethostname(),
-            User=None, Process=None, Path=str(source), Content=content, Records=content.count("\n"),
-            Dropped=0, Truncated=False, StartedAt=row["StartedAt"], StoppedAt=row["StoppedAt"], db=db)
+            UID=uuid.uuid4().hex,
+            Source=row["TID"],
+            Level=row["Status"],
+            Host=socket.gethostname(),
+            User=None,
+            Process=None,
+            Path=str(source),
+            Content=content,
+            Records=content.count("\n"),
+            Dropped=0,
+            Truncated=False,
+            StartedAt=row["StartedAt"],
+            StoppedAt=row["StoppedAt"],
+            db=db
+        )
         record.save(by="Migration")
         db.execute(QueryAPI(f'UPDATE {db._target_(schema, table)} SET "LID" = :lid: WHERE "UID" = :uid:'), [{"lid": record.UID, "uid": row["UID"]}])
         migrated += 1

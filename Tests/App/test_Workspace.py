@@ -234,8 +234,7 @@ def test_rolling_needs_more_samples_than_the_window():
     assert rolling([(1, 100.0), (2, 110.0)], window=2) == ([], [])
 
 def test_covariant_recovers_unit_beta_from_a_proportional_benchmark():
-    betas = covariant([(1, 100.0), (2, 110.0), (3, 99.0), (4, 108.9)],
-                      [(1, 50.0), (2, 55.0), (3, 49.5), (4, 54.45)], window=2)
+    betas = covariant([(1, 100.0), (2, 110.0), (3, 99.0), (4, 108.9)], [(1, 50.0), (2, 55.0), (3, 49.5), (4, 54.45)], window=2)
     assert [stamp for stamp, _ in betas] == [3, 4]
     assert [round(value, 6) for _, value in betas] == [1.0, 1.0]
 

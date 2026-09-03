@@ -13,9 +13,16 @@ from Library.Utility.Math import truncate
 from Library.Utility.Typing import MISSING
 
 def _dataset_(**overrides):
-    fields = dict(WarmupBars=None, ExecutionBars=[], TickTimestamps=np.empty(0, dtype="int64"),
-                  TickAsks=np.empty(0, dtype="float64"), TickBids=np.empty(0, dtype="float64"),
-                  TickConversions=None, IntraLevels=[], IntraBars={})
+    fields = dict(
+        WarmupBars=None,
+        ExecutionBars=[],
+        TickTimestamps=np.empty(0, dtype="int64"),
+        TickAsks=np.empty(0, dtype="float64"),
+        TickBids=np.empty(0, dtype="float64"),
+        TickConversions=None,
+        IntraLevels=[],
+        IntraBars={}
+    )
     fields.update(overrides)
     return DatasetAPI(**fields)
 
@@ -356,10 +363,20 @@ def test_extract_inject_round_trips_state():
 
 def test_auto_fee_types_resolve_to_accurate():
     engine = BacktestingAPI(
-        strategy=type("Strategy", (), {}), security=object(), timeframe=object(), resolution=MISSING,
-        parameters=object(), start="2023-01-01", stop="2024-01-01", account=("EUR", 10000.0, 30.0),
-        spread=(SpreadType.Auto, MISSING), commission=(CommissionType.Auto, MISSING), swap=(SwapType.Auto, MISSING, MISSING),
-        report=False, export=False)
+        strategy=type("Strategy", (), {}),
+        security=object(),
+        timeframe=object(),
+        resolution=MISSING,
+        parameters=object(),
+        start="2023-01-01",
+        stop="2024-01-01",
+        account=("EUR", 10000.0, 30.0),
+        spread=(SpreadType.Auto, MISSING),
+        commission=(CommissionType.Auto, MISSING),
+        swap=(SwapType.Auto, MISSING, MISSING),
+        report=False,
+        export=False
+    )
     assert engine._spread_type_ == SpreadType.Accurate
     assert engine._commission_type_ == CommissionType.Accurate
     assert engine._swap_type_ == SwapType.Accurate

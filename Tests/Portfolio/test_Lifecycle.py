@@ -128,11 +128,7 @@ def test_update_data_bar_uses_high_low_extremes_long(env):
     pf = env["portfolio"]
     pos = make_position(env, direction=Direction.Buy, entry=1.0500)
     pf.open_position(0, pos)
-    bar = make_bar(env, ENTRY_DT + timedelta(minutes=10),
-                   open_ask=1.0510, open_bid=1.0508,
-                   high_ask=1.0600, high_bid=1.0598,
-                   low_ask=1.0420, low_bid=1.0418,
-                   close_ask=1.0530, close_bid=1.0528)
+    bar = make_bar(env, ENTRY_DT + timedelta(minutes=10), open_ask=1.0510, open_bid=1.0508, high_ask=1.0600, high_bid=1.0598, low_ask=1.0420, low_bid=1.0418, close_ask=1.0530, close_bid=1.0528)
     pf.update_data(bar)
     assert pos.MaxEquityRunupPrice.Price == pytest.approx(1.0598)
     assert pos.MaxEquityDrawdownPrice.Price == pytest.approx(1.0418)
@@ -142,11 +138,7 @@ def test_update_data_bar_uses_high_low_extremes_short(env):
     pf = env["portfolio"]
     pos = make_position(env, direction=Direction.Sell, entry=1.0500)
     pf.open_position(0, pos)
-    bar = make_bar(env, ENTRY_DT + timedelta(minutes=10),
-                   open_ask=1.0510, open_bid=1.0508,
-                   high_ask=1.0600, high_bid=1.0598,
-                   low_ask=1.0420, low_bid=1.0418,
-                   close_ask=1.0530, close_bid=1.0528)
+    bar = make_bar(env, ENTRY_DT + timedelta(minutes=10), open_ask=1.0510, open_bid=1.0508, high_ask=1.0600, high_bid=1.0598, low_ask=1.0420, low_bid=1.0418, close_ask=1.0530, close_bid=1.0528)
     pf.update_data(bar)
     assert pos.MaxEquityRunupPrice.Price == pytest.approx(1.0420)
     assert pos.MaxEquityDrawdownPrice.Price == pytest.approx(1.0600)

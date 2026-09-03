@@ -117,16 +117,29 @@ def register(manager):
 
 def enlist(manager):
     for task in STANDALONE:
-        manager.create_task(UID=task["uid"], Name=task["name"], Owner=OWNER, WID=None, Type=TaskType.Python, Kind=Kind.Manual,
-                            Path=task["path"], Description=task["description"], Enabled=True, MaxRetry=0, RetryDelay=0,
-                            RequiresApproval=False, RequiresReview=False, Waits=True, Tolerates=True)
+        manager.create_task(
+            UID=task["uid"],
+            Name=task["name"],
+            Owner=OWNER,
+            WID=None,
+            Type=TaskType.Python,
+            Kind=Kind.Manual,
+            Path=task["path"],
+            Description=task["description"],
+            Enabled=True,
+            MaxRetry=0,
+            RetryDelay=0,
+            RequiresApproval=False,
+            RequiresReview=False,
+            Waits=True,
+            Tolerates=True
+        )
 
 def schedule_orchestrator():
     pythonw = Path(sys.executable).with_name("pythonw.exe")
     interpreter = pythonw if pythonw.exists() else Path(sys.executable)
     command = f'"{interpreter}" "{LAUNCHER}"'
-    subprocess.run(["schtasks", "/Create", "/TN", ORCHESTRATOR, "/TR", command, "/SC", "ONLOGON", "/RL", "HIGHEST", "/F"], check=True,
-                   **windowless())
+    subprocess.run(["schtasks", "/Create", "/TN", ORCHESTRATOR, "/TR", command, "/SC", "ONLOGON", "/RL", "HIGHEST", "/F"], check=True, **windowless())
 
 def main(database="Quant", boot=False):
     with LoggingAPI() as log:
