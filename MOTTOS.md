@@ -1,6 +1,3 @@
-# Mottos
-
-One quote per list line — a random one is displayed in the footer on every page load.
-
-- Enjoy the journey
-- In the middle of difficulty lies opportunity
+- "Don't explain your philosophy. Embody it." — Epictetus (Enchiridion)
+- "You have power over your mind, not outside events" — Marcus Aurelius (Meditations)
+- "We suffer more often in imagination than in reality" — Seneca (Letters from a Stoic)
