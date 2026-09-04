@@ -2,7 +2,7 @@ import dash
 from dash import Patch
 from dash.development.base_component import Component
 
-from Library.App.V2.Component import NotificationAPI
+from Library.App.V2.Component.Component import NotificationAPI
 from Library.Utility.Typing import MISSING
 
 class NotifierAPI:
