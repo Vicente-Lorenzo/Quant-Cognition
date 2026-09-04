@@ -460,9 +460,9 @@ html, body { height: 100%; margin: 0; overflow-x: hidden; }
 .scheduler-cron-actions { display: flex; align-items: center; gap: 0.75rem; }
 .scheduler-cron-actions .btn { padding: 0.1rem 0.5rem; font-size: 0.72rem; }
 
-.scheduler-switch { display: inline-flex; align-items: center; align-self: center; margin: 0 0.25rem; font-size: 0.8rem; color: var(--bs-secondary-color); min-height: 0; padding-left: 2.5em; }
-.scheduler-switch .form-check-input { margin-top: 0; float: none; margin-left: -2.5em; }
-.scheduler-switch .form-check-label { margin: 0 0 0 0.45rem; line-height: 1; }
+.app-switch { display: inline-flex; align-items: center; align-self: center; margin: 0 0.25rem; font-size: 0.8rem; color: var(--bs-secondary-color); min-height: 0; padding-left: 2.5em; }
+.app-switch .form-check-input { margin-top: 0; float: none; margin-left: -2.5em; }
+.app-switch .form-check-label { margin: 0 0 0 0.45rem; line-height: 1; }
 
 .table-count { margin-left: auto; align-self: center; font-size: 0.75rem; color: var(--bs-secondary-color); white-space: nowrap; }
 
@@ -476,26 +476,26 @@ html, body { height: 100%; margin: 0; overflow-x: hidden; }
 
 .dash-table-container .dash-spreadsheet tr:hover td.dash-cell { color: var(--bs-body-color) !important; }
 
-.scheduler-field-label { display: inline-flex; align-items: center; gap: 0.35rem; }
-.scheduler-field-label .form-label { margin: 0; }
+.app-field-label { display: inline-flex; align-items: center; gap: 0.35rem; }
+.app-field-label .form-label { margin: 0; }
 
-.scheduler-help { font-size: 0.8rem; color: var(--bs-secondary-color); cursor: help; }
-.scheduler-help:hover { color: var(--bs-primary); }
+.app-help { font-size: 0.8rem; color: var(--bs-secondary-color); cursor: help; }
+.app-help:hover { color: var(--bs-primary); }
 
-.scheduler-switch-field { display: inline-flex; align-items: center; gap: 0.4rem; }
-.scheduler-switch-field .form-check { margin: 0; min-height: 0; display: inline-flex; align-items: center; }
-.scheduler-switch-field .form-check-input { margin-top: 0; }
-.scheduler-switch-field .form-check-label { margin: 0 0 0 0.45rem; line-height: 1; }
+.app-switch-field { display: inline-flex; align-items: center; gap: 0.4rem; }
+.app-switch-field .form-check { margin: 0; min-height: 0; display: inline-flex; align-items: center; }
+.app-switch-field .form-check-input { margin-top: 0; }
+.app-switch-field .form-check-label { margin: 0 0 0 0.45rem; line-height: 1; }
 
 .scheduler-arrow { color: var(--bs-secondary-color); font-size: 1.15rem; line-height: 1; padding: 0 0.1rem; }
 
-.scheduler-field { margin-bottom: 1rem; }
+.app-field { margin-bottom: 1rem; }
 
-.scheduler-field label { font-size: 0.78rem; font-weight: 500; color: var(--bs-secondary-color); margin-bottom: 0.3rem; }
+.app-field label { font-size: 0.78rem; font-weight: 500; color: var(--bs-secondary-color); margin-bottom: 0.3rem; }
 
-.scheduler-field-row { display: flex; gap: 1rem; }
+.app-field-row { display: flex; gap: 1rem; }
 
-.scheduler-field-row > * { flex: 1; }
+.app-field-row > * { flex: 1; }
 
 .scheduler-graph { height: 380px; margin-top: 0.5rem; }
 
@@ -672,7 +672,7 @@ html, body { height: 100%; margin: 0; overflow-x: hidden; }
     .table-toolbar { flex-wrap: wrap; row-gap: 0.4rem; }
     .lw-grid table { font-size: 0.72rem; }
     .lw-grid tbody td, .lw-grid thead th { padding: 0.3rem 0.5rem; }
-    .scheduler-field-row { flex-direction: column; gap: 0.25rem; }
+    .app-field-row { flex-direction: column; gap: 0.25rem; }
     .scheduler-detail-row { flex-direction: column; align-items: flex-start; gap: 0.1rem; }
     .modal-dialog { margin: 0.5rem; }
 }
