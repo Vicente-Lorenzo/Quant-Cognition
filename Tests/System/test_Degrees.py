@@ -3,7 +3,8 @@ import types
 import pytest
 
 from Library.Indicator.Indicator import IndicatorAPI
-from Library.System.Optimization import (OptimizationAPI, build_grid, expand_parameter, inherited, measure_plan, resolve_inheritance, rounds_parameter, staged, unpack_plan, unpack_section, unpack_stages)
+from Library.System.Optimization import OptimizationAPI
+from Library.System.Space import (build_grid, expand_parameter, inherited, measure_plan, resolve_inheritance, rounds_parameter, staged, unpack_plan, unpack_section, unpack_stages)
 
 class Block:
 

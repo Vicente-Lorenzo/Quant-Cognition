@@ -49,11 +49,11 @@ class _Rung_:
 
 @pytest.mark.parametrize("spelling", ["Hour", "HOUR", "hourly", "H", "1H", "H1", "60"])
 def test_every_spelling_of_a_timeframe_lands_on_one_ladder_scope(spelling):
-    from Library.System.Main import scope
+    from Library.System.Main import _scope_ as scope
     rungs = scope(_Rung_("Spotware(cTrader)"), _Rung_("Forex(Major)"), _Rung_("EURUSD"), _Rung_(spelling))
     assert rungs == ("Spotware(cTrader)", "Forex(Major)", "EURUSD", "H1")
 
 def test_distinct_timeframes_get_distinct_scopes():
-    from Library.System.Main import scope
+    from Library.System.Main import _scope_ as scope
     made = {scope(_Rung_("P"), _Rung_("C"), _Rung_("T"), _Rung_(uid))[-1] for uid in ("Hour", "Daily", "H4", "M15", "Monthly")}
     assert made == {"H1", "D1", "H4", "M15", "MN1"}

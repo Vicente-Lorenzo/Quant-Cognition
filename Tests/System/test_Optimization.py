@@ -2,9 +2,9 @@ import pytest
 
 from Library.Utility.Parameter import Parameter
 from Library.System.Selection import ElectionMode, SelectionMode, select
-from Library.System.Optimization import (
+from Library.System.Optimization import OptimizationAPI
+from Library.System.Space import (
     CandidateAPI,
-    OptimizationAPI,
     apply_candidate,
     build_grid,
     expand_parameter,
