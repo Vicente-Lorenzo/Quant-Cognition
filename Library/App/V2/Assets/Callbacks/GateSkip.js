@@ -1,5 +1,4 @@
-(function(rows, data) {
-    if (rows === null || rows === undefined) return window.dash_clientside.no_update;
-    var selected = rows.map(function(index) { return (data || [])[index]; }).filter(Boolean);
-    return !selected.some(function(row) { return row.Kind !== "Service"; });
+(function(state) {
+    if (state === null || state === undefined) return window.dash_clientside.no_update;
+    return !(state.rows || []).some(function(row) { return row.Kind !== "Service"; });
 })

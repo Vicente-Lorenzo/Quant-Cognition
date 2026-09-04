@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quant Plot</title>
+<style>
+__STYLES__
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; width: 100%; }
+body { background: var(--lw-plane); color: var(--lw-secondary); display: flex; flex-direction: column; overflow-x: hidden;
+       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+       --bs-body-bg: var(--lw-plane); --bs-body-color: var(--lw-secondary); --bs-secondary-bg: #171b26;
+       --bs-secondary-color: var(--lw-muted); --bs-emphasis-color: var(--lw-ink); --bs-primary-rgb: 61, 155, 255; }
+header { flex: 0 0 auto; padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--lw-grid); }
+h1 { margin: 0; font-size: 0.875rem; font-weight: 600; color: var(--lw-ink); }
+.desc { margin: 0.2rem 0 0; font-size: 0.7rem; color: var(--lw-muted); line-height: 1.45; }
+#chart { flex: 1 1 auto; min-height: 60vh; padding: 0 0.9rem; }
+#sheets { flex: 0 0 auto; max-height: 46vh; padding: 0 0.9rem 0.6rem; }
+</style></head>
+<body>
+<header><h1 id="title"></h1><p id="description" class="desc" hidden></p></header>
+<script id="lightweight-payload" type="application/json" class="lightweight-payload">__PAYLOAD__</script>
+<div id="chart" class="lightweight lightweight-chart" data-workspace="plot" data-role="chart" style="height:auto"><div class="lightweight-body"></div></div>
+<div id="sheets" class="lightweight lightweight-table" data-workspace="plot" data-role="table"><div class="lightweight-body"></div></div>
+<script>__ARCHIVE__</script>
+<script>__LIBRARY__</script>
+<script>__RUNTIME__</script>
+<script>
+(function () {
+    var data = JSON.parse(document.getElementById("lightweight-payload").textContent || "{}");
+    document.title = data.title || "Quant Plot";
+    document.getElementById("title").textContent = data.title || "";
+    if (data.description) {
+        var node = document.getElementById("description");
+        node.textContent = data.description;
+        node.hidden = false;
+    }
+    if (!(data.sheets || []).length) document.getElementById("sheets").style.display = "none";
+})();
+</script>
+</body></html>
