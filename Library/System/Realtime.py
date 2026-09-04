@@ -4,6 +4,7 @@ import os
 import struct
 import contextlib
 
+from pathlib import Path
 from collections import deque
 from datetime import datetime, timedelta
 from typing import Type, Union, TYPE_CHECKING
@@ -34,13 +35,13 @@ from Library.Utility.Datetime import Weekday, timestamp_to_datetime
 from Library.Utility.Statistic import timer
 
 if TYPE_CHECKING:
-    from Library.Parameter import Parameter
+    from Library.Utility.Parameter import Parameter
     from Library.Strategy.Strategy import StrategyAPI
     from Library.Universe.Timeframe import TimeframeAPI
 
-_MARKET_CLOSURE_ = timedelta(days=4)
-
 class RealtimeAPI(SystemAPI):
+
+    _MARKET_CLOSURE_ = timedelta(days=4)
 
     _DIRECTION_ = {0: Direction.Buy, 1: Direction.Sell}
     _ORDER_TYPE_ = {0: OrderType.Limit, 1: OrderType.Stop, 2: OrderType.StopLimit}
@@ -71,15 +72,18 @@ class RealtimeAPI(SystemAPI):
                  universe: tuple[int, float, int, int] = (0, 0.0, 0, 0),
                  market: tuple[int, float, int, int] = (0, 0.0, 0, 0),
                  portfolio: tuple[int, float, int, int] = (0, 0.0, 0, 0),
+                 risk_free: float = 0.0,
                  benchmark: Union[str, list, None] = None,
                  report: bool = True,
                  export: bool = True,
-                 plot: bool = False) -> None:
+                 plot: bool = False,
+                 run: Union[str, Path, None] = None,
+                 description: Union[str, None] = None) -> None:
         if database is None:
             universe = (0, 0.0, 0, 0)
             market = (0, 0.0, 0, 0)
             portfolio = (0, 0.0, 0, 0)
-        super().__init__(strategy=strategy, security=security, timeframe=timeframe, parameters=parameters, universe=universe, market=market, portfolio=portfolio, benchmark=benchmark, report=report, export=export, plot=plot)
+        super().__init__(strategy=strategy, security=security, timeframe=timeframe, parameters=parameters, universe=universe, market=market, portfolio=portfolio, risk_free=risk_free, benchmark=benchmark, report=report, export=export, plot=plot, run=run, description=description)
 
         self._system_: SystemType = system
         self._iid_: str = iid
@@ -181,9 +185,14 @@ class RealtimeAPI(SystemAPI):
             Environment=environment,
             AccountType=AccountType(account_type),
             Asset=asset,
-            Balance=balance, Equity=equity, Credit=credit,
-            Leverage=leverage, MarginUsed=margin_used, MarginFree=margin_free,
-            MarginLevel=margin_level, MarginStopLevel=margin_stop,
+            Balance=balance,
+            Equity=equity,
+            Credit=credit,
+            Leverage=leverage,
+            MarginUsed=margin_used,
+            MarginFree=margin_free,
+            MarginLevel=margin_level,
+            MarginStopLevel=margin_stop,
             MarginMode=MarginMode(margin_mode),
             db=self._db_
         )
@@ -230,7 +239,8 @@ class RealtimeAPI(SystemAPI):
             Volume=volume,
             LimitPrice=target_price if has_limit else None,
             StopPrice=target_price if has_stop else None,
-            StopLossPrice=stop_loss, TakeProfitPrice=take_profit,
+            StopLossPrice=stop_loss,
+            TakeProfitPrice=take_profit,
             ExpirationTimestamp=timestamp_to_datetime(expiration_ts, milliseconds=True) if expiration_ts != 0 else None,
             Label=label,
             db=self._db_
@@ -248,10 +258,18 @@ class RealtimeAPI(SystemAPI):
             Type=pos_type,
             Direction=self._DIRECTION_[direction_id],
             EntryTimestamp=timestamp_to_datetime(entry_ts, milliseconds=True),
-            EntryPrice=entry_price, Volume=volume, Quantity=quantity,
-            GrossPnL=gross_pnl, CommissionPnL=commission_pnl, SwapPnL=swap_pnl, NetPnL=net_pnl,
-            UsedMargin=used_margin, StopLossPrice=stop_loss, TakeProfitPrice=take_profit,
-            Label=label, Comment=pos_type.name,
+            EntryPrice=entry_price,
+            Volume=volume,
+            Quantity=quantity,
+            GrossPnL=gross_pnl,
+            CommissionPnL=commission_pnl,
+            SwapPnL=swap_pnl,
+            NetPnL=net_pnl,
+            UsedMargin=used_margin,
+            StopLossPrice=stop_loss,
+            TakeProfitPrice=take_profit,
+            Label=label,
+            Comment=pos_type.name,
             db=self._db_
         )
 
@@ -266,7 +284,8 @@ class RealtimeAPI(SystemAPI):
         self._metrics_["Trades"] += 1
         pos_type = PositionType(pos_type_id)
         return TradeAPI(
-            UID=uid, Position=position_id,
+            UID=uid,
+            Position=position_id,
             Session=self._session_,
             Account=self.account,
             Security=self._security_,
@@ -274,10 +293,16 @@ class RealtimeAPI(SystemAPI):
             Direction=self._DIRECTION_[direction_id],
             EntryTimestamp=timestamp_to_datetime(entry_ts, milliseconds=True),
             ExitTimestamp=timestamp_to_datetime(exit_ts, milliseconds=True),
-            EntryPrice=entry_price, ExitPrice=exit_price,
-            Volume=volume, Quantity=quantity,
-            GrossPnL=gross_pnl, CommissionPnL=commission_pnl, SwapPnL=swap_pnl, NetPnL=net_pnl,
-            Label=label, Comment=pos_type.name,
+            EntryPrice=entry_price,
+            ExitPrice=exit_price,
+            Volume=volume,
+            Quantity=quantity,
+            GrossPnL=gross_pnl,
+            CommissionPnL=commission_pnl,
+            SwapPnL=swap_pnl,
+            NetPnL=net_pnl,
+            Label=label,
+            Comment=pos_type.name,
             db=self._db_
         )
 
@@ -290,10 +315,14 @@ class RealtimeAPI(SystemAPI):
         return TickAPI(
             Security=self._security_,
             Timestamp=timestamp,
-            Ask=ask, Bid=bid,
-            AskBaseConversion=ask_base, BidBaseConversion=bid_base,
-            AskQuoteConversion=ask_quote, BidQuoteConversion=bid_quote,
-            Volume=volume, db=self._db_
+            Ask=ask,
+            Bid=bid,
+            AskBaseConversion=ask_base,
+            BidBaseConversion=bid_base,
+            AskQuoteConversion=ask_quote,
+            BidQuoteConversion=bid_quote,
+            Volume=volume,
+            db=self._db_
         )
 
     def _deserialize_tick_(self, data: bytes, offset: int) -> TickAPI:
@@ -304,10 +333,14 @@ class RealtimeAPI(SystemAPI):
         return TickAPI(
             Security=self._security_,
             Timestamp=timestamp,
-            Ask=ask, Bid=bid,
-            AskBaseConversion=ask_base, BidBaseConversion=bid_base,
-            AskQuoteConversion=ask_quote, BidQuoteConversion=bid_quote,
-            Volume=volume, db=self._db_
+            Ask=ask,
+            Bid=bid,
+            AskBaseConversion=ask_base,
+            BidBaseConversion=bid_base,
+            AskQuoteConversion=ask_quote,
+            BidQuoteConversion=bid_quote,
+            Volume=volume,
+            db=self._db_
         )
 
     def receive_update_bar(self, offset: int = 1) -> BarAPI:
@@ -324,10 +357,16 @@ class RealtimeAPI(SystemAPI):
         self._metrics_["Ticks"] += 5
         self._metrics_["Bars"] += 1
         return BarAPI(
-            Security=self._security_, Timeframe=self._timeframe_,
+            Security=self._security_,
+            Timeframe=self._timeframe_,
             Timestamp=timestamp_to_datetime(bar_ts, milliseconds=True),
-            GapTick=gap, OpenTick=opn, HighTick=high, LowTick=low, CloseTick=close,
-            Volume=volume, db=self._db_
+            GapTick=gap,
+            OpenTick=opn,
+            HighTick=high,
+            LowTick=low,
+            CloseTick=close,
+            Volume=volume,
+            db=self._db_
         )
 
     def receive_update_denied(self, offset: int = 1) -> tuple[ActionID, str]:
@@ -346,7 +385,7 @@ class RealtimeAPI(SystemAPI):
 
     def _warmup_horizon_(self) -> timedelta:
         step = self._timeframe_.Seconds or 0.0
-        return timedelta(seconds=step) + _MARKET_CLOSURE_
+        return timedelta(seconds=step) + self._MARKET_CLOSURE_
 
     def _warmup_database_clean_(self) -> bool:
         database = self._warmup_db_timestamps_

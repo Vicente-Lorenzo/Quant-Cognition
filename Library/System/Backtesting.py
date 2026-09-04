@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-import contextlib
-import hashlib
+import os
 import math
+import hashlib
 import threading
+import contextlib
 
 from pathlib import Path
+from itertools import count
 from collections import deque
 from dataclasses import dataclass
-from itertools import count
 from datetime import date, datetime, timedelta
 from typing import Any, Type, Union, Iterator, TYPE_CHECKING
 
@@ -17,25 +18,24 @@ from Library.Database.Dataframe import np, pl
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Engine import MachineAPI
 from Library.Indicator.Indicator import IndicatorAPI
+from Library.Portfolio.Statistic import NET_TOTAL_AGGREGATED, STATISTICS_METRICS_LABEL
 from Library.Market.Bar import BarAPI
 from Library.Market.Market import MarketAPI
 from Library.Market.Price import Direction, PriceAPI
 from Library.Market.Tick import TickAPI
 from Library.Portfolio.Account import AccountAPI, AccountType, Environment, MarginMode
 from Library.Portfolio.Portfolio import PortfolioAPI
-from Library.Portfolio.Position import PositionAPI, PositionType
+from Library.Portfolio.Position import PositionAPI, PositionMode, PositionType
 from Library.Portfolio.Trade import TradeAPI
 from Library.Protocol.Action import (
     ActionAPI,
     ActionID,
-    ModifyBuyPositionStopLossActionAPI,
-    ModifyBuyPositionTakeProfitActionAPI,
-    ModifyBuyPositionVolumeActionAPI,
-    ModifySellPositionStopLossActionAPI,
-    ModifySellPositionTakeProfitActionAPI,
-    ModifySellPositionVolumeActionAPI,
     OpenBuyPositionActionAPI,
-    OpenSellPositionActionAPI
+    OpenSellPositionActionAPI,
+    ModifyBuyPositionStopLossActionAPI,
+    ModifySellPositionStopLossActionAPI,
+    ModifyBuyPositionTakeProfitActionAPI,
+    ModifySellPositionTakeProfitActionAPI
 )
 from Library.Protocol.Update import UpdateID, BarUpdateAPI, CompleteUpdateAPI, InitUpdateAPI
 from Library.Universe.Contract import CommissionMode, CommissionType, SpreadType, SwapMode, SwapType
@@ -43,12 +43,14 @@ from Library.Universe.Timeframe import TimeframeAPI
 from Library.Utility.Datetime import MICROSECOND, Weekday, datetime_to_epoch, epoch_to_datetime, is_summer_time, parse_datetime
 from Library.Utility.IO import mkdir, read_json, write_json
 from Library.Utility.Math import equals, truncate
+from Library.Utility.Path import inspect_cached
+from Library.Utility.Progress import ProgressAPI
 from Library.Utility.Statistic import Timer, timer
 from Library.Utility.Typing import MISSING, Missing
 from Library.System.System import SystemAPI
 
 if TYPE_CHECKING:
-    from Library.Parameter import Parameter
+    from Library.Utility.Parameter import Parameter
     from Library.Strategy.Strategy import StrategyAPI
     from Library.Universe.Security import SecurityAPI
 
@@ -68,11 +70,13 @@ class DatasetAPI:
 class BacktestingAPI(SystemAPI):
 
     _EPSILON_: float = 1e-9
-    _CACHE_DIR_: Path = Path.home() / ".cache" / "cAlgo" / "preload"
+    _CACHE_DIR_: Path = inspect_cached("Preload")
     _CONVERSION_COLUMNS_: tuple = (TickAPI.ID.AskBaseConversion, TickAPI.ID.BidBaseConversion, TickAPI.ID.AskQuoteConversion, TickAPI.ID.BidQuoteConversion)
 
     _PRELOAD_CACHE_: dict = {}
     _PRELOAD_LOCK_ = threading.Lock()
+    _TAPE_CACHE_: dict = {}
+    _TAPE_LOCK_ = threading.Lock()
     _DISK_CACHE_: bool = True
 
     _db_: DatabaseAPI
@@ -98,11 +102,18 @@ class BacktestingAPI(SystemAPI):
                  spread: tuple[SpreadType, Union[float, Missing, None]],
                  commission: tuple[CommissionType, Union[float, Missing, None]],
                  swap: tuple[SwapType, Union[float, Missing, None], Union[float, Missing, None]],
+                 risk_free: float = 0.0,
+                 benchmark: Union[str, list, None] = None,
                  report: bool = True,
                  export: bool = True,
+                 plot: bool = False,
+                 run: Union[str, Path, None] = None,
+                 description: Union[str, None] = None,
                  dataset: Union[DatasetAPI, None] = None) -> None:
-        super().__init__(strategy=strategy, security=security, timeframe=timeframe, parameters=parameters, universe=(0, 0.0, 0, 0), market=(0, 0.0, 0, 0), portfolio=(0, 0.0, 0, 0), report=report, export=export)
+        super().__init__(strategy=strategy, security=security, timeframe=timeframe, parameters=parameters, universe=(0, 0.0, 0, 0), market=(0, 0.0, 0, 0), portfolio=(0, 0.0, 0, 0), risk_free=risk_free, benchmark=benchmark, report=report, export=export, plot=plot, run=run, description=description)
         self._injected_: Union[DatasetAPI, None] = dataset
+        self._folded_: list = []
+        self._journal_: list = []
 
         self._start_: datetime = parse_datetime(start, end_of_day=False)
         self._stop_: datetime = parse_datetime(stop, end_of_day=True)
@@ -155,6 +166,7 @@ class BacktestingAPI(SystemAPI):
             self.market = MarketAPI()
             self.indicator = IndicatorAPI(technical=self._parameters_.TechnicalManagement, fundamental=self._parameters_.FundamentalManagement, sentimental=self._parameters_.SentimentalManagement)
             self.portfolio = PortfolioAPI(Parameter=self._parameters_.PortfolioManagement)
+            self._netting_ = self._position_mode_() == PositionMode.Netting
             self._contract_ = self._security_.Contract
             self._digits_ = int(self._contract_.Digits) if getattr(self._contract_, "Digits", None) else 5
             ticker = self._security_.Ticker
@@ -178,6 +190,12 @@ class BacktestingAPI(SystemAPI):
             raise
         self._intra_arrays_ = self._build_intra_arrays_()
         self._advance_index_ = 0
+        self._positions_ = {}
+        self._ask_above_ = None
+        self._ask_below_ = None
+        self._bid_above_ = None
+        self._bid_below_ = None
+        self._arm_version_ += 1
         self._uid_queue_ = deque()
         self._arg_queue_ = deque()
         self._feed_ = self._generate_()
@@ -316,6 +334,8 @@ class BacktestingAPI(SystemAPI):
         intra_bars = {uid: pl.read_parquet(folder / f"intra_{uid}.parquet") for uid in levels}
         names = [str(column) for column in self._CONVERSION_COLUMNS_]
         tick_conversions = tuple(ticks[name].to_numpy() for name in names) if all(name in ticks.columns for name in names) else None
+        try: os.utime(folder / "meta.json", None)
+        except OSError: pass
         return ticks["ts"].to_numpy(), ticks["ask"].to_numpy(), ticks["bid"].to_numpy(), tick_conversions, levels, intra_bars
 
     def _write_cache_(self, folder: Path, frames: tuple, token: int) -> None:
@@ -343,12 +363,82 @@ class BacktestingAPI(SystemAPI):
     def inject(self, dataset: DatasetAPI) -> None:
         self._injected_ = dataset
 
+    def _tape_(self, bars: list[BarAPI]) -> tuple:
+        key = (self._security_.UID, self._start_, self._stop_, self._timeframe_.UID, self._auto_, None if self._auto_ else self._resolution_.UID)
+        with self._TAPE_LOCK_:
+            cached = self._TAPE_CACHE_.get(key)
+            if cached is None:
+                self._TAPE_CACHE_.clear()
+                cached = self._TAPE_CACHE_[key] = self._acquire_frames_(bars)
+            return cached
+
     def _build_dataset_(self) -> DatasetAPI:
         warmup, bars, rows = self._load_bars_()
         if not bars:
             return DatasetAPI(WarmupBars=warmup, ExecutionBars=[], TickTimestamps=np.empty(0, dtype="int64"), TickAsks=np.empty(0, dtype="float64"), TickBids=np.empty(0, dtype="float64"), TickConversions=None, IntraLevels=[], IntraBars={})
-        tick_ts, tick_ask, tick_bid, tick_conversions, intra_levels, intra_bars = self._acquire_frames_(bars)
+        tick_ts, tick_ask, tick_bid, tick_conversions, intra_levels, intra_bars = self._tape_(bars)
         return DatasetAPI(WarmupBars=warmup, ExecutionBars=bars, TickTimestamps=tick_ts, TickAsks=tick_ask, TickBids=tick_bid, TickConversions=tick_conversions, IntraLevels=intra_levels, IntraBars=intra_bars, ExecutionRows=rows)
+
+    def _metric_(self, label: str, column: str = NET_TOTAL_AGGREGATED) -> float:
+        statistics = self.statistics
+        if statistics is not None and not statistics.is_empty() and STATISTICS_METRICS_LABEL in statistics.columns and column in statistics.columns:
+            row = statistics.filter(pl.col(STATISTICS_METRICS_LABEL) == label)
+            if row.height:
+                value = row[column].item()
+                if value is not None: return float(value)
+        return self._account_return_()
+
+    def _record_(self, **fields) -> None:
+        self._journal_.append(fields)
+
+    def _tracked_(self) -> list:
+        return self._curves_(self.portfolio)[0] if getattr(self.portfolio, "EquityTrack", None) else []
+
+    def _stitch_(self, fold: int, label: str, window: tuple, score, equity: Union[list, None] = None,
+                 training: Union[float, None] = None, settings: Union[dict, None] = None) -> None:
+        curve = self._tracked_() if equity is None else equity
+        if not curve: return
+        self._folded_.append({"Fold": fold, "Parameters": label, "Start": window[0], "Stop": window[1],
+                              "Training": training, "Validation": score, "Score": score,
+                              "Settings": settings or {}, "Equity": curve})
+
+    def _analysis_(self) -> dict:
+            from Library.App.V2.Workspace import analysis
+            _, sheets = analysis(self._journal_, self._folded_)
+            return {sheet.name: pl.DataFrame([dict(zip([column.name for column in sheet.columns], row)) for row in sheet.rows], strict=False)
+                    for sheet in sheets if sheet.rows}
+
+    def _workspace_(self, workspace):
+            from Library.App.V2.Workspace import searchspace
+            return searchspace(workspace=workspace, journal=self._journal_, folds=self._folded_, elected=self._tracked_())
+
+    def _account_return_(self) -> float:
+        balance = self.portfolio.InitialBalance if self.portfolio is not None else None
+        return self.portfolio.Equity / balance - 1.0 if balance else 0.0
+
+    def _dispatch_(self, parameters: Parameter, start, stop) -> dict:
+        return {
+            "strategy": self._strategy_,
+            "provider": self._security_._provider_.UID,
+            "ticker": self._security_._ticker_.UID,
+            "timeframe": self._timeframe_.UID,
+            "parameters": parameters.data,
+            "start": start,
+            "stop": stop,
+            "account": (self._account_asset_, self._account_balance_, self._account_leverage_),
+            "spread": (self._spread_type_, self._spread_value_),
+            "commission": (self._commission_type_, self._commission_value_),
+            "swap": (self._swap_type_, self._swap_long_, self._swap_short_),
+        }
+
+    @staticmethod
+    def _resolve_(payload: dict) -> tuple:
+        from Library.Universe import ProviderAPI, SecurityAPI, TickerAPI, TimeframeAPI
+        with PostgresDatabaseAPI(database="Quant") as db:
+            provider = ProviderAPI(UID=payload["provider"], db=db, autoload=True)
+            ticker = TickerAPI(UID=payload["ticker"], db=db, autoload=True)
+            timeframe = TimeframeAPI(UID=payload["timeframe"], db=db, autoload=True)
+            return SecurityAPI(Provider=provider, Ticker=ticker, db=db, autoload=True), timeframe
 
     def _preload_(self) -> None:
         watch = Timer(); watch.start()
@@ -356,7 +446,7 @@ class BacktestingAPI(SystemAPI):
             self._dataset_ = self._injected_
             outcome = "Injected"
         else:
-            key = (self._security_.UID, self._start_, self._stop_, self._timeframe_.UID, self._auto_, None if self._auto_ else self._resolution_.UID)
+            key = (self._security_.UID, self._start_, self._stop_, self._timeframe_.UID, self._auto_, None if self._auto_ else self._resolution_.UID, self._window_)
             with self._PRELOAD_LOCK_:
                 reused = key in self._PRELOAD_CACHE_
                 if not reused:
@@ -552,6 +642,63 @@ class BacktestingAPI(SystemAPI):
         for arg in args: self._arg_queue_.append(arg)
         self._uid_queue_.append(UpdateID.Complete)
 
+    def _position_mode_(self) -> PositionMode:
+        node = self._parameters_.PortfolioManagement
+        mode = node.PositionMode if node else None
+        if not mode: return PositionMode.Hedging
+        value = mode[0]
+        return value if isinstance(value, PositionMode) else PositionMode[str(value)]
+
+    def _net_position_(self) -> Union[PositionAPI, None]:
+        return next(iter(self._positions_.values()), None)
+
+    def _emit_increase_(self, position: PositionAPI, direction: Direction, volume: float) -> None:
+        ask, bid = self._ask_bid_(self._tick_)
+        fill = ask if direction == Direction.Buy else bid
+        rate = self._symbol_rate_(self._tick_)
+        base_conversion, quote_conversion = self._conversions_(self._tick_)
+        total = position.Volume + volume
+        position.EntryPrice.Price = self._round_((position.EntryPrice.Price * position.Volume + fill * volume) / total)
+        position.Volume = total
+        position.Quantity = self._quantity_(total)
+        previous = position.CommissionPnL.PnL if position.CommissionPnL else 0.0
+        position.CommissionPnL = previous + truncate(self._commission_(volume, rate, base_conversion, quote_conversion))
+        self._arm_version_ += 1
+        update_id = UpdateID.IncreasedBuyPositionVolume if direction == Direction.Buy else UpdateID.IncreasedSellPositionVolume
+        self._enqueue_(update_id, self._bar_, position)
+
+    def _emit_reduce_(self, position: PositionAPI, volume: float) -> None:
+        initial_commission = position.CommissionPnL.PnL if position.CommissionPnL else 0.0
+        remaining = position.Volume - volume
+        trade = self._build_trade_(position, volume, self._tick_, self._exit_price_(position, self._tick_))
+        position.Volume = remaining
+        position.Quantity = self._quantity_(remaining)
+        position.CommissionPnL = initial_commission * (remaining / (remaining + volume))
+        self._arm_version_ += 1
+        update_id = UpdateID.DecreasedBuyPositionVolume if position.Direction == Direction.Buy else UpdateID.DecreasedSellPositionVolume
+        self._enqueue_(update_id, position, trade, self._bar_)
+
+    def _emit_net_open_(self, action: Union[OpenBuyPositionActionAPI, OpenSellPositionActionAPI], direction: Direction, volume: float, sl_price, tp_price) -> None:
+        position = self._net_position_()
+        if position is None:
+            self._emit_plain_open_(action, direction, volume, sl_price, tp_price); return
+        if position.Direction == direction:
+            self._emit_increase_(position, direction, volume); return
+        if volume < position.Volume - self._EPSILON_:
+            self._emit_reduce_(position, volume); return
+        closed = UpdateID.ClosedBuyPosition if position.Direction == Direction.Buy else UpdateID.ClosedSellPosition
+        remainder = volume - position.Volume
+        self._emit_close_(position, self._tick_, closed)
+        if remainder > self._EPSILON_:
+            self._emit_plain_open_(action, direction, remainder, sl_price, tp_price)
+
+    def _emit_plain_open_(self, action: Union[OpenBuyPositionActionAPI, OpenSellPositionActionAPI], direction: Direction, volume: float, sl_price, tp_price) -> None:
+        position = self._build_position_(direction, action.PositionType, volume, self._tick_, sl_price, tp_price)
+        self._positions_[position.UID] = position
+        self._arm_version_ += 1
+        update_id = UpdateID.OpenedBuyPosition if direction == Direction.Buy else UpdateID.OpenedSellPosition
+        self._enqueue_(update_id, self._bar_, position)
+
     def _emit_open_(self, action: Union[OpenBuyPositionActionAPI, OpenSellPositionActionAPI], direction: Direction) -> None:
         volume = action.Volume
         if volume > self._contract_.VolumeMax or volume < self._contract_.VolumeMin or not equals(volume % self._contract_.VolumeStep, 0.0, abs_=self._EPSILON_):
@@ -566,11 +713,8 @@ class BacktestingAPI(SystemAPI):
         else:
             sl_price = None if sl_distance is None else self._round_(entry + sl_distance)
             tp_price = None if tp_distance is None else self._round_(entry - tp_distance)
-        position = self._build_position_(direction, action.PositionType, volume, self._tick_, sl_price, tp_price)
-        self._positions_[position.UID] = position
-        self._arm_version_ += 1
-        update_id = UpdateID.OpenedBuyPosition if direction == Direction.Buy else UpdateID.OpenedSellPosition
-        self._enqueue_(update_id, self._bar_, position)
+        if self._netting_: self._emit_net_open_(action, direction, volume, sl_price, tp_price)
+        else: self._emit_plain_open_(action, direction, volume, sl_price, tp_price)
 
     def _emit_close_(self, position: PositionAPI, tick: TickAPI, update_id: UpdateID) -> None:
         trade = self._build_trade_(position, position.Volume, tick, self._exit_price_(position, tick))
@@ -578,20 +722,18 @@ class BacktestingAPI(SystemAPI):
         self._arm_version_ += 1
         self._enqueue_(update_id, position, trade, self._bar_)
 
-    def _emit_modify_volume_(self, action: Union[ModifyBuyPositionVolumeActionAPI, ModifySellPositionVolumeActionAPI], direction: Direction) -> None:
+    def _emit_target_volume_(self, action: ActionAPI, direction: Direction, intent: int) -> None:
         position = self._positions_.get(action.PositionID)
         if position is None: self._log_.error(lambda: "Action Modify Volume: Failed · Due to Position not found"); return
         if equals(action.Volume, 0.0, abs_=self._EPSILON_):
+            if intent > 0: self._log_.error(lambda: "Action Increase Volume: Failed · Due to target being zero"); return
             self._emit_close_(position, self._tick_, UpdateID.ClosedBuyPosition if direction == Direction.Buy else UpdateID.ClosedSellPosition); return
-        closing = position.Volume - action.Volume
-        if closing <= 0.0: self._log_.error(lambda: f"Action Modify Volume: Failed · Due to invalid Volume ({action.Volume})"); return
-        initial_commission = position.CommissionPnL.PnL if position.CommissionPnL else 0.0
-        trade = self._build_trade_(position, closing, self._tick_, self._exit_price_(position, self._tick_))
-        position.Volume = action.Volume
-        position.Quantity = self._quantity_(action.Volume)
-        position.CommissionPnL = initial_commission * (action.Volume / (action.Volume + closing))
-        update_id = UpdateID.ModifiedBuyPositionVolume if direction == Direction.Buy else UpdateID.ModifiedSellPositionVolume
-        self._enqueue_(update_id, position, trade, self._bar_)
+        delta = action.Volume - position.Volume
+        if equals(delta, 0.0, abs_=self._EPSILON_): return
+        if intent > 0 and delta < 0.0: self._log_.error(lambda: f"Action Increase Volume: Failed · Due to target below current ({action.Volume} < {position.Volume})"); return
+        if intent < 0 and delta > 0.0: self._log_.error(lambda: f"Action Decrease Volume: Failed · Due to target above current ({action.Volume} > {position.Volume})"); return
+        if delta > 0.0: self._emit_increase_(position, direction, delta)
+        else: self._emit_reduce_(position, -delta)
 
     def _emit_modify_stop_loss_(self, action: Union[ModifyBuyPositionStopLossActionAPI, ModifySellPositionStopLossActionAPI], direction: Direction) -> None:
         position = self._positions_.get(action.PositionID)
@@ -623,8 +765,12 @@ class BacktestingAPI(SystemAPI):
                 position = self._positions_.get(action.PositionID)
                 if position is None: self._log_.error(lambda: "Action Close: Failed · Due to Position not found"); return
                 self._emit_close_(position, self._tick_, UpdateID.ClosedSellPosition)
-            case ActionID.ModifyBuyPositionVolume: self._emit_modify_volume_(action, Direction.Buy)
-            case ActionID.ModifySellPositionVolume: self._emit_modify_volume_(action, Direction.Sell)
+            case ActionID.IncreaseBuyPositionVolume: self._emit_target_volume_(action, Direction.Buy, 1)
+            case ActionID.IncreaseSellPositionVolume: self._emit_target_volume_(action, Direction.Sell, 1)
+            case ActionID.DecreaseBuyPositionVolume: self._emit_target_volume_(action, Direction.Buy, -1)
+            case ActionID.DecreaseSellPositionVolume: self._emit_target_volume_(action, Direction.Sell, -1)
+            case ActionID.ModifyBuyPositionVolume: self._emit_target_volume_(action, Direction.Buy, 0)
+            case ActionID.ModifySellPositionVolume: self._emit_target_volume_(action, Direction.Sell, 0)
             case ActionID.ModifyBuyPositionStopLoss: self._emit_modify_stop_loss_(action, Direction.Buy)
             case ActionID.ModifySellPositionStopLoss: self._emit_modify_stop_loss_(action, Direction.Sell)
             case ActionID.ModifyBuyPositionTakeProfit: self._emit_modify_take_profit_(action, Direction.Buy)
@@ -889,7 +1035,9 @@ class BacktestingAPI(SystemAPI):
         yield
         bars = self._dataset_.ExecutionBars
         total = len(bars)
+        tracker = ProgressAPI(total, label=self._identity_(), unit="bars")
         for index, bar in enumerate(bars):
+            tracker.advance()
             self._bar_ = bar
             self._tick_ = bars[index + 1].OpenTick if index + 1 < total else bar.CloseTick
             self._enqueue_(UpdateID.BarClosed, bar)
@@ -899,6 +1047,7 @@ class BacktestingAPI(SystemAPI):
             self._bar_ = nbar
             for timestamp, raw_ask, raw_bid in self._intrabar_source_(nbar):
                 for _ in self._walk_(timestamp, raw_ask, raw_bid): yield
+        tracker.close()
 
     def receive_update_id(self) -> UpdateID:
         if not self._uid_queue_:

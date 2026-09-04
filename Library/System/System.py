@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+import yaml
 
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import Sequence, Type, Union, TYPE_CHECKING
 
 from Library.Database import BufferAPI
 from Library.Database.Dataframe import pl
-from Library.Logging import HandlerLoggingAPI
+from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Market.Bar import BarAPI
 from Library.Market.Tick import TickAPI
 from Library.Portfolio.Account import AccountAPI
@@ -101,7 +104,7 @@ from Library.Protocol.Update import (
 from Library.System.Lifecycle import LifecycleAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Utility.Enumeration import EnumerationAPI
-from Library.Utility.Path import traceback_root
+from Library.Utility.Path import inspect_destination
 from Library.Utility.Service import ServiceAPI
 from Library.Utility.Statistic import Timer
 
@@ -112,7 +115,7 @@ if TYPE_CHECKING:
     from Library.Indicator.Sentimental import SentimentalAPI
     from Library.Indicator.Technical import TechnicalAPI
     from Library.Market.Market import MarketAPI
-    from Library.Parameter import Parameter
+    from Library.Utility.Parameter import Parameter
     from Library.Portfolio.Portfolio import PortfolioAPI
     from Library.Strategy.Strategy import StrategyAPI
     from Library.Universe.Timeframe import TimeframeAPI
@@ -127,6 +130,9 @@ class SystemType(EnumerationAPI):
 
 class SystemAPI(ServiceAPI, ABC):
 
+    Exports: str = "Exports"
+    Plots: str = "Plots"
+
     def __init__(self,
                  strategy: Type[StrategyAPI],
                  security: SecurityAPI,
@@ -135,15 +141,22 @@ class SystemAPI(ServiceAPI, ABC):
                  universe: tuple[int, float, int, int] = (0, 0.0, 0, 0),
                  market: tuple[int, float, int, int] = (0, 0.0, 0, 0),
                  portfolio: tuple[int, float, int, int] = (0, 0.0, 0, 0),
+                 risk_free: float = 0.0,
                  benchmark: Union[str, Sequence, None] = None,
                  report: bool = True,
                  export: bool = True,
-                 plot: bool = False) -> None:
+                 plot: bool = False,
+                 run: Union[str, Path, None] = None,
+                 description: Union[str, None] = None) -> None:
         super().__init__()
         self._connected_: bool = False
+        self._run_: Union[Path, None] = Path(run) if run else None
         self._reporting_: bool = report
         self._exporting_: bool = export
         self._plotting_: bool = plot
+        self._description_: Union[str, None] = description
+        self._failures_: list = []
+        self._risk_free_: float = risk_free
         self._benchmarking_: bool = benchmark is not None
         self._benchmark_: tuple = tuple(entry.strip() for entry in (benchmark.split(",") if isinstance(benchmark, str) else benchmark or ()) if entry and entry.strip())
         self._strategy_: Type[StrategyAPI] = strategy
@@ -172,7 +185,7 @@ class SystemAPI(ServiceAPI, ABC):
         self._execution_timer_: Timer = Timer()
         self._finalization_timer_: Timer = Timer()
 
-        self._log_: HandlerLoggingAPI = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="System Management")
+        self._log_: LoggingAPI = LoggingAPI("System Management")
 
     def _attach_session_(self, record) -> None:
         if not self._portfolio_.Active or self._session_ is None: return
@@ -226,23 +239,50 @@ class SystemAPI(ServiceAPI, ABC):
         if not columns: return df
         return df.with_columns([pl.col(name).map_elements(lambda v: json.dumps(v, default=str), return_dtype=pl.Utf8).alias(name) for name in columns])
 
+    _OUTPUT_: str = "Output"
+
+    def _publish_(self, name: str, sections: dict) -> Union[Path, None]:
+        if self._run_ is None or not sections: return None
+        try:
+            folder = self._run_ / self._OUTPUT_
+            folder.mkdir(parents=True, exist_ok=True)
+            path = folder / name
+            path.write_text(yaml.safe_dump(sections, sort_keys=False), encoding="utf-8")
+            self._log_.info(lambda: f"Publish Operation: Saved · {path}")
+            return path
+        except Exception as error:
+            self._log_.warning(lambda error=error: f"Publish Operation: Failed · {error}")
+            return None
+
+    def _destination_(self, request, temporary: str, scoped: str = "") -> Union[Path, None]:
+        if request is None or request is False: return None
+        if request is True and self._run_ is not None: return self._run_.joinpath(self._OUTPUT_, scoped) if scoped else self._run_ / self._OUTPUT_
+        return inspect_destination(request, temporary)
+
     def _export_(self, tables: dict) -> None:
         try:
             ident = getattr(self, "_iid_", None) or getattr(self._session_, "UID", None) or self.__class__.__name__
-            base = traceback_root() / "Reports" / f"{datetime.now():%Y-%m-%d %H-%M-%S} {ident}"
-            folder, index = base, 2
-            while folder.exists():
-                folder = base.parent / f"{base.name} ({index})"
-                index += 1
-            folder.mkdir(parents=True)
+            destination = self._destination_(self._exporting_, self.Exports, "Export")
+            if self._run_ is not None and self._exporting_ is True:
+                folder = destination
+                folder.mkdir(parents=True, exist_ok=True)
+            else:
+                base = destination / f"{datetime.now():%Y-%m-%d %H-%M-%S} {ident}"
+                folder, index = base, 2
+                while folder.exists():
+                    folder = base.parent / f"{base.name} ({index})"
+                    index += 1
+                folder.mkdir(parents=True)
             for name, table in tables.items():
                 try:
                     self._stringify_(table).write_csv(str(folder / f"{name.lower()}.csv"))
                 except Exception as error:
                     self._log_.error(lambda n=name, e=error: f"Export Operation: Failed · {n} · {e}")
+                    self._failures_.append(f"Export {name}: {error}")
             self._log_.info(lambda: f"Export Operation: Saved · {folder}")
         except Exception as error:
-            self._log_.error(lambda: f"Export Operation: Failed · {error}")
+            self._log_.error(lambda error=error: f"Export Operation: Failed · {error}")
+            self._failures_.append(f"Export: {error}")
 
     def _bars_(self) -> list:
         if self.market is None: return []
@@ -250,6 +290,7 @@ class SystemAPI(ServiceAPI, ABC):
         if frame is None or frame.is_empty(): return []
         columns = ("Timestamp", "OpenTick.Bid", "HighTick.Bid", "LowTick.Bid", "CloseTick.Bid", "OpenTick.Timestamp")
         if any(column not in frame.columns for column in columns): return []
+        if "Volume" in frame.columns: columns += ("Volume",)
         return list(zip(*(frame[column].to_list() for column in columns)))
 
     @staticmethod
@@ -295,7 +336,6 @@ class SystemAPI(ServiceAPI, ABC):
         return " · ".join(parts)
 
     def _benchmarks_(self, start, stop) -> dict:
-        if not self._benchmarking_: return {}
         benchmarks = {}
         bars = self._bars_()
         if bars: benchmarks[self._label_(self._security_, "Buy & Hold")] = [(bar[0], bar[4]) for bar in bars]
@@ -320,13 +360,21 @@ class SystemAPI(ServiceAPI, ABC):
                 self._log_.warning(lambda s=spec, e=error: f"Benchmark Operation: Skipped · {s} · {e}")
         return benchmarks
 
+    def _workspace_(self, workspace):
+        return workspace
+
+    def _analysis_(self) -> dict:
+        return {}
+
     def _plot_(self, portfolio: PortfolioAPI, account: Union[AccountAPI, None], start, stop, benchmarks: dict, tables: dict) -> None:
-        from Library.Utility.Plot import PlotAPI
+        from Library.App.V2.Workspace import backtest
         equity, balance = self._curves_(portfolio)
         ticker = self._security_.Ticker.UID if self._security_ and self._security_.Ticker else "Security"
         title = f"{self.__class__.__name__} · {self._strategy_.__name__} · {ticker} {self._timeframe_.UID} · {start} → {stop}"
-        plot = PlotAPI(
+        workspace = backtest(
             title=title,
+            description=self._description_,
+            anchor=start,
             currency=account.Asset if account is not None and account.Asset else "",
             bars=self._bars_(),
             equity=equity,
@@ -336,19 +384,49 @@ class SystemAPI(ServiceAPI, ABC):
             benchmarks=benchmarks,
             directional=(self.strategy.DirectionalEntryThreshold, self.strategy.DirectionalExitThreshold) if self.strategy is not None else None,
             volumetric=(self.strategy.VolumeEntryThreshold, self.strategy.VolumeExitThreshold) if self.strategy is not None else None,
-            tables=tables)
-        path = plot.render(traceback_root() / "Reports" / "Plots", name=f"{datetime.now():%Y-%m-%d %H-%M-%S} {ticker} {self._strategy_.__name__}")
+            sheets=tables)
+        workspace = self._workspace_(workspace)
+        self._result_(workspace)
+        if not self._plotting_: return
+        destination = self._destination_(self._plotting_, self.Plots)
+        naming = "Plot" if self._run_ is not None and self._plotting_ is True else f"{datetime.now():%Y-%m-%d %H-%M-%S} {ticker} {self._strategy_.__name__}"
+        path = workspace.render(destination, name=naming)
         self._log_.info(lambda: f"Plot Operation: Rendered · {path}")
+
+    def _result_(self, workspace) -> None:
+        if self._run_ is None: return
+        try:
+            folder = self._run_ / self._OUTPUT_
+            folder.mkdir(parents=True, exist_ok=True)
+            path = folder / "Result.json"
+            path.write_text(workspace.encode(), encoding="utf-8")
+            self._log_.info(lambda: f"Result Operation: Saved · {path} · {path.stat().st_size / 1048576:.1f} MB")
+        except Exception as error:
+            self._log_.error(lambda error=error: f"Result Operation: Failed · {error}")
+            self._failures_.append(f"Result: {error}")
+
+    @contextmanager
+    def quieted(self, level: VerboseLevel = VerboseLevel.Warning):
+        if self._reporting_ or self._exporting_ or self._plotting_:
+            yield self
+            return
+        with self._log_.console.temporary(level), self._log_.file.temporary(level): yield self
+
+    @contextmanager
+    def deliverables(self, report: bool, export: bool, plot: bool):
+        restored = (self._reporting_, self._exporting_, self._plotting_)
+        self._reporting_, self._exporting_, self._plotting_ = report, export, plot
+        try: yield self
+        finally: self._reporting_, self._exporting_, self._plotting_ = restored
 
     def _report_(self, portfolio: PortfolioAPI, account: Union[AccountAPI, None], start, stop) -> None:
         if portfolio is None: return
-        net = generate_net_report(portfolio.Positions, portfolio.Trades, account, start, stop, portfolio.EquityCurve, portfolio.Excursions)
+        net = generate_net_report(portfolio.Positions, portfolio.Trades, account, start, stop, portfolio.EquityCurve, portfolio.Excursions, risk_free=self._risk_free_)
         self.statistics = net
         benchmarks = {}
-        if self._benchmarking_:
-            try: benchmarks = self._benchmarks_(start, stop)
-            except Exception as error: self._log_.error(lambda: f"Benchmark Operation: Failed · {error}")
-        self.benchmarks = generate_benchmark_report(portfolio.EquityTrack, benchmarks, start, stop) if self._benchmarking_ else None
+        try: benchmarks = self._benchmarks_(start, stop)
+        except Exception as error: self._log_.error(lambda error=error: f"Benchmark Operation: Failed · {error}")
+        self.benchmarks = generate_benchmark_report(portfolio.EquityTrack, benchmarks, start, stop, risk_free=self._risk_free_) if self._benchmarking_ else None
         if not (self._reporting_ or self._exporting_ or self._plotting_): return
         tables = {
             "Orders": order_view(portfolio.Orders),
@@ -358,15 +436,30 @@ class SystemAPI(ServiceAPI, ABC):
             "Net": net,
         }
         if self.benchmarks is not None and not self.benchmarks.is_empty(): tables["Benchmark"] = self.benchmarks
-        if self._plotting_:
-            try: self._plot_(portfolio, account, start, stop, benchmarks, tables)
-            except Exception as error: self._log_.error(lambda: f"Plot Operation: Failed · {error}")
+        try: self._plot_(portfolio, account, start, stop, benchmarks, tables)
+        except Exception as error:
+            self._log_.error(lambda error=error: f"Plot Operation: Failed · {error}")
+            self._failures_.append(f"Plot: {error}")
         if self._reporting_:
             for name, table in tables.items():
                 if table.is_empty(): continue
                 self._log_.info(lambda n=name, t=table: f"Report {n}: {t}")
+            for name, frame in self._analysis_().items():
+                self._log_.info(lambda n=name, t=frame: f"Report {n}: {t}")
         if self._exporting_:
             self._export_(tables)
+        self._delivered_()
+
+    def _identity_(self) -> str:
+        ticker = getattr(getattr(self._security_, "Ticker", None), "UID", None) or "Security"
+        frame = getattr(self._timeframe_, "UID", None)
+        return f"{ticker} {frame}" if frame else ticker
+
+    def _delivered_(self) -> None:
+        if not self._failures_: return
+        summary = " · ".join(self._failures_)
+        self._failures_ = []
+        raise RuntimeError(f"Output Operation: Failed · {summary}")
 
     @abstractmethod
     def send_action(self, action: ActionAPI) -> None:
@@ -681,6 +774,8 @@ class SystemAPI(ServiceAPI, ABC):
         if self.strategy is None: return
         self._strategy_.Recording = self._plotting_
         self.strategy.Signals = []
+        self.strategy._long_bars_ = 0
+        self.strategy._short_bars_ = 0
         engine = LifecycleAPI(
             system_machine=self.system_management(),
             strategy_machine=self.strategy.strategy_management(),
