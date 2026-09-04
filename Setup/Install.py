@@ -58,8 +58,8 @@ WORKFLOWS = [
             {"uid": "Environment.Retention", "name": "Log Retention", "path": "Setup/Retention.py", "kind": Kind.Scheduled, "description": "Prunes expired log files from the temporary folders and expired log rows from the Logging schema"},
             {"uid": "Environment.Version", "name": "Version Check", "path": "Setup/Version.py", "kind": Kind.Scheduled, "description": "Reports when a vendored frontend library has a newer release upstream — never upgrades automatically"},
             {"uid": "Environment.Update", "name": "Environment Update", "path": "Setup/Environment.py", "kind": Kind.Scheduled, "description": "Syncs the active conda environment to the pinned Quant manifest while the services are suspended"},
-            {"uid": "Environment.Tunnel", "name": "Cloudflare Tunnel", "path": "Library/Web/Tunnel.py", "kind": Kind.Service, "description": "Runs the named Cloudflare tunnel exposing the loopback app server to the public edge"},
-            {"uid": "Environment.Server", "name": "Application Server", "path": "Library/Web/Tray.py", "kind": Kind.Service, "description": "Serves the Quant Cognition Dash application under waitress with its own system-tray controls"}
+            {"uid": "Environment.Tunnel", "name": "Cloudflare Tunnel", "path": "Library/Web/Service/Tunnel.py", "kind": Kind.Service, "description": "Runs the named Cloudflare tunnel exposing the loopback app server to the public edge"},
+            {"uid": "Environment.Server", "name": "Application Server", "path": "Library/Web/Service/Tray.py", "kind": Kind.Service, "description": "Serves the Quant Cognition Dash application under waitress with its own system-tray controls"}
         ],
         "edges": [
             ("Environment.Cache", "Environment.Retention"),

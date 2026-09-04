@@ -5,7 +5,7 @@ from Library.App.V2 import PageAPI, ContainerAPI, TextAPI
 class HierarchyPageAPI(PageAPI):
 
     def __init__(self, *, app) -> None:
-        super().__init__(app=app, path="/hierarchy", button="Hierarchy", icon="bi bi-diagram-3", description="Explore the module hierarchy and dependency graph of a library")
+        super().__init__(app=app, path="/framework/hierarchy", button="Hierarchy", icon="bi bi-diagram-3", description="Explore the module hierarchy and dependency graph of a library")
 
     def content(self) -> list:
         return [

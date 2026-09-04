@@ -5,7 +5,7 @@ from Library.App.V2 import PageAPI, ContainerAPI, TextAPI
 class DatabasePageAPI(PageAPI):
 
     def __init__(self, *, app) -> None:
-        super().__init__(app=app, path="/database", button="Database", icon="bi bi-database", description="Browse and edit database tables across the universe schema")
+        super().__init__(app=app, path="/framework/database", button="Database", icon="bi bi-database", description="Browse and edit database tables across the universe schema")
 
     def content(self) -> list:
         return [

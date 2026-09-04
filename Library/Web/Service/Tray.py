@@ -1,13 +1,12 @@
 import sys
 import threading
-import webbrowser
 
 from waitress import create_server
 
 from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Logging.File import FileAPI
-from Library.Utility.Runtime import tail_terminal
-from Library.Web.Serve import build, main as headless
+from Library.Utility.Runtime import open_browser, tail_terminal
+from Library.Web.Service.Serve import build, main as headless
 
 class TrayAPI:
 
@@ -47,7 +46,7 @@ class TrayAPI:
         except Exception: pass
 
     def _browser_(self, icon=None, item=None) -> None:
-        webbrowser.open(self._URL_)
+        open_browser(self._URL_)
 
     def _terminal_(self, icon=None, item=None) -> None:
         tail_terminal(self._LOG_)
