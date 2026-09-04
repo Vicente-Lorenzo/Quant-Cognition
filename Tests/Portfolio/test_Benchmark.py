@@ -1,8 +1,9 @@
 import math
 from datetime import date, datetime, timedelta
 
-from Library.Portfolio.Statistic import (
-    BENCHMARK_ALPHA, BENCHMARK_ALPHASIGNIFICANCE,
+from Library.Statistic.Label import (
+    BENCHMARK_ALPHA,
+    BENCHMARK_ALPHASIGNIFICANCE,
     BENCHMARK_ANNUALIZEDRETURN,
     BENCHMARK_BETA,
     BENCHMARK_CORRELATION,
@@ -18,10 +19,14 @@ from Library.Portfolio.Statistic import (
     CALMARRATIO,
     SHARPERATIO,
     SORTINORATIO,
-    STERLINGRATIO,
+    STERLINGRATIO
+)
+from Library.Statistic.Metric import (
     align_series,
-    generate_benchmark_report,
     series_returns
+)
+from Library.Portfolio.Statistic import (
+    generate_benchmark_report
 )
 
 def _series_(values, step=1):
