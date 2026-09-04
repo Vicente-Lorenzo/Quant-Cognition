@@ -18,7 +18,10 @@ from Library.Database.Dataframe import np, pl
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Engine import MachineAPI
 from Library.Indicator.Indicator import IndicatorAPI
-from Library.Portfolio.Statistic import NET_TOTAL_AGGREGATED, STATISTICS_METRICS_LABEL
+from Library.Statistic.Label import (
+    NET_TOTAL_AGGREGATED,
+    STATISTICS_METRICS_LABEL
+)
 from Library.Market.Bar import BarAPI
 from Library.Market.Market import MarketAPI
 from Library.Market.Price import Direction, PriceAPI

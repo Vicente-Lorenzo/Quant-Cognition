@@ -251,7 +251,7 @@ class PortfolioAPI(DatapointAPI):
         return a if a is not None else 1.0
 
     def update_data(self, data: Union[TickAPI, BarAPI]) -> None:
-        from Library.Portfolio.Statistic import calculate_pnl_difference, calculate_gross_pnl, calculate_net_pnl
+        from Library.Statistic.Metric import calculate_pnl_difference, calculate_gross_pnl, calculate_net_pnl
         if isinstance(data, TickAPI):
             bid, ask, timestamp = data.Bid.Price, data.Ask.Price, data.Timestamp.DateTime
             high_bid = low_bid = bid
@@ -362,7 +362,7 @@ class PortfolioAPI(DatapointAPI):
         if dst.Comment is None: dst.Comment = src.Comment
 
     def _compute_target_pnl_(self, pos: PositionAPI, target_price: Union[float, None]) -> Union[float, None]:
-        from Library.Portfolio.Statistic import calculate_pnl_difference, calculate_gross_pnl, calculate_net_pnl
+        from Library.Statistic.Metric import calculate_pnl_difference, calculate_gross_pnl, calculate_net_pnl
         entry = pos.EntryPrice.Price if pos.EntryPrice else None
         if target_price is None or entry is None or pos.Volume is None: return None
         comm = pos.CommissionPnL.PnL if pos.CommissionPnL else 0.0
@@ -576,27 +576,27 @@ class PortfolioAPI(DatapointAPI):
 
     @property
     def Return(self) -> Union[float, None]:
-        from Library.Portfolio.Statistic import calculate_pnl_return
+        from Library.Statistic.Metric import calculate_pnl_return
         if not self._account_ or not self._account_.Balance: return None
         return calculate_pnl_return(self.NetPnL, self._account_.Balance)
 
     @property
     def LogReturn(self) -> Union[float, None]:
-        from Library.Portfolio.Statistic import calculate_log_return
+        from Library.Statistic.Metric import calculate_log_return
         ret = self.Return
         if ret is None: return None
         return calculate_log_return(ret)
 
     @property
     def Percentage(self) -> Union[float, None]:
-        from Library.Portfolio.Statistic import calculate_percentage
+        from Library.Statistic.Metric import calculate_percentage
         ret = self.Return
         if ret is None: return None
         return calculate_percentage(ret)
 
     @property
     def LogPercentage(self) -> Union[float, None]:
-        from Library.Portfolio.Statistic import calculate_log_percentage
+        from Library.Statistic.Metric import calculate_log_percentage
         log_ret = self.LogReturn
         if log_ret is None: return None
         return calculate_log_percentage(log_ret)
@@ -608,7 +608,7 @@ class PortfolioAPI(DatapointAPI):
 
     @property
     def AnnualizedReturn(self) -> Union[float, None]:
-        from Library.Portfolio.Statistic import calculate_annualized_return
+        from Library.Statistic.Metric import calculate_annualized_return
         ret = self.Return
         if ret is None: return None
         first = self._first_entry_()
@@ -618,7 +618,7 @@ class PortfolioAPI(DatapointAPI):
 
     @property
     def AnnualizedLogReturn(self) -> Union[float, None]:
-        from Library.Portfolio.Statistic import calculate_annualized_log_return
+        from Library.Statistic.Metric import calculate_annualized_log_return
         log_ret = self.LogReturn
         if log_ret is None: return None
         first = self._first_entry_()
@@ -628,12 +628,12 @@ class PortfolioAPI(DatapointAPI):
 
     @property
     def AnnualizedPercentage(self) -> Union[float, None]:
-        from Library.Portfolio.Statistic import calculate_percentage
+        from Library.Statistic.Metric import calculate_percentage
         return calculate_percentage(self.AnnualizedReturn)
 
     @property
     def AnnualizedLogPercentage(self) -> Union[float, None]:
-        from Library.Portfolio.Statistic import calculate_log_percentage
+        from Library.Statistic.Metric import calculate_log_percentage
         return calculate_log_percentage(self.AnnualizedLogReturn)
 
     @property

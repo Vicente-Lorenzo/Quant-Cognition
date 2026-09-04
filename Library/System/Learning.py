@@ -12,7 +12,18 @@ from typing import Type, Union, TYPE_CHECKING
 
 from Library.Database.Dataframe import np, pl
 from Library.Model.Split import SplitAPI
-from Library.Portfolio.Statistic import CALMARRATIO, MAXEQUITYDRAWDOWNPERC, NETRETURNANNPERC, NETRETURNPERC, NET_BUY_AGGREGATED, NET_SELL_AGGREGATED, SHARPERATIO, SORTINORATIO, STERLINGRATIO, TOTALTRADESVALUE
+from Library.Statistic.Label import (
+    CALMARRATIO,
+    MAXEQUITYDRAWDOWNPERC,
+    NETRETURNANNPERC,
+    NETRETURNPERC,
+    NET_BUY_AGGREGATED,
+    NET_SELL_AGGREGATED,
+    SHARPERATIO,
+    SORTINORATIO,
+    STERLINGRATIO,
+    TOTALTRADESVALUE
+)
 from Library.Strategy.Hybrid.DDPG import DDPGStrategyAPI
 from Library.Strategy.Model.Reward import RewardType
 from Library.System.Backtesting import BacktestingAPI, DatasetAPI
