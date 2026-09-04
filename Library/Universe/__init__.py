@@ -1,4 +1,4 @@
-from Library.Universe.Timeframe import TimeframeAPI
+from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Category import CategoryAPI
 from Library.Universe.Provider import (
     ProviderAPI,
@@ -9,6 +9,7 @@ from Library.Universe.Ticker import (
     TickerAPI,
     ContractType
 )
+from Library.Universe.Timeframe import TimeframeAPI
 from Library.Universe.Contract import (
     ContractAPI,
     SpreadType,
@@ -21,16 +22,16 @@ from Library.Universe.Contract import (
     PayoffType
 )
 from Library.Universe.Security import SecurityAPI
-from Library.Universe.Universe import UniverseAPI
 
 __all__ = [
-    "TimeframeAPI",
+    "UniverseAPI",
     "CategoryAPI",
     "ProviderAPI",
     "Provider",
     "Platform",
     "TickerAPI",
     "ContractType",
+    "TimeframeAPI",
     "ContractAPI",
     "SpreadType",
     "CommissionType",
@@ -40,6 +41,5 @@ __all__ = [
     "VariantType",
     "ExerciseType",
     "PayoffType",
-    "SecurityAPI",
-    "UniverseAPI"
+    "SecurityAPI"
 ]

@@ -1,16 +1,32 @@
+from Library.Utility.Memory import memory_to_string
+from Library.Utility.Math import equals, truncate, EPSILON
+from Library.Utility.Datetime import (
+    EPOCH,
+    HORIZON,
+    MILLISECOND,
+    MICROSECOND,
+    datetime_to_string,
+    string_to_datetime,
+    datetime_to_timestamp,
+    datetime_to_epoch,
+    epoch_to_datetime,
+    timestamp_to_datetime,
+    datetime_to_iso,
+    iso_to_datetime,
+    parse_datetime,
+    seconds_to_string,
+    seconds_to_clock,
+    is_summer_time,
+    is_winter_time
+)
 from Library.Utility.Statistic import (
     Timer,
     timer,
     profiler
 )
-from Library.Utility.HTML import (
-    formatize,
-    stylize,
-    htmlize,
-    HtmlAPI
-)
 from Library.Utility.Typing import (
     MISSING,
+    Missing,
     isclass,
     iscallable,
     ismethod,
@@ -28,26 +44,6 @@ from Library.Utility.Typing import (
     contains,
     format
 )
-from Library.Utility.Datetime import (
-    EPOCH,
-    MILLISECOND,
-    MICROSECOND,
-    datetime_to_string,
-    string_to_datetime,
-    datetime_to_timestamp,
-    datetime_to_epoch,
-    epoch_to_datetime,
-    timestamp_to_datetime,
-    datetime_to_iso,
-    iso_to_datetime,
-    parse_datetime,
-    seconds_to_string,
-    seconds_to_clock,
-    is_summer_time,
-    is_winter_time
-)
-from Library.Utility.Math import equals, truncate, EPSILON
-from Library.Utility.Memory import memory_to_string
 from Library.Utility.Runtime import (
     find_user,
     is_windows,
@@ -72,6 +68,11 @@ from Library.Utility.Runtime import (
     tail_terminal
 )
 from Library.Utility.Path import (
+    inspect_root,
+    inspect_temporary,
+    inspect_persistent,
+    inspect_cached,
+    inspect_destination,
     inspect_separator,
     inspect_file,
     inspect_path,
@@ -115,6 +116,13 @@ from Library.Utility.Path import (
     PathAPI
 )
 from Library.Utility.File import FileAPI
+from Library.Utility.HTML import (
+    formatize,
+    stylize,
+    htmlize,
+    HtmlAPI
+)
+from Library.Utility.Service import ServiceAPI
 from Library.Utility.IO import (
     is_readable,
     is_writable,
@@ -129,24 +137,23 @@ from Library.Utility.IO import (
     copy,
     smartlink
 )
-from Library.Utility.Service import ServiceAPI
 from Library.Utility.Remote import RemoteAPI
 
 __all__ = [
     "Timer", "timer", "profiler",
     "formatize", "stylize", "htmlize", "HtmlAPI",
-    "MISSING",
+    "MISSING", "Missing",
     "isclass", "iscallable", "ismethod", "isproperty", "getclass", "getmro", "getslots", "getclasses",
     "hasmember", "getmember", "hasattribute", "getattribute", "hasmethod", "getmethod", "hasproperty", "getproperty",
     "getvariable", "findvariable",
     "cast", "contains", "format",
-    "EPOCH", "MILLISECOND", "MICROSECOND", "datetime_to_string", "string_to_datetime", "datetime_to_timestamp", "datetime_to_epoch", "epoch_to_datetime", "timestamp_to_datetime", "datetime_to_iso", "iso_to_datetime", "parse_datetime", "seconds_to_string", "seconds_to_clock", "is_summer_time", "is_winter_time",
+    "EPOCH", "HORIZON", "MILLISECOND", "MICROSECOND", "datetime_to_string", "string_to_datetime", "datetime_to_timestamp", "datetime_to_epoch", "epoch_to_datetime", "timestamp_to_datetime", "datetime_to_iso", "iso_to_datetime", "parse_datetime", "seconds_to_string", "seconds_to_clock", "is_summer_time", "is_winter_time",
     "EPSILON", "equals", "truncate",
     "memory_to_string",
     "find_user", "is_windows", "is_linux", "is_mac", "is_local", "is_remote", "is_service",
     "find_ipython", "find_shell", "is_python", "is_ipython", "is_console", "is_terminal", "is_notebook", "find_notebook",
     "find_env_var", "match_env_vars", "find_host_port", "windowless", "terminate", "tail_terminal",
-    "inspect_separator", "inspect_file", "inspect_file_path", "inspect_module", "inspect_module_path",
+    "inspect_root", "inspect_temporary", "inspect_persistent", "inspect_cached", "inspect_destination", "inspect_separator", "inspect_file", "inspect_file_path", "inspect_module", "inspect_module_path",
     "traceback_working", "traceback_working_module", "traceback_working_module_path",
     "traceback_depth", "traceback_depth_file", "traceback_depth_file_path", "traceback_depth_module", "traceback_depth_module_path",
     "traceback_origin", "traceback_origin_file", "traceback_origin_file_path", "traceback_origin_module", "traceback_origin_module_path",

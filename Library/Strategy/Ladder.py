@@ -8,7 +8,7 @@ import yaml
 
 from Library.Logging import LoggingAPI
 from Library.Strategy.Strategy import StrategyAPI
-from Library.Utility.Parameter import numbered
+from Library.Utility.Parameter import Parameter, numbered
 from Library.Utility.Path import inspect_persistent
 
 class LadderAPI:
@@ -61,6 +61,10 @@ class LadderAPI:
                 merged = self.merge(merged, section)
                 trail.append(str(path))
         return merged, trail
+
+    def parameterize(self, strategy: Type[StrategyAPI], kind: str, *rungs: str) -> tuple[Parameter, list]:
+        sections, trail = self.resolve(strategy, kind, *rungs)
+        return Parameter(sections, self.override(strategy, kind, *rungs)), trail
 
     def sources(self, strategy: Type[StrategyAPI], kind: str, *rungs: str) -> dict:
         found = {}
