@@ -23,7 +23,7 @@ from Library.App.V2.Page.Launchpad import LinkAPI, LaunchpadPageAPI
 from Library.App.V2.Page.Login import LoginPageAPI
 from Library.App.V2.Page.Settings import SettingsPageAPI
 from Library.Logging import LoggingAPI
-from Library.Utility.Path import inspect_file, inspect_file_path, traceback_current_module
+from Library.Utility.Path import inspect_file, inspect_file_path, inspect_module, traceback_current_module
 from Library.Utility.Runtime import find_host_port
 from Library.Utility.Typing import MISSING, getmro, iscallable
 
@@ -32,8 +32,9 @@ if TYPE_CHECKING: from Library.Auth import AuthAPI
 class AppAPI(ShellAPI, RouterAPI):
 
     Theme = [dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP]
+    Launchpad: type = LaunchpadPageAPI
     Assets = traceback_current_module(resolve=True) / "Assets"
-    _FRAMEWORK_ = "/_framework"
+    _APPLICATION_ = "/_application"
     _META_ = [{"name": "viewport", "content": "width=device-width, initial-scale=1, viewport-fit=cover"},
               {"name": "color-scheme", "content": "light dark"}]
 
@@ -72,7 +73,7 @@ class AppAPI(ShellAPI, RouterAPI):
         self._ids_ = set()
         self._pages_ = {}
         self._parametrics_ = {}
-        self._assets_ = Path(inspect.getfile(type(self))).parent / "Assets"
+        self._assets_ = inspect_module(inspect.getfile(type(self)), resolve=True) / "Assets"
         self.app = self._compose_()
         if self._auth_ is not None: self._auth_.install(self.app.server, login=self.anchorize(path="/login", relative=True))
         self._log_.debug(lambda: f"Assets Operation: Resolved ({'Application' if self._assets_ != self.Assets else 'Library'})")
@@ -146,25 +147,24 @@ class AppAPI(ShellAPI, RouterAPI):
         page._init_()
 
     def _serve_(self, app: dash.Dash) -> None:
-        assets = self.Assets
+        assets = self._assets_
         def _view_(filename): return flask.send_from_directory(assets, filename)
-        app.server.add_url_rule(f"{self._FRAMEWORK_}/<path:filename>", endpoint=f"framework_{id(self)}", view_func=_view_)
+        app.server.add_url_rule(f"{self._APPLICATION_}/<path:filename>", endpoint=f"application_{id(self)}", view_func=_view_)
 
     def _compose_(self) -> dash.Dash:
-        override = self._assets_.exists() and self._assets_ != self.Assets
+        overlay = self._assets_.exists() and self._assets_ != self.Assets
+        if not overlay: self._assets_ = self.Assets
         external = list(self.Theme)
-        if override: external += [f"{self._FRAMEWORK_}/{css.relative_to(self.Assets).as_posix()}" for css in sorted(self.Assets.rglob("*.css"))]
-        else: self._assets_ = self.Assets
-        app = dash.Dash(self.__class__.__name__, assets_folder=str(self._assets_), external_stylesheets=external, suppress_callback_exceptions=True, title=self._title_, update_title=None, meta_tags=self._META_)
-        if override: self._serve_(app)
+        if overlay: external += [f"{self._APPLICATION_}/{sheet.relative_to(self._assets_).as_posix()}" for sheet in sorted(self._assets_.rglob("*.css"))]
+        app = dash.Dash(self.__class__.__name__, assets_folder=str(self.Assets), external_stylesheets=external, suppress_callback_exceptions=True, title=self._title_, update_title=None, meta_tags=self._META_)
+        if overlay: self._serve_(app)
         return app
 
     def asset(self, path: str, url: bool = True) -> str:
         if self._assets_ != self.Assets and (self._assets_ / path).exists():
-            return self.app.get_asset_url(path) if url else self._read_(self._assets_ / path)
+            return f"{self._APPLICATION_}/{path}" if url else self._read_(self._assets_ / path)
         if (self.Assets / path).exists():
-            if not url: return self._read_(self.Assets / path)
-            return f"{self._FRAMEWORK_}/{path}" if self._assets_ != self.Assets else self.app.get_asset_url(path)
+            return self.app.get_asset_url(path) if url else self._read_(self.Assets / path)
         raise RuntimeError(f"Asset Operation: Failed · Due to Missing Asset ({path})")
 
     def __init_ids__(self) -> None:
@@ -241,7 +241,7 @@ class AppAPI(ShellAPI, RouterAPI):
 
 
     def _init_pages_(self) -> None:
-        launchpad = LaunchpadPageAPI(app=self)
+        launchpad = self.Launchpad(app=self)
         self.link(launchpad)
         self.pages()
         self.link(SettingsPageAPI(app=self))

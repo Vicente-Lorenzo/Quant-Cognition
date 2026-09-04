@@ -16,12 +16,21 @@ class LinkAPI:
 class LaunchpadAPI:
 
     _EXTERNAL_ = False
+    _MATRIX_: tuple = ()
+
+    @classmethod
+    def _matrix_(cls) -> dict:
+        if not cls._MATRIX_: return {}
+        columns, rows = (list(cls._MATRIX_) + [None])[:2]
+        style = {"gridTemplateColumns": f"repeat({columns}, minmax(0, 1fr))"} if columns else {}
+        if rows: style["gridTemplateRows"] = f"repeat({rows}, minmax(0, 1fr))"
+        return style
 
     def _launchpad_(self, role=None) -> ContainerAPI:
         tiles = [self._tile_(child, role) for child in self.children if child.button and not child._parametric_]
         if self._EXTERNAL_: tiles.extend(self._link_(link) for link in self.app.apps())
         heading = TextAPI(text=self.button, classname="app-launchpad-title", builder=html.H1)
-        grid = ContainerAPI(builder=html.Div, classname="app-launchpad-grid", elements=tiles) if tiles else TextAPI(text="No applications registered", classname="app-launchpad-empty")
+        grid = ContainerAPI(builder=html.Div, classname="app-launchpad-grid", style=self._matrix_(), elements=tiles) if tiles else TextAPI(text="No applications registered", classname="app-launchpad-empty")
         return ContainerAPI(fluid=True, classname="app-launchpad", elements=[heading, grid])
 
     def _tile_(self, page: PageAPI, role) -> ButtonAPI:
