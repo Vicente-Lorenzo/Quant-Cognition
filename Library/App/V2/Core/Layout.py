@@ -1,8 +1,7 @@
+from dash import html
 from abc import ABC, abstractmethod
 
-from dash import html
-
-from Library.App.V2.Component import Component, ContainerAPI, IconAPI, TextAPI
+from Library.App.V2.Component.Component import Component, ContainerAPI, IconAPI, TextAPI
 
 class LayoutAPI(ABC):
 

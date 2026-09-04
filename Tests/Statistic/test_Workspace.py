@@ -1,6 +1,31 @@
 from datetime import datetime
 
-from Library.Statistic import (underwater, overwater, periodic, rolling, covariant, distribution, diurnal, tabulate, transpose, trace, stitch, excursion, walkforward, headline, compare)
+from Library.Statistic import (
+    BENCHMARK_BETA,
+    BENCHMARK_CORRELATION,
+    BENCHMARK_LABEL,
+    NET_TOTAL_AGGREGATED,
+    NET_TOTAL_INDIVIDUAL,
+    PROFITFACTOR,
+    SHARPERATIO,
+    STATISTICS_METRICS_LABEL,
+    TOTALTRADESVALUE,
+    compare,
+    covariant,
+    distribution,
+    diurnal,
+    excursion,
+    headline,
+    overwater,
+    periodic,
+    rolling,
+    stitch,
+    tabulate,
+    trace,
+    transpose,
+    underwater,
+    walkforward
+)
 from Library.Statistic.Workspace import (
     SeriesType,
     AxisType,
@@ -22,7 +47,7 @@ BARS = [(datetime(2024, 1, 1, hour), 1.0 + hour / 100, 1.02 + hour / 100, 0.99 +
 SERIES = [(datetime(2024, 1, 1, hour), float(hour)) for hour in range(12)]
 _EPOCHS_ = [1704067200, 1704070800, 1704074400, 1704078000, 1704081600, 1704085200, 1704088800, 1704092400, 1704096000, 1704099600, 1704103200, 1704106800]
 _COMPACT_ = {'a': 1.123457, 'b': [2.987654, {'c': 3.141593}], 'd': 'text', 'e': True, 'f': 7}
-_ROWS_ = [{"UID": "a", "Name": "Alpha", "Score": 1}, {"UID": "b", "Name": "Beta", "Score": 2}]
+_ROWS_ = [{"UID": "a", "Name": "Alpha", "Score": 1}, {"UID": "b", "Name": BENCHMARK_BETA, "Score": 2}]
 _UNIQUE_ = [{'time': 1, 'value': 2.0}, {'time': 2, 'value': 3.0}, {'time': 3, 'value': 9.0}]
 _CANDLES_ = [{'time': 1704067200, 'open': 1.0, 'high': 1.02, 'low': 0.99, 'close': 1.01}, {'time': 1704070800, 'open': 1.01, 'high': 1.03, 'low': 1.0, 'close': 1.02}, {'time': 1704074400, 'open': 1.02, 'high': 1.04, 'low': 1.01, 'close': 1.03}, {'time': 1704078000, 'open': 1.03, 'high': 1.05, 'low': 1.02, 'close': 1.04}, {'time': 1704081600, 'open': 1.04, 'high': 1.06, 'low': 1.03, 'close': 1.05}, {'time': 1704085200, 'open': 1.05, 'high': 1.07, 'low': 1.04, 'close': 1.06}, {'time': 1704088800, 'open': 1.06, 'high': 1.08, 'low': 1.05, 'close': 1.07}, {'time': 1704092400, 'open': 1.07, 'high': 1.09, 'low': 1.06, 'close': 1.08}, {'time': 1704096000, 'open': 1.08, 'high': 1.1, 'low': 1.07, 'close': 1.09}, {'time': 1704099600, 'open': 1.09, 'high': 1.11, 'low': 1.08, 'close': 1.1}, {'time': 1704103200, 'open': 1.1, 'high': 1.12, 'low': 1.09, 'close': 1.11}, {'time': 1704106800, 'open': 1.11, 'high': 1.1300000000000001, 'low': 1.1, 'close': 1.12}]
 _LINE_ = [{'time': 1704067200, 'value': 0.0}, {'time': 1704070800, 'value': 1.0}, {'time': 1704074400, 'value': 2.0}, {'time': 1704078000, 'value': 3.0}, {'time': 1704081600, 'value': 4.0}, {'time': 1704085200, 'value': 5.0}, {'time': 1704088800, 'value': 6.0}, {'time': 1704092400, 'value': 7.0}, {'time': 1704096000, 'value': 8.0}, {'time': 1704099600, 'value': 9.0}, {'time': 1704103200, 'value': 10.0}, {'time': 1704106800, 'value': 11.0}]
@@ -257,7 +282,7 @@ def test_excursion_ignores_trades_without_an_entry_price():
 
 def _payload_(name, points, metrics):
     return {"panes": [{"id": "growth", "series": [{"key": "strategy", "name": name, "data": points}]}],
-            "sheets": [{"name": "Net", "columns": [{"name": "Statistical Metrics"}, {"name": "Net Total Metrics (Individual)"}, {"name": "Net Total Metrics (Aggregated)"}],
+            "sheets": [{"name": "Net", "columns": [{"name": STATISTICS_METRICS_LABEL}, {"name": NET_TOTAL_INDIVIDUAL}, {"name": NET_TOTAL_AGGREGATED}],
                         "rows": [[label, individual, aggregated] for label, individual, aggregated in metrics]}]}
 
 def test_diurnal_keeps_the_last_value_of_each_day():
@@ -268,13 +293,13 @@ def test_diurnal_drops_empty_values():
     assert diurnal([{"time": 0, "value": None}, {"time": 0, "value": 5.0}]) == [{"time": 0, "value": 5.0}]
 
 def test_tabulate_reads_the_named_column_not_the_last():
-    payload = _payload_("A", [], [("Nr Total of Trades", "37", "25")])
-    assert tabulate(payload, "Net", "Net Total Metrics (Individual)") == {"Nr Total of Trades": "37"}
-    assert tabulate(payload, "Net") == {"Nr Total of Trades": "25"}
+    payload = _payload_("A", [], [(TOTALTRADESVALUE, "37", "25")])
+    assert tabulate(payload, "Net", NET_TOTAL_INDIVIDUAL) == {TOTALTRADESVALUE: "37"}
+    assert tabulate(payload, "Net") == {TOTALTRADESVALUE: "25"}
 
 def test_tabulate_falls_back_to_the_last_column_when_the_name_is_absent():
-    payload = _payload_("A", [], [("Profit Factor", "1.1", "1.2")])
-    assert tabulate(payload, "Net", "Missing Column") == {"Profit Factor": "1.2"}
+    payload = _payload_("A", [], [(PROFITFACTOR, "1.1", "1.2")])
+    assert tabulate(payload, "Net", "Missing Column") == {PROFITFACTOR: "1.2"}
 
 def test_trace_finds_a_series_and_tolerates_absence():
     payload = _payload_("A", [{"time": 0, "value": 100.0}], [])
@@ -283,13 +308,13 @@ def test_trace_finds_a_series_and_tolerates_absence():
     assert trace(payload, "missing", "strategy") == []
 
 def test_compare_builds_one_series_per_run_and_a_metric_row():
-    first = _payload_("A", [{"time": 0, "value": 100.0}, {"time": 86400, "value": 110.0}], [("Profit Factor", "1.1", "9.9")])
-    second = _payload_("B", [{"time": 0, "value": 100.0}, {"time": 86400, "value": 90.0}], [("Profit Factor", "0.8", "9.9")])
+    first = _payload_("A", [{"time": 0, "value": 100.0}, {"time": 86400, "value": 110.0}], [(PROFITFACTOR, "1.1", "9.9")])
+    second = _payload_("B", [{"time": 0, "value": 100.0}, {"time": 86400, "value": 90.0}], [(PROFITFACTOR, "0.8", "9.9")])
     space = compare([("Run A", first), ("Run B", second)])
     assert [series.name for series in space.panes[0].series] == ["Run A", "Run B"]
     sheet = space.sheets[0]
     assert [column.name for column in sheet.columns] == ["Metric", "Run A", "Run B"]
-    assert sheet.rows == [["Profit Factor", "1.1", "0.8"]]
+    assert sheet.rows == [[PROFITFACTOR, "1.1", "0.8"]]
 
 def test_compare_skips_runs_without_a_curve():
     payload = _payload_("A", [{"time": 0, "value": 100.0}], [])
@@ -332,15 +357,15 @@ def test_cell_falls_back_to_exponent_at_the_extremes():
     assert PointAPI.cell(1e16) == "1e+16"
 
 def test_transpose_reads_a_row_per_entity_sheet():
-    payload = {"sheets": [{"name": "Benchmark",
-                           "columns": [{"name": "Benchmark"}, {"name": "Beta"}, {"name": "Correlation"}],
+    payload = {"sheets": [{"name": BENCHMARK_LABEL,
+                           "columns": [{"name": BENCHMARK_LABEL}, {"name": BENCHMARK_BETA}, {"name": BENCHMARK_CORRELATION}],
                            "rows": [["Strategy", "", ""], ["Buy & Hold", "0.13", "0.55"]]}]}
-    assert transpose(payload, "Benchmark") == {"Beta": "0.13", "Correlation": "0.55"}
+    assert transpose(payload, BENCHMARK_LABEL) == {BENCHMARK_BETA: "0.13", BENCHMARK_CORRELATION: "0.55"}
 
 def test_transpose_returns_nothing_when_only_the_skipped_row_exists():
-    payload = {"sheets": [{"name": "Benchmark", "columns": [{"name": "Benchmark"}, {"name": "Beta"}],
+    payload = {"sheets": [{"name": BENCHMARK_LABEL, "columns": [{"name": BENCHMARK_LABEL}, {"name": BENCHMARK_BETA}],
                            "rows": [["Strategy", ""]]}]}
-    assert transpose(payload, "Benchmark") == {}
+    assert transpose(payload, BENCHMARK_LABEL) == {}
     assert transpose(payload, "Missing") == {}
 
 def test_overwater_measures_recovery_since_the_last_peak():
@@ -361,15 +386,15 @@ def test_compare_prefers_net_metrics_over_a_benchmark_of_the_same_name():
     payload = {"panes": [{"id": "growth", "series": [{"key": "strategy", "name": "A",
                                                       "data": [{"time": 0, "value": 100.0}]}]}],
                "sheets": [{"name": "Net",
-                           "columns": [{"name": "Statistical Metrics"}, {"name": "Net Total Metrics (Individual)"}],
-                           "rows": [["Sharpe Ratio Annualized", "0.9"]]},
-                          {"name": "Benchmark",
-                           "columns": [{"name": "Benchmark"}, {"name": "Sharpe Ratio Annualized"}, {"name": "Beta"}],
+                           "columns": [{"name": STATISTICS_METRICS_LABEL}, {"name": NET_TOTAL_INDIVIDUAL}],
+                           "rows": [[SHARPERATIO, "0.9"]]},
+                          {"name": BENCHMARK_LABEL,
+                           "columns": [{"name": BENCHMARK_LABEL}, {"name": SHARPERATIO}, {"name": BENCHMARK_BETA}],
                            "rows": [["Strategy", "", ""], ["Buy & Hold", "-0.3", "0.13"]]}]}
     sheet = compare([("Run A", payload)]).sheets[0]
     values = {row[0]: row[1] for row in sheet.rows}
-    assert values["Sharpe Ratio Annualized"] == "0.9"
-    assert values["Beta"] == "0.13"
+    assert values[SHARPERATIO] == "0.9"
+    assert values[BENCHMARK_BETA] == "0.13"
 
 def _fold_(index: int, opening: float, closing: float, month: int) -> dict:
     return {"Fold": index, "Parameters": f"Baseline=EMA/{index}", "Start": datetime(2020, month, 1),

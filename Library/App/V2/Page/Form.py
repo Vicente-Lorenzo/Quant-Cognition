@@ -1,9 +1,9 @@
 from typing import Generic
 
 from Library.App.V2 import AppType
-from Library.App.V2.Callback import ComponentID
-from Library.App.V2.Component import Component, ButtonAPI, ContainerAPI, IconAPI, MarkdownAPI, PaginatorAPI, TextAPI
-from Library.App.V2.Page import PageAPI
+from Library.App.V2.Core.Callback import ComponentID
+from Library.App.V2.Component.Component import Component, ButtonAPI, ContainerAPI, IconAPI, MarkdownAPI, PaginatorAPI, TextAPI
+from Library.App.V2.Page.Page import PageAPI
 
 class FormAPI(PageAPI, Generic[AppType]):
 

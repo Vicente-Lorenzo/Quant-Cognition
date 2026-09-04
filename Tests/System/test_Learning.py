@@ -13,7 +13,8 @@ from Library.Statistic.Label import (
     NET_BUY_AGGREGATED,
     NET_SELL_AGGREGATED,
     NET_TOTAL_AGGREGATED,
-    STATISTICS_METRICS_LABEL
+    STATISTICS_METRICS_LABEL,
+    TOTALTRADESVALUE
 )
 from Library.Strategy.Model.Reward import RewardType
 from Library.Strategy.Strategy import Threshold
@@ -333,10 +334,10 @@ def test_metric_reads_buy_and_sell_columns(tmp_path):
     _reset_(tmp_path)
     harness = _make_(episodes=1)
     harness.portfolio = SimpleNamespace(Equity=10000.0, InitialBalance=10000.0)
-    harness.statistics = pl.DataFrame({STATISTICS_METRICS_LABEL: ["Nr Total of Trades"], NET_BUY_AGGREGATED: [7.0], NET_SELL_AGGREGATED: [5.0], NET_TOTAL_AGGREGATED: [12.0]})
-    assert harness._metric_("Nr Total of Trades", NET_BUY_AGGREGATED) == 7.0
-    assert harness._metric_("Nr Total of Trades", NET_SELL_AGGREGATED) == 5.0
-    assert harness._metric_("Nr Total of Trades") == 12.0
+    harness.statistics = pl.DataFrame({STATISTICS_METRICS_LABEL: [TOTALTRADESVALUE], NET_BUY_AGGREGATED: [7.0], NET_SELL_AGGREGATED: [5.0], NET_TOTAL_AGGREGATED: [12.0]})
+    assert harness._metric_(TOTALTRADESVALUE, NET_BUY_AGGREGATED) == 7.0
+    assert harness._metric_(TOTALTRADESVALUE, NET_SELL_AGGREGATED) == 5.0
+    assert harness._metric_(TOTALTRADESVALUE) == 12.0
 
 def test_parallel_payload_is_picklable(tmp_path):
     _reset_(tmp_path)

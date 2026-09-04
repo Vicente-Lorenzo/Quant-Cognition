@@ -1,10 +1,16 @@
+import uuid
 from typing import Generic
 from typing_extensions import Self
 
+import dash
+from dash import html
+import dash_bootstrap_components as dbc
+from dash.exceptions import PreventUpdate
+
 from Library.App.V2 import AppType
-from Library.App.V2.Component import Component, ComponentAPI, StorageAPI
-from Library.App.V2.Callback import ComponentID
-from Library.Logging import HandlerLoggingAPI
+from Library.App.V2.Component.Component import Component, ComponentAPI, ButtonAPI, IconAPI, IntervalAPI, StorageAPI, SwitchAPI, TextAPI
+from Library.App.V2.Core.Callback import ComponentID, Output, Input, State, InjectionType, serverside_callback
+from Library.Logging import LoggingAPI
 
 class PageAPI(Generic[AppType]):
 
@@ -33,7 +39,7 @@ class PageAPI(Generic[AppType]):
                  add_forward_parent: bool = False,
                  add_forward_children: bool = True,
                  parametric: bool = False) -> None:
-        self._log_ = HandlerLoggingAPI(Class=self.__class__.__name__, Subclass="Page Management")
+        self._log_ = LoggingAPI("Page Management")
         self.app = app
         self.path = path
         self.button = button
@@ -63,9 +69,35 @@ class PageAPI(Generic[AppType]):
         if element is None: return []
         return list(element) if isinstance(element, (tuple, list)) else [element]
 
+    @staticmethod
+    def _icon_(name: str, label: str = None, tint: str = None) -> list[ComponentAPI]:
+        parts = [IconAPI(icon=name, classname=f"icon icon-{tint}") if tint else IconAPI(icon=name)]
+        if label is not None: parts.append(TextAPI(text=label))
+        return parts
+
+    @staticmethod
+    def toolbar(buttons: list, classname: str = "table-toolbar") -> Component:
+        built = []
+        for button in buttons: built.extend(button.build() if isinstance(button, ComponentAPI) else [button])
+        return html.Div(built, className=classname)
+
     def identify(self, *, page: str = None, type: str, name: str, portable: str = "", **kwargs) -> dict:
         page = page or self.endpoint or "global"
         return self.app.identify(page=page, type=type, name=name, portable=portable, **kwargs)
+
+    def _help_(self, help: str) -> list:
+        self._helps_ = getattr(self, "_helps_", 0) + 1
+        identifier = self.register(type="icon", name=f"help-{self._helps_}")
+        return IconAPI(id=identifier, icon="bi bi-question-circle", classname="app-help", tooltip=help, placement="right").build()
+
+    def _field_(self, label: str, control, help: str = None) -> html.Div:
+        caption = [dbc.Label(label)]
+        if help: caption += self._help_(help)
+        control = control if isinstance(control, list) else [control]
+        return html.Div([html.Div(caption, className="app-field-label"), *control], className="app-field")
+
+    def _switch_(self, id: dict, label: str, value, help: str) -> html.Div:
+        return html.Div([*SwitchAPI(id=id, label=label, value=value).build(), *self._help_(help)], className="app-switch-field")
 
     def register(self, *, page: str = None, type: str, name: str, portable: str = "", **kwargs) -> dict:
         page = page or self.endpoint or "global"
@@ -202,3 +234,57 @@ class PageAPI(Generic[AppType]):
 
     def __repr__(self) -> str:
         return repr(f"{self.button or self.__class__.__name__} @ {self.endpoint}")
+
+class RefreshAPI:
+
+    RELOAD_STORE_ID: ComponentID | dict = ComponentID()
+    FINGERPRINT_STORE_ID: ComponentID | dict = ComponentID()
+    INTERVAL_ID: ComponentID | dict = ComponentID()
+    REFRESH_BTN: ComponentID | dict = ComponentID()
+
+    _POLL_ = 10000
+
+    def _refresh_ids_(self) -> None:
+        self.RELOAD_STORE_ID = self.register(type="store", name="reload")
+        self.FINGERPRINT_STORE_ID = self.register(type="store", name="fingerprint")
+        self.INTERVAL_ID = self.register(type="interval", name="poll")
+        self.REFRESH_BTN = self.register(type="button", name="refresh")
+
+    def _fingerprint_(self):
+        return None
+
+    def _refresh_button_(self) -> ButtonAPI:
+        return ButtonAPI(id=self.REFRESH_BTN, label=self._icon_("bi bi-arrow-clockwise", "Refresh"), background="secondary", tooltip="Reload from the database")
+
+    def _polling_(self, poll: bool = True) -> list[Component]:
+        elements = [StorageAPI(id=self.RELOAD_STORE_ID, data=None), StorageAPI(id=self.FINGERPRINT_STORE_ID, data=None)]
+        if poll and self._POLL_: elements.append(IntervalAPI(id=self.INTERVAL_ID, interval=self._POLL_, intervals=0))
+        return elements
+
+    @serverside_callback(
+        Output(RELOAD_STORE_ID, "data"),
+        Output(FINGERPRINT_STORE_ID, "data"),
+        on_enter=InjectionType.Hidden,
+    )
+    def _enter_(self):
+        return uuid.uuid4().hex, (self._fingerprint_() or dash.no_update)
+
+    @serverside_callback(
+        Output(RELOAD_STORE_ID, "data"),
+        Input(REFRESH_BTN, "n_clicks"),
+        on_click=InjectionType.Hidden,
+    )
+    def _refresh_(self, clicks):
+        return uuid.uuid4().hex
+
+    @serverside_callback(
+        Output(RELOAD_STORE_ID, "data"),
+        Output(FINGERPRINT_STORE_ID, "data"),
+        Input(INTERVAL_ID, "n_intervals"),
+        State(FINGERPRINT_STORE_ID, "data"),
+    )
+    def _tick_(self, intervals, previous):
+        if not intervals: raise PreventUpdate
+        token = self._fingerprint_()
+        if token is not None and token == previous: raise PreventUpdate
+        return uuid.uuid4().hex, (dash.no_update if token is None else token)

@@ -1,17 +1,15 @@
 from __future__ import annotations
 
+import dash
 from enum import Enum
 from functools import wraps
+from typing_extensions import Self
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Callable
 
-import dash
-from typing_extensions import Self
-
-from Library.App.V2.Component import Component
 from Library.Utility.Typing import hasattribute, getattribute
 
-if TYPE_CHECKING: from Library.App.V2 import AppAPI, PageAPI
+if TYPE_CHECKING: from Library.App.V2 import AppAPI, PageAPI, Component
 
 class ComponentID:
 
@@ -29,7 +27,7 @@ class Trigger(ABC):
 
     @abstractmethod
     def build(self, context: AppAPI | PageAPI) -> tuple[dict, str]:
-        from Library.App.V2.Page import PageAPI
+        from Library.App.V2.Page.Page import PageAPI
         trigger = self.__class__.__name__
         component = self.component.name if isinstance(self.component, ComponentID) else self.component
         if isinstance(component, dict):

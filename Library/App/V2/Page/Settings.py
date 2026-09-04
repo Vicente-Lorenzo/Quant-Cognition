@@ -1,9 +1,10 @@
 from dash import dcc, html
 import dash_bootstrap_components as dbc
 
-from Library.App.V2.Callback import ComponentID, Output, Input, State, InjectionType, clientside_callback
-from Library.App.V2.Component import ButtonAPI, ContainerAPI, IconAPI, TextAPI
-from Library.App.V2.Page import PageAPI
+from Library.App.V2.Core.Identity import GlobalAPI
+from Library.App.V2.Core.Callback import ComponentID, Output, Input, State, InjectionType, clientside_callback
+from Library.App.V2.Component.Component import ButtonAPI, ContainerAPI, IconAPI, TextAPI
+from Library.App.V2.Page.Page import PageAPI
 
 class SettingsPageAPI(PageAPI):
 
@@ -78,7 +79,7 @@ class SettingsPageAPI(PageAPI):
         return self.app.asset("Callbacks/Tab.js", url=False)
 
     @clientside_callback(
-        Output("GLOBAL_LOCATION_ID", "hash"),
+        Output(GlobalAPI.GLOBAL_LOCATION_ID, "hash"),
         Input(SETTINGS_TABS_ID, "active_tab"),
     )
     def _settings_async_hash_callback_(self):
@@ -88,16 +89,16 @@ class SettingsPageAPI(PageAPI):
         Output(SETTINGS_MEMORY_EDITOR_ID, "value"),
         Output(SETTINGS_SESSION_EDITOR_ID, "value"),
         Output(SETTINGS_LOCAL_EDITOR_ID, "value"),
-        Input("GLOBAL_MEMORY_STORAGE_ID", "data"),
-        Input("GLOBAL_SESSION_STORAGE_ID", "data"),
-        Input("GLOBAL_LOCAL_STORAGE_ID", "data"),
+        Input(GlobalAPI.GLOBAL_MEMORY_STORAGE_ID, "data"),
+        Input(GlobalAPI.GLOBAL_SESSION_STORAGE_ID, "data"),
+        Input(GlobalAPI.GLOBAL_LOCAL_STORAGE_ID, "data"),
         on_init=InjectionType.Hidden
     )
     def _settings_async_load_callback_(self):
         return self.app.asset("Callbacks/Stringify.js", url=False)
 
     @clientside_callback(
-        Output("GLOBAL_MEMORY_STORAGE_ID", "data"),
+        Output(GlobalAPI.GLOBAL_MEMORY_STORAGE_ID, "data"),
         Input(SETTINGS_MEMORY_SAVE_ID, "n_clicks"),
         State(SETTINGS_MEMORY_EDITOR_ID, "value"),
         on_click=InjectionType.Hidden
@@ -106,7 +107,7 @@ class SettingsPageAPI(PageAPI):
         return self.app.asset("Callbacks/Parse.js", url=False)
 
     @clientside_callback(
-        Output("GLOBAL_SESSION_STORAGE_ID", "data"),
+        Output(GlobalAPI.GLOBAL_SESSION_STORAGE_ID, "data"),
         Input(SETTINGS_SESSION_SAVE_ID, "n_clicks"),
         State(SETTINGS_SESSION_EDITOR_ID, "value"),
         on_click=InjectionType.Hidden
@@ -115,7 +116,7 @@ class SettingsPageAPI(PageAPI):
         return self.app.asset("Callbacks/Parse.js", url=False)
 
     @clientside_callback(
-        Output("GLOBAL_LOCAL_STORAGE_ID", "data"),
+        Output(GlobalAPI.GLOBAL_LOCAL_STORAGE_ID, "data"),
         Input(SETTINGS_LOCAL_SAVE_ID, "n_clicks"),
         State(SETTINGS_LOCAL_EDITOR_ID, "value"),
         on_click=InjectionType.Hidden

@@ -1,7 +1,7 @@
 from dash import dcc, html
 
-from Library.App.V2.Component import Component, IconAPI, TextAPI, InputAPI, ButtonAPI
-from Library.App.V2.Page import PageAPI
+from Library.App.V2.Component.Component import Component, IconAPI, TextAPI, InputAPI, ButtonAPI
+from Library.App.V2.Page.Page import PageAPI
 
 class LoginPageAPI(PageAPI):
 

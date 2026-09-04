@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from abc import ABC
 from typing import Any, Callable
-
 from dash.exceptions import PreventUpdate
 
-from Library.App.V2.Callback import Input, Output, State, InjectionType
+from Library.App.V2.Core.Callback import Input, Output, State, InjectionType
 from Library.App.V2.Session import TriggerAPI
 
 class InjectionAPI(ABC):
@@ -51,8 +50,7 @@ class OnClickInjectionAPI(InjectionAPI):
 
     @staticmethod
     def _guard_(payload: dict) -> None:
-        clicks = payload["original_inputs"][0] if payload["original_inputs"] else None
-        if not clicks: raise PreventUpdate
+        if not any(payload["original_inputs"] or ()): raise PreventUpdate
 
 class OnCleanInjectionAPI(InjectionAPI, ABC):
 
