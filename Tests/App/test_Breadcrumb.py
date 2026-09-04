@@ -1,4 +1,4 @@
-from Library.App.V2.Breadcrumb import BreadcrumbAPI, CrumbAPI
+from Library.App.V2.Component.Breadcrumb import BreadcrumbAPI, CrumbAPI
 
 def test_crumb_resolves_a_pair():
     crumb = CrumbAPI.resolve(("Workflows", "/scheduler/workflows"))

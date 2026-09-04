@@ -5,7 +5,7 @@ import traceback
 from abc import ABC
 from typing import Callable
 
-from Library.Utility.Statistic import Timer
+from Library.Utility.Profiler import Timer
 from Library.Utility.Typing import MISSING, Missing
 
 

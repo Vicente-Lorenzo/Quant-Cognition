@@ -1,5 +1,5 @@
-from Library.App.V2.Workspace import WorkspaceAPI
-from Library.App.V2.Lightweight import LightweightChartAPI, LightweightTableAPI
+from Library.Statistic.Workspace import WorkspaceAPI
+from Library.App.V2.Lightweight.Lightweight import LightweightChartAPI, LightweightTableAPI
 
 def test_chart_component_builds_host_and_carrier():
     built = LightweightChartAPI(id={"name": "chart"}, carrier={"name": "carrier"}, selection={"name": "state"}, workspace="demo", payload=WorkspaceAPI(title="W")).build()

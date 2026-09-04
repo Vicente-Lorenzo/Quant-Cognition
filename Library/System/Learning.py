@@ -21,7 +21,7 @@ from Library.Utility.Enumeration import EnumerationAPI
 from Library.Universe.Contract import CommissionType, SpreadType, SwapType
 from Library.Utility.IO import mkdir, write_json
 from Library.Utility.Progress import ProgressAPI
-from Library.Utility.Statistic import timer
+from Library.Utility.Profiler import timer
 from Library.Utility.Typing import Missing
 
 if TYPE_CHECKING:

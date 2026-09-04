@@ -17,7 +17,7 @@ from Library.Universe.Security import SecurityAPI
 from Library.Universe.Timeframe import TimeframeAPI
 from Library.Utility.Parameter import Parameter
 from Library.Utility.Progress import ProgressAPI
-from Library.Utility.Statistic import timer
+from Library.Utility.Profiler import timer
 from Library.Utility.Typing import MISSING, Missing
 
 class OptimizationAPI(BacktestingAPI):

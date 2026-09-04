@@ -11,7 +11,7 @@ from Library.Scheduler.Executor import ExecutorAPI
 from Library.System.System import SystemAPI
 from Library.Utility.File import PruneAPI
 from Library.Utility.Path import inspect_cached, inspect_temporary
-from Library.Utility.Statistic import PROFILES
+from Library.Utility.Profiler import PROFILES
 
 _DAYS_: int = 30
 

@@ -1,4 +1,4 @@
-from Library.App.V2.Field import ControlType, FieldAPI
+from Library.App.V2.Component.Field import ControlType, FieldAPI
 
 _SPEC_ = (
     FieldAPI(name="uid", label="UID", identity=True),

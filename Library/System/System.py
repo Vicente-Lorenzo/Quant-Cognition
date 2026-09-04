@@ -106,7 +106,7 @@ from Library.Universe.Security import SecurityAPI
 from Library.Utility.Enumeration import EnumerationAPI
 from Library.Utility.Path import inspect_destination
 from Library.Utility.Service import ServiceAPI
-from Library.Utility.Statistic import Timer
+from Library.Utility.Profiler import Timer
 
 if TYPE_CHECKING:
     from Library.Engine import MachineAPI
@@ -367,7 +367,7 @@ class SystemAPI(ServiceAPI, ABC):
         return {}
 
     def _plot_(self, portfolio: PortfolioAPI, account: Union[AccountAPI, None], start, stop, benchmarks: dict, tables: dict) -> None:
-        from Library.App.V2.Workspace import backtest
+        from Library.Statistic import backtest
         equity, balance = self._curves_(portfolio)
         ticker = self._security_.Ticker.UID if self._security_ and self._security_.Ticker else "Security"
         title = f"{self.__class__.__name__} · {self._strategy_.__name__} · {ticker} {self._timeframe_.UID} · {start} → {stop}"

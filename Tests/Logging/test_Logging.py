@@ -28,13 +28,13 @@ def test_lambda_is_called_exactly_once_for_many_sinks(recorder):
     log = LoggingAPI("Once")
     log.debug(lambda: calls.append(1) or "built")
     assert calls == [1]
-    assert len(recorder.written) == 1
+    assert len(recorder.matching("built")) == 1
 
 def test_plain_string_content_is_accepted(recorder):
     recorder.set_level(VerboseLevel.Debug)
     log = LoggingAPI("Plain")
     log.info("Plain Message: Delivered")
-    assert "Plain Message: Delivered" in recorder.written[0]
+    assert recorder.matching("Plain Message: Delivered")
 
 @pytest.mark.parametrize("method,level", [
     ("debug", VerboseLevel.Debug), ("info", VerboseLevel.Info), ("alert", VerboseLevel.Alert),
@@ -43,7 +43,8 @@ def test_every_level_method_emits_its_level(recorder, method, level):
     recorder.set_level(VerboseLevel.Debug)
     log = LoggingAPI("Levels")
     getattr(log, method)(lambda: "message")
-    assert recorder.formatted[0][0] is level
+    mine = [entry for entry in recorder.formatted if entry[4] == "message"]
+    assert mine and mine[0][0] is level
 
 def test_gating_is_per_level(recorder):
     recorder.set_level(VerboseLevel.Warning)
@@ -54,7 +55,8 @@ def test_gating_is_per_level(recorder):
     log.warning(lambda: "kept")
     log.error(lambda: "kept")
     log.exception(lambda: "kept")
-    assert len(recorder.written) == 3
+    assert len(recorder.matching("kept")) == 3
+    assert recorder.matching("dropped") == []
 
 def test_silent_sink_receives_nothing(recorder):
     recorder.set_level(VerboseLevel.Silent)
@@ -70,22 +72,21 @@ def test_per_sink_levels_route_independently(recorder, lines):
     log = LoggingAPI("Routing")
     log.debug(lambda: "debug only to file")
     log.error(lambda: "error to both")
-    assert len(recorder.written) == 1
-    assert "error to both" in recorder.written[0]
+    assert len(recorder.matching("error to both")) == 1
+    assert recorder.matching("debug only to file") == []
     assert len(lines()) == 2
 
 def test_writing_to_a_single_sink_directly(recorder):
     recorder.set_level(VerboseLevel.Debug)
     recorder.write(VerboseLevel.Info, "moment", "", "", "direct")
-    assert recorder.written == ["moment - Info - direct"]
+    assert "moment - Info - direct" in recorder.written
 
 def test_shared_tags_appear_before_level(recorder):
     recorder.set_level(VerboseLevel.Debug)
     LoggingAPI.set_shared_tags("EURUSD", "H1")
     log = LoggingAPI("Tagged")
     log.info(lambda: "message")
-    assert recorder.written[0].startswith("")
-    assert " - EURUSD - H1 - Info - test_Logging - Tagged - message" in recorder.written[0]
+    assert recorder.matching(" - EURUSD - H1 - Info - test_Logging - Tagged - message")
 
 def test_shared_tags_are_shared_across_instances(recorder):
     recorder.set_level(VerboseLevel.Debug)
@@ -94,8 +95,8 @@ def test_shared_tags_are_shared_across_instances(recorder):
     second = LoggingAPI("Second")
     first.info(lambda: "a")
     second.info(lambda: "b")
-    assert "SHARED" in recorder.written[0]
-    assert "SHARED" in recorder.written[1]
+    tagged = recorder.matching("First") + recorder.matching("Second")
+    assert len(tagged) == 2 and all("SHARED" in line for line in tagged)
 
 def test_clear_shared_tags(recorder):
     recorder.set_level(VerboseLevel.Debug)
@@ -103,7 +104,7 @@ def test_clear_shared_tags(recorder):
     LoggingAPI.clear_shared_tags()
     log = LoggingAPI("Cleared")
     log.info(lambda: "message")
-    assert "GONE" not in recorder.written[0]
+    assert recorder.matching("Cleared") and recorder.matching("GONE") == []
 
 def test_set_shared_tags_ignores_empty_call(recorder):
     LoggingAPI.set_shared_tags("KEPT")
@@ -114,7 +115,7 @@ def test_instance_tags_appear_after_level(recorder):
     recorder.set_level(VerboseLevel.Debug)
     log = LoggingAPI("Engine", "Backtesting")
     log.info(lambda: "message")
-    assert " - Info - test_Logging - Engine - Backtesting - message" in recorder.written[0]
+    assert recorder.matching(" - Info - test_Logging - Engine - Backtesting - message")
 
 def test_instance_tags_are_independent(recorder):
     recorder.set_level(VerboseLevel.Debug)
@@ -122,8 +123,9 @@ def test_instance_tags_are_independent(recorder):
     second = LoggingAPI("Beta")
     first.info(lambda: "a")
     second.info(lambda: "b")
-    assert "Alpha" in recorder.written[0] and "Beta" not in recorder.written[0]
-    assert "Beta" in recorder.written[1] and "Alpha" not in recorder.written[1]
+    alpha, beta = recorder.matching("Alpha"), recorder.matching("Beta")
+    assert len(alpha) == 1 and "Beta" not in alpha[0]
+    assert len(beta) == 1 and "Alpha" not in beta[0]
 
 def test_given_tags_follow_the_derived_owner(recorder):
     log = LoggingAPI("Explicit", "Purpose")
@@ -247,7 +249,8 @@ def test_log_method_with_explicit_level(recorder):
     recorder.set_level(VerboseLevel.Debug)
     log = LoggingAPI("Explicit")
     log.log(VerboseLevel.Warning, lambda: "explicit level")
-    assert recorder.formatted[0][0] is VerboseLevel.Warning
+    mine = [entry for entry in recorder.formatted if entry[4] == "explicit level"]
+    assert mine and mine[0][0] is VerboseLevel.Warning
 
 def test_log_method_with_silent_is_dropped(recorder):
     recorder.set_level(VerboseLevel.Debug)
@@ -259,7 +262,8 @@ def test_critical_maps_to_exception(recorder):
     recorder.set_level(VerboseLevel.Debug)
     log = LoggingAPI("Critical")
     log.critical(lambda: "critical")
-    assert recorder.formatted[0][0] is VerboseLevel.Exception
+    mine = [entry for entry in recorder.formatted if entry[4] == "critical"]
+    assert mine and mine[0][0] is VerboseLevel.Exception
 
 def test_flush_and_close_are_safe_without_open(recorder):
     log = LoggingAPI("Lifecycle")

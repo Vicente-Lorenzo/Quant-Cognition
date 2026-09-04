@@ -12,7 +12,7 @@ from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Logging import LoggingAPI
-from Library.Utility.Statistic import Timer
+from Library.Utility.Profiler import Timer
 
 if TYPE_CHECKING:
     from Library.Database.Database import DatabaseAPI

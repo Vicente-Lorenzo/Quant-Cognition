@@ -45,7 +45,7 @@ from Library.Utility.IO import mkdir, read_json, write_json
 from Library.Utility.Math import equals, truncate
 from Library.Utility.Path import inspect_cached
 from Library.Utility.Progress import ProgressAPI
-from Library.Utility.Statistic import Timer, timer
+from Library.Utility.Profiler import Timer, timer
 from Library.Utility.Typing import MISSING, Missing
 from Library.System.System import SystemAPI
 
@@ -403,13 +403,13 @@ class BacktestingAPI(SystemAPI):
                               "Settings": settings or {}, "Equity": curve})
 
     def _analysis_(self) -> dict:
-            from Library.App.V2.Workspace import analysis
+            from Library.Statistic import analysis
             _, sheets = analysis(self._journal_, self._folded_)
             return {sheet.name: pl.DataFrame([dict(zip([column.name for column in sheet.columns], row)) for row in sheet.rows], strict=False)
                     for sheet in sheets if sheet.rows}
 
     def _workspace_(self, workspace):
-            from Library.App.V2.Workspace import searchspace
+            from Library.Statistic import searchspace
             return searchspace(workspace=workspace, journal=self._journal_, folds=self._folded_, elected=self._tracked_())
 
     def _account_return_(self) -> float:

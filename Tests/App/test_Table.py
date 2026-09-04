@@ -1,4 +1,4 @@
-from Library.App.V2.Table import TableAPI
+from Library.App.V2.Lightweight.Table import TableAPI
 
 _ROWS_ = [{"UID": "a", "Name": "Alpha", "Score": 1}, {"UID": "b", "Name": "Beta", "Score": 2}]
 

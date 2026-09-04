@@ -3,9 +3,16 @@ from __future__ import annotations
 from typing import Union, TYPE_CHECKING
 from dataclasses import dataclass, field
 
+from Library.Utility.Typing import MISSING
 from Library.Database.Dataclass import DataclassAPI
 from Library.Utility.Enumeration import EnumerationAPI
-from Library.Utility.Typing import MISSING
+from Library.Statistic.Metric import (
+    calculate_log_percentage,
+    calculate_log_return,
+    calculate_log_value,
+    calculate_percentage,
+    calculate_price_return
+)
 
 if TYPE_CHECKING:
     from Library.Universe.Contract import ContractAPI
@@ -14,6 +21,9 @@ class Direction(EnumerationAPI):
     Buy = 1
     Neutral = 0
     Sell = -1
+
+def calculate_direction(value: float) -> Direction:
+    return Direction.Buy if value > 0 else Direction.Sell if value < 0 else Direction.Neutral
 
 class PriceMode(EnumerationAPI):
     Ask = 0
@@ -36,7 +46,6 @@ class PriceAPI(DataclassAPI):
 
     @property
     def LogPrice(self) -> Union[float, None]:
-        from Library.Portfolio.Statistic import calculate_log_value
         return calculate_log_value(self.Price)
     @property
     def InvertedPrice(self) -> Union[float, None]:
@@ -48,23 +57,18 @@ class PriceAPI(DataclassAPI):
         return self.Price - self.Reference
     @property
     def Return(self) -> Union[float, None]:
-        from Library.Portfolio.Statistic import calculate_price_return
         return calculate_price_return(self.Price, self.Reference)
     @property
     def LogReturn(self) -> Union[float, None]:
-        from Library.Portfolio.Statistic import calculate_log_return
         return calculate_log_return(self.Return)
     @property
     def Percentage(self) -> Union[float, None]:
-        from Library.Portfolio.Statistic import calculate_percentage
         return calculate_percentage(self.Return)
     @property
     def LogPercentage(self) -> Union[float, None]:
-        from Library.Portfolio.Statistic import calculate_log_percentage
         return calculate_log_percentage(self.LogReturn)
     @property
     def Direction(self) -> Union[Direction, None]:
-        from Library.Portfolio.Statistic import calculate_direction
         d = self.Distance
         if d is None: return None
         return calculate_direction(d)

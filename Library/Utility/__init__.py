@@ -19,7 +19,7 @@ from Library.Utility.Datetime import (
     is_summer_time,
     is_winter_time
 )
-from Library.Utility.Statistic import (
+from Library.Utility.Profiler import (
     Timer,
     timer,
     profiler

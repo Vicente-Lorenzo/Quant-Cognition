@@ -571,7 +571,7 @@ class PortfolioAPI(DatapointAPI):
 
     @property
     def Direction(self) -> Direction:
-        from Library.Portfolio.Statistic import calculate_direction
+        from Library.Market.Price import calculate_direction
         return calculate_direction(self.NetPnL)
 
     @property

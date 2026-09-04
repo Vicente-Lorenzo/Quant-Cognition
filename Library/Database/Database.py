@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Union, Callable, Any
 
-from Library.Utility.Statistic import Timer
+from Library.Utility.Profiler import Timer
 from Library.Database.Dataframe import DataframeAPI, pd, pl
 from Library.Database.Query import QueryAPI
 from Library.Utility.Service import ServiceAPI

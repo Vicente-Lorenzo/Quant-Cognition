@@ -32,7 +32,7 @@ from Library.System.System import SystemAPI, SystemType
 from Library.Universe.Contract import CommissionMode, SwapMode
 from Library.Universe.Security import SecurityAPI
 from Library.Utility.Datetime import Weekday, timestamp_to_datetime
-from Library.Utility.Statistic import timer
+from Library.Utility.Profiler import timer
 
 if TYPE_CHECKING:
     from Library.Utility.Parameter import Parameter

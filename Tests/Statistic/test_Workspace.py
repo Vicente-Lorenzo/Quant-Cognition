@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from Library.App.V2.Workspace import (
+from Library.Statistic import (underwater, overwater, periodic, rolling, covariant, distribution, diurnal, tabulate, transpose, trace, stitch, excursion, walkforward, headline, compare)
+from Library.Statistic.Workspace import (
     SeriesType,
     AxisType,
     FormatType,
@@ -14,21 +15,7 @@ from Library.App.V2.Workspace import (
     PaneAPI,
     ColumnAPI,
     SheetAPI,
-    WorkspaceAPI,
-    underwater,
-    overwater,
-    periodic,
-    rolling,
-    covariant,
-    distribution,
-    excursion,
-    diurnal,
-    tabulate,
-    transpose,
-    trace,
-    compare,
-    stitch,
-    walkforward
+    WorkspaceAPI
 )
 
 BARS = [(datetime(2024, 1, 1, hour), 1.0 + hour / 100, 1.02 + hour / 100, 0.99 + hour / 100, 1.01 + hour / 100) for hour in range(12)]

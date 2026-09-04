@@ -1,4 +1,4 @@
-from Library.App.V2.Chart import NetworkAPI
+from Library.App.V2.Component.Chart import NetworkAPI
 
 _NODES_ = [{"uid": "A", "color": "#2f9e44", "hover": "A<br>Success"}, {"uid": "B", "color": None, "hover": "B<br>No run"}, {"uid": "C"}]
 _EDGES_ = [("A", "B"), ("B", "C")]

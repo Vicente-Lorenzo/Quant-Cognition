@@ -62,6 +62,9 @@ class RecorderAPI(LoggerAPI):
     def _write_(self, line):
         self.written.append(line)
 
+    def matching(self, needle: str) -> list:
+        return [line for line in self.written if needle in line]
+
 @pytest.fixture
 def recorder():
     sink = RecorderAPI()
