@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Sequence, Type, Union, TYPE_CHECKING
 
+from Library.Statistic.Label import BENCHMARK_LABEL
 from Library.Database import BufferAPI
 from Library.Database.Dataframe import pl
 from Library.Logging import LoggingAPI, VerboseLevel
@@ -435,7 +436,7 @@ class SystemAPI(ServiceAPI, ABC):
             "Deals": deal_view(portfolio.Deals),
             "Net": net,
         }
-        if self.benchmarks is not None and not self.benchmarks.is_empty(): tables["Benchmark"] = self.benchmarks
+        if self.benchmarks is not None and not self.benchmarks.is_empty(): tables[BENCHMARK_LABEL] = self.benchmarks
         try: self._plot_(portfolio, account, start, stop, benchmarks, tables)
         except Exception as error:
             self._log_.error(lambda error=error: f"Plot Operation: Failed · {error}")
