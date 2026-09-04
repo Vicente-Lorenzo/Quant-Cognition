@@ -13,7 +13,7 @@ def test_timeframe_normalize_exact_matches():
     assert TimeframeAPI.normalize("MONTHLY") == "MN1"
     assert TimeframeAPI.normalize("MN") == "MN1"
     assert TimeframeAPI.normalize("MONTH") == "MN1"
-    assert TimeframeAPI.normalize("1M") == "M1" 
+    assert TimeframeAPI.normalize("1M") == "M1"
     assert TimeframeAPI.normalize("HOURLY") == "H1"
     assert TimeframeAPI.normalize("H") == "H1"
     assert TimeframeAPI.normalize("HOUR") == "H1"

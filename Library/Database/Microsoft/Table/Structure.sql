@@ -5,8 +5,8 @@ WITH expected_structure(column_name, data_type, is_pk, is_fk) AS (
     ) AS v(column_name, data_type, is_pk, is_fk)
 ),
 actual_structure AS (
-    SELECT 
-        c.column_name, 
+    SELECT
+        c.column_name,
         c.data_type,
         CASE WHEN pk.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END AS is_pk,
         CASE WHEN fk.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END AS is_fk
@@ -14,8 +14,8 @@ actual_structure AS (
     LEFT JOIN (
         SELECT kcu.COLUMN_NAME
         FROM information_schema.table_constraints tc
-        JOIN information_schema.key_column_usage kcu 
-          ON tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME 
+        JOIN information_schema.key_column_usage kcu
+          ON tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
          AND tc.TABLE_SCHEMA = kcu.TABLE_SCHEMA
         WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
           AND tc.TABLE_SCHEMA = '::schema::'
@@ -24,8 +24,8 @@ actual_structure AS (
     LEFT JOIN (
         SELECT kcu.COLUMN_NAME
         FROM information_schema.table_constraints tc
-        JOIN information_schema.key_column_usage kcu 
-          ON tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME 
+        JOIN information_schema.key_column_usage kcu
+          ON tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
          AND tc.TABLE_SCHEMA = kcu.TABLE_SCHEMA
         WHERE tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
           AND tc.TABLE_SCHEMA = '::schema::'

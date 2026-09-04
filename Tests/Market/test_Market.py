@@ -119,15 +119,15 @@ def test_series_tick_initialization():
         "Volume": [100.0, 200.0]
     })
     market.init_data(data)
-    
+
     assert market.Ticks.Bid.last() == 1.1
     assert market.Ticks.Ask.last() == 1.2
-    
+
     tick = market.Ticks.last(dataframe=False)
     assert isinstance(tick, TickAPI)
     assert tick.Bid.Price == 1.1
     assert tick.Ask.Price == 1.2
-    
+
     # test offset
     market.update_offset(2)
     assert market.Ticks.Bid.last() == 1.0
@@ -145,10 +145,10 @@ def test_series_bar_initialization():
         "Volume": [1000.0]
     })
     market.init_data(data)
-    
+
     assert market.CloseTicks.Bid.last() == 1.1
     assert market.OpenTicks.Ask.last() == 1.1
-    
+
     # over test
     assert market.CloseTicks.Bid.over(market.OpenTicks.Bid) == True
 
@@ -165,7 +165,7 @@ def test_series_group_crossover():
         "Volume": [1000.0, 1000.0]
     })
     market.init_data(data)
-    
+
     res = market.CloseTicks.crossover(market.OpenTicks, dataframe=False)
     df_res = market.CloseTicks.crossover(market.OpenTicks, dataframe=True)
     assert df_res["CloseTick.Ask"][0] == True
@@ -176,8 +176,8 @@ def test_market_update_data():
     t1 = TickAPI(Timestamp=datetime(2020, 1, 1), Security=1, Ask=1.1, Bid=1.0, Volume=100.0)
     data = pl.DataFrame([t1.dict()], strict=False)
     market.init_data(data)
-    
+
     tick = TickAPI(Timestamp=datetime(2020, 1, 2), Security=1, Ask=1.2, Bid=1.1, Volume=200.0)
     market.update_data(tick)
-    
+
     assert market.Ticks.Ask.last() == 1.2

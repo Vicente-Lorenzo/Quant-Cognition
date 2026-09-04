@@ -28,14 +28,14 @@ class StreamingAPI(ServiceAPI):
                 payload = Protobuf.extract(message)
                 if type(payload).__name__ != self._SPOT_EVENT_: return
                 if int(payload.symbolId) not in ids: return
-                
+
                 from Library.Utility.Datetime import timestamp_to_datetime
                 from datetime import timezone
-                
+
                 dt = None
                 if payload.HasField("timestamp"):
                     dt = timestamp_to_datetime(int(payload.timestamp), milliseconds=True).replace(tzinfo=timezone.utc)
-                
+
                 if payload.HasField("bid") or payload.HasField("ask"):
                     tick = TickAPI(
                         SecurityUID=int(payload.symbolId),

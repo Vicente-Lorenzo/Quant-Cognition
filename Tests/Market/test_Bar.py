@@ -36,9 +36,9 @@ def test_bar_initialization(db):
     dt = datetime(2023, 1, 1, 12, 0, 0)
     db.migrate(schema=TickAPI.Schema, table=TickAPI.Table, structure=TickAPI(db=db).Structure)
     bar_args = (
-        sec.UID, 
+        sec.UID,
         tf.UID,
-        dt, 
+        dt,
         None,
         TickAPI(Ask=1.0500, Bid=1.0498),
         TickAPI(Ask=1.0510, Bid=1.0508),

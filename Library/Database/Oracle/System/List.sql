@@ -1,4 +1,4 @@
-SELECT 
+SELECT
     SYS_CONTEXT('USERENV', 'CON_NAME') AS "Database",
     u.username AS "Schema",
     t.table_name AS "Table"

@@ -1,4 +1,4 @@
-SELECT 
+SELECT
     current_database()::text AS "Database",
     n.nspname AS "Schema",
     c.relname AS "Table",

@@ -1,251 +1,416 @@
 # TODOS — Quant Trading Framework
 
-The single planning file. `RULES.md` holds conventions and verified state only; nothing here belongs
-there. Ordered — item 2 is current.
+The single planning file. `RULES.md` holds conventions, traps and verified state; `ARCHITECTURE.md`
+holds design depth. Nothing here belongs in either.
+
+**Current:** finish the uncommitted-code review, commit, then write the thesis in LaTeX (lead with
+the alpha decomposition). The 7-pair campaign is complete — see `Research/CAMPAIGN-7PAIR.md`.
 
 ---
 
-## 1. Logging refactor — DONE 2026-07-30
+## 1. Open engine defects
 
-Delivered. `Library/Logging` went from 12 files / 1031 lines to 6 files, and from 0 tests to 237.
+### 1.1 A backtest contaminates the next one in the same process — mitigated, not fixed
 
-| | before | after |
+Running any backtest mutates the cached `DatasetAPI` in `BacktestingAPI._PRELOAD_CACHE_`, so a later
+run in the same process reads corrupted state. Same candidate, same window, same fresh system object:
+
+| evaluated | Sharpe |
+|---|---|
+| alone in a fresh process | **0.08825151393019111** |
+| after another candidate, same process | **-0.03230736384293977** |
+| after another candidate, with `_PRELOAD_CACHE_.clear()` between | **0.08825151393019111** |
+
+The tape's visible fields are identical before and after (bar/tick counts, sums, shapes, indicator
+presence), so the mutation is **inside the `BarAPI` objects**, not the frames. `copy.deepcopy` of the
+tape raises, so copy-on-reuse is unavailable without first making the dataset copyable.
+
+**Mitigation in place:** `OptimizationAPI._evaluate_` clears the cache before every candidate. Serial
+and 6-worker parallel agree 0 mismatches of 24; 1/8/16 workers give identical selections. Cost is
+real — 192 candidates × 2 folds went 40s → 267s serial because every candidate re-loads the tape;
+8 workers bring it to 34s (7.9×), 16 saturates at 33s.
+
+**Scope is wider than the optimizer.** Any process running more than one backtest is affected. The
+goldens are safe (each runs in its own process). Learning injects its own tapes via `_tapes_` so it
+is probably unaffected — **not verified**. Finding the mutation inside `BarAPI` would let the cache
+be shared again and make the optimizer several times faster.
+
+### 1.2 Currency handling in Portfolio / Sizing / Backtesting
+
+Evidence: `Research/CAMPAIGN-7PAIR.md` §31-33.
+
+**Verified correct — do not "fix" these:** P&L quote→account conversion is correct for every
+base/quote combination under an EUR account, validated against the goldens (`account == base` uses
+`1/price`: EURUSD `30.27/1.0743 = 28.1765` vs recorded `28.1760`; `account == third` uses the tick's
+`QuoteConversion`, and the implied rate **varies per trade** - USDJPY 0.00707514 / 0.00707354 /
+0.00698959 / 0.00704379 - proving a per-tick read rather than a constant). The tick
+conversion data is accurate, EUR-denominated, zero nulls; `QuoteConv / BaseConv` equals `1/price` to
+4 decimals on all seven majors.
+
+**(a) Risk sizing ignores the quote→account conversion.** `calculate_fixed_amount_volume` computes
+`amount / (sl_pips * PipSize)` — `amount` in **account** currency, the stop in **quote** currency, no
+conversion. `PipSize` cancels, so contract tick metadata is not the lever. Effective risk becomes
+`RiskPercentage / price`:
+
+| pair | intended | actual |
 |---|---|---|
-| suppressed record | 271 ns | **128 ns** |
-| emitted record | 4961 ns | **1188 ns** |
-| timestamp render | 1990 ns | **234 ns** |
-| 100k-record CPU-bound workload | 0.532 s | 0.452 s |
+| EURUSD | 1.0% | 0.909% |
+| USDJPY | 1.0% | **0.0067%** |
 
-**What shipped** — `Level` · `Logger` · `Console` · `File` · `Storage` · `Logging`, with `Log.py`
-holding the `Logging.Log` datapoint. Dead sinks (Web · Email · Bucket · Report · Buffer · Telegram)
-deleted; the V1 terminal tab that consumed `web.stream()` removed. `LoggingAPI` subclasses
-`logging.Logger`, so it interoperates with third-party code while its own level methods bypass the
-stdlib record machinery. Files land in `tempfile.gettempdir()/Logs/<entry-point>.log` with rotation
-and retention. `Environment.Retention` sweeps expired files and rows daily.
+On USDJPY the raw volume (133 units at 10 000 balance) falls under `VolumeMin`, which is why DDPG
+could never open a position. **Raising the balance does not help** — risk stays `1/price` because
+volume and balance scale together.
 
-**Two measured findings worth keeping**
+**(b) The USDJPY goldens cannot validate sizing — they are degenerate.** All **781** USDJPY golden
+trades sit at exactly `VolumeMin` (1 distinct volume, 100% at floor) because
+`calculate_normalized_volume` clamps *up*. The byte-identical match proves both engines clamp, not
+that raw sizing agrees. EURUSD spans 2 000-82 000 across 61 distinct volumes and does validate it.
+⇒ **Before regenerating USDJPY goldens, run the same backtest in cTrader with a much larger account
+(e.g. 1 000 000 EUR) so raw volume clears the floor.** If cTrader's volumes stay tiny our engine is
+faithful and must not change; if they come out ~150× larger, the fix is warranted. Re-baselining
+without this test risks anchoring to the wrong reference.
 
-- **Threads lose to the GIL for local sinks.** A CPU-bound Python thread starves a concurrent writer
-  253x, and a drain thread fell 93k records behind. Making the *formatter* cheap (cached-second
-  timestamp, 5.5x) beat making the write *asynchronous* on wall clock, with no queue and no backlog.
-  Async is therefore a per-sink property: console and file are synchronous, `StorageAPI` is not,
-  because a 50-200 us database insert is the one case where blocking is worse.
-- **stdlib cannot be the hot path.** `LogRecord.__init__` alone costs 2097 ns with every tuning knob
-  off, and `QueueHandler.prepare()` formats on the calling thread. Subclassing `logging.Logger` while
-  bypassing `_log`/`makeRecord`/`handle` gives interoperation at 247 ns.
+**(c) Account currency must become generic.** Stored rates convert to EUR only. `quote → account` is
+derivable as `1.0` when `account == quote` and `QuoteConv / BaseConv` when `account == base`, but a
+fourth currency unrelated to the pair (a CHF account trading GBPJPY) needs a cross rate the tick does
+not carry. Needs a designed rate source, not a bolt-on.
 
-**Two real bugs fixed on the way** — `with log:` returned a truthy value from `__exit__` and was
-therefore *swallowing exceptions* (`Setup/Logging.py` used that pattern); and timestamps truncated
-instead of rounding, so `.123` rendered as `.122`.
+**(d) The exposure feature and the order sizer use different formulas.**
+`DDPGObservationAPI._position_features_` normalizes exposure by `ActionAPI.maximum_volume`
+(`SizingMode.Balance`), while orders are sized by `_reference_volume_` (risk-based). They disagree by
+9× on EURUSD/GBPUSD and **238× on USDJPY**, so the feature clips to ±1 above `abs(action)` 0.109 /
+0.112 / **0.004**. On USDJPY the agent is effectively blind to its own position and can only trade
+all-in or flat. Present on every pair; tolerable at 9×, fatal at 238×. **Unify the two formulas.**
 
-**Remaining, optional** — `StorageAPI` is implemented and unit-tested against a fake record but has
-not yet been exercised against a live Postgres run end to end; the Scheduler currently writes its
-durable rows through `ExecutorAPI._open_log_`/`_close_log_` rather than through the sink.
+**The campaign is unaffected** — every published winner runs with active risk sizing (26-124 distinct
+volumes, 0.0-4.1% of trades at the floor). USDJPY alone used a research-only compensation
+(`RiskPercentage` scaled by 119.1994) restoring ~1% risk per trade, exact at window start and
+drifting to ~0.8% by the end. Remove it once (a) is fixed properly.
 
 ---
 
 ## 2. DB-only inputs and outputs
 
 Every input a model consumes and every output it produces moves from scattered files into Postgres.
-Today parameters are a YAML tree in `Library/Parameter/`, weights are torch folders under
-`~/.cache/cAlgo/models` (plus curated copies in `Library/Parameter/`), and results are CSVs under
-`Reports/`. Nothing is queryable, nothing links a run to the exact inputs that produced it, and the
-two most valuable series — the timestamped equity curve and the per-bar signal tape — are only
-persisted *inside* a plot HTML. Target: **parameters in a `Parameter` schema, results in a `Research`
-schema, weights as rows, one `Run` row tying them together**, identical CLI behavior, thin web UI on
-top.
+Today results are CSVs under `Reports/` and the two most valuable series — the timestamped equity
+curve and the per-bar signal tape — are persisted only *inside* a plot HTML. Nothing is queryable and
+nothing links a run to the exact inputs that produced it. Target: **results in a `Research` schema,
+weights as rows, one `Run` row tying them together**, identical CLI behavior, thin web UI on top.
 
-⚠ `Library/Research` (this module) is distinct from the top-level `Research/` folder (frozen campaign
-method and tooling).
+⚠ `Library/Research` (this module) is distinct from the top-level `Research/` folder.
 
-### 2.1 Decisions already made — do not re-litigate
+Parameters are already done — `Library/Strategy/Ladder.py` replaced the YAML tree (defaults →
+provider → category → ticker → timeframe, sparse overrides in the persisted tier).
+
+### 2.1 Decisions made — do not re-litigate
 
 | Decision | Rationale |
 |---|---|
-| DB-first, no CSV interim | the backend must be touched anyway to capture equity/signals; writing to Postgres instead is barely extra work |
-| Weights in the DB (bytea) with a `materialize()` export | self-contained and atomic with results; nets are KBs–MBs. Realtime/cTrader gets a materialize step |
-| Full DB-only, Realtime included | one source of truth; the `Library/Parameter` file tree is archived out |
-| A dedicated `Library/Research` module, not the Scheduler | Scheduler `Task` carries a bare file path with **no arguments column** (`ExecutorAPI._command_` → `[sys.executable, path]`), so it cannot express `python -m Library.System.Main Backtesting --provider ... --start ...` |
-| Runs launch without a daemon | `ManagerAPI.run_task` already proves the pattern; only cron/supervision needs the daemon |
+| DB-first, no CSV interim | the backend must be touched anyway to capture equity/signals |
+| Weights in the DB (bytea) with `materialize()` | self-contained and atomic with results; nets are KBs-MBs |
+| Reuse the Scheduler executor; `Task.Arguments` column | `ExecutorAPI`/`Runner` already own spawn, heartbeat leases, PID tracking, tree-kill, retry, peak-RSS, reaping and log capture. `Research.Run` **references** a `Scheduler.Run` rather than reimplementing it, exactly as `Scheduler.Run` references `Logging.Log` |
+| `Library/Research` owns the domain | parameter snapshots, result series, headline metrics and `KeptAt` are research concepts the Scheduler must not learn |
+| Retention: a nullable `KeptAt` on the Run row | null ⇒ eligible for the 30-day sweep, set ⇒ retained with its full series. One column, one index; no second table, no status enum to keep in sync |
 
-### 2.2 Current state — verified facts to build on
+### 2.2 Current state to build on
 
-**Inputs.** `Library/Parameter/Parameter.py` has `ParameterAPI` (filesystem navigator —
-`__getattr__`/`__getitem__` walk directories, leaf `.yml` → `Parameter`) and `Parameter` (nested dict
-whose `_save_` dumps YAML at the root). Consumers use exactly one shape:
-`Library/System/Main.py:277` → `parameterize[provider.UID][category.UID][ticker.UID][args.timeframe]`,
-then `.Backtesting[strategy]` / `.Learning[strategy]` / `.Realtime[strategy]`. **That is the seam** —
-a DB-backed `ParameterAPI` with an identical access surface converts every consumer untouched.
-Weights: `DDPGStrategyAPI._DEFAULT_WEIGHTS_ = ~/.cache/cAlgo/models`;
-`LearningAPI._weights_directory_()` → `<root>/<Security UID> <Timeframe UID> <Strategy>`; manifest
-written as `<Strategy> Manifest.json` beside it; deployed weights referenced from YAML via
-`SignalManagement.Weights`.
+`SystemAPI._report_` builds `{Orders, Positions, Trades, Deals, Net(+Benchmark)}`, then optionally
+`_plot_`/`_export_`. `net.csv` = 85 metric rows × 6 value columns, label column `Statistical Metrics`; historical files drift
+(`Annualised` vs `Annualized`) so **key by normalized label, never row index**.
 
-**Outputs.** `SystemAPI._report_` (`System.py:346`) builds `{Orders, Positions, Trades, Deals,
-Net(+Benchmark)}`, then optionally `_plot_` and `_export_` (CSVs in
-`Reports/<YYYY-MM-DD HH-MM-SS> <ident>/`). `net.csv` = 85 metric rows × 6 value columns, label column
-`Statistical Metrics`; historical files drift (`Annualised` vs `Annualized`) so **key by normalized
-label, never row index**. `Library/Portfolio/Statistic.py` also exposes
-`generate_realized_report`/`generate_unrealized_report`; only Net is exported today.
-
-**The two series that matter.** `PortfolioAPI.EquityTrack` (`Portfolio.py:544`) returns
-`list[(datetime, float)]` — timestamped, public, **never persisted** (balance is reconstructible from
-`trades.csv`, equity is not). `StrategyAPI._emit_` appends `(timestamp, signal, delta, exposure,
-volume delta)` to `self.Signals`, but **only when `--plot` is passed** (`System.deploy()` line 684
-sets `Recording = self._plotting_`), only **two** strategies call it (`Rule/Trend.py:68`,
-`Hybrid/DDPG.py:431`), and `Signals` resets per `deploy()`.
+**The two series that matter.** `PortfolioAPI.EquityTrack` returns `list[(datetime, float)]` —
+timestamped, public, **never persisted** (balance is reconstructible from `trades.csv`, equity is
+not). `StrategyAPI._emit_` appends `(timestamp, signal, delta, exposure, volume delta)` to
+`self.Signals` but **only when `--plot` is passed**, only two strategies call it, and `Signals` resets
+per `deploy()`.
 
 **Bars** are already in the `Market` schema — do not persist per run.
 
 ### 2.3 Target design
 
-**`Parameter` schema.** Table `Parameter.Parameter`, composite PK
-(`Provider`, `Category`, `Ticker`, `Timeframe`, `File`) + `Content` (JSON of the YAML dict) +
-`UpdatedAt`/`UpdatedBy`; `File` ∈ {Backtesting, Realtime, Learning, Optimization}. Refactor
-`Parameter._save_` to delegate to an injected saver; `ParameterAPI(database="Quant")` becomes the
-default navigator with the **same** walk, keeping `ParameterAPI(path=...)` for migration and tests.
-`Setup/Parameter.py` creates the schema then upserts every `Library/Parameter/**/*.yml` idempotently,
-registered in the `Setup` workflow after `Setup.Scheduler`. **A parity test is mandatory** —
-identical structure for every YAML, and write-back must preserve nested-update semantics.
-
 **`Research` schema — `Library/Research`**
 
 | File | Contents |
 |---|---|
-| `Run.py` | `ResearchStatus` (Waiting/Running/Success/Failure/Cancelled) · `ResearchRunAPI` — `UID` PK, `System`, `Status`, `Arguments` (JSON CLI flags), `Command`, `Strategy`/`Provider`/`Ticker`/`Timeframe`/`Start`/`Stop`, `Parameters` (JSON snapshot of resolved parameters at launch ⇒ full reproducibility), `Owner` FK→Auth.User, `PID`, `ExitCode`, `Log`, `StartedAt`/`StoppedAt`/`Duration`, headline metrics (`Trades`, `NetPnL`, `NetReturn`, `AnnualizedReturn`, `WinRate`, `ProfitFactor`, `Sharpe`, `MaxDrawdown`) |
-| `Result.py` | all `RID` FK→Run **ON DELETE CASCADE**: `TradeResultAPI`, `DealResultAPI`, `PositionResultAPI`, `OrderResultAPI`, `StatisticResultAPI` (long form: RID · Report ∈ {Net, Realized, Unrealized} · Metric · 6 values), `EquityResultAPI` (RID, Timestamp, Equity, Balance), `SignalResultAPI` (RID, Timestamp, Signal, Delta, Exposure, VolumeDelta), `EpisodeResultAPI` (RID, Seed, Fold, Episode, Train, Selection), `BenchmarkResultAPI`, `WeightResultAPI` (RID, Path, Content `pl.Binary`), plus **`ResultAPI`** the writer/reader facade |
-| `Model.py` | `ModelAPI` — named deployable weights registry (`UID` name PK, `RID` FK, Strategy/Provider/Ticker/Timeframe, Description). Parameter `Weights:` keys hold a Model UID instead of a folder path |
+| `Run.py` | `ResearchStatus` · `ResearchRunAPI` — `UID` PK, `System`, `Status`, `Arguments`, `Command`, scope columns, `Parameters` (JSON snapshot at launch ⇒ reproducibility), `Owner` FK→Auth.User, `PID`, `ExitCode`, `Log`, timing, headline metrics |
+| `Result.py` | all `RID` FK→Run **ON DELETE CASCADE**: `TradeResultAPI`, `DealResultAPI`, `PositionResultAPI`, `OrderResultAPI`, `StatisticResultAPI` (long form: RID · Report ∈ {Net, Realized, Unrealized} · Metric · 6 values), `EquityResultAPI`, `SignalResultAPI`, `EpisodeResultAPI`, `BenchmarkResultAPI`, `WeightResultAPI`, plus `ResultAPI` the writer/reader facade |
+| `Model.py` | `ModelAPI` — named deployable weights registry. Parameter `Weights:` keys hold a Model UID instead of a folder path |
 | `Research.py` | `ResearchAPI` manager shaped like `Library/Scheduler/Manager.py`: `command()`, `launch()`, `run()`/`runs()`, `reap()` (PID liveness + `create_time()` guard), `cancel()` (tree-kill), `delete()`, `promote()`, `materialize()`, `fingerprint()` |
-| `Runner.py` | `python -m Library.Research.Runner <uid>` — Popen the CLI with stdout→log, persist Running+PID+StartedAt, wait, **reload the row (a Cancelled status must win)**, write terminal state |
+| `Runner.py` | `python -m Library.Research.Runner <uid>` — Popen the CLI, persist Running+PID, wait, **reload the row (a Cancelled status must win)**, write terminal state |
 
 `Setup/Research.py` provisions after `setup_auth` (FKs), with indexes on `Run(Status)`,
-`Run(System, StartedAt)` and `(RID, Timestamp)` on the series tables. Datapoint recipe to copy:
+`Run(System, StartedAt)` and `(RID, Timestamp)` on the series tables. Recipe to copy:
 `Library/Scheduler/Run.py`.
 
 ### 2.4 Backend contract
 
-1. **`--rid <uid>`** on the shared base parser in `Library/System/Main.py`, threaded into `SystemAPI`
-   like `iid`. Absent (console runs) ⇒ the writer auto-creates its own `Run` row so console runs
-   still enter history.
-2. `ParameterAPI()` construction flips to DB mode (automatic once 2.3 lands).
-3. **At `_report_` time** call `Library.Research.ResultAPI` — import direction is one-way
-   (`System` → `Research`; `Research` must never import `System`): `.trades/.deals/.positions/.orders`,
-   `.statistics(rid, report, df)` for **all three** reports, `.equity(rid, df)` from `EquityTrack`
-   **keeping timestamps**, `.benchmarks(rid, series)`, `.headline(rid, metrics)`.
-4. **Ungate the signal tape** (`System.deploy()` line 684) so it records independently of `--plot`,
-   flush via `.signals(rid, df)`. Consider emitting from `NNFX`/`Netting` so every strategy has one.
-5. **Learning**: `.episode(...)` per episode (replaces log parsing), `.manifest(rid, dict)`,
-   `.weights(rid, dir)` at completion. Parallel seed workers need the rid in their payload. Weight
-   loading moves to Model UID → `materialize()` into the local cache (touches
-   `DDPGStrategyAPI._weights_path_`).
-6. **Retire the CSV export** (and optionally the fat plot HTML) once the DB path is verified.
-7. **Optimization** returns `None` from `_system_` and exits 0 silently; a warning + nonzero exit
-   would help the UI until `OptimizationAPI` lands.
+1. **`--rid <uid>`** on the shared base parser, threaded into `SystemAPI` like `iid`. Absent ⇒ the
+   writer auto-creates its own `Run` row so console runs still enter history.
+2. **At `_report_` time** call `ResultAPI` — import direction is one-way (`System` → `Research`;
+   `Research` must never import `System`): `.trades/.deals/.positions/.orders`,
+   `.statistics(rid, report, df)` for **all three** reports, `.equity(rid, df)` **keeping timestamps**,
+   `.benchmarks`, `.headline`.
+3. **Ungate the signal tape** so it records independently of `--plot`; flush via `.signals(rid, df)`.
+4. **Learning**: `.episode(...)` per episode (replaces log parsing), `.manifest`, `.weights` at
+   completion. Parallel seed workers need the rid in their payload. Weight loading moves to
+   Model UID → `materialize()` into the local cache.
+5. **Retire the CSV export** once the DB path is verified.
 
 ### 2.5 Gotchas (measured)
 
 - **Payload size binds.** A full 11-year H1 run is ~34 MB of JSON across ~10 series (~68k points
   each). Thin to ~2k points/series (≈4 MB) before shipping to a browser; >8 MB wedges the Dash dev
-  server. **Decimation must use one shared time grid** across all series or cross-pane crosshair
-  lookups break (series start at different times because candles include warmup bars).
-- `PlotAPI` emits the **full marker set twice** (candle + close series), doubling the largest part of
-  the payload — fix at the source.
+  server. **Decimation must use one shared time grid** or cross-pane crosshair lookups break.
 - **Series volume:** 11y H1 ≈ 68k equity + 68k signal rows per run. Fine with `(RID, Timestamp)`.
 - **Cancel/finish race:** the Runner must reload before writing terminal state.
 - **PID reuse:** guard reaping with `psutil.Process(pid).create_time() <= StartedAt + grace`; never
   kill on a reap, only mark.
 - **Realtime cutover risk:** DB parameters + materialized weights change the deployed path. Verify on
-  a Simulation run *before* archiving the YAML tree.
+  a Simulation run *before* archiving anything.
 
 ### 2.6 Verification plan
 
-1. `python -m Setup.Parameter` → DB navigator structurally identical to every YAML; write-back parity passes.
-2. `python -m Setup.Research` → schema, tables, indexes exist.
-3. Console smoke: `ResearchAPI.launch("Backtesting", {...EURUSD Daily Trend 2023...})` →
-   Waiting→Running→Success with results rows and non-null headline metrics; cancel a second run
-   mid-flight → Cancelled and the process tree dead.
-4. A real short backtest end to end: CLI reads DB parameters, writes DB results; equity and signal row
-   counts match bar counts.
-5. Learning 1-seed/1-episode: episodes recorded, manifest stored, `promote()` + `materialize()`
+1. `python -m Setup.Research` → schema, tables, indexes exist.
+2. Console smoke: launch → Waiting→Running→Success with result rows and non-null headline metrics;
+   cancel a second run mid-flight → Cancelled and the process tree dead.
+3. A real short backtest end to end: equity and signal row counts match bar counts.
+4. Learning 1-seed/1-episode: episodes recorded, manifest stored, `promote()` + `materialize()`
    round-trips byte-identically in torch.
-6. Full suite green, **then** archive the YAML tree and weight folders out of `Library/Parameter`.
-7. **Re-run `Research/DDPG-EURUSD-H1/verify_lock.py` — the campaign must still reproduce.**
+5. Full suite green.
+6. **Re-run `Research/DDPG-EURUSD-H1/verify_lock.py` — the campaign must still reproduce.**
 
 ### 2.7 Reading list (in order)
 
-1. `Library/System/System.py` — `_report_`, `_export_`, `_plot_`, `_curves_`, `_bars_`, `_markers_`, `deploy`
-2. `Library/Portfolio/Portfolio.py` — `EquityTrack` / `EquityCurve` / `_record_equity_`
-3. `Library/Strategy/Strategy.py` — `_emit_`, `Recording`, `Signals`
-4. `Library/Parameter/Parameter.py` — the navigator seam to preserve
-5. `Library/Scheduler/Run.py` + `Manager.py` + `Executor.py` — datapoint, manager, spawn patterns
-6. `Setup/Scheduler.py` + `Setup/Install.py` — provisioning + workflow registration
-7. `Library/App/V2/Lightweight.py` — the consumer contract (what the UI reads)
-
-**Phase A is already delivered** (`Library/App/V2/Lightweight.py` + assets): TradingView-backed charts
-and a virtualized grid, verified live against a real DDPG payload. Its data shapes are the target
-shapes for 2.3 — matching them makes the UI a thin read layer. Phase C afterwards is three page
-families (Backtesting · Optimization · Learning), each Launch → Runs → Analysis.
+1. `Library/System/System.py` - `_report_`, `_export_`, `_plot_`, `_curves_`, `_bars_`, `deploy`
+2. `Library/Portfolio/Portfolio.py` - `EquityTrack` / `EquityCurve` / `_record_equity_`
+3. `Library/Strategy/Strategy.py` - `_emit_`, `Recording`, `Signals`
+4. `Library/Scheduler/Run.py` + `Manager.py` + `Executor.py` - datapoint, manager, spawn patterns
+5. `Setup/Scheduler.py` + `Setup/Install.py` - provisioning + workflow registration
+6. `Library/App/V2/Lightweight/Lightweight.py` - the consumer contract (what the UI reads)
 
 ---
 
-## 3. G7 majors extension
+## 3. Live connector + tick-only storage + generic currency
 
-Retrain the locked method on all seven Forex majors (professor's ask, no deadline).
-Method: `Research/DDPG-EURUSD-H1/REPRODUCE.md`.
+**Goals.** Backtesting, optimization and learning correct for **any** account, base and quote
+currency, in netting **and** hedging. Minimise the database footprint so it scales to many more
+tickers and providers. Keep Ask/Bid/Volume per tick and OHLC ticks — not just prices — for intrabar
+accuracy, possibly High/Low **Ask and Bid** rather than bid-only pillars. Remove per-tick conversion
+rates without losing engine speed or accuracy. Continuous live capture replacing the per-ticker
+Download-strategy cBot workflow. A connector abstraction: Spotware first (one instance per broker),
+later Bloomberg, Yahoo. Permanently fix P&L and sizing conversions across every offline engine, and
+enable a live trading panel updating per tick.
 
-**Blocked on data — only 2 of 7 are ready.**
+**Measured.** `Market.Tick` is **295 GB** (244 heap + 51 index) over 1 663 564 416 rows — **157
+bytes/row actual against 104 declared**, the difference being header, alignment and varchar. Ranked
+levers:
 
-| pair | H1 bars | status |
+| Lever | Saving | Note |
 |---|---|---|
-| EURUSD | 84 332 (2012-11-11 → 2026-06-25) | ready |
-| USDJPY | 84 188 (2012-11-11 → 2026-06-25) | ready |
-| GBPUSD · AUDUSD · USDCAD · USDCHF · NZDUSD | none | **download required** |
+| **TimescaleDB compression** | **~250 GB** | measured **90.7%** on 1 203 593 real ticks (173 MB -> 16 MB, compress 1 s, one-day read-back of 367 389 rows in 0.03 s). Reads got *faster*. No schema change |
+| drop the 4 conversion columns | 53 GB | 100% redundant — reconstructible from the pair's own price plus EURUSD, worst error **0.036%**, and the same change that makes account currency generic |
+| `Tick_pkey` | 51 GB | the only index, and the sole reason `UID` exists |
+| narrow types | ~23 GB | price -> int32 scaled by PipSize, Security -> int16 |
+| drop `Mid` | 13 GB | derivable from Ask/Bid |
 
-Steps per new pair: Universe ticker/security/contract rows → `Download` ticks + H1 bars →
-parameter tree (`<PAIR>/Hour/Learning.yml`, friendly key `Hour` never `H1`) → re-check commission and
-swap (JPY pip scaling differs) → train ~30 min/pair at the locked protocol.
+TimescaleDB 2.24.0 is available and `shared_preload_libraries` already contains `timescaledb`, but
+**`CREATE EXTENSION` has never been run in `Quant`** — it is enabled in `Tests` only. Tick-only
+storage then lets continuous aggregates derive every timeframe on demand, retiring the `Bar` tables
+(5.9 GB) and unlocking H4/D2/W1 and arbitrary intervals.
 
----
+**Decided.** `UpdatedAt`/`UpdatedBy` stay — they are part of the `DatapointAPI` contract, and
+dropping them would have to be a `Library/Database` opt-out capability, not a one-off. Conversions
+must be rebuilt from **full tick streams, not H1 bars** — accuracy over convenience.
 
-## 4. Blocked on the user (one command)
+**Sequence**, ordered so nothing in flight breaks: compress as-is -> continuous aggregates for bars
+-> the feed-equivalence test -> live connector for capture only -> **then** the v2 schema plus the
+generic currency engine. Doing the last one first is the dangerous path: it touches P&L, sizing and
+the goldens simultaneously.
 
-```
-icacls C:\ProgramData\miniforge3 /grant "Admin:(OI)(CI)M"
-```
+**Risks to what already works.**
 
-`C:\ProgramData\miniforge3` grants Users RX only and the `Quant Scheduler` logon task runs
-**Limited**, so daemon-spawned conda/mamba env updates cannot write — this is why
-`Environment.Update` fails nightly. Keep the task Limited; never elevate the daemon tree. Claude is
-classifier-blocked from running `icacls`.
+- Reconstructed conversions will **not** be bit-identical to stored ones (float ordering), so the six
+  golden reports break. Not a blocker, but it must be a **versioned** change with the goldens
+  deliberately re-baselined against cTrader — never absorbed into an ordinary refactor.
+- **A new cross-stream dependency**: backtesting GBPUSD would require EURUSD ticks loaded. Cache
+  keys, preload sizing and the memory ceiling all need revisiting — the campaign already hit a hard
+  wall here, a cold multi-worker start on an uncached pair exceeding 51 GB.
+- **Hedging is unproven, not merely untested.** It is a stated goal, but everything to date ran
+  `PositionMode.Netting`.
+
+**Blocking unknown:** whether the Spotware Open API and the Download cBot deliver identical ticks.
+Same broker backend, but different transport — untested, and it gates everything downstream. Needs
+an app `clientId`/`clientSecret`, an OAuth `accessToken` and a `ctidTraderAccountId`; the test is to
+capture one symbol for one session through both paths and compare tick counts, timestamps and
+prices. Historical backfill via Open API is not viable (weeks) — keep the existing history and
+capture forward.
+
+**Before any code**, the currency algebra needs its own written design: `account`, `base`, `quote`,
+and the bridge-pair graph for cases where no direct rate exists (a CHF account trading GBPJPY),
+including what happens when a required bridge pair has no data for part of the window.
+
+## 4. Persistence tiers vs OneDrive backup (brainstorm, 2026-09-03)
+
+**The idea.** Relocate the persistence tiers under OneDrive so results and models are backed up, and
+git stays free of binaries.
+
+**Why it came up.** The seven thesis winners' weights (639 KB, 28 files) live *only* in
+`<Data>/Models`, on one machine's local AppData. Verified safe from pruning — `Setup/Retention.py`
+imports only `inspect_cached`/`inspect_temporary` — but "not pruned" is not "backed up".
+
+| tier | files | size | pruned by | OneDrive verdict |
+|---|---|---|---|---|
+| `Temp` | 843 | 3.49 GB | retention, by age | **no** |
+| `Data` | 15 645 | 3.15 GB | **never** | **yes — the good candidate** |
+| `Cache` | 180 | 6.61 GB | retention, by last use | **no** |
+
+- **`Data` — move it.** Write-once, never pruned, holds the only copy of every model and override.
+- **`Temp` — do not move.** Retention deletes from it constantly and OneDrive sync locks make
+  deletion unreliable — purging legacy models on 2026-09-03 raised `PermissionError [WinError 5]` on
+  `rmdir` and needed readonly-clearing plus a 6-attempt backoff; one directory still could not be
+  removed.
+- **`Cache` — do not move.** 6.61 GB of preload tapes on the hot path, and **Files On-Demand can
+  dehydrate a cached tape to a placeholder**, so a backtest's first read would block on a network
+  fetch or fail — a silent, intermittent failure in the worst possible place.
+
+**Blocking design question:** does anything assume `Data` and `Temp` share a volume? Save/Release
+moves a run folder between tiers as a **rename**. Crossing volumes turns that into copy+delete —
+slower and no longer atomic. Resolve this before moving anything.
+
+Also open: whether `inspect_root()` stays derived with only `Data` redirected (a per-tier root is the
+cleaner shape); a `Data/Models` retention policy of its own, since ~1 100 wave-archive models
+(~110 MB) are search byproduct rather than deliverables; and a per-machine namespace if two machines
+ever sync the same `Data`.
 
 ---
 
 ## 5. Queued
 
+- **A real risk-free rate curve.** `--risk-free` is a single constant applied across Sharpe, Sortino,
+  Calmar, Sterling and Jensen's alpha. A constant is wrong over 2014-2026 — it flatters every ratio in
+  the ZIRP years and penalizes them after 2022. Backfill the **ECB deposit facility rate** from 2014
+  (right reference for a EUR account, published daily, free), store it as a dated series beside the
+  market data, and have the statistics read the rate in force at each period. Keep the flag as an
+  override for reproducibility.
+- **`Nr Total of Trades` disagrees with the Trades table by one, in 3 of 6 goldens.** Statistics say
+  113 · 1026 · 710 where `trades.csv` has 112 · 1025 · 709 (goldens 19 · 27 · 36); the other three
+  agree. The `+1` runs hold an open position at the stop date, but the open trade **is** present in
+  the Trades sheet (a `Sell` with empty `ExitPrice`), so "stats count it, the table drops it" does not
+  explain it. Pre-existing — the 2026-07-05 files carry the same numbers. Goldens 19 · 27 · 36 have
+  Aggregated == Individual while 18 has 25 vs 37; explain both in one pass. Moves statistics
+  semantics, so it needs its own focused change.
+- **Profit/risk/ratio columns on `/backtesting` rows** — build as a DB read once §2 lands, not by
+  re-parsing each run's stored plot HTML (user decision 2026-08-20).
+- **An ordinal pane with very few points does not fill the width.** A 3-fold generalization chart leaves
+  space at the right edge — Lightweight clamps bar spacing and setting it explicitly is overridden.
+  Cosmetic, legible, unfixed.
+- **Multi-tab `Open` depends on the browser, not the code.** Browsers permit one popup per gesture;
+  Playwright's Chrome only worked with `--disable-popup-blocking`. The button opens the first in
+  place, attempts the rest, and reports how many were blocked. No code-only fix.
 - **Re-measure emergence at the champion's own ratios.** Phases 14-17 measured ~12.5% at
   `mirror_ratio 0.65 / ratio 0.35`; the champion is **0.50 / 0.30**.
 - **UID encoding Phase 6** — DROP + repopulate Tick/Bar with the encoded scheme; gated on no
-  in-flight downloads. Everything else shipped green.
+  in-flight downloads.
 - **Protocol symmetry** — add 4 target-volume actions (`Increase`/`Decrease`/`Modify`) in logical
   order. Renumbering is safe because `Setup/Enum.py` regenerates the C# side; run `python -m
-  Setup.Enum` after ANY enum edit, rebuild, reinstall the `.algo`, then verify a live round-trip —
-  wire-ID mismatches mis-decode silently.
+  Setup.Enum`, rebuild, reinstall the `.algo`, then verify a live round-trip.
 - **Signal + plot refactor** — Direction+Volume signal on the Strategy base class, thresholds default
-  OFF and one-sided-capable, 8 toggleable lines. Land as a no-op first, prove 651 + goldens, then tune.
-- **Optimization refactor** — rebuild `OptimizationAPI` on the tape seam (`extract()` once →
-  `inject()` across N parameter runs/workers).
+  OFF and one-sided-capable, 8 toggleable lines. Land as a no-op first, prove tests + goldens, then
+  tune.
 - **Report folder seconds-collision** — two exports in the same second overwrite; needs a uniqueness
   suffix.
 - **Strategy state recovery** — persist Signal/Risk machine state across a Live restart
   (`SessionAPI.State` bytes, load at `deploy()`, save on `Shutdown`).
 - **Realtime hardening** (audited 2026-07-02, needs a cTrader session): warmup bars double-added to
-  the market buffer · `BufferAPI._worker_` flush deadlock on connect failure · transport hardening
-  (handle validation, length bounds, batch offset guards) · unused universe buffer · watchdog armed
-  only on `Init` · hung-peer timeout (the current watchdog only detects peer death by PID).
-- **`receive_update_security`** — parse the C# security payload to enrich `SecurityAPI` (pip size,
-  commission).
+  the market buffer · `BufferAPI._worker_` flush deadlock on connect failure · transport hardening ·
+  unused universe buffer · watchdog armed only on `Init` · hung-peer timeout.
+- **`receive_update_security`** — parse the C# security payload to enrich `SecurityAPI`.
 - **Dataframe dtype preservation + FK-aware `reorder`** — blocked: `reorder` must become FK-aware
   before the per-fetch `shrink_dtype` can go, which would remove the latent Float64→Float32 price
   downcast.
-- **C# warnings** (non-breaking): 2× `CA1416`, 3× `CS0618` deprecated order APIs. `--profile` wraps
-  only the Python side.
+- **C# warnings** (non-breaking): 2× `CA1416`, 3× `CS0618` deprecated order APIs.
+- **`Setup/Install.py` and `Setup/Task.py` both define `provision()`** — different modules, different
+  jobs, no collision today. Rename one if it ever confuses.
+
+---
+
+## 6. Delivered
+
+Kept for the findings that live nowhere else. Full detail is in git history.
+
+**Module review — 2026-09-04.** Pre-commit pass over `Setup` · `Script` · `Scheduler` · `System` ·
+`App/V2` · `Statistic` · `Web`. The findings worth keeping:
+- **A star import binds `__all__` too.** `Statistic/Label.py`'s own `__all__` listed the string
+  `"__all__"` — a generator had collected its own previous output as if it were a label constant. So
+  `from Library.Statistic.Label import *` handed `Portfolio/Statistic.py` an `__all__` of 119 label
+  names, hiding all 31 of that module's real public names. Nothing failed; the export surface was
+  simply wrong.
+- **A package `__init__` nobody imports through is dead weight.** App/V2's four subpackage `__init__`
+  files re-exported 93 names while the parent reached past them into leaf modules. Routing the parent
+  through the packages exposed a genuine cycle (`Core/Callback` ↔ `Component/Field`) that had only
+  ever worked by accident of leaf-import order. `Component` was used in annotations only, so
+  `TYPE_CHECKING` erased the edge. 30 of 30 nested packages elsewhere already did this correctly.
+- **A per-app asset override must not repoint Dash's `assets_folder`.** Doing so silently drops the
+  eight auto-injected `Scripts/*.js` and the favicon, because only stylesheets were re-added. The
+  overlay — library folder stays Dash's, application folder consulted first by `asset()` and served
+  at `/_application` — deletes the re-injection hack instead of extending it.
+- **`Setup/Install.py` registers task paths as strings into live Scheduler rows, so moving a file is
+  a database migration.** The `Scripts/`→`Script/` rename had left the `Quant Scheduler` logon task
+  pointing at a path that no longer existed; it would have failed silently at the next logon. Re-run
+  `python -m Setup.Install --boot` after moving anything a task points at, and check
+  `Scheduler.Task.Path` resolves for all 18 rows.
+- **`Tests/Web` created (26 tests) where there were none.** The layout itself is guarded: every page
+  must live in the folder matching its father route, the parent may not import past its packages,
+  and no Quant Cognition vocabulary may appear under `App/V2/Assets`.
+
+**Logging refactor — 2026-07-30.** 12 files / 1031 lines → 7 modules; 0 tests → 274. Suppressed
+record 271 → **128 ns**, emitted 4961 → **1188 ns**, timestamp 1990 → **234 ns**.
+- **Threads lose to the GIL for local sinks.** A CPU-bound Python thread starves a concurrent writer
+  253×, and a drain thread fell 93k records behind. Making the *formatter* cheap (cached-second
+  timestamp, 5.5×) beat making the write asynchronous, with no queue and no backlog. Async is
+  therefore a per-sink property: console and file synchronous, `StorageAPI` not.
+- **stdlib cannot be the hot path.** `LogRecord.__init__` alone costs 2097 ns with every knob off, and
+  `QueueHandler.prepare()` formats on the calling thread. Subclassing `logging.Logger` while bypassing
+  `_log`/`makeRecord`/`handle` gives interoperation at 247 ns.
+- Two real bugs fixed on the way: `with log:` returned truthy from `__exit__` and was **swallowing
+  exceptions**; timestamps truncated instead of rounding (`.123` rendered as `.122`).
+- **Remaining:** `StorageAPI` is unit-tested against a fake record but never exercised against a live
+  Postgres run end to end; the Scheduler still writes durable rows through `ExecutorAPI._open_log_`.
+
+**Strategy inputs and `/strategies` — 2026-08-25.** The YAML tree was retired by `Ladder.py`;
+`/strategies` rebuilt as the scopes-as-columns pivot grid with editing and diff-on-apply review.
+
+**Optimization engine — 2026-08-25.** `Library/System/Optimization.py`: DOF staging, coarse-to-fine
+rounds, walk-forward selection/election, the `/optimization` surface. Search space lives in a sibling
+`Optimization.yml` — it cannot live in `Backtesting.yml` because that file's list arity is
+**structural** (`RiskPercentage: [1.0]` unpacks with `self._risk_percentage_, = ...`;
+`BaselineMode: [Signal, Off, Signal]` unpacks as three positions). The optimization format keeps the
+shape and turns each **slot** into a list of options; a slot absent from the file is not searched.
+- **The trap that would silently corrupt every sweep:** `DatasetAPI` carries `IndicatorResults`.
+  Learning caches them safely because *its* indicators never change between episodes. **Optimization
+  varies indicator parameters**, so reusing a cached tape wholesale evaluates every candidate with the
+  *first* candidate's indicators — the sweep completes, produces plausible numbers, and is
+  meaningless. Rule: reuse the market-data tape, always
+  `inject(replace(tape, IndicatorResults=None))`.
+- Still worth adding: purging + embargo around train/test boundaries (golden 19 has an average hold of
+  **537 days**, so a naive boundary leaks badly); probability of backtest overfitting / deflated
+  Sharpe; one untouched holdout used exactly once; TPE or random search beyond three free parameters.
+
+**G7 majors extension — complete.** All seven pairs trained, evaluated and published; results in
+`Research/CAMPAIGN-7PAIR.md`, robustness in `Research/THESIS-ROBUSTNESS.json`. Each pair is its own
+campaign folder (`Research/DDPG-<TICKER>-<TIMEFRAME>/`), so the delivered EURUSD campaign is
+untouched. `robust_eval.py` reads `Security`/`Timeframe` from the model's own manifest, so a model is
+always scored on the pair it was trained on.
+
+**Environment permissions — resolved 2026-08-20.** `icacls C:\ProgramData\miniforge3 /grant
+"Admin:(OI)(CI)M"` applied; `Environment.Update` has succeeded on every run since. The daemon stays
+Limited, as intended.
+
+**Groundwork landed 2026-07-31.** Output flags take an optional path; `Library/Utility/Plot.py`
+deleted in favour of `Workspace.py`; the `PlotAPI` oracle frozen to literals before deletion so the
+V2-port guarantee survived; dead code removed; the `Netting` *strategy* removed (⚠ `PositionMode.Netting`
+is a different thing — the core position model DDPG depends on — and was kept); `Script/Cache.py`
+rewritten with a 30-day horizon and honest counts (the old `ignore_errors=True` silently failed on
+OneDrive and left 70 empty `__pycache__` dirs while reporting success).
+⚠ Goldens regenerate with `--export`, which now defaults to temp — rebuilding them needs
+`--export "Reports"` explicitly.

@@ -1,4 +1,4 @@
-SELECT 
+SELECT
     d.datname AS "Database",
     t.table_schema AS "Schema",
     t.table_name AS "Table"

@@ -26,6 +26,6 @@ public class Connector : Indicator
     public override void Calculate(int index)
     {
         // Calculate value at specified index
-        // Result[index] = 
+        // Result[index] =
     }
 }

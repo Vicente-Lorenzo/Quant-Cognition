@@ -2,8 +2,8 @@ WITH expected_structure AS (
     ::definitions::
 ),
 actual_structure AS (
-    SELECT 
-        c.column_name, 
+    SELECT
+        c.column_name,
         c.data_type,
         CASE WHEN pk.column_name IS NOT NULL THEN 1 ELSE 0 END AS is_pk,
         CASE WHEN fk.column_name IS NOT NULL THEN 1 ELSE 0 END AS is_fk

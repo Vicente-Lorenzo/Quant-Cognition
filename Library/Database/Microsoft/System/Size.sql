@@ -1,4 +1,4 @@
-SELECT 
+SELECT
     DB_NAME() AS [Database],
     s.name AS [Schema],
     t.name AS [Table],
