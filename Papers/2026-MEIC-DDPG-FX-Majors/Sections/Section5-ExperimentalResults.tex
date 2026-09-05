@@ -1,0 +1,7 @@
+\section{Experimental Results}
+
+This section outlines the methodology for evaluating the performance of the proposed trading models. Starting by defining a meaningful benchmark, we will use a combination of baseline strategies. A "Buy and Hold" strategy is less applicable to the Forex market, so we will employ a Random Signal Strategy and a Rule-Based Strategy. The Random Signal Strategy generates random buy, sell, or hold signals, providing a naive benchmark. The Rule-Based Strategy will use simple moving averages that offer a structured and realistic comparison. Performance will be evaluated using the metrics in Table~\ref{Tables:PerformanceMetrics} from the cTrader platform :
+
+\input{Tables/PerformanceMetrics}
+
+The process includes using accurate historical Forex data to assess performance, providing insights into alpha generation and risk management. We will compare the results of the DDPG model with baseline strategies using the selected metrics to highlight the relative performance of the model. In addition, we will use the tools of cTrader to analyse trade executions, equity curves, and drawdown charts, complementing quantitative metrics with visual insights.

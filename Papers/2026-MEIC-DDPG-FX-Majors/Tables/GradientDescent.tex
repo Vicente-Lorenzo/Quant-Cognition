@@ -1,0 +1,17 @@
+\begin{table}[htb!]
+\centering
+\footnotesize
+\begin{tabularx}{\textwidth}{@{}lXl@{}}
+\toprule
+\textbf{Algorithm} & \textbf{Formula} & \textbf{Description} \\
+\midrule
+Batch Gradient Descent & \(\theta := \theta - \eta \cdot \nabla_{\theta} J(\theta; X, y)\) & Updates parameters using all data \\
+\addlinespace
+Mini-Batch Gradient Descent & \(\theta := \theta - \eta \cdot \nabla_{\theta} J(\theta; X^{(i:i+n)}, y^{(i:i+n)})\) & Updates parameters using subsets of data \\
+\addlinespace
+Stochastic Gradient Descent & \(\theta := \theta - \eta \cdot \nabla_{\theta} J(\theta; x^{(i)}, y^{(i)})\) & Updates parameters per data point \\
+\bottomrule
+\end{tabularx}
+\caption{Summary of the most common Gradient Descent variants \cite{goodfellow_deep_2016}.}
+\label{Tables:GradientDescent}
+\end{table}

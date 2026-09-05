@@ -1,0 +1,58 @@
+\begin{figure}[htb!]
+
+\label{Gantt:WorkSchedule}
+\centering
+\tikzset{every picture/.style={xscale=0.7, yscale=0.7, transform shape}}
+\begin{ganttchart}[
+y unit chart = 0.5cm,
+vgrid, 
+bar top shift=-0.1, 
+bar height=0.5, 
+title height=0.5]{1}{36}
+\gantttitle{Jun'24}{4}
+\gantttitle{Jul'24}{4}
+\gantttitle{Aug'24}{4}
+\gantttitle{Sep'24}{4} 
+\gantttitle{Oct'24}{4} 
+\gantttitle{Nov'24}{4} 
+\gantttitle{Dec'24}{4} 
+\gantttitle{Jan'25}{4} 
+\gantttitle{Feb'25}{4} \\
+\gantttitlelist{1,...,4}{1}
+\gantttitlelist{1,...,4}{1}
+\gantttitlelist{1,...,4}{1}
+\gantttitlelist{1,...,4}{1}
+\gantttitlelist{1,...,4}{1}
+\gantttitlelist{1,...,4}{1}
+\gantttitlelist{1,...,4}{1}
+\gantttitlelist{1,...,4}{1}
+\gantttitlelist{1,...,4}{1} \\
+  
+\ganttgroup{Preparation Phase}{1}{4} \\
+\ganttbar{Research Required Tools}{1}{2} \\
+\ganttbar{Testing Selected Tools}{3}{4} \\
+
+\ganttgroup{Implementation Phase}{5}{20} \\
+\ganttbar{Develop cTrader API}{5}{6} \\
+\ganttbar{Develop Feature Engineering}{7}{8} \\
+\ganttbar{Develop NN Models}{9}{10} \\
+\ganttbar{Develop RL Models}{11}{14} \\
+\ganttbar{Develop DRL Models}{15}{18} \\
+\ganttbar{Enhance Optimisation}{19}{20} \\
+
+\ganttgroup{Testing Phase}{21}{24} \\
+\ganttbar{Bug Fixing}{21}{22} \\
+\ganttbar{Code Optimization}{23}{24} \\
+
+\ganttgroup{Evaluation Phase}{25}{28} \\
+\ganttbar{Backtesting and Analysis}{25}{26} \\
+\ganttbar{Performance Comparison}{27}{28} \\
+
+\ganttgroup{Writing Dissertation}{1}{36} \\
+\ganttbar{Alpha Version}{1}{28} \\
+\ganttbar{Final Revision by Advisor}{29}{32} \\
+\ganttbar{Beta Version}{33}{36} \\
+
+\end{ganttchart}
+\caption{Planned Schedule}
+\end{figure}

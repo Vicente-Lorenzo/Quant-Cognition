@@ -1,0 +1,18 @@
+\begin{algorithm}[htb!]
+\caption{Actor-Critic}
+\label{Codes:ActorCritic}
+\begin{algorithmic}
+\REQUIRE $\pi(s, a; \theta)$: a differentiable policy, $Q(s, a; w)$: a differentiable $Q$-function, $N$: number of iterations and learning rates $\beta^\theta > 0$ and $\beta^w > 0$
+\STATE Initialize policy parameter $\theta^{(0)}$ and $Q$-function parameter $w^{(0)}$
+\STATE Initialize state $s$
+\FOR{$n = 0, 1, \ldots, N - 1$}
+    \STATE Sample $a \sim \pi(s, a; \theta^{(n)})$
+    \STATE Take action $a$, observe state $s'$ and reward $r$
+    \STATE Sample action $a' \sim \pi(s', a; \theta^{(n)})$
+    \STATE Compute the TD error: $\delta \gets r + \gamma Q(s', a'; w^{(n)}) - Q(s, a; w^{(n)})$
+    \STATE Update $w$: $w^{(n+1)} \gets w^{(n)} + \beta^w \delta \nabla_w Q(s, a; w^{(n)})$
+    \STATE Update $\theta$: $\theta^{(n+1)} \gets \theta^{(n)} + \beta^\theta \delta \nabla_\theta \ln \pi(s, a; \theta^{(n)})$
+    \STATE $s \gets s'$, $a \gets a'$
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}

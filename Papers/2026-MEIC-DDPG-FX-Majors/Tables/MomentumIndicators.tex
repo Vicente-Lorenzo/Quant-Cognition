@@ -1,0 +1,59 @@
+\begin{table}[htb!]
+\centering
+\footnotesize
+\begin{tabularx}{\textwidth}{@{}lXl@{}}
+\toprule
+\textbf{Indicator Name} & \textbf{Formula} & \textbf{Range} \\ 
+\midrule
+Price Momentum & $\text{PM}_t = \frac{\text{Price}_t - \text{Price}_{t-1}}{\text{Price}_{t-1}}$ & - \\
+\addlinespace
+Price Acceleration & $\text{PA}_t = \frac{\text{Short Linear Regression Coefficient}}{\text{Long Linear Regression Coefficient}} = \frac{\beta_\text{short}}{\beta_\text{long}}$ & - \\
+\addlinespace
+Relative Strength Index & $\text{RSI}(N)_t = 100 - \frac{100}{1 + \frac{\text{Average Gain}_t}{\text{Average Loss}_t}}$ & [0, 100] \\
+\addlinespace
+& $\text{Average Gain}_t = \frac{1}{N}\sum_{i=1}^{N} \max(\text{Price}_i - \text{Price}_{i-1}, 0)$ & \\
+\addlinespace
+& $\text{Average Loss}_t = \frac{1}{N}\sum_{i=1}^{N} \max(\text{Price}_{i-1} - \text{Price}_i, 0)$ & \\
+\addlinespace
+Aroon Oscillator & $\text{Aroon}(N)_t = \text{Aroon Up}(N)_t - \text{Aroon Down}(N)_t$ & [-100, 100] \\
+\addlinespace
+& $\text{Aroon Up}(N)_t = \left( \frac{N - \text{Periods Since Highest High in } N}{N} \right) \times 100$ & \\
+\addlinespace
+& $\text{Aroon Down}(N)_t = \left( \frac{N - \text{Periods Since Lowest Low in } N}{N} \right) \times 100$ & \\
+\addlinespace
+Balance of Power & $\text{BOP}_t = \frac{\text{Close}_t - \text{Open}_t}{\text{High}_t - \text{Low}_t}$ & [-1, 1] \\
+\addlinespace
+Commodity Channel Index & $\text{CCI}(N)_t = \frac{\text{TP}_t - \text{SMA}_\text{TP}(N)_t}{0.015 \times \text{Mean Deviation}(N)_t}$ & - \\
+\addlinespace
+& $\text{TP}_t = \frac{\text{High}_t + \text{Low}_t + \text{Close}_t}{3}$ & \\
+\addlinespace
+& $\text{Mean Deviation}(N)_t = \frac{1}{N}\sum_{i=1}^{N} |\text{TP}_i - \text{SMA}_\text{TP}(N)_t|$ & \\
+\addlinespace
+Moving Average Convergence Divergence & $\text{MACD}_t = \text{EMA}(N_{\text{short}})_t - \text{EMA}(N_{\text{long}})_t $ & - \\
+\addlinespace
+& where typically $N_{\text{short}} = 12$ and $N_{\text{long}} = 26$ & \\
+\addlinespace
+Stochastic RSI & $\text{StochRSI}(N)_t = \frac{\text{RSI}(N)_t - \max(\text{RSI}(N))}{\max(\text{RSI}(N)) - \min(\text{RSI}(N))}$ & [0, 100] \\
+\addlinespace
+Stochastic Oscillator & $\text{Stoch \%K}(N)_t = \frac{\text{Close}_t - \text{LL}(N)_t}{\text{HH}(N)_t - \text{LL}(N)_t} \times 100$ & [0, 100] \\
+\addlinespace
+& $\text{Stoch \%D}(M)_t = \text{SMA}_{\text{Stoch \%K}(N)}(M)_t$ & [0, 100] \\
+\addlinespace
+& $\text{HH}(N)_t = \max_{i=t-N+1}^{t}(\text{High}_i)$, $\text{LL}(N)_t = \min_{i=t-N+1}^{t}(\text{Low}_i)$ & \\
+\addlinespace
+Ultimate Oscillator & $\text{UO}_t = \frac{4 \times \text{Avg}_t(N_1) + 2 \times \text{Avg}_t(N_2) + \text{Avg}_t(N_3)}{4+2+1} \times 100$ & [0, 100] \\
+\addlinespace
+& $\text{Avg}_t(N) = \frac{\sum_{i=0}^{N-1}\text{BP}_{t-i}}{\sum_{i=0}^{N-1}\text{TR}_{t-i}}$ & \\
+\addlinespace
+& $\text{BP}_t = \text{Close}_t - \min(\text{Close}_{t-1}, \text{Low}_t)$ & \\
+\addlinespace
+& $\text{TR}_t = \max(\text{Close}_{t-1}, \text{High}_t) - \min(\text{Close}_{t-1}, \text{Low}_t)$ & \\
+\addlinespace
+& where typically $N_1 = 7$, $N_2 = 14$, and $N_3 = 28$ & \\
+\addlinespace
+Williams \%R & $\text{Williams \%R}(N)_t = \frac{\text{HH}(N)_t - \text{Close}_t}{\text{HH}(N)_t - \text{LL}(N)_t} \times -100$ & [-100, 0] \\
+\bottomrule
+\end{tabularx}
+\caption{Summary of frequently used Momentum Technical Indicators \cite{jansen_machine_2020}.}
+\label{Tables:MomentumIndicators}
+\end{table}

@@ -1,0 +1,70 @@
+\begin{sidewaystable}
+%\begin{landscape}
+%\begin{table}[htb!]
+\centering
+\footnotesize
+\begin{tabularx}{\linewidth}{@{}ccccccc@{}}
+\toprule
+\textbf{Reference} & \textbf{State Space} & \textbf{Action Space} & \textbf{Reward Function} & \textbf{Bias/Variance} & \textbf{Exploration/Exploitation} & \textbf{Training Techniques} \\ 
+\midrule
+
+\cite{carapuco_reinforcement_2018} & \makecell{Ask, Bid, Volume, \\ Technical Analysis} & Discrete (1, 0, -1) & Total Return & \makecell{Tweak Network, \\ Early Stopping} & Policy \(\varepsilon\)-greedy & Cross-Validation \\
+\addlinespace
+
+\cite{huang_financial_2018} & \makecell{OHLCV, \\ Technical Analysis} & Discrete (1, 0, -1) & Total Return & \makecell{Tweak Replay Memory, \\ Tweak RNN Sequence} & Policy \(\varepsilon\)-greedy & Online Learning \\
+\addlinespace
+
+\cite{rundo_deep_2019} & OHLCV & Discrete (1, 0, -1) & Total Return & Tweak Network & - & Train-Validate-Test Split \\
+\addlinespace
+
+\cite{saini_stock_2019} & \makecell{OHLCV, Sentiment \\ and Technical Analysis} & Discrete (1, 0, -1) & Total Return & Tweak Network & Policy \(\varepsilon\)-greedy, Shuffling &  Cross-Validation \\
+\addlinespace
+
+\cite{gran_deep_2019} & Log Returns, Volume & Discrete (1, 0, -1) & Total Return & - & - & Pre-Train with GA \\
+\addlinespace
+
+\cite{kong_empirical_2023} & \makecell{OHLCV, \\ Technical Analysis} & Discrete (1, 0, -1) & Sharpe Ratio & Ensemble Selection & Ensemble Selection & Cross-Validation \\
+\addlinespace
+
+\cite{li_deep_2019} & \makecell{OHLCV, Metrics, \\ Technical Analysis } & \makecell{Discrete \\ (-n, ..., 0, ..., n)} & Total Return & Denoising & Gaussian Noise & Adaptive Learning Rate \\
+\addlinespace
+
+\cite{majidi_algorithmic_2022} & OHLCV & \makecell{Continuous \text{[-1, 1]}} & Log-Return & \makecell{Normalisation, \\ Regularisation} & \makecell{Policy \(\varepsilon\)-greedy \\ Gaussian Noise} & Train-Validate-Test Split \\
+\addlinespace
+
+\cite{sagiraju_application_2021} & OHLCV & Discrete (1, 0, -1) & Sharpe Ratio & Wavelet Transform & - & Train-Validate-Test Split \\
+\addlinespace
+
+\cite{sim_generalized_2023} & \makecell{OHLCV, \\ Macroeconomic Metrics} & Discrete (1, 0, -1) & \makecell{Total Return, \\ (1, 0, -1)} & \makecell{Normalisation, \\ Regularisation} & \makecell{Policy \(\varepsilon\)-greedy \\ (Adaptive)} & Adaptive Synchronization \\
+\addlinespace
+
+\cite{theate_application_2021} & OHLCV & Discrete (1, -1) & Total Return & \makecell{Normalisation, \\ Regularisation} & \makecell{Duplicate Environment \\ (Inverse Positioning)} & \makecell{Adaptive Learning Rate, \\ Huber Loss, Gradient Clip} \\
+\addlinespace
+
+\cite{wu_adaptive_2020} & \makecell{OHLCV, \\ Technical Analysis} & Discrete (1, 0, -1) & Total Return & \makecell{Normalisation, \\ Regularisation} & \makecell{Policy \(\varepsilon\)-greedy \\ Gaussian Noise} & Train-Test Split \\
+\addlinespace
+
+\cite{xiong_practical_2018} & OHLCV & Discrete (1, 0, -1) & Total Return & Tweak Network & Gaussian Noise & Train-Validate-Test Split \\
+\addlinespace
+
+\cite{yang_deep_2020} & \makecell{OHLCV, \\ Technical Analysis} & \makecell{Discrete \\ (-n, ..., 0, ..., n)} & \makecell{Total Return \\ (Turbulence Index)} & Ensemble Selection & Ensemble Selection & Train-Validate-Test Split \\
+\addlinespace
+
+\cite{yousefi_deep_2022} & \makecell{OHLCV, \\ Technical Analysis} & Discrete (1, 0, -1) & Total Return & Normalisation & Gaussian Noise & Train-Test Split \\
+\addlinespace
+
+\cite{chen_application_2019} & OHLCV & Discrete (1, 0, -1) & Total Return & Tweak Learning Rate & - & - \\
+\addlinespace
+
+\cite{jia_lstm-ddpg_2021} & OHLCV & \makecell{Continuous \\ (Position Sizing)} & Sharpe Ratio & - & Gaussian Noise & Train-Validate-Test Split \\
+\addlinespace
+
+\cite{zhang_deep_2020} & \makecell{OHLCV, \\ Technical Analysis} & Continuous \text{[-1, 1]} & \makecell{Total Return \\ (with Volatility)} & Normalisation & - & Cross-Validation \\
+
+\bottomrule
+\end{tabularx}
+%\end{table}
+%\end{landscape}
+\caption{Summary of the advanced features of related work articles.}
+\label{Tables:AdvancedRelatedWork}
+\end{sidewaystable}

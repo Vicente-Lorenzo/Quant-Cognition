@@ -1,0 +1,33 @@
+\begin{table}[htb!]
+\centering
+\footnotesize
+\begin{tabularx}{\textwidth}{@{}lXl@{}}
+\toprule
+\textbf{Indicator Name} & \textbf{Formula} & \textbf{Range} \\ 
+\midrule
+Simple Moving Average & $\text{SMA}(N)_t = \frac{1}{N} \sum_{i=1}^{N} \text{Price}_{t-N+i}$ & - \\
+\addlinespace
+Exponential Moving Average & $\text{EMA}(N)_t = \frac{2}{N+1} \times \text{Price}_t + (1 - \frac{2}{N+1}) \times \text{EMA}(N)_{t-1}$ & - \\
+\addlinespace
+Weighted Moving Average & $\text{WMA}(N)_t = \frac{2}{N \times (N + 1)} \sum_{i=1}^{N} i \times \text{Price}_{t-N+i}$ & - \\
+\addlinespace
+Double Exponential Moving Average & $\text{DEMA}(N)_t = 2 \times \text{EMA}(N)_t - \text{EMA}_2(N)_t$ & - \\
+\addlinespace
+Triple Exponential Moving Average & $\text{TEMA}(N)_t = 3 \times [\text{EMA}(N)_t - \text{EMA}_2(N)_t] + \text{EMA}_3(N)_t$ & - \\
+\addlinespace
+Hull Moving Average & $\text{HMA}(N)_t = \text{WMA}\left(2 \times \text{WMA}\left(\frac{N}{2}\right)_t - \text{WMA}(N)_t\right)$ & - \\
+\addlinespace
+Triangular Moving Average & $\text{TRIMA}(N)_t = \frac{1}{N} \sum_{i=1}^{N} \text{SMA}(N)_{t-N+i}$ & - \\
+\addlinespace
+Kaufman Adaptive Moving Average & $\text{KAMA}(N)_t = \text{KAMA}(N)_{t-1} + \text{SC} \times (\text{Price}_t - \text{KAMA}(N)_{t-1})$ & - \\
+\addlinespace
+& $\text{SC} = [ \text{ER} \times (\phi_{\text{short}} - \phi_{\text{long}}) + \phi_{\text{long}} ]^2, \phi_{\text{short}} = \frac{2}{N_{\text{short}} + 1}$, $\phi_{\text{long}} = \frac{2}{N_{\text{long}} + 1}$ & \\
+\addlinespace
+& $\text{ER} = \frac{| \text{Price}_t - \text{Price}_{t-N} |}{\sum_{i=1}^{N} | \text{Price}_{t-i+1} - \text{Price}_{t-i} |}$ & \\
+\addlinespace
+& where typically $N_{\text{short}} = 2$ and $N_{\text{long}} = 30$ & \\
+\bottomrule
+\end{tabularx}
+\caption{Summary of frequently used Trend Technical Indicators \cite{jansen_machine_2020}.}
+\label{Tables:TrendIndicators}
+\end{table}

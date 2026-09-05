@@ -1,0 +1,26 @@
+\begin{table}[htb!]
+\centering
+\footnotesize
+\begin{tabularx}{\textwidth}{@{}lXl@{}}
+\toprule
+\textbf{Indicator Name} & \textbf{Formula} & \textbf{Range} \\ 
+\midrule
+Chaikin Accumulation/Distribution Line & $\text{AD}_t = \text{AD}_{t-1} + \text{MFV}_t$ & - \\
+\addlinespace
+& $\text{MFV}_t = \frac{\text{Close}_t - \text{Low}_t}{\text{High}_t - \text{Low}_t} \times \text{Volume}_t$ & \\
+\addlinespace
+Chaikin Accumulation/Distribution Oscillator & $\text{ADOSC}_t = \text{EMA}_\text{AD}(N_{\text{short}})_t - \text{EMA}_\text{AD}(N_{\text{long}})_t$ & - \\
+\addlinespace
+& where typically $N_{\text{short}} = 3$ and $N_{\text{long}} = 10$ & \\
+\addlinespace
+On-Balance Volume & $\text{OBV}_t = 
+\begin{cases} 
+\text{OBV}_{t-1} + \text{Volume}_t & \text{if } \text{Price}_t > \text{Price}_{t-1} \\
+\text{OBV}_{t-1} - \text{Volume}_t & \text{if } \text{Price}_t < \text{Price}_{t-1} \\
+\text{OBV}_{t-1} & \text{otherwise}
+\end{cases}$ & - \\
+\bottomrule
+\end{tabularx}
+\caption{Summary of frequently used Volume Technical Indicators \cite{jansen_machine_2020}.}
+\label{Tables:VolumeIndicators}
+\end{table}

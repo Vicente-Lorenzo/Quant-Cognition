@@ -1,0 +1,53 @@
+\begin{sidewaystable}
+%\begin{landscape}
+%\begin{table}[htb!]
+\centering
+\footnotesize
+\begin{tabularx}{\linewidth}{@{}ccccccccX@{}}
+\toprule
+\textbf{Reference} & \textbf{Market} & \textbf{Dataset} & \textbf{Timeframe} & \textbf{Period} & \textbf{NN} & \textbf{RL} & \textbf{DRL} & \textbf{Key Findings} \\
+\midrule
+
+\cite{carapuco_reinforcement_2018} & Forex & Raw Ticks & \(\approx\) 2 Hours & 2010 - 2017 & FNN & Critic-Only & DQN & Significantly outperformed the benchmark. \\
+
+\cite{huang_financial_2018} & Forex & OHLCV & 15 Minutes & 2012 - 2017 & RNN (LSTM) & Critic-Only & DRQN & Significantly outperformed the benchmark even with explicit and implicit costs. \\
+
+\cite{rundo_deep_2019} & Forex & OHLCV & Minute & 2004 - 2018 & RNN (LSTM) & Critic-Only & DRQN & Outperformed the benchmark, but had abnormally high accuracy and maximum drawdown. \\
+
+\cite{saini_stock_2019} & Stocks & \makecell{OHLCV, \\ News} & Daily & \(\approx\) 5 Months & RNN (LSTM) & Actor-Critic & DDPG & Outperformed the benchmark and News are important features. \\
+
+\cite{gran_deep_2019} & Stocks & OHLCV & Monthly & 2005 - 2019 & FNN & Actor-Critic & DDPG & Outperformed the benchmark even with explicit and implicit costs. \\
+
+\cite{kong_empirical_2023} & Stocks & OHLCV & Daily & 2016 - 2020 & FNN & Actor-Critic & \makecell{DDPG, \\ A2C, PPO} & The ensemble underperformed the benchmark and had unstable returns. \\
+
+\cite{li_deep_2019} & \makecell{Stocks, \\ Futures} & OHLCV & Minute & 2010 - 2020 & \makecell{FNN (SDAE), \\ RNN (LSTM)} & \makecell{Critic-Only, \\ Actor-Critic} & DQN, A3C & Both significantly outperformed the benchmark and A3C had superior results and convergence. \\
+
+\cite{majidi_algorithmic_2022} & \makecell{Stocks, \\ Cryptos} & OHLCV & Daily & 2010 - 2021 & FNN & Actor-Critic & DDPG (TD3) & Outperformed the Cryptos benchmark but underperformed the Stocks benchmark. \\
+
+\cite{sagiraju_application_2021} & Stocks & OHLCV & Daily & 1992 - 2020 & FNN & \makecell{Critic-Only, \\ Actor-Critic} & \makecell{DQN, DDPG, \\ PPO, A2C} & All outperformed the benchmark, PPO and DQN had superior results and more consistent, DDPG and A2C performance was below expectation. \\
+
+\cite{sim_generalized_2023} & Stocks & OHLCV & Daily & 2006 - 2022 & FNN & Critic-Only & DQN & Outperformed the benchmark with good generalization power in out-of-sample assets. \\
+
+\cite{theate_application_2021} & Stocks & OHLCV & Daily & 2012 - 2019 & FNN & Critic-Only & DQN & Outperformed the benchmark with consistent results in stable and volatile markets. \\
+
+\cite{wu_adaptive_2020} & Stocks & OHLCV & Daily & 2008 - 2018 & RNN (GRU) & \makecell{Critic-Only, \\ Actor-Critic} & \makecell{GDQN, \\ GDPG} & Both outperformed the benchmark with consistent results in stable and volatile markets. GDPG had superior results. \\
+ 
+\cite{xiong_practical_2018} & Stocks & OHLCV & Daily & 2009 - 2018 & FNN & Actor-Critic & DDPG & Outperformed the benchmark. \\
+
+\cite{yang_deep_2020} & Stocks & OHLCV & Daily & 2009 - 2020 & FNN & Actor-Critic & \makecell{DDPG, \\ A2C, PPO} & The ensemble significantly outperformed the benchmark with explicit costs, then PPO had the best results, followed by A2C and finally DDPG. \\
+
+\cite{yousefi_deep_2022} & Stocks & OHLCV & Daily & 2009 - 2021 & FNN & Actor-Critic & DDPG, A2C & Both outperformed the benchmark. DDPG had superior results, convergence and stability due to experience replay and noise. \\
+
+\cite{chen_application_2019} & ETFs & OHLCV & Daily & 2000 - 2018 & \makecell{FNN, \\ RNN (LSTM)} & Critic-Only & \makecell{DQN, \\  DRQN} & Both outperformed the benchmark and DRQN had superior results. \\
+
+\cite{jia_lstm-ddpg_2021} & ETFs & OHLCV & Daily & 2002 - 2020 & RNN (LSTM) & Actor-Critic & DDPG & Outperformed the benchmark using variable position sizing and explicit and implicit costs. \\
+
+\cite{zhang_deep_2020} & Futures & OHLCV & Daily & 2005 - 2019 & RNN (LSTM) & Actor-Critic & A2C & Outperformed the benchmark with explicit and implicit costs. \\
+ 
+\bottomrule
+\end{tabularx}
+%\end{table}
+%\end{landscape}
+\caption{Summary of the basic features of related work articles.}
+\label{Tables:BasicRelatedWork}
+\end{sidewaystable}

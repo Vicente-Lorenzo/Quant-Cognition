@@ -1,0 +1,21 @@
+\begin{table}[htb!]
+\centering
+\footnotesize
+\begin{tabularx}{\textwidth}{@{}lXl@{}}
+\toprule
+\textbf{Activation Function} & \textbf{Formula} & \textbf{Description} \\
+\midrule
+Linear & \( a(x) = x \) & Suitable for regression tasks. \\
+\addlinespace
+Sigmoid & \( \sigma(x) = \frac{1}{1 + e^{-x}} \) & Maps inputs to (0, 1), for binary classification. \\
+\addlinespace
+Hyperbolic Tangent & \( \tanh(x) = \frac{e^{x} - e^{-x}}{e^{x} + e^{-x}} \) & Maps inputs to (-1, 1), offering richer gradients than sigmoid. \\
+\addlinespace
+ReLU & \( \text{ReLU}(x) = \max(0, x) \) & Encourages sparse activation, helps with gradient flow. \\
+\addlinespace
+Softmax & \( \text{Softmax}(z)_i = \frac{e^{z_i}}{\sum_{k=1}^K e^{z_k}} \) & Turns logits into probabilities, for multi-class classification. \\
+\bottomrule
+\end{tabularx}
+\caption{Summary of the most common Activation Functions \cite{goodfellow_deep_2016}.}
+\label{Tables:ActivationFunctions}
+\end{table}

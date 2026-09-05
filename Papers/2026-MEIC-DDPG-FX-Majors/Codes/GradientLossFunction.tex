@@ -1,0 +1,19 @@
+\begin{algorithm}[htb!]
+\caption{Gradient of the Loss Function \cite{goodfellow_deep_2016}.}
+\label{Codes:GradientLossFunction}
+\begin{algorithmic}
+\REQUIRE \( f \): network function, \( \theta \): network parameters, \( x \): input data, \( y \): true label, \( l \): number of layers, \( L \): loss function
+\STATE Compute the output of the network \( \hat{y} = f(x; \theta) \)
+\STATE Compute the gradient of the loss function with respect to the output layer before activation:
+\STATE \( \nabla_{z^{(l+1)}}L(f(x; \theta), y) = \frac{\partial L(f(x; \theta), y)}{\partial \hat{y}} \cdot \frac{\partial \hat{y}}{\partial z^{(l+1)}} \)
+\FOR{\( \ell = l+1 \) to \( 1 \)}
+\STATE Compute gradients of hidden layer parameters:
+\STATE \( \nabla_{W^{(\ell)}}L(f(x; \theta), y) = \nabla_{z^{(\ell)}}L(f(x; \theta), y) \cdot h^{(\ell-1)T} \)
+\STATE \( \nabla_{b^{(\ell)}}L(f(x; \theta), y) = \nabla_{z^{(\ell)}}L(f(x; \theta), y) \)
+\STATE Compute gradient of previous hidden layer:
+\STATE \( \nabla_{h^{(\ell-1)}}L(f(x; \theta), y) = W^{(\ell)T} \cdot \nabla_{z^{(\ell)}}L(f(x; \theta), y) \)
+\STATE Compute gradient of previous hidden layer (before activation):
+\STATE \( \nabla_{z^{(\ell-1)}}L(f(x; \theta), y) = \nabla_{h^{(\ell-1)}}L(f(x; \theta), y) \odot g'(z^{(\ell-1)}) \)
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}

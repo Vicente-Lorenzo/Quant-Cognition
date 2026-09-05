@@ -1,0 +1,27 @@
+\begin{table}[htb!]
+\centering
+\footnotesize
+\begin{tabularx}{\textwidth}{@{}lXl@{}}
+\toprule
+\textbf{Indicator Name} & \textbf{Formula} & \textbf{Range} \\ 
+\midrule
+Standard Deviation & $\text{SD}(N)_t = \sqrt{\frac{1}{N-1} \sum_{i=1}^{N} (\text{Price}_i - \overline{\text{Price}})^2}$ & - \\
+\addlinespace
+Bollinger Bands & $\text{Upper BB}(N, k)_t = \text{SMA}(N)_t + k \times \text{SD}(N)_t$ & - \\
+\addlinespace
+& $\text{Lower BB}(N, k)_t = \text{SMA}(N)_t - k \times \text{SD}(N)_t$ & \\
+\addlinespace
+& where typically $ k = 2 $& \\
+\addlinespace
+Average True Range & $\text{ATR}(N)_t = \frac{1}{N} \sum_{i=1}^{N} \text{TRANGE}_i$ & - \\
+\addlinespace
+& $\text{TRANGE}_t = \max(\text{High}_t - \text{Low}_t, |\text{High}_t - \text{Close}_{t-1}|, |\text{Low}_t - \text{Close}_{t-1}|)$ & \\
+\addlinespace
+Normalised Average True Range & $\text{NATR}(N)_t = \frac{\text{ATR}(N)_t}{\text{Close}_t} \times 100$ & - \\
+\addlinespace
+Chaikin Volatility Index & $\text{CVI}(N)_t = \frac{1}{N} \sum_{i=1}^{N} (\text{High}_i - \text{Low}_i)$ & - \\
+\bottomrule
+\end{tabularx}
+\caption{Summary of frequently used Volatility Technical Indicators \cite{jansen_machine_2020}.}
+\label{Tables:VolatilityIndicators}
+\end{table}
