@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+from typing import TYPE_CHECKING
 from dash import dcc, html
 import dash_bootstrap_components as dbc
 
@@ -9,6 +10,9 @@ from Library.App.V2.Core.Identity import GlobalAPI
 from Library.App.V2.Component.Component import Component, ButtonAPI, IconAPI, LoadingAPI, ModalAPI, StorageAPI, TextAPI
 from Library.App.V2.Core.Layout import DefaultLayoutAPI
 from Library.App.V2.Session import TriggerAPI
+
+if TYPE_CHECKING:
+    from Library.App.V2.Page.Page import PageAPI
 
 class ShellAPI(GlobalAPI):
 

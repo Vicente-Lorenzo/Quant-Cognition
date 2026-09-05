@@ -7,13 +7,15 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Sequence, Type, Union, TYPE_CHECKING
+from typing import Sequence, Union, TYPE_CHECKING
 
+from Library.Statistic.Composition import backtest
 from Library.Statistic.Label import BENCHMARK_LABEL
 from Library.Database import BufferAPI
 from Library.Database.Dataframe import pl
 from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Market.Bar import BarAPI
+from Library.Market.Market import MarketAPI
 from Library.Market.Tick import TickAPI
 from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.Order import OrderAPI
@@ -103,7 +105,9 @@ from Library.Protocol.Update import (
     ExceptionUpdateAPI
 )
 from Library.System.Lifecycle import LifecycleAPI
+from Library.Universe.Provider import ProviderAPI
 from Library.Universe.Security import SecurityAPI
+from Library.Universe.Ticker import TickerAPI
 from Library.Utility.Enumeration import EnumerationAPI
 from Library.Utility.Path import inspect_destination
 from Library.Utility.Service import ServiceAPI
@@ -115,13 +119,13 @@ if TYPE_CHECKING:
     from Library.Indicator.Indicator import IndicatorAPI
     from Library.Indicator.Sentimental import SentimentalAPI
     from Library.Indicator.Technical import TechnicalAPI
-    from Library.Market.Market import MarketAPI
     from Library.Utility.Parameter import Parameter
     from Library.Portfolio.Portfolio import PortfolioAPI
     from Library.Strategy.Strategy import StrategyAPI
     from Library.Universe.Timeframe import TimeframeAPI
 
 class SystemType(EnumerationAPI):
+
     Live = 1
     Simulation = 2
     Testing = 3
@@ -134,8 +138,10 @@ class SystemAPI(ServiceAPI, ABC):
     Exports: str = "Exports"
     Plots: str = "Plots"
 
+    _OUTPUT_: str = "Output"
+
     def __init__(self,
-                 strategy: Type[StrategyAPI],
+                 strategy: type[StrategyAPI],
                  security: SecurityAPI,
                  timeframe: TimeframeAPI,
                  parameters: Parameter,
@@ -160,7 +166,7 @@ class SystemAPI(ServiceAPI, ABC):
         self._risk_free_: float = risk_free
         self._benchmarking_: bool = benchmark is not None
         self._benchmark_: tuple = tuple(entry.strip() for entry in (benchmark.split(",") if isinstance(benchmark, str) else benchmark or ()) if entry and entry.strip())
-        self._strategy_: Type[StrategyAPI] = strategy
+        self._strategy_: type[StrategyAPI] = strategy
         self._security_: SecurityAPI = security
         self._timeframe_: TimeframeAPI = timeframe
         self._parameters_: Parameter = parameters
@@ -239,8 +245,6 @@ class SystemAPI(ServiceAPI, ABC):
         columns = [name for name, dtype in df.schema.items() if isinstance(dtype, nested)]
         if not columns: return df
         return df.with_columns([pl.col(name).map_elements(lambda v: json.dumps(v, default=str), return_dtype=pl.Utf8).alias(name) for name in columns])
-
-    _OUTPUT_: str = "Output"
 
     def _publish_(self, name: str, sections: dict) -> Union[Path, None]:
         if self._run_ is None or not sections: return None
@@ -336,6 +340,12 @@ class SystemAPI(ServiceAPI, ABC):
         if suffix: parts.append(suffix)
         return " · ".join(parts)
 
+    def _indicator_window_(self) -> int:
+        windows = [getattr(self.indicator.Technical, "Window", 0) or 0,
+                   getattr(self.indicator.Fundamental, "Window", 0) or 0,
+                   getattr(self.indicator.Sentimental, "Window", 0) or 0]
+        return max(windows)
+
     def _benchmarks_(self, start, stop) -> dict:
         benchmarks = {}
         bars = self._bars_()
@@ -345,10 +355,6 @@ class SystemAPI(ServiceAPI, ABC):
         if database is None:
             self._log_.warning(lambda: f"Benchmark Operation: Skipped · Due to no Database connection ({' · '.join(self._benchmark_)})")
             return benchmarks
-        from Library.Market.Market import MarketAPI
-        from Library.Universe.Provider import ProviderAPI
-        from Library.Universe.Security import SecurityAPI
-        from Library.Universe.Ticker import TickerAPI
         for spec in self._benchmark_:
             try:
                 provider_uid, _, ticker_uid = spec.rpartition(":")
@@ -368,7 +374,6 @@ class SystemAPI(ServiceAPI, ABC):
         return {}
 
     def _plot_(self, portfolio: PortfolioAPI, account: Union[AccountAPI, None], start, stop, benchmarks: dict, tables: dict) -> None:
-        from Library.Statistic import backtest
         equity, balance = self._curves_(portfolio)
         ticker = self._security_.Ticker.UID if self._security_ and self._security_.Ticker else "Security"
         title = f"{self.__class__.__name__} · {self._strategy_.__name__} · {ticker} {self._timeframe_.UID} · {start} → {stop}"

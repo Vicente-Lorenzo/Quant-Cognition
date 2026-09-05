@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from Library.Portfolio.Account import AccountAPI
 
 class SizingMode(EnumerationAPI):
+
     Volume = 0
     Balance = 1
     Risk = 2

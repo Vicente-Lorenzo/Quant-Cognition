@@ -1,8 +1,6 @@
 import logging
 import threading
 
-import pytest
-
 from Library.Logging import LoggingAPI, BridgeAPI, VerboseLevel
 
 def test_facade_is_a_standard_logger():

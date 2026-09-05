@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Union, ClassVar
 
@@ -10,6 +8,7 @@ from Library.Database.Database import PrimaryKey, ForeignKey
 from Library.Database.Datapoint import DatapointAPI
 
 class Kind(EnumerationAPI):
+
     Manual = 0
     Scheduled = 1
     Service = 2

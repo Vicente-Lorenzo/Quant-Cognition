@@ -1,10 +1,9 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from Library.Logging import LoggingAPI
-from Library.Logging import VerboseLevel
+from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Logging.Log import LogAPI
 from Setup.Enum import enum_block
 from Setup.Task import migrate, provision

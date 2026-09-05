@@ -1,5 +1,6 @@
 from Library.Market.Price import (
     Direction,
+    PriceMode,
     PriceAPI
 )
 from Library.Market.Timestamp import (
@@ -7,7 +8,7 @@ from Library.Market.Timestamp import (
     TimestampAPI
 )
 from Library.Market.Series import SeriesAPI
-from Library.Market.Market import PriceMode, MarketAPI
+from Library.Market.Market import MarketAPI
 from Library.Market.Tick import TickAPI
 from Library.Market.Bar import BarAPI
 

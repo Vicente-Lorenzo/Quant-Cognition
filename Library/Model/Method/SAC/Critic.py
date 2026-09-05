@@ -22,7 +22,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 from pathlib import Path
 
-from Library.Database.Dataframe import np
 from Library.Model.Core.Network import NetworkAPI
 
 class SoftCriticNetworkAPI(NetworkAPI):

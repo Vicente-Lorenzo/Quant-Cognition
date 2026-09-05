@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from Library.Market.Market import MarketAPI
 
 class TechnicalType(EnumerationAPI):
+
     Baseline = 0
     Overlap = 1
     Momentum = 2

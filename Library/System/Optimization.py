@@ -1,17 +1,15 @@
-from __future__ import annotations
-
 from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from datetime import date, datetime
 from pathlib import Path
-from typing import Type, Union
+from typing import Union
 
 from Library.Model.Split import SplitAPI
 from Library.Strategy.Strategy import StrategyAPI
 from Library.System.Backtesting import BacktestingAPI
 from Library.System.Learning import FitnessType
 from Library.System.Selection import ElectionMode, SelectionMode, elect, select
-from Library.System.Space import CandidateAPI, apply_candidate, build_grid, measure_plan, neighbourhoods, resolve_inheritance, rounds_space, unpack_plan, unpack_section
+from Library.System.Space import CandidateAPI, apply_candidate, build_grid, measure_plan, neighborhoods, resolve_inheritance, rounds_space, unpack_plan, unpack_section
 from Library.Universe.Contract import CommissionType, SpreadType, SwapType
 from Library.Universe.Security import SecurityAPI
 from Library.Universe.Timeframe import TimeframeAPI
@@ -25,7 +23,7 @@ class OptimizationAPI(BacktestingAPI):
     _CHUNK_: int = 8
 
     def __init__(self,
-                 strategy: Type[StrategyAPI],
+                 strategy: type[StrategyAPI],
                  security: SecurityAPI,
                  timeframe: TimeframeAPI,
                  resolution: Union[str, TimeframeAPI, Missing, None],
@@ -166,7 +164,7 @@ class OptimizationAPI(BacktestingAPI):
             self._trials_ += sum(1 for _, score in scored if score is not None)
             for candidate, score in scored:
                 self._record_(Fold=fold, Stage=order, Round=position + 1, Candidate=candidate.index, Fitness=score, **candidate.settings())
-            picked = select(scored, self._selection_, adjacency=neighbourhoods)
+            picked = select(scored, self._selection_, adjacency=neighborhoods)
             if picked is None: break
             candidate, score = picked
             chosen = candidate.pinned()
@@ -293,10 +291,7 @@ _WORKER_: Union[OptimizationAPI, None] = None
 
 def _prepare_(payload: dict) -> None:
     global _WORKER_
-    import os
-    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
     from Library.Logging import LoggingAPI, VerboseLevel
-    from Library.Utility.Parameter import Parameter
     log = LoggingAPI("Worker")
     log.console.set_level(VerboseLevel.Warning)
     ProgressAPI.mute()

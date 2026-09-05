@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from Library.Universe.Contract import ContractAPI
 
 class Direction(EnumerationAPI):
+
     Buy = 1
     Neutral = 0
     Sell = -1
@@ -26,6 +27,7 @@ def calculate_direction(value: float) -> Direction:
     return Direction.Buy if value > 0 else Direction.Sell if value < 0 else Direction.Neutral
 
 class PriceMode(EnumerationAPI):
+
     Ask = 0
     Mid = 1
     Bid = 2
@@ -47,39 +49,49 @@ class PriceAPI(DataclassAPI):
     @property
     def LogPrice(self) -> Union[float, None]:
         return calculate_log_value(self.Price)
+
     @property
     def InvertedPrice(self) -> Union[float, None]:
         if not self.Price: return None
         return 1.0 / self.Price
+
     @property
     def Distance(self) -> Union[float, None]:
         if self.Reference is None: return None
         return self.Price - self.Reference
+
     @property
     def Return(self) -> Union[float, None]:
         return calculate_price_return(self.Price, self.Reference)
+
     @property
     def LogReturn(self) -> Union[float, None]:
         return calculate_log_return(self.Return)
+
     @property
     def Percentage(self) -> Union[float, None]:
         return calculate_percentage(self.Return)
+
     @property
     def LogPercentage(self) -> Union[float, None]:
         return calculate_log_percentage(self.LogReturn)
+
     @property
     def Direction(self) -> Union[Direction, None]:
         d = self.Distance
         if d is None: return None
         return calculate_direction(d)
+
     @property
     def Ratio(self) -> Union[float, None]:
         if not self.Reference: return None
         return self.Price / self.Reference
+
     @property
     def Points(self) -> Union[float, None]:
         if self.Contract is None or not self.Contract.PointSize: return None
         return self.Price / self.Contract.PointSize
+
     @property
     def Pips(self) -> Union[float, None]:
         if self.Contract is None or not self.Contract.PipSize: return None

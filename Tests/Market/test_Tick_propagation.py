@@ -1,4 +1,3 @@
-import pytest
 from Library.Market.Tick import TickAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Universe.Contract import ContractAPI

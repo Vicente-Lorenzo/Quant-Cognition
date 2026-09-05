@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import uuid
 from datetime import datetime
 from typing import Union
@@ -17,8 +15,6 @@ from Library.Database import PostgresDatabaseAPI, QueryAPI
 from Library.Utility.Typing import MISSING, Missing
 
 class ManagerAPI:
-
-    _OPEN_: tuple = (RunStatus.Running.name, RunStatus.Approving.name, RunStatus.Reviewing.name)
 
     def __init__(self, *, database: str = "Quant") -> None:
         self._database_ = database
@@ -138,7 +134,7 @@ class ManagerAPI:
         cid = None
         if row["WID"] is not None:
             cycles = self.cycles(workflow=row["WID"], limit=1)
-            if cycles and cycles[0]["Status"] in self._OPEN_: cid = cycles[0]["UID"]
+            if cycles and cycles[0]["Status"] in RunAPI.Open: cid = cycles[0]["UID"]
         if wait: return ExecutorAPI(database=self._database_).run(TaskAPI(**self._clean_(row)), cycle=cid, manual=True, arguments=arguments)
         self._spawn_(uid, cycle=cid, manual=True, arguments=arguments)
         self._log_.info(lambda: f"Task Run: Dispatched ({uid})")
@@ -158,7 +154,7 @@ class ManagerAPI:
         cid = None
         if row["WID"] is not None:
             cycles = self.cycles(workflow=row["WID"], limit=1)
-            if not cycles or cycles[0]["Status"] not in self._OPEN_: return None
+            if not cycles or cycles[0]["Status"] not in RunAPI.Open: return None
             cid = cycles[0]["UID"]
         now = datetime.now()
         run = RunAPI(UID=uuid.uuid4().hex, CID=cid, TID=uid, Kind=Kind.Manual.name, Retry=0, Duration=0.0, Auditor=by, StartedAt=now, StoppedAt=now)

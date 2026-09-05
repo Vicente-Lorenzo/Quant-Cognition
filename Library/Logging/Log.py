@@ -75,4 +75,4 @@ class LogAPI(DatapointAPI):
         horizon = datetime.now().timestamp() - days * 86400
         db.execute(QueryAPI(statement), [{"horizon": datetime.fromtimestamp(horizon)}])
         db.commit()
-        return db.rowcount if hasattr(db, "rowcount") else 0
+        return db.rowcount

@@ -1,9 +1,34 @@
 import struct
 import math
 
+import pytest
+
 from Library.Portfolio.Position import PositionType
-from Library.Protocol.Action import *
-from Library.Protocol.Update import *
+from Library.Protocol.Action import (
+    ActionID,
+    BidAboveTargetActionAPI,
+    CloseBuyPositionActionAPI,
+    CompleteActionAPI,
+    DecreaseBuyPositionVolumeActionAPI,
+    DecreaseSellPositionVolumeActionAPI,
+    IncreaseBuyPositionVolumeActionAPI,
+    IncreaseSellPositionVolumeActionAPI,
+    ModifyBuyPositionStopLossActionAPI,
+    ModifyBuyPositionVolumeActionAPI,
+    ModifySellPositionVolumeActionAPI,
+    OpenBuyPositionActionAPI,
+    OpenBuyStopLimitOrderActionAPI,
+    OpenBuyStopOrderActionAPI
+)
+from Library.Protocol.Update import (
+    UpdateID,
+    CompleteUpdateAPI,
+    DeniedUpdateAPI,
+    ExceptionUpdateAPI,
+    FilledBuyStopOrderUpdateAPI,
+    StopLossBuyPositionUpdateAPI,
+    TickUpdateAPI
+)
 from Library.Protocol.Binary import BinaryAPI
 
 def test_action_id_enum_values():
@@ -218,11 +243,7 @@ def test_codec_init_round_trip():
 
 def test_codec_field_count_validation():
     codec = BinaryAPI('B', 'i', 'd')
-    try:
-        codec.pack(1, 2)
-        assert False
-    except ValueError:
-        pass
+    with pytest.raises(ValueError): codec.pack(1, 2)
 
 def test_codec_fixed_size():
     tick = BinaryAPI('q', 'd', 'd', 'd', 'd', 'd', 'd', 'd')

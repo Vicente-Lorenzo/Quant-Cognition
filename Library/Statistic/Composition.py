@@ -391,7 +391,6 @@ def backtest(*, title: str, description: str = None, currency: str = "", anchor=
                                 data=PointAPI.line(PointAPI.conform(PointAPI.rebase(series, anchor), spine))))
     if growth: panes.append(PaneAPI(id="growth", title="Growth vs Benchmarks (rebased 100)", flex=20, format=FormatType.Value, datum=100.0, series=growth))
 
-
     tables = []
     for name, frame in (sheets or {}).items():
         if frame is None or not hasattr(frame, "columns") or frame.is_empty(): continue

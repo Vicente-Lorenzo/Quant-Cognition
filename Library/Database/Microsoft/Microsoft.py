@@ -1,4 +1,4 @@
-﻿import re
+import re
 import pymssql
 from typing import Union, Callable, Any
 from typing_extensions import Self

@@ -1,12 +1,9 @@
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Union, ClassVar
 from dataclasses import dataclass, field, InitVar
 
 from Library.Database.Dataframe import pl
 from Library.Database.Database import PrimaryKey, ForeignKey, DatabaseAPI
-from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Dataclass import overridefield, coerce
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.Position import PositionAPI, PositionType, PositionStatus
@@ -37,7 +34,6 @@ class TradeAPI(PositionAPI):
 
     @property
     def Structure(self) -> dict:
-        s = super().Structure
         cols = {
             self.ID.UID: PrimaryKey(pl.Int64),
             self.ID.Session: ForeignKey(pl.String, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")'),
@@ -73,10 +69,7 @@ class TradeAPI(PositionAPI):
             self.ID.Label: pl.String(),
             self.ID.Comment: pl.String(),
         }
-        for k, v in s.items():
-            if k not in cols:
-                cols[k] = v
-        return cols
+        return cols | {k: v for k, v in super().Structure.items() if k not in cols}
 
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],

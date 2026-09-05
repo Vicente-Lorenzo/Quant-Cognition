@@ -1,6 +1,7 @@
 import pytest
 
 from Library.Universe.Timeframe import TimeframeAPI
+
 def test_timeframe_normalize_exact_matches():
     assert TimeframeAPI.normalize("DAILY") == "D1"
     assert TimeframeAPI.normalize("D") == "D1"
@@ -31,11 +32,13 @@ def test_timeframe_normalize_exact_matches():
     assert TimeframeAPI.normalize("Y") == "Y1"
     assert TimeframeAPI.normalize("YEAR") == "Y1"
     assert TimeframeAPI.normalize("1Y") == "Y1"
+
 def test_timeframe_normalize_regex():
     assert TimeframeAPI.normalize("M15") == "M15"
     assert TimeframeAPI.normalize("15M") == "M15"
     assert TimeframeAPI.normalize("H4") == "H4"
     assert TimeframeAPI.normalize("4H") == "H4"
+
 def test_timeframe_initialization(db):
     tf = TimeframeAPI(UID="60", db=db)
     assert tf.UID == "H1"
@@ -43,6 +46,7 @@ def test_timeframe_initialization(db):
     assert tf.Value == 1
     assert tf.Minutes == 60.0
     assert tf.Name == "Hour"
+
 def test_timeframe_normalize_ticks():
     assert TimeframeAPI.normalize("TICK") == "T1"
     assert TimeframeAPI.normalize("TICKS") == "T1"
@@ -51,6 +55,7 @@ def test_timeframe_normalize_ticks():
     assert TimeframeAPI.normalize("T1") == "T1"
     assert TimeframeAPI.normalize("T50") == "T50"
     assert TimeframeAPI.normalize("50T") == "T50"
+
 def test_timeframe_tick_inference():
     tf = TimeframeAPI(UID="T50")
     assert tf.UID == "T50"
@@ -59,6 +64,7 @@ def test_timeframe_tick_inference():
     assert tf.IsTick is True
     assert tf.Minutes is None
     assert tf.Seconds is None
+
 def test_timeframe_comparison():
     tick, tick50, m1, h1, d1 = (TimeframeAPI(UID=u) for u in ("T1", "T50", "M1", "H1", "D1"))
     assert tick < d1

@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from Library.Market.Market import MarketAPI
 
 class MovingAverageType(EnumerationAPI):
+
     Simple = 0
     Exponential = 1
     Weighted = 2

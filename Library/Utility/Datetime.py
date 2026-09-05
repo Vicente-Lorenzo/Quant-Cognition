@@ -10,6 +10,7 @@ MILLISECOND: Final[timedelta] = timedelta(milliseconds=1)
 MICROSECOND: Final[timedelta] = timedelta(microseconds=1)
 
 class Weekday(EnumerationAPI):
+
     Monday = 0
     Tuesday = 1
     Wednesday = 2

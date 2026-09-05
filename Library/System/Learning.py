@@ -8,7 +8,7 @@ from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
 from datetime import date, datetime
 from pathlib import Path
-from typing import Type, Union, TYPE_CHECKING
+from typing import Union, TYPE_CHECKING
 
 from Library.Database.Dataframe import np, pl
 from Library.Model.Split import SplitAPI
@@ -31,12 +31,12 @@ from Library.System.Selection import ElectionMode, SelectionMode, elect, select
 from Library.Utility.Enumeration import EnumerationAPI
 from Library.Universe.Contract import CommissionType, SpreadType, SwapType
 from Library.Utility.IO import mkdir, write_json
+from Library.Utility.Parameter import Parameter
 from Library.Utility.Progress import ProgressAPI
 from Library.Utility.Profiler import timer
 from Library.Utility.Typing import Missing
 
 if TYPE_CHECKING:
-    from Library.Utility.Parameter import Parameter
     from Library.Strategy.Strategy import StrategyAPI
     from Library.Universe.Security import SecurityAPI
     from Library.Universe.Timeframe import TimeframeAPI
@@ -79,6 +79,7 @@ class _FrozenTechnicalAPI_:
         pass
 
 class FitnessType(EnumerationAPI):
+
     AnnualizedReturn = NETRETURNANNPERC
     SharpeRatio = SHARPERATIO
     SortinoRatio = SORTINORATIO
@@ -88,8 +89,13 @@ class FitnessType(EnumerationAPI):
 
 class LearningAPI(BacktestingAPI):
 
+    _MIRROR_TICKS_ = ("GapTick", "OpenTick", "HighTick", "LowTick", "CloseTick")
+    _MIRROR_SWAP_ = {"HighTick": "LowTick", "LowTick": "HighTick"}
+    _MIRROR_CONVERSIONS_ = ("AskBaseConversion", "BidBaseConversion", "AskQuoteConversion", "BidQuoteConversion")
+    _RESERVED_ = ("Fold ", "Episode ")
+
     def __init__(self,
-                 strategy: Type[StrategyAPI],
+                 strategy: type[StrategyAPI],
                  security: SecurityAPI,
                  timeframe: TimeframeAPI,
                  parameters: Parameter,
@@ -210,10 +216,6 @@ class LearningAPI(BacktestingAPI):
         if key not in self._tapes_: self._tapes_[key] = replace(self.extract(), IndicatorResults=self._capture_() if not mirror else None)
         return self._fitness_()
 
-    _MIRROR_TICKS_ = ("GapTick", "OpenTick", "HighTick", "LowTick", "CloseTick")
-    _MIRROR_SWAP_ = {"HighTick": "LowTick", "LowTick": "HighTick"}
-    _MIRROR_CONVERSIONS_ = ("AskBaseConversion", "BidBaseConversion", "AskQuoteConversion", "BidQuoteConversion")
-
     @staticmethod
     def _mirror_frame_(frame: Union[pl.DataFrame, None], anchor: float) -> Union[pl.DataFrame, None]:
         if frame is None or frame.is_empty(): return frame
@@ -264,8 +266,6 @@ class LearningAPI(BacktestingAPI):
     def _restore_(self) -> None:
         self._strategy_.Training = False
         self._strategy_.Agent = None
-
-    _RESERVED_ = ("Fold ", "Episode ")
 
     @classmethod
     def _stash_(cls, directory: Path, label: str) -> Path:
@@ -528,14 +528,12 @@ class LearningAPI(BacktestingAPI):
         self._log_.info(lambda: f"Learning Summary: Completed · {len(metrics)} Seeds · Mean {mean:+.4f} · Std {deviation:.4f} · Best {best:+.4f}")
 
 def _learn_seed_(payload: dict) -> dict:
-    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
     import torch
     torch.set_num_threads(payload.get("threads") or torch.get_num_threads())
     from Library.Logging import LoggingAPI, VerboseLevel
     log = LoggingAPI("Worker")
     log.console.set_level(VerboseLevel.Warning)
     log.file.set_level(VerboseLevel.Debug)
-    from Library.Utility.Parameter import Parameter
     security, timeframe = LearningAPI._resolve_(payload)
     learner = LearningAPI(strategy=payload["strategy"], security=security, timeframe=timeframe, parameters=Parameter(payload["parameters"], "."), start=payload["start"], stop=payload["stop"], account=payload["account"], spread=payload["spread"], commission=payload["commission"], swap=payload["swap"], reward=payload["reward"], episodes=payload["episodes"], epochs=payload["epochs"], train_frequency=payload["train_frequency"], gradient_steps=payload["gradient_steps"], training=payload["training"], validation=payload["validation"], testing=payload["testing"], rolling=payload["rolling"], continuous=payload["continuous"], fitness=payload["fitness"], patience=payload["patience"], activity=payload.get("activity", 0), balance=payload.get("balance", 0), ratio=payload.get("ratio", 0.0), mirror=payload.get("mirror", False), mirror_ratio=payload.get("mirror_ratio", 0.5), final=payload.get("final", False), seed=payload["seed"], seeds=1, workers=1, report=False, export=False)
     try:

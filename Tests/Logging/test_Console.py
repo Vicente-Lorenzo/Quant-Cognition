@@ -37,6 +37,7 @@ def test_color_is_disabled_when_not_a_tty(monkeypatch):
 
 def test_color_detection_survives_a_stream_without_isatty(monkeypatch):
     class Bare:
+
         def write(self, text): pass
     monkeypatch.setattr(sys, "stdout", Bare())
     assert LoggingAPI.console._supports_() is False
@@ -87,7 +88,9 @@ def test_output_is_resolved_lazily(monkeypatch):
 
 def test_unencodable_characters_do_not_raise(monkeypatch):
     class Narrow(io.StringIO):
+
         encoding = "cp1252"
+
         def write(self, text):
             text.encode("cp1252")
             return super().write(text)
@@ -100,9 +103,13 @@ def test_unencodable_characters_do_not_raise(monkeypatch):
 
 def test_write_to_a_broken_stream_never_raises(monkeypatch):
     class Broken:
+
         encoding = "utf-8"
+
         def isatty(self): return False
+
         def write(self, text): raise OSError("pipe closed")
+
         def flush(self): raise OSError("pipe closed")
     monkeypatch.setattr(sys, "stdout", Broken())
     LoggingAPI.console.set_level(VerboseLevel.Debug)
@@ -114,6 +121,7 @@ def test_virtual_terminal_probe_never_raises():
 
 def test_supports_is_platform_aware(monkeypatch):
     class Tty(io.StringIO):
+
         def isatty(self): return True
     monkeypatch.setattr(sys, "stdout", Tty())
     monkeypatch.setattr(sys, "platform", "linux")

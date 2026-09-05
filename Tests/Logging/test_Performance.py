@@ -1,7 +1,5 @@
 import time
 
-import pytest
-
 from Library.Logging import LoggerAPI, LoggingAPI, VerboseLevel
 
 _RUNS_: int = 20000

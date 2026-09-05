@@ -1,9 +1,11 @@
-﻿import pytest
+import pytest
 from Library.Database.Datapoint import DatapointAPI
+
 def override_databases(cls, db_name):
     cls.Database = db_name
     for sub in cls.__subclasses__():
         override_databases(sub, db_name)
+
 override_databases(DatapointAPI, "Tests")
 from Library.Database.Query import QueryAPI
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
@@ -11,6 +13,7 @@ from Library.Universe.Universe import UniverseAPI
 from Library.Market.Market import MarketAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Setup.Enum import OUTPUT_PATH
+
 @pytest.fixture(scope="session")
 def db():
     admin = PostgresDatabaseAPI(admin=True)
@@ -34,6 +37,7 @@ def db():
         yield conn
     finally:
         conn.disconnect()
+
 @pytest.fixture(scope="session")
 def universe(db):
     from Library.Universe.Category import CategoryAPI
@@ -61,6 +65,7 @@ def universe(db):
     tf = TimeframeAPI(UID="M1", db=db)
     tf.save()
     return {"category": cat, "provider": prov, "ticker": ticker, "contract": contract, "security": sec, "timeframe": tf}
+
 @pytest.fixture(scope="session")
 def market(db, universe):
     from Library.Market.Tick import TickAPI
@@ -68,6 +73,7 @@ def market(db, universe):
     db.migrate(schema=MarketAPI.Schema, table=TickAPI.Table, structure=TickAPI(db=None).Structure)
     db.migrate(schema=MarketAPI.Schema, table=BarAPI.Table, structure=BarAPI(db=None).Structure)
     return {"tick_table": f'"{TickAPI.Schema}"."{TickAPI.Table}"', "bar_table": f'"{BarAPI.Schema}"."{BarAPI.Table}"'}
+
 @pytest.fixture(scope="session")
 def connector_enums() -> dict:
     if not OUTPUT_PATH.is_file(): pytest.skip("Generated C# enum not present")

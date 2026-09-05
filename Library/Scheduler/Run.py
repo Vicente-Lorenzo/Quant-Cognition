@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Union, ClassVar
@@ -15,6 +13,7 @@ from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Database import PrimaryKey, ForeignKey
 
 class RunStatus(EnumerationAPI):
+
     Waiting = 0
     Running = 1
     Approving = 2
@@ -24,11 +23,13 @@ class RunStatus(EnumerationAPI):
     Failure = 6
 
 class RetentionLevel(EnumerationAPI):
+
     Temporary = 0
     Persistent = 1
     Favorite = 2
 
 class RunEvent(EnumerationAPI):
+
     Start = 0
     Complete = 1
     RequireApproval = 2
@@ -48,6 +49,7 @@ class RunAPI(DatapointAPI):
     Busy: ClassVar[tuple] = (RunStatus.Waiting.name, RunStatus.Running.name)
     Live: ClassVar[tuple] = (RunStatus.Waiting.name, RunStatus.Running.name, RunStatus.Retrying.name)
     Active: ClassVar[tuple] = (RunStatus.Waiting.name, RunStatus.Running.name, RunStatus.Approving.name, RunStatus.Reviewing.name, RunStatus.Retrying.name)
+    Open: ClassVar[tuple] = (RunStatus.Running.name, RunStatus.Approving.name, RunStatus.Reviewing.name)
 
     UID: Union[str, None] = None
     CID: Union[str, None] = None

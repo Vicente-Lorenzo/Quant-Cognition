@@ -9,6 +9,7 @@ from Library.Utility.Path import PathAPI
 from Library.Utility.Typing import format
 
 class FileAPI:
+
     def __init__(self, data: Union[str, Path, PathAPI], *, encoding: str = "utf-8"):
         if isinstance(data, PathAPI):
             self._data_: str = data.file.read_text(encoding=encoding)

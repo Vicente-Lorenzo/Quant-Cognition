@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from Library.Portfolio.Portfolio import PortfolioAPI
 
 class UpdateID(EnumerationAPI):
+
     Init = 0
     Account = 1
     Security = 2
@@ -106,6 +107,7 @@ class UpdateID(EnumerationAPI):
 
 @dataclass(slots=True)
 class UpdateAPI(DataclassAPI):
+
     Direction: ClassVar[Direction] = Direction.Neutral
     Account: AccountAPI
     Security: SecurityAPI
@@ -117,30 +119,37 @@ class UpdateAPI(DataclassAPI):
 
 @dataclass(slots=True)
 class CompleteUpdateAPI(UpdateAPI):
+
     pass
 
 @dataclass(slots=True)
 class InitUpdateAPI(UpdateAPI):
+
     ProcessID: int
 
 @dataclass(slots=True)
 class AccountUpdateAPI(UpdateAPI):
+
     pass
 
 @dataclass(slots=True)
 class SecurityUpdateAPI(UpdateAPI):
+
     pass
 
 @dataclass(slots=True)
 class ExecutionUpdateAPI(UpdateAPI):
+
     pass
 
 @dataclass(slots=True)
 class TickUpdateAPI(UpdateAPI):
+
     Tick: TickAPI
 
 @dataclass(slots=True)
 class BarUpdateAPI(UpdateAPI):
+
     Bar: BarAPI
 
 __all__ = [

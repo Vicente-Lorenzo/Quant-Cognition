@@ -342,6 +342,7 @@ def test_compare_prefers_the_walk_forward_curve_of_a_searched_run():
 def test_compare_without_any_curve_yields_an_empty_workspace():
     space = compare([("Run A", {"panes": [], "sheets": []})])
     assert space.panes == [] and space.sheets == []
+
 def test_cell_keeps_large_values_out_of_scientific_notation():
     assert PointAPI.cell(10000000.0) == "10,000,000"
     assert PointAPI.cell(12345678.9) == "12,345,679"

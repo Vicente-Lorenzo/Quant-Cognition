@@ -1,4 +1,3 @@
-import pytest
 from Library.Portfolio.PnL import PnLAPI
 from Library.Market.Price import Direction
 

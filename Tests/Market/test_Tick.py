@@ -1,9 +1,7 @@
-﻿import pytest
+import pytest
 import polars as pl
 from datetime import datetime, timedelta
 from Library.Market.Tick import TickAPI
-from Library.Market.Timestamp import TimestampAPI
-from Library.Market.Price import PriceAPI
 from Library.Universe.Security import SecurityAPI
 
 def test_encode_matches_bit_layout():
@@ -51,6 +49,7 @@ def test_uid_recomputed_on_natural_key_change():
     assert tick.UID == TickAPI.encode(5, b)
     tick.Security = 9
     assert tick.UID == TickAPI.encode(9, b)
+
 def test_tick_initialization():
     now = datetime.now()
     tick_args = (100, now, 1.1005, 1.10025, 1.1000, 1.0, 1.0, 1.0, 1.0)
@@ -60,6 +59,7 @@ def test_tick_initialization():
     assert tick.Timestamp.DateTime == now
     assert tick.Ask.Price == 1.1005
     assert tick.Bid.Price == 1.1000
+
 def test_tick_properties():
     now = datetime.now()
     tick = TickAPI(1, now, Ask=1.1005, Bid=1.1000)
@@ -68,6 +68,7 @@ def test_tick_properties():
     assert round(tick.Spread.Price, 4) == 0.0005
     assert tick.InvertedAsk == 1.0 / 1.1005
     assert tick.InvertedBid == 1.0 / 1.1000
+
 def test_tick_db_operations(db):
     from Library.Universe.Category import CategoryAPI
     from Library.Universe.Provider import ProviderAPI, Platform

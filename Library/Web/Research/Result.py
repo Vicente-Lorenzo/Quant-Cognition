@@ -366,7 +366,7 @@ class ResultPageAPI(ResultBaseAPI, RefreshAPI):
         return [uid for uid in parts[0].split(self._JOINER_) if uid], view
 
     def _details_(self, pairs) -> html.Div:
-        rows = [html.Div([html.Span(label, className="scheduler-detail-key"), html.Span(value if not isinstance(value, str) else value, className="scheduler-detail-val")], className="scheduler-detail-row")
+        rows = [html.Div([html.Span(label, className="scheduler-detail-key"), html.Span(value, className="scheduler-detail-val")], className="scheduler-detail-row")
                 for label, value in pairs if value not in (None, "")]
         return html.Div(rows, className="scheduler-detail")
 

@@ -317,7 +317,6 @@ def calculate_return(df: pl.DataFrame) -> tuple[float, float]:
     tot_ret_pct = (math.exp(tot_log) - 1.0) * 100.0 if tot_log else 0.0
     return exp_ret_pct, tot_ret_pct
 
-
 def calculate_volatility(df: pl.DataFrame, upside: bool = False, downside: bool = False) -> float:
     log_ret = str(PositionAPI.ID.LogReturn)
     if df.is_empty() or log_ret not in df.columns: return 0.0

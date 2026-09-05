@@ -17,6 +17,7 @@ from Library.Utility.Typing import MISSING
 if TYPE_CHECKING: from Library.Database import DatabaseAPI
 
 class SpreadType(EnumerationAPI):
+
     Points = 0
     Percentage = 1
     Random = 2
@@ -25,6 +26,7 @@ class SpreadType(EnumerationAPI):
     Auto = 5
 
 class CommissionType(EnumerationAPI):
+
     Points = 0
     Percentage = 1
     Amount = 2
@@ -32,12 +34,14 @@ class CommissionType(EnumerationAPI):
     Auto = 4
 
 class CommissionMode(EnumerationAPI):
+
     BaseAssetPerMillionVolume = 0
     BaseAssetPerOneLot = 1
     PercentageOfVolume = 2
     QuoteAssetPerOneLot = 3
 
 class SwapType(EnumerationAPI):
+
     Points = 0
     Percentage = 1
     Amount = 2
@@ -45,16 +49,19 @@ class SwapType(EnumerationAPI):
     Auto = 4
 
 class SwapMode(EnumerationAPI):
+
     Pips = 0
     Percentage = 1
 
 class VariantType(EnumerationAPI):
+
     Call = 0
     Put = 1
     Deliverable = 2
     NDF = 3
 
 class PayoffType(EnumerationAPI):
+
     Trivial = 0
     Vanilla = 1
     Asian = 2
@@ -63,6 +70,7 @@ class PayoffType(EnumerationAPI):
     Digital = 5
 
 class ExerciseType(EnumerationAPI):
+
     European = 0
     American = 1
     Bermudan = 2

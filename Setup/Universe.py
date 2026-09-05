@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from Library.Database.Dataframe import pl
 from Library.Logging import LoggingAPI
-from Setup.Task import provision
+from Setup.Task import migrate, provision
 from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Ticker import TickerAPI, ContractType
 from Library.Universe.Contract import ContractAPI, PayoffType
@@ -17,19 +17,11 @@ from Library.Universe.Provider import Provider, Platform, ProviderAPI
 
 BY = "Population"
 
-def _migrate_(db):
-    CategoryAPI(db=db, migrate=True, autosave=False, autoload=False)
-    ProviderAPI(db=db, migrate=True, autosave=False, autoload=False)
-    TickerAPI(db=db, migrate=True, autosave=False, autoload=False)
-    ContractAPI(db=db, migrate=True, autosave=False, autoload=False)
-    SecurityAPI(db=db, migrate=True, autosave=False, autoload=False)
-    TimeframeAPI(db=db, migrate=True, autosave=False, autoload=False)
-
 def _stamp_(df: pl.DataFrame) -> pl.DataFrame:
     return df.with_columns(pl.lit(BY).alias("UpdatedBy"), pl.lit(datetime.now()).alias("UpdatedAt"))
 
 def populate_universe(db):
-    _migrate_(db)
+    migrate(db, CategoryAPI, ProviderAPI, TickerAPI, ContractAPI, SecurityAPI, TimeframeAPI)
     categories_data = [
         {CategoryAPI.ID.UID: "Forex(Major)", CategoryAPI.ID.Primary: "Forex", CategoryAPI.ID.Secondary: "Major", CategoryAPI.ID.Alternative: "Currency"},
         {CategoryAPI.ID.UID: "Forex(Minor)", CategoryAPI.ID.Primary: "Forex", CategoryAPI.ID.Secondary: "Minor", CategoryAPI.ID.Alternative: "Currency"},

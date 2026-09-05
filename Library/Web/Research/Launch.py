@@ -9,8 +9,7 @@ from Library.Logging import VerboseLevel
 from Library.Scheduler import ManagerAPI
 from Library.Utility.Datetime import HORIZON
 from Library.Strategy.Strategy import StrategyType
-from Library.System.Learning import FitnessType
-from Library.System.Learning import RewardType
+from Library.System.Learning import FitnessType, RewardType
 from Library.System.Selection import ElectionMode, SelectionMode
 from Library.System.System import SystemType
 from Library.Universe.Contract import CommissionType, SpreadType, SwapType
@@ -31,8 +30,8 @@ MARKET = (
     FieldAPI(name="strategy", control="select", group="market", default=StrategyType.Trend.name, options=_STRATEGIES_, help="Trading rules the engine runs"),
     FieldAPI(name="provider", group="market", default="Spotware", help="Broker whose parameter tree and data are used"),
     FieldAPI(name="ticker", group="market", default="EURUSD", help="Security traded during the run"),
-    FieldAPI(name="timeframe", group="market", default="Daily", help="Friendly parameter-tree key \u00b7 Hour or Daily \u00b7 never H1 or D1"),
-    FieldAPI(name="risk_free", label="Risk Free Rate", control="number", group="market", default=0.0, minimum=0, help="Annual risk free rate as a decimal \u00b7 0.04 is 4% \u00b7 used by Alpha and every ratio"),
+    FieldAPI(name="timeframe", group="market", default="Daily", help="Friendly parameter-tree key · Hour or Daily · never H1 or D1"),
+    FieldAPI(name="risk_free", label="Risk Free Rate", control="number", group="market", default=0.0, minimum=0, help="Annual risk free rate as a decimal · 0.04 is 4% · used by Alpha and every ratio"),
     FieldAPI(name="benchmark", group="market", help="Optional comparison series rebased alongside the strategy growth"),
     FieldAPI(name="description", control="textarea", group="market", help="Free text stored with the run for later recall"),
     FieldAPI(name="start", group="period", default=HORIZON.strftime("%Y-%m-%d"), help="First timestamp of the simulated period"),
@@ -40,17 +39,17 @@ MARKET = (
     FieldAPI(name="account_asset", label="Account Asset", group="account", default="EUR", help="Deposit currency of the simulated account"),
     FieldAPI(name="account_balance", label="Account Balance", control="number", group="account", default=10000.0, minimum=0, help="Opening balance of the simulated account"),
     FieldAPI(name="account_leverage", label="Account Leverage", control="number", group="account", default=30.0, minimum=1, help="Leverage the simulated account trades with"),
-    FieldAPI(name="spread_type", label="Spread Type", control="select", group="cost", default=SpreadType.Auto.name, options=_SPREAD_, help="How the spread is priced \u00b7 Accurate derives it from the tick tape"),
+    FieldAPI(name="spread_type", label="Spread Type", control="select", group="cost", default=SpreadType.Auto.name, options=_SPREAD_, help="How the spread is priced · Accurate derives it from the tick tape"),
     FieldAPI(name="spread_value", label="Spread Value", control="number", group="cost", help="Fixed spread in points when the type is not Accurate"),
-    FieldAPI(name="commission_type", label="Commission Type", control="select", group="cost", default=CommissionType.Auto.name, options=_COMMISSION_, help="How commission is charged \u00b7 Points matches an IC Markets raw account"),
-    FieldAPI(name="commission_value", label="Commission Value", control="number", group="cost", help="Commission in the unit the type selects \u00b7 3.5 points is the thesis condition"),
-    FieldAPI(name="swap_type", label="Swap Type", control="select", group="cost", default=SwapType.Auto.name, options=_SWAP_, help="How overnight financing is charged \u00b7 the thesis runs swap free"),
-    FieldAPI(name="swap_buy", label="Swap Buy", control="number", group="cost", help="Overnight financing applied to long exposure \u00b7 0 is swap free"),
-    FieldAPI(name="swap_sell", label="Swap Sell", control="number", group="cost", help="Overnight financing applied to short exposure \u00b7 0 is swap free"),
+    FieldAPI(name="commission_type", label="Commission Type", control="select", group="cost", default=CommissionType.Auto.name, options=_COMMISSION_, help="How commission is charged · Points matches an IC Markets raw account"),
+    FieldAPI(name="commission_value", label="Commission Value", control="number", group="cost", help="Commission in the unit the type selects · 3.5 points is the thesis condition"),
+    FieldAPI(name="swap_type", label="Swap Type", control="select", group="cost", default=SwapType.Auto.name, options=_SWAP_, help="How overnight financing is charged · the thesis runs swap free"),
+    FieldAPI(name="swap_buy", label="Swap Buy", control="number", group="cost", help="Overnight financing applied to long exposure · 0 is swap free"),
+    FieldAPI(name="swap_sell", label="Swap Sell", control="number", group="cost", help="Overnight financing applied to short exposure · 0 is swap free"),
 )
 
 BACKTESTING = (
-    FieldAPI(name="resolution", control="select", group="resolution", options=_RESOLUTION_, help="Bar resolution the engine steps on \u00b7 Auto picks the finest available"),
+    FieldAPI(name="resolution", control="select", group="resolution", options=_RESOLUTION_, help="Bar resolution the engine steps on · Auto picks the finest available"),
 )
 
 OUTPUT = (
@@ -59,11 +58,11 @@ OUTPUT = (
     FieldAPI(name="plot", control="switch", group="output", default=True, help="Render the interactive result view under the run Output folder"),
     FieldAPI(name="console", control="select", group="verbosity", default=VerboseLevel.Info.name, options=_VERBOSE_, help="Console verbosity of the run"),
     FieldAPI(name="file", control="select", group="verbosity", default=VerboseLevel.Debug.name, options=_VERBOSE_, help="File verbosity of the run"),
-    FieldAPI(name="storage", control="select", group="verbosity", default=VerboseLevel.Warning.name, options=_VERBOSE_, help="Database verbosity of the run \u00b7 kept only while the run is retained"),
+    FieldAPI(name="storage", control="select", group="verbosity", default=VerboseLevel.Warning.name, options=_VERBOSE_, help="Database verbosity of the run · kept only while the run is retained"),
 )
 
 LEARNING = (
-    FieldAPI(name="selection", control="select", group="objective", default=SelectionMode.Best.name, options=_SELECTION_, help="Which candidate wins inside a fold \u00b7 Plateau prefers a stable neighbourhood"),
+    FieldAPI(name="selection", control="select", group="objective", default=SelectionMode.Best.name, options=_SELECTION_, help="Which candidate wins inside a fold · Plateau prefers a stable neighborhood"),
     FieldAPI(name="election", control="select", group="objective", default=ElectionMode.Last.name, options=_ELECTION_, help="Which model wins across folds"),
     FieldAPI(name="purge", control="number", group="guard", default=0, minimum=0, help="Days trimmed from the end of each training window"),
     FieldAPI(name="embargo", control="number", group="guard", default=0, minimum=0, help="Days skipped after each validation window"),
@@ -72,32 +71,32 @@ LEARNING = (
     FieldAPI(name="epochs", control="number", group="cadence", default=1, minimum=1, help="Gradient epochs per pass"),
     FieldAPI(name="train_frequency", label="Train Frequency", control="number", group="steps", default=1, minimum=1, help="Environment steps between gradient updates"),
     FieldAPI(name="gradient_steps", label="Gradient Steps", control="number", group="steps", default=1, minimum=1, help="Gradient updates applied at each training step"),
-    FieldAPI(name="training", control="number", group="split", default=0, minimum=0, help="Walk-forward training window in months \u00b7 0 uses the whole period"),
+    FieldAPI(name="training", control="number", group="split", default=0, minimum=0, help="Walk-forward training window in months · 0 uses the whole period"),
     FieldAPI(name="validation", control="number", group="split", default=0, minimum=0, help="Walk-forward validation window in months"),
-    FieldAPI(name="testing", control="number", group="split", default=0, minimum=0, help="Held-out testing window in months \u00b7 the elected model is re-run here"),
+    FieldAPI(name="testing", control="number", group="split", default=0, minimum=0, help="Held-out testing window in months · the elected model is re-run here"),
     FieldAPI(name="rolling", control="switch", group="mode", default=False, help="Roll the walk-forward window instead of anchoring it"),
     FieldAPI(name="continuous", control="switch", group="mode", default=False, help="Carry the trained agent into the next fold instead of starting fresh"),
     FieldAPI(name="fitness", control="select", group="objective", default=FitnessType.AnnualizedReturn.name, options=_FITNESS_, help="Metric a single run is scored on"),
-    FieldAPI(name="patience", control="number", group="cadence", default=0, minimum=0, help="Episodes without improvement before training stops \u00b7 0 disables early stopping"),
+    FieldAPI(name="patience", control="number", group="cadence", default=0, minimum=0, help="Episodes without improvement before training stops · 0 disables early stopping"),
     FieldAPI(name="activity", control="number", group="gate", default=0, minimum=0, help="Minimum trades a candidate must place to be admissible"),
     FieldAPI(name="balance", control="number", group="gate", default=0, minimum=0, help="Minimum trades on the weaker side before a candidate is admissible"),
-    FieldAPI(name="ratio", control="number", group="gate", default=0.0, minimum=0, help="Minimum share of directional time on the weaker side \u00b7 the two sided gate"),
+    FieldAPI(name="ratio", control="number", group="gate", default=0.0, minimum=0, help="Minimum share of directional time on the weaker side · the two sided gate"),
     FieldAPI(name="mirror", control="switch", group="gate", default=False, help="Train on the mirrored tape as well so the agent sees both directions"),
     FieldAPI(name="mirror_ratio", label="Mirror Ratio", control="number", group="gate", default=0.5, minimum=0, help="Share of episodes drawn from the mirrored tape"),
     FieldAPI(name="final", control="switch", group="mode", default=False, help="Keep the last checkpoint instead of the best scoring one"),
-    FieldAPI(name="seed", control="number", group="fleet", help="Fix the starting seed \u00b7 empty draws one per run"),
+    FieldAPI(name="seed", control="number", group="fleet", help="Fix the starting seed · empty draws one per run"),
     FieldAPI(name="seeds", control="number", group="fleet", default=1, minimum=1, help="Independent seeds trained per fold"),
     FieldAPI(name="workers", control="number", group="fleet", default=1, minimum=1, help="Worker processes training in parallel"),
-    FieldAPI(name="threads", control="number", group="fleet", minimum=1, help="Torch threads per worker \u00b7 1 is required for bit exact reproducibility"),
+    FieldAPI(name="threads", control="number", group="fleet", minimum=1, help="Torch threads per worker · 1 is required for bit exact reproducibility"),
 )
 
 OPTIMIZATION = (
-    FieldAPI(name="training", control="number", group="split", default=0, minimum=0, help="Walk-forward training window in months \u00b7 0 uses the whole period"),
+    FieldAPI(name="training", control="number", group="split", default=0, minimum=0, help="Walk-forward training window in months · 0 uses the whole period"),
     FieldAPI(name="validation", control="number", group="split", default=0, minimum=0, help="Walk-forward validation window in months"),
-    FieldAPI(name="testing", control="number", group="split", default=0, minimum=0, help="Held-out testing window in months \u00b7 the elected candidate is re-run here"),
+    FieldAPI(name="testing", control="number", group="split", default=0, minimum=0, help="Held-out testing window in months · the elected candidate is re-run here"),
     FieldAPI(name="fitness", control="select", group="objective", default=FitnessType.AnnualizedReturn.name, options=_FITNESS_, help="Metric a single run is scored on"),
-    FieldAPI(name="resolution", control="select", group="resolution", options=_RESOLUTION_, help="Bar resolution the engine steps on \u00b7 Auto picks the finest available"),
-    FieldAPI(name="selection", control="select", group="objective", default=SelectionMode.Best.name, options=_SELECTION_, help="Which candidate wins inside a fold \u00b7 Plateau prefers a stable neighbourhood"),
+    FieldAPI(name="resolution", control="select", group="resolution", options=_RESOLUTION_, help="Bar resolution the engine steps on · Auto picks the finest available"),
+    FieldAPI(name="selection", control="select", group="objective", default=SelectionMode.Best.name, options=_SELECTION_, help="Which candidate wins inside a fold · Plateau prefers a stable neighborhood"),
     FieldAPI(name="election", control="select", group="objective", default=ElectionMode.Frequency.name, options=_ELECTION_, help="Which model wins across folds"),
     FieldAPI(name="purge", control="number", group="guard", default=0, minimum=0, help="Days trimmed from the end of each training window"),
     FieldAPI(name="embargo", control="number", group="guard", default=0, minimum=0, help="Days skipped after each validation window"),

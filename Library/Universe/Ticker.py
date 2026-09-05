@@ -21,6 +21,7 @@ _TRIM_PATTERN_ = re.compile(r"[#.+\-_]+$")
 _SUFFIX_LIST_ = sorted([".m", ".micro", ".pro", ".p", ".raw", ".ecn", ".s", ".std", ".i", ".ins", ".z", ".v", ".x", ".plus", "+", "-", "_sb", ".c", ".cfd"], key=len, reverse=True)
 
 class ContractType(EnumerationAPI):
+
     Spot = 0
     CFD = 1
     Option = 2

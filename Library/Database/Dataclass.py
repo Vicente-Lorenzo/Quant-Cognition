@@ -1,11 +1,9 @@
-from __future__ import annotations
-
 import json
 import functools
 import dataclasses
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import Union, Type, Any, ClassVar
+from typing import Union, Any, ClassVar
 from typing_extensions import Self
 
 from Library.Utility.Typing import MISSING
@@ -19,14 +17,14 @@ def coerce(value: Any) -> Any:
 
 class DatametaAPI:
 
-    def __init__(self, cls: Type, name: Union[str, None] = None, full: bool = False):
+    def __init__(self, cls: type, name: Union[str, None] = None, full: bool = False):
         self._cls_ = cls
         self._name_ = name
         self._full_ = full
 
     @staticmethod
     @functools.cache
-    def _resolve_(cls: Type, name: Union[str, None], full: bool, item: str) -> Any:
+    def _resolve_(cls: type, name: Union[str, None], full: bool, item: str) -> Any:
         attrs = {k: v for base in reversed(cls.mro()) if base is not object for k, v in base.__dict__.items()}
         fs = attrs.get("__dataclass_fields__", {})
         is_prop = item in attrs and isinstance(attrs[item], property)

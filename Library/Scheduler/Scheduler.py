@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import time
 import uuid
 import subprocess
@@ -26,7 +24,6 @@ class SchedulerAPI:
     _INTERVAL_: int = 30
     _CONCURRENCY_: int = 4
     _LEASE_: int = 90
-    _OPEN_: tuple = (RunStatus.Running.name, RunStatus.Approving.name, RunStatus.Reviewing.name)
 
     def __init__(self, *, database: str = "Quant", interval: Union[int, Missing] = MISSING, concurrency: Union[int, Missing] = MISSING) -> None:
         self._database_ = database
@@ -145,10 +142,6 @@ class SchedulerAPI:
             run.save(by="Reaper")
             self._log_.warning(lambda row=row, run=run: f"Run Reap: {run.Status} ({row['UID']}) · Due to stale heartbeat")
 
-    @staticmethod
-    def _terminate_(pid: Union[int, None]) -> None:
-        terminate(pid)
-
     def _paused_(self, db: PostgresDatabaseAPI, tasks: list[dict]) -> set:
         governed = {task["UID"]: task["WID"] for task in tasks if task["WID"] is not None and Kind.parse(task["Kind"]) is Kind.Scheduled}
         if not governed: return set()
@@ -180,7 +173,7 @@ class SchedulerAPI:
             running = self._alive_(uid)
             if task["WID"] in paused:
                 if running:
-                    self._terminate_(self._services_[uid].pid)
+                    terminate(self._services_[uid].pid)
                     self._suspend_(db, uid, now)
                     self._log_.info(lambda task=task: f"Service Suspend: Stopped ({task['Name']}) · Maintenance")
                 self._services_.pop(uid, None)
@@ -239,7 +232,7 @@ class SchedulerAPI:
     def _reset_(self, db: PostgresDatabaseAPI, cycle: dict, now: datetime) -> None:
         for run in self._cycle_runs_(db, cycle["UID"]):
             if run["Status"] not in RunAPI.Active: continue
-            self._terminate_(run["PID"])
+            terminate(run["PID"])
             failed = RunAPI(UID=run["UID"], CID=run["CID"], TID=run["TID"], Kind=run["Kind"], ExitCode=run["ExitCode"], Retry=run["Retry"], PID=run["PID"], Log=run["Log"], StartedAt=run["StartedAt"], StoppedAt=now, Heartbeat=run["Heartbeat"], db=db)
             failed.Status = RunStatus.Failure.name
             failed.save(by="Reset")
@@ -273,7 +266,7 @@ class SchedulerAPI:
         kind = Kind.parse(workflow["Kind"])
         if not isinstance(kind, Kind): kind = Kind.Scheduled if workflow["Schedule"] else Kind.Manual
         cycle = self._cycle_(db, workflow["UID"])
-        opened = cycle is not None and cycle["Status"] in self._OPEN_
+        opened = cycle is not None and cycle["Status"] in RunAPI.Open
         if kind is Kind.Service:
             if launch: self._launch_.discard(workflow["UID"])
             if not opened:
@@ -368,7 +361,7 @@ class SchedulerAPI:
     def stop(self) -> None:
         self._running_ = False
         for handle in list(self._services_.values()):
-            if handle is not None and handle.poll() is None: self._terminate_(handle.pid)
+            if handle is not None and handle.poll() is None: terminate(handle.pid)
         self._services_.clear()
         if self._listener_ is not None:
             try: self._listener_.disconnect()

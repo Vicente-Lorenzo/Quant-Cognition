@@ -88,14 +88,14 @@
                 return Object.assign({}, marker, {color: theme.border});
             }));
         });
-        var colour = chosen[0].direction === "Buy" ? theme.up : theme.down;
+        var color = chosen[0].direction === "Buy" ? theme.up : theme.down;
         chosen.forEach(function (span) {
             state.priced.forEach(function (series) {
                 [["entryPrice", 0], ["exitPrice", 2]].forEach(function (entry) {
                     var price = span[entry[0]];
                     if (price === null || price === undefined) return;
-                    state.lines.push({series: series, line: series.createPriceLine({price: price, color: colour, lineWidth: 1, lineStyle: entry[1],
-                                                                                   axisLabelVisible: true, axisLabelColor: colour, axisLabelTextColor: theme.plane})});
+                    state.lines.push({series: series, line: series.createPriceLine({price: price, color: color, lineWidth: 1, lineStyle: entry[1],
+                                                                                   axisLabelVisible: true, axisLabelColor: color, axisLabelTextColor: theme.plane})});
                 });
             });
         });
@@ -196,9 +196,9 @@
                 bandHandles = [];
                 (pane.lines || []).forEach(function (level, index) {
                     if (!bandState[index]) return;
-                    var colour = tint(theme, level.color, "band");
-                    bandHandles.push(bandOwner.series.createPriceLine({price: level.price, color: colour, lineWidth: 1, lineStyle: level.style === undefined ? 2 : level.style,
-                                                                      title: level.title, axisLabelVisible: true, axisLabelColor: colour, axisLabelTextColor: theme.plane}));
+                    var color = tint(theme, level.color, "band");
+                    bandHandles.push(bandOwner.series.createPriceLine({price: level.price, color: color, lineWidth: 1, lineStyle: level.style === undefined ? 2 : level.style,
+                                                                      title: level.title, axisLabelVisible: true, axisLabelColor: color, axisLabelTextColor: theme.plane}));
                 });
                 if (pane.datum !== undefined && pane.datum !== null) {
                     bandHandles.push(bandOwner.series.createPriceLine({price: pane.datum, color: theme.datum, lineWidth: 1, lineStyle: 0,
@@ -207,8 +207,8 @@
             };
             (pane.lines || []).forEach(function (level, index) {
                 var chip = element("span", "lw-chip", chips);
-                var colour = tint(theme, level.color, "band");
-                chip.innerHTML = '<span class="lw-swatch" style="background:' + colour + '"></span><span></span> <b></b>';
+                var color = tint(theme, level.color, "band");
+                chip.innerHTML = '<span class="lw-swatch" style="background:' + color + '"></span><span></span> <b></b>';
                 chip.children[1].textContent = level.title || "Level";
                 chip.children[2].textContent = format(pane.format, level.price);
                 chip.onclick = function () { bandState[index] = !bandState[index]; chip.classList.toggle("off", !bandState[index]); renderBands(); };
@@ -216,7 +216,7 @@
             var buildSeries = function (spec, kind) {
                 var base = {priceLineVisible: false, lastValueVisible: false, priceScaleId: spec.axis === "left" ? "left" : "right"};
                 if (spec.axis !== "left" && pane.bound) base.autoscaleInfoProvider = function () { return {priceRange: {minValue: -pane.bound, maxValue: pane.bound}}; };
-                var colour = tint(theme, spec.color);
+                var color = tint(theme, spec.color);
                 var series;
                 if (kind === "candlestick") {
                     series = instance.addSeries(LightweightCharts.CandlestickSeries, Object.assign({}, base, {upColor: theme.up, downColor: theme.down, borderUpColor: theme.up,
@@ -226,16 +226,16 @@
                     series = instance.addSeries(LightweightCharts.BarSeries, Object.assign({}, base, {upColor: theme.up, downColor: theme.down}));
                     series.setData(spec.data);
                 } else if (kind === "histogram") {
-                    series = instance.addSeries(LightweightCharts.HistogramSeries, Object.assign({}, base, {color: colour}));
+                    series = instance.addSeries(LightweightCharts.HistogramSeries, Object.assign({}, base, {color: color}));
                     series.setData(spec.data.map(function (point) { return {time: point.time, value: point.value, color: point.color ? tint(theme, point.color) : ((point.value || 0) >= 0 ? theme.up : theme.down)}; }));
                 } else if (kind === "area") {
-                    series = instance.addSeries(LightweightCharts.AreaSeries, Object.assign({}, base, {lineColor: colour, topColor: colour, bottomColor: "transparent", lineWidth: spec.width || 2}));
+                    series = instance.addSeries(LightweightCharts.AreaSeries, Object.assign({}, base, {lineColor: color, topColor: color, bottomColor: "transparent", lineWidth: spec.width || 2}));
                     series.setData(spec.data);
                 } else if (kind === "baseline") {
                     series = instance.addSeries(LightweightCharts.BaselineSeries, Object.assign({}, base, {topLineColor: theme.up, bottomLineColor: theme.down, lineWidth: spec.width || 2}));
                     series.setData(spec.data);
                 } else {
-                    series = instance.addSeries(LightweightCharts.LineSeries, Object.assign({}, base, {color: colour, lineWidth: spec.width || 2, lineType: 0}));
+                    series = instance.addSeries(LightweightCharts.LineSeries, Object.assign({}, base, {color: color, lineWidth: spec.width || 2, lineType: 0}));
                     series.setData(spec.data);
                 }
                 if (spec.markers && spec.markers.length) {
@@ -310,13 +310,13 @@
         });
         if (charts.length) {
             (data.deals || []).forEach(function (deal) {
-                var colour = tint(theme, deal.color, "up");
-                var line = charts[0].addSeries(LightweightCharts.LineSeries, {color: colour, lineWidth: 3, priceLineVisible: false, lastValueVisible: false,
+                var color = tint(theme, deal.color, "up");
+                var line = charts[0].addSeries(LightweightCharts.LineSeries, {color: color, lineWidth: 3, priceLineVisible: false, lastValueVisible: false,
                                                     crosshairMarkerVisible: false, visible: state.sides[deal.side] !== false && state.dealmap,
                                                     autoscaleInfoProvider: function () { return null; }});
                 line.setData(deal.points);
                 line.__side__ = deal.side;
-                stamps(line).setMarkers(deal.points.map(function (point) { return {time: point.time, position: "inBar", color: colour, shape: "circle", size: 0.8}; }));
+                stamps(line).setMarkers(deal.points.map(function (point) { return {time: point.time, position: "inBar", color: color, shape: "circle", size: 0.8}; }));
                 dealSeries.push(line);
             });
         }

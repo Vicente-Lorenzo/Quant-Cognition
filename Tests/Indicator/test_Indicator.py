@@ -1,4 +1,3 @@
-import pytest
 from Library.Database.Dataframe import pl
 from Library.Indicator.Indicator import IndicatorAPI, IndicatorMode
 from Library.Indicator.Technical.Technical import TechnicalAPI

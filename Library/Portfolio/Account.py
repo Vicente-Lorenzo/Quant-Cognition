@@ -19,15 +19,18 @@ if TYPE_CHECKING:
     from Library.Portfolio.Session import SessionAPI
 
 class AccountType(EnumerationAPI):
+
     Hedged = 0
     Netted = 1
 
 class MarginMode(EnumerationAPI):
+
     Sum = 0
     Max = 1
     Net = 2
 
 class Environment(EnumerationAPI):
+
     Live = 0
     Demo = 1
 

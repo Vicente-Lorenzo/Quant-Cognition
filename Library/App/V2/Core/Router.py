@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import dash
 from pathlib import PurePosixPath
+from typing import TYPE_CHECKING
 
 from Library.App.V2.Core.Callback import Output, Input, State, InjectionType, serverside_callback
 from Library.App.V2.Core.Identity import GlobalAPI
 from Library.App.V2.Session import TriggerAPI
 from Library.Utility.Path import inspect_file, inspect_file_path
+
+if TYPE_CHECKING:
+    from Library.App.V2.Page.Page import PageAPI
 
 class RouterAPI(GlobalAPI):
 

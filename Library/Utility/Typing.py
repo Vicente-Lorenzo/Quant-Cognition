@@ -1,7 +1,9 @@
 from typing import Union, Final
 
 class Missing:
+
     def __repr__(self) -> str: return "Missing"
+
     def __bool__(self) -> bool: return False
 
 MISSING: Final[Missing] = Missing()

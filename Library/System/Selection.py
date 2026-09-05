@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 from statistics import fmean, median
 from typing import Any, Callable, Union
 
 from Library.Utility.Enumeration import EnumerationAPI
 
 class SelectionMode(EnumerationAPI):
+
     Worst = 1
     Plateau = 2
     Mean = 3
@@ -13,6 +12,7 @@ class SelectionMode(EnumerationAPI):
     Best = 5
 
 class ElectionMode(EnumerationAPI):
+
     First = 1
     Worst = 2
     Frequency = 3
@@ -41,8 +41,8 @@ def select(scored: list, mode: Union[str, SelectionMode] = SelectionMode.Best,
     lookup = {getattr(item, "index", index): score for index, (item, score) in enumerate(ranked)}
     best, summit = None, None
     for item, score in ranked:
-        neighbours = [lookup[key] for key in company.get(getattr(item, "index", None), ()) if key in lookup]
-        plateau = (score + sum(neighbours)) / (1 + len(neighbours))
+        neighbors = [lookup[key] for key in company.get(getattr(item, "index", None), ()) if key in lookup]
+        plateau = (score + sum(neighbors)) / (1 + len(neighbors))
         if summit is None or plateau > summit: best, summit = (item, score), plateau
     return best
 

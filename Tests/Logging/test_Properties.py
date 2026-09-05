@@ -1,8 +1,3 @@
-import os
-from pathlib import Path
-
-import pytest
-
 from Library.Logging import LoggingAPI, LoggerAPI, ConsoleAPI, FileAPI, VerboseLevel
 
 def test_logger_properties_mirror_attributes(recorder):

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from enum import IntFlag
 from typing import Union, ClassVar
 from dataclasses import dataclass
@@ -11,6 +9,7 @@ from Library.Utility.Enumeration import EnumerationAPI
 from Library.Utility.Typing import cast
 
 class ActionID(EnumerationAPI):
+
     Init = 0
     Execution = 1
     AskAboveTarget = 2
@@ -76,81 +75,104 @@ class ActionID(EnumerationAPI):
 
 @dataclass(slots=True)
 class ActionAPI(DataclassAPI):
+
     ActionID: ClassVar[ActionID]
     Direction: ClassVar[Direction] = Direction.Neutral
+
     def serialize(self) -> bytes:
         raise NotImplementedError
 
 @dataclass(slots=True)
 class CompleteActionAPI(ActionAPI):
+
     ActionID: ClassVar[ActionID] = ActionID.Complete
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B')
+
     def serialize(self) -> bytes:
         return self._binary_.pack(self.ActionID.value)
 
 @dataclass(slots=True)
 class ShutdownActionAPI(ActionAPI):
+
     ActionID: ClassVar[ActionID] = ActionID.Shutdown
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B')
+
     def serialize(self) -> bytes:
         return self._binary_.pack(self.ActionID.value)
 
 @dataclass(slots=True)
 class InitActionAPI(ActionAPI):
+
     ActionID: ClassVar[ActionID] = ActionID.Init
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
     ProcessID: int
+
     def serialize(self) -> bytes:
         return self._binary_.pack(self.ActionID.value, self.ProcessID)
 
 @dataclass(slots=True)
 class ExecutionActionAPI(ActionAPI):
+
     ActionID: ClassVar[ActionID] = ActionID.Execution
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B')
+
     def serialize(self) -> bytes:
         return self._binary_.pack(self.ActionID.value)
 
 @dataclass(slots=True)
 class AskAboveTargetActionAPI(ActionAPI):
+
     ActionID: ClassVar[ActionID] = ActionID.AskAboveTarget
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'D')
     Ask: Union[float, None]
+
     def __post_init__(self):
         self.Ask = cast(self.Ask, float, None)
+
     def serialize(self) -> bytes:
         return self._binary_.pack(self.ActionID.value, self.Ask)
 
 @dataclass(slots=True)
 class AskBelowTargetActionAPI(ActionAPI):
+
     ActionID: ClassVar[ActionID] = ActionID.AskBelowTarget
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'D')
     Ask: Union[float, None]
+
     def __post_init__(self):
         self.Ask = cast(self.Ask, float, None)
+
     def serialize(self) -> bytes:
         return self._binary_.pack(self.ActionID.value, self.Ask)
 
 @dataclass(slots=True)
 class BidAboveTargetActionAPI(ActionAPI):
+
     ActionID: ClassVar[ActionID] = ActionID.BidAboveTarget
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'D')
     Bid: Union[float, None]
+
     def __post_init__(self):
         self.Bid = cast(self.Bid, float, None)
+
     def serialize(self) -> bytes:
         return self._binary_.pack(self.ActionID.value, self.Bid)
 
 @dataclass(slots=True)
 class BidBelowTargetActionAPI(ActionAPI):
+
     ActionID: ClassVar[ActionID] = ActionID.BidBelowTarget
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'D')
     Bid: Union[float, None]
+
     def __post_init__(self):
         self.Bid = cast(self.Bid, float, None)
+
     def serialize(self) -> bytes:
         return self._binary_.pack(self.ActionID.value, self.Bid)
 
 class Stream(IntFlag):
+
     Tick = 1
     BarOpened = 2
     BarClosed = 4
@@ -161,17 +183,21 @@ class Stream(IntFlag):
 
 @dataclass(slots=True)
 class SubscribeActionAPI(ActionAPI):
+
     ActionID: ClassVar[ActionID] = ActionID.Subscribe
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'B')
     Streams: int
+
     def serialize(self) -> bytes:
         return self._binary_.pack(self.ActionID.value, self.Streams)
 
 @dataclass(slots=True)
 class UnsubscribeActionAPI(ActionAPI):
+
     ActionID: ClassVar[ActionID] = ActionID.Unsubscribe
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'B')
     Streams: int
+
     def serialize(self) -> bytes:
         return self._binary_.pack(self.ActionID.value, self.Streams)
 

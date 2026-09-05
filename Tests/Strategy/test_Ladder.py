@@ -82,7 +82,7 @@ def test_promotion_leaves_other_strategies_in_the_same_file(ladder):
     assert ladder.resolve(DDPGStrategyAPI, "Backtesting", *RUNGS)[0]["MoneyManagement"]["RiskPercentage"] == [3.5]
 
 def test_a_corrupt_override_is_survived(ladder, tmp_path):
-    path = ladder.override(TrendStrategyAPI, "Backtesting", *RUNGS)
+    path = ladder.override("Backtesting", *RUNGS)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("{ this is not: valid: yaml", encoding="utf-8")
     sections, trail = ladder.resolve(TrendStrategyAPI, "Backtesting", *RUNGS)

@@ -7,6 +7,7 @@ from Library.App.V2.Component.Component import Component, InputAPI, SelectAPI, S
 from Library.Utility.Enumeration import EnumerationAPI
 
 class ControlType(EnumerationAPI):
+
     Text = "text"
     Number = "number"
     Select = "select"

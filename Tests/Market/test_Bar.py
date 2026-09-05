@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from datetime import datetime
 from Library.Market.Bar import BarAPI
 from Library.Market.Tick import TickAPI
@@ -8,16 +8,19 @@ from Library.Universe.Category import CategoryAPI
 from Library.Universe.Provider import ProviderAPI, Platform
 from Library.Universe.Ticker import TickerAPI, ContractType
 from Library.Universe.Universe import UniverseAPI
+
 def test_bar_composite_identity_no_surrogate_uid():
     bar = BarAPI(Security=5, Timeframe="D1", Timestamp=datetime(2023, 1, 1))
     assert "UID" not in {str(k) for k in bar.Structure.keys()}
     assert set(bar.natural_keys()) == {"Security", "Timeframe", "Timestamp"}
     assert bar.identity_keys() == []
+
 def test_bar_tick_fk_derives_from_encoded_uid():
     ts = datetime(2023, 1, 1)
     gap = TickAPI(5, ts, Ask=1.1, Bid=1.0)
     bar = BarAPI(Security=5, Timeframe="D1", Timestamp=ts, GapTick=gap, OpenTick=gap, HighTick=gap, LowTick=gap, CloseTick=gap, Volume=1.0)
     assert bar._parse_("GapTick") == gap.UID == TickAPI.encode(5, ts)
+
 def test_bar_initialization(db):
     db.migrate(schema=UniverseAPI.Schema, table=CategoryAPI.Table, structure=CategoryAPI(db=db).Structure)
     db.migrate(schema=UniverseAPI.Schema, table=ProviderAPI.Table, structure=ProviderAPI(db=db).Structure)

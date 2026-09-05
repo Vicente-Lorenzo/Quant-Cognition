@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import time
 import uuid
 import datetime
@@ -360,6 +358,11 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
     def table(self) -> Union[str, None]:
         """Returns the current table name."""
         return self._table_
+
+    @property
+    def rowcount(self) -> int:
+        """Returns the number of rows affected by the last executed statement."""
+        return self._cursor_.rowcount if self._cursor_ is not None else 0
 
     def connected(self) -> bool:
         """Checks if the database connection is active."""
@@ -1209,7 +1212,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
             if isinstance(dtype, IdentityKey):
                 if dtype.primary: datatype += " PRIMARY KEY"
                 else: datatype += " UNIQUE"
-                datatype += " GENERATED ALWAYS AS IDENTITY"
+                datatype += self._identity_()
             elif isinstance(dtype, PrimaryKey):
                 datatype += " PRIMARY KEY"
             elif isinstance(dtype, ForeignKey):
@@ -1384,7 +1387,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
             if token is not None: return token
         expression = "COUNT(*)" if column is None else f"COUNT(*), MAX({self._quoted_(column)})"
         frame = self.select(database=database, schema=schema, table=table, columns=expression, condition=condition, parameters=parameters)
-        records = frame.to_dicts() if hasattr(frame, "to_dicts") else frame.to_dict("records")
+        records = self._records_(frame)
         if not records: return ""
         return "|".join("" if value is None else str(value) for value in records[0].values())
 

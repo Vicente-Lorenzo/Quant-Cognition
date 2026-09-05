@@ -1,4 +1,4 @@
-﻿import oracledb
+import oracledb
 from typing import Union, Callable, Any
 from typing_extensions import Self
 from collections.abc import Sequence

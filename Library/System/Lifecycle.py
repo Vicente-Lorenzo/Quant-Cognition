@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Union
 
 from Library.Engine import EngineAPI, MachineAPI

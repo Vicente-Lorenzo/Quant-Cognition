@@ -145,7 +145,7 @@ class StorageAPI(LoggerAPI):
 
     def set_level(self, level: str | int | VerboseLevel, default: bool = False, force: bool = False) -> None:
         """
-        Sets the accepted level, clamped so the sink can never accept routine traffic.
+        Sets the accepted level.
 
         The level defaults to Warning and a more verbose one may be set deliberately; the queue is what
         keeps a remote sink from being handed a Debug firehose.

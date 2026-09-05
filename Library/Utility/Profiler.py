@@ -12,6 +12,7 @@ from Library.Utility.Datetime import datetime_to_string, seconds_to_string
 
 @dataclass(kw_only=True)
 class Timer:
+
     _start_: float = field(default=None, init=True, repr=False)
     _stop_: float = field(default=None, init=True, repr=False)
 

@@ -6,6 +6,7 @@ from Library.Universe.Security import SecurityAPI
 from Library.Universe.Provider import ProviderAPI, Platform
 from Library.Universe.Category import CategoryAPI
 from Library.Universe.Contract import ContractAPI
+
 @pytest.fixture(autouse=True)
 def setup_universe(db):
     db.migrate(schema=UniverseAPI.Schema, table=CategoryAPI.Table, structure=CategoryAPI(db=db).Structure)
@@ -20,9 +21,11 @@ def setup_universe(db):
     db.executeone(QueryAPI(f'TRUNCATE TABLE "{UniverseAPI.Schema}"."{TickerAPI.Table}" CASCADE')).commit()
     db.executeone(QueryAPI(f'TRUNCATE TABLE "{UniverseAPI.Schema}"."{ProviderAPI.Table}" CASCADE')).commit()
     db.executeone(QueryAPI(f'TRUNCATE TABLE "{UniverseAPI.Schema}"."{CategoryAPI.Table}" CASCADE')).commit()
+
 def test_universe_constants():
     assert UniverseAPI.Database == "Tests"
     assert UniverseAPI.Schema == "Universe"
+
 def test_bulk_population_integrity(db):
     cats = pl.DataFrame([{"UID": "Cat1", "Primary": "P", "Secondary": "S", "Alternative": "A"}])
     UniverseAPI.push_categories(db, cats)
@@ -47,10 +50,13 @@ def test_bulk_population_integrity(db):
     assert sec.Ticker.UID == "T1"
     assert sec.Provider.UID == "Prov1"
     assert sec.Category.UID == "Cat1"
+
 def test_ticker_detection_logic():
     assert TickerAPI.detect("EURUSD") == ContractType.Spot
     assert TickerAPI.detect("AAPL.US") == ContractType.Spot
-    assert TickerAPI.detect("ESH4") == ContractType.Future or TickerAPI.detect("ESH24") == ContractType.Future
+    assert TickerAPI.detect("ESH4") == ContractType.Future
+    assert TickerAPI.detect("ESH24") == ContractType.Future
+
 def test_referential_integrity_cascade(db):
     cat = CategoryAPI(UID="Forex", Primary="Forex", Secondary="Major", Alternative="Currency", db=db)
     cat.save()

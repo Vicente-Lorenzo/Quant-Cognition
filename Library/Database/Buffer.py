@@ -6,7 +6,7 @@ import threading
 
 from datetime import datetime, timedelta
 from collections.abc import Sequence
-from typing import Callable, Type, Union, TYPE_CHECKING
+from typing import Callable, Union, TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 class BufferAPI(threading.Thread):
 
     def __init__(self,
-                 types: Sequence[Type[DatapointAPI]],
+                 types: Sequence[type[DatapointAPI]],
                  batch: int = 0,
                  interval: float = 0.0,
                  by: str = "Autosave",
@@ -102,7 +102,7 @@ class BufferAPI(threading.Thread):
         self._signal_.put(None)
         if self.is_alive(): self.join()
 
-    def _collect_(self, t: Type[DatapointAPI]) -> list:
+    def _collect_(self, t: type[DatapointAPI]) -> list:
         records: list = []
         q = self._queue_[t]
         while True:
@@ -119,7 +119,7 @@ class BufferAPI(threading.Thread):
             buckets[bucket].append(r)
         return buckets
 
-    def _write_(self, db: DatabaseAPI, t: Type[DatapointAPI], records: list) -> None:
+    def _write_(self, db: DatabaseAPI, t: type[DatapointAPI], records: list) -> None:
         if not records: return
         stamp = datetime.now()
         try:

@@ -14,9 +14,6 @@ class RateOfChangeAPI(TechnicalAPI):
     Type = TechnicalType.Momentum
     Parameters = (PERIOD.revised(default=12), MODE)
 
-    def _extract_(self, market: MarketAPI) -> Union[pl.Series, pl.DataFrame]:
-        return market.CloseTicks.Price.tail()
-
     def batch(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
         if data.is_empty(): return self._pad_()
         roc = (data / data.shift(self.Window)).log()

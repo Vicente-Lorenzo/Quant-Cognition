@@ -159,7 +159,6 @@ class SchedulerWorkflowDetailPageAPI(SchedulerWorkflowAPI, SchedulerDetailAPI):
             *self._grid_(self.SUB_TABLE_ID, self.SUB_CARRIER_ID, "Tasks", self._MEMBER_COLUMNS_, "/scheduler/task", self.SUB_STATE_STORE_ID),
             *self._grid_(self.CYCLE_TABLE_ID, self.CYCLE_CARRIER_ID, "Cycles", self._CYCLE_COLUMNS_),
             self._legend_(),
-            self._legend_(),
             self._modal_(),
             StorageAPI(id=self.MODE_STORE_ID, data={}),
             *self._hidden_(),

@@ -1,7 +1,5 @@
-import bisect
 import json
 import math
-from statistics import fmean
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any
@@ -10,6 +8,7 @@ from typing_extensions import Self
 from Library.Utility.Enumeration import EnumerationAPI
 
 class SeriesType(EnumerationAPI):
+
     Candlestick = "candlestick"
     Line = "line"
     Area = "area"
@@ -18,10 +17,12 @@ class SeriesType(EnumerationAPI):
     Baseline = "baseline"
 
 class AxisType(EnumerationAPI):
+
     Right = "right"
     Left = "left"
 
 class FormatType(EnumerationAPI):
+
     Price = "price"
     Signal = "signal"
     Volume = "volume"
@@ -31,6 +32,7 @@ class FormatType(EnumerationAPI):
     Text = "text"
 
 class AlignType(EnumerationAPI):
+
     Left = "left"
     Right = "right"
     Center = "center"
@@ -325,7 +327,6 @@ class SheetAPI(SpecAPI):
 
 @dataclass(kw_only=True)
 class WorkspaceAPI(SpecAPI):
-
 
     title: str = None
     description: str = None

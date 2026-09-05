@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class TransitionAPI(DataclassAPI):
+
     To: StateAPI
     Action: Union[Callable[[Any], Union[list, None]], None]
     Reason: Union[str, None]

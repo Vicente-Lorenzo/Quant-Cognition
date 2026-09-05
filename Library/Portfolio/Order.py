@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Union, ClassVar
 from dataclasses import dataclass, field, InitVar
@@ -21,12 +19,14 @@ from Library.Market.Price import PriceAPI, Direction
 from Library.Utility.Typing import MISSING
 
 class OrderType(EnumerationAPI):
+
     Market = 0
     Limit = 1
     Stop = 2
     StopLimit = 3
 
 class OrderStatus(EnumerationAPI):
+
     Accepted = 1
     Filled = 2
     Rejected = 3
@@ -34,6 +34,7 @@ class OrderStatus(EnumerationAPI):
     Cancelled = 5
 
 class TimeInForce(EnumerationAPI):
+
     GoodTillDate = 1
     GoodTillCancel = 2
     ImmediateOrCancel = 3

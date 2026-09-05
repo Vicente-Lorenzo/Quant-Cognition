@@ -2,7 +2,6 @@ import json
 import re
 import uuid
 from dataclasses import dataclass
-from typing import Type
 
 from dash import dcc, html
 from dash.exceptions import PreventUpdate
@@ -183,7 +182,7 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
         return {"value": shown, "origin": "parent",
                 "hint": f"Inherited from {'/'.join(where) or 'Everywhere'}{via}"}
 
-    def _model_(self, strategy: Type[StrategyAPI], scopes: list) -> dict:
+    def _model_(self, strategy: type[StrategyAPI], scopes: list) -> dict:
         ladder, model = self._ladder_(), {}
         for kind in KINDS:
             searched = kind == SEARCHED
@@ -204,7 +203,7 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
         self._settable_(ladder, strategy, scopes, model)
         return model
 
-    def _settable_(self, ladder: LadderAPI, strategy: Type[StrategyAPI], scopes: list, model: dict) -> None:
+    def _settable_(self, ladder: LadderAPI, strategy: type[StrategyAPI], scopes: list, model: dict) -> None:
         declared = {}
         for kind in KINDS:
             if kind == SEARCHED: continue
@@ -452,7 +451,7 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
             strategy = resolve(key)
             resolved = ladder.resolve(strategy, kind, *scope)[0]
             own = ladder.sparse(strategy, kind, *scope)
-            path = ladder.override(strategy, kind, *scope)
+            path = ladder.override(kind, *scope)
             lines = []
             for section, stage, name, value in sorted(edits):
                 before = self._pick_(resolved.get(section), stage or None, name or None)

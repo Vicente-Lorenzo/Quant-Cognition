@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from abc import ABC
 from typing import Any, Callable
 from dash.exceptions import PreventUpdate

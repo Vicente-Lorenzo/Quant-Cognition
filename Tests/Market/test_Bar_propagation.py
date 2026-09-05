@@ -1,8 +1,6 @@
-import pytest
 from Library.Market.Bar import BarAPI
 from Library.Market.Tick import TickAPI
 from Library.Universe.Security import SecurityAPI
-from Library.Universe.Contract import ContractAPI
 
 def test_bar_security_propagates_security():
     s1 = SecurityAPI(UID=999)

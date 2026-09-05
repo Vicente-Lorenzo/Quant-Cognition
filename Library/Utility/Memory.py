@@ -1,4 +1,5 @@
 from typing import Union
+
 def memory_to_string(bytes: Union[int, float]) -> str:
     if bytes is None: return "0B"
     bytes = round(bytes)

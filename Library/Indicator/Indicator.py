@@ -15,12 +15,14 @@ if TYPE_CHECKING:
     from Library.Market.Market import MarketAPI
 
 class IndicatorMode(EnumerationAPI):
+
     Off = 0
     Filter = 1
     Signal = 2
 
 @dataclass
 class IndicatorAPI:
+
     Technical: TechnicalAPI = None
     Fundamental: FundamentalAPI = None
     Sentimental: SentimentalAPI = None

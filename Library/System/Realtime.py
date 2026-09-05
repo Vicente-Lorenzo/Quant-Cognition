@@ -7,7 +7,7 @@ import contextlib
 from pathlib import Path
 from collections import deque
 from datetime import datetime, timedelta
-from typing import Type, Union, TYPE_CHECKING
+from typing import Union, TYPE_CHECKING
 
 from Library.Database.Database import DatabaseAPI
 from Library.Database.Dataframe import pl
@@ -63,7 +63,7 @@ class RealtimeAPI(SystemAPI):
 
     def __init__(self,
                  system: SystemType,
-                 strategy: Type[StrategyAPI],
+                 strategy: type[StrategyAPI],
                  security: SecurityAPI,
                  timeframe: TimeframeAPI,
                  parameters: Parameter,
@@ -118,7 +118,7 @@ class RealtimeAPI(SystemAPI):
             self.strategy = self._strategy_(money_management=self._parameters_.MoneyManagement, risk_management=self._parameters_.RiskManagement, signal_management=self._parameters_.SignalManagement, technical_management=self._parameters_.TechnicalManagement, fundamental_management=self._parameters_.FundamentalManagement, sentimental_management=self._parameters_.SentimentalManagement, portfolio_management=self._parameters_.PortfolioManagement)
             self.market = MarketAPI()
             self.indicator = IndicatorAPI(technical=self._parameters_.TechnicalManagement, fundamental=self._parameters_.FundamentalManagement, sentimental=self._parameters_.SentimentalManagement)
-            self.portfolio = PortfolioAPI(Parameter=self._parameters_.PortfolioManagement)
+            self.portfolio = PortfolioAPI()
             self._db_ = None if self._database_ is None else self._stack_.enter_context(PostgresDatabaseAPI(database=self._database_))
         except Exception:
             self._stack_.__exit__(None, None, None)
@@ -307,23 +307,8 @@ class RealtimeAPI(SystemAPI):
         )
 
     def receive_update_tick(self, offset: int = 1) -> TickAPI:
-        ts, ask, bid, ask_base, bid_base, ask_quote, bid_quote, volume = self._binary_tick_.unpack(self._last_update_data_, 1)
         self._metrics_["Ticks"] += 1
-        timestamp = timestamp_to_datetime(ts, milliseconds=True)
-        if not self.strategy.Transform.Market:
-            return TickAPI._ingest_(self._db_, self._security_, timestamp, ask, bid, ask_base, bid_base, ask_quote, bid_quote, volume)
-        return TickAPI(
-            Security=self._security_,
-            Timestamp=timestamp,
-            Ask=ask,
-            Bid=bid,
-            AskBaseConversion=ask_base,
-            BidBaseConversion=bid_base,
-            AskQuoteConversion=ask_quote,
-            BidQuoteConversion=bid_quote,
-            Volume=volume,
-            db=self._db_
-        )
+        return self._deserialize_tick_(self._last_update_data_, 1)
 
     def _deserialize_tick_(self, data: bytes, offset: int) -> TickAPI:
         ts, ask, bid, ask_base, bid_base, ask_quote, bid_quote, volume = self._binary_tick_.unpack(data, offset)
@@ -376,12 +361,6 @@ class RealtimeAPI(SystemAPI):
     def receive_update_exception(self, offset: int = 1) -> str:
         (reason,) = self._binary_exception_.unpack(self._last_update_data_, 1)
         return reason or ""
-
-    def _indicator_window_(self) -> int:
-        windows = [getattr(self.indicator.Technical, "Window", 0) or 0,
-                   getattr(self.indicator.Fundamental, "Window", 0) or 0,
-                   getattr(self.indicator.Sentimental, "Window", 0) or 0]
-        return max(windows)
 
     def _warmup_horizon_(self) -> timedelta:
         step = self._timeframe_.Seconds or 0.0

@@ -11,13 +11,14 @@ from itertools import count
 from collections import deque
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Any, Type, Union, Iterator, TYPE_CHECKING
+from typing import Any, Union, Iterator, TYPE_CHECKING
 
 from Library.Database.Database import DatabaseAPI
 from Library.Database.Dataframe import np, pl
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Engine import MachineAPI
 from Library.Indicator.Indicator import IndicatorAPI
+from Library.Statistic.Composition import analysis, searchspace
 from Library.Statistic.Label import (
     NET_TOTAL_AGGREGATED,
     STATISTICS_METRICS_LABEL
@@ -42,6 +43,9 @@ from Library.Protocol.Action import (
 )
 from Library.Protocol.Update import UpdateID, BarUpdateAPI, CompleteUpdateAPI, InitUpdateAPI
 from Library.Universe.Contract import CommissionMode, CommissionType, SpreadType, SwapMode, SwapType
+from Library.Universe.Provider import ProviderAPI
+from Library.Universe.Security import SecurityAPI
+from Library.Universe.Ticker import TickerAPI
 from Library.Universe.Timeframe import TimeframeAPI
 from Library.Utility.Datetime import MICROSECOND, Weekday, datetime_to_epoch, epoch_to_datetime, is_summer_time, parse_datetime
 from Library.Utility.IO import mkdir, read_json, write_json
@@ -55,10 +59,10 @@ from Library.System.System import SystemAPI
 if TYPE_CHECKING:
     from Library.Utility.Parameter import Parameter
     from Library.Strategy.Strategy import StrategyAPI
-    from Library.Universe.Security import SecurityAPI
 
 @dataclass(frozen=True, slots=True)
 class DatasetAPI:
+
     WarmupBars: Union[pl.DataFrame, None]
     ExecutionBars: list[BarAPI]
     TickTimestamps: np.ndarray
@@ -94,7 +98,7 @@ class BacktestingAPI(SystemAPI):
     _tick_: TickAPI
 
     def __init__(self,
-                 strategy: Type[StrategyAPI],
+                 strategy: type[StrategyAPI],
                  security: SecurityAPI,
                  timeframe: TimeframeAPI,
                  resolution: Union[str, TimeframeAPI, Missing, None],
@@ -168,7 +172,7 @@ class BacktestingAPI(SystemAPI):
             self.strategy = self._strategy_(money_management=self._parameters_.MoneyManagement, risk_management=self._parameters_.RiskManagement, signal_management=self._parameters_.SignalManagement, technical_management=self._parameters_.TechnicalManagement, fundamental_management=self._parameters_.FundamentalManagement, sentimental_management=self._parameters_.SentimentalManagement, portfolio_management=self._parameters_.PortfolioManagement)
             self.market = MarketAPI()
             self.indicator = IndicatorAPI(technical=self._parameters_.TechnicalManagement, fundamental=self._parameters_.FundamentalManagement, sentimental=self._parameters_.SentimentalManagement)
-            self.portfolio = PortfolioAPI(Parameter=self._parameters_.PortfolioManagement)
+            self.portfolio = PortfolioAPI()
             self._netting_ = self._position_mode_() == PositionMode.Netting
             self._contract_ = self._security_.Contract
             self._digits_ = int(self._contract_.Digits) if getattr(self._contract_, "Digits", None) else 5
@@ -207,12 +211,6 @@ class BacktestingAPI(SystemAPI):
     def _disconnect_(self) -> None:
         super()._disconnect_()
         if self._stack_: self._stack_.__exit__(None, None, None)
-
-    def _indicator_window_(self) -> int:
-        windows = [getattr(self.indicator.Technical, "Window", 0) or 0,
-                   getattr(self.indicator.Fundamental, "Window", 0) or 0,
-                   getattr(self.indicator.Sentimental, "Window", 0) or 0]
-        return max(windows)
 
     def _build_account_(self) -> AccountAPI:
         return AccountAPI(
@@ -406,14 +404,12 @@ class BacktestingAPI(SystemAPI):
                               "Settings": settings or {}, "Equity": curve})
 
     def _analysis_(self) -> dict:
-            from Library.Statistic import analysis
-            _, sheets = analysis(self._journal_, self._folded_)
-            return {sheet.name: pl.DataFrame([dict(zip([column.name for column in sheet.columns], row)) for row in sheet.rows], strict=False)
-                    for sheet in sheets if sheet.rows}
+        _, sheets = analysis(self._journal_, self._folded_)
+        return {sheet.name: pl.DataFrame([dict(zip([column.name for column in sheet.columns], row)) for row in sheet.rows], strict=False)
+                for sheet in sheets if sheet.rows}
 
     def _workspace_(self, workspace):
-            from Library.Statistic import searchspace
-            return searchspace(workspace=workspace, journal=self._journal_, folds=self._folded_, elected=self._tracked_())
+        return searchspace(workspace=workspace, journal=self._journal_, folds=self._folded_, elected=self._tracked_())
 
     def _account_return_(self) -> float:
         balance = self.portfolio.InitialBalance if self.portfolio is not None else None
@@ -436,7 +432,6 @@ class BacktestingAPI(SystemAPI):
 
     @staticmethod
     def _resolve_(payload: dict) -> tuple:
-        from Library.Universe import ProviderAPI, SecurityAPI, TickerAPI, TimeframeAPI
         with PostgresDatabaseAPI(database="Quant") as db:
             provider = ProviderAPI(UID=payload["provider"], db=db, autoload=True)
             ticker = TickerAPI(UID=payload["ticker"], db=db, autoload=True)

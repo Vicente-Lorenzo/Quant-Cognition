@@ -1,6 +1,5 @@
 import sys
 import threading
-import os
 import subprocess
 
 from Library.Logging import LoggingAPI, VerboseLevel

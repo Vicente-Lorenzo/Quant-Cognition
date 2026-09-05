@@ -2,7 +2,7 @@ import sys
 
 import pytest
 
-from Library.Logging import LoggingAPI, LoggerAPI, VerboseLevel
+from Library.Logging import LoggingAPI, VerboseLevel
 
 def test_raising_lambda_never_propagates(recorder):
     recorder.set_level(VerboseLevel.Debug)
@@ -21,6 +21,7 @@ def test_raising_lambda_does_not_stop_later_records(recorder):
 def test_content_with_broken_repr_never_propagates(recorder):
     recorder.set_level(VerboseLevel.Debug)
     class Hostile:
+
         def __str__(self): raise RuntimeError("no string for you")
     log = LoggingAPI("Hostile")
     log.info(lambda: Hostile())
@@ -80,6 +81,7 @@ def test_fallback_survives_a_missing_stderr(monkeypatch, recorder):
 
 def test_fallback_survives_a_broken_stderr(monkeypatch, recorder):
     class Broken:
+
         def write(self, text): raise OSError("stderr gone")
     monkeypatch.setattr(sys, "__stderr__", Broken())
     def explode(line): raise OSError("cannot write")

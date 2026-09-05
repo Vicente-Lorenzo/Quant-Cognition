@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from datetime import datetime
 from Library.Database.Dataframe import pl
 from Library.Database.Postgres import PostgresDatabaseAPI
@@ -13,6 +13,7 @@ _DATABASES_ = (
     "refactor_x",
     "refactor_y"
 )
+
 @pytest.fixture
 def db():
     def _drop_(names):
@@ -34,25 +35,30 @@ def db():
     baseline = _snapshot_()
     yield PostgresDatabaseAPI
     _drop_(_snapshot_() - baseline)
+
 def test_exists_only(db):
     api = db(admin=True)
     assert api.exists(database="postgres") is True
     assert api.exists(database="non_existent_db") is False
+
 def test_create_only(db):
     api = db(admin=True)
     api.create(database="test_database")
     assert api.exists(database="test_database") is True
+
 def test_delete_only(db):
     api = db(admin=True)
     api.create(database="test_database")
     api.delete(database="test_database")
     assert api.exists(database="test_database") is False
+
 def test_list_only(db):
     api = db(admin=True)
     api.create(database="test_database")
     df = api.list(database="test_database")
     assert not df.is_empty()
     assert "test_database" in df["Database"].to_list()
+
 def test_iterable_structures(db):
     api = db(admin=True)
     api.create(database=("test_db_1", "test_db_2"))
@@ -71,12 +77,14 @@ def test_iterable_structures(db):
     assert "schema_1" in schemas
     assert "schema_2" in schemas
     api.disconnect()
+
 def test_migration(db):
     api = db(database="test_database", schema="test_schema", table="test_table", migrate=True)
     api._STRUCTURE_ = {"id": pl.Int64, "value": pl.String}
     with api:
         assert api.exists(database="test_database", schema="test_schema", table="test_table") is True
     api.disconnect()
+
 def test_mixed_operations(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -102,6 +110,7 @@ def test_mixed_operations(db):
     assert len(df_many) == 2
     api.disconnect()
     admin.disconnect()
+
 def test_structure_mismatch(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -113,6 +122,7 @@ def test_structure_mismatch(db):
     assert "name" in df.columns
     api.disconnect()
     admin.disconnect()
+
 def test_refactor_database(db):
     api = db(admin=True)
     api.create(database="test_database")
@@ -120,6 +130,7 @@ def test_refactor_database(db):
     assert api.exists(database="test_database") is False
     assert api.exists(database="test_database_renamed") is True
     api.disconnect()
+
 def test_refactor_schema(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -130,6 +141,7 @@ def test_refactor_schema(db):
     assert api.exists(schema="old_schema") is False
     api.disconnect()
     admin.disconnect()
+
 def test_refactor_table(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -147,6 +159,7 @@ def test_refactor_table(db):
     assert df["name"][0] == "A"
     api.disconnect()
     admin.disconnect()
+
 def test_refactor_lowest_level_default(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -160,6 +173,7 @@ def test_refactor_lowest_level_default(db):
     assert api.exists(database="test_database", schema="test_schema", table="t1") is False
     api.disconnect()
     admin.disconnect()
+
 def test_refactor_iterable_databases(db):
     api = db(admin=True)
     api.create(database=("refactor_a", "refactor_b"))
@@ -168,6 +182,7 @@ def test_refactor_iterable_databases(db):
     assert api.exists(database="refactor_a") is False
     assert api.exists(database="refactor_b") is False
     api.disconnect()
+
 def test_refactor_iterable_tables(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -182,6 +197,7 @@ def test_refactor_iterable_tables(db):
     assert api.exists(table="t2") is False
     api.disconnect()
     admin.disconnect()
+
 def test_refactor_validation(db):
     api = db(admin=True)
     with pytest.raises(ValueError): api.refactor(database="x")
@@ -192,6 +208,7 @@ def test_refactor_validation(db):
     with pytest.raises(ValueError): api.refactor(database=("a", "b"), name="single")
     with pytest.raises(ValueError): api.refactor(database=("a", "b"), name=("only_one",))
     api.disconnect()
+
 def test_rename_column(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -208,6 +225,7 @@ def test_rename_column(db):
     assert df["new_id"][0] == 1
     api.disconnect()
     admin.disconnect()
+
 def test_rename_iterable_columns(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -223,6 +241,7 @@ def test_rename_iterable_columns(db):
     assert "gamma" in df.columns
     api.disconnect()
     admin.disconnect()
+
 def test_rename_validation(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -242,6 +261,7 @@ def test_rename_validation(db):
     api2.disconnect()
     api3.disconnect()
     admin.disconnect()
+
 def test_crud_operations(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -264,6 +284,7 @@ def test_crud_operations(db):
     assert df["id"][0] == 2
     api.disconnect()
     admin.disconnect()
+
 def test_schema_operations(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -287,6 +308,7 @@ def test_schema_operations(db):
     assert df["value"][0] == 20.0
     api.disconnect()
     admin.disconnect()
+
 def test_crud_positional_operations(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -308,6 +330,7 @@ def test_crud_positional_operations(db):
     assert df["value"][0] == 25.0
     api.disconnect()
     admin.disconnect()
+
 def test_upsert_operations(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -328,6 +351,7 @@ def test_upsert_operations(db):
     assert df["name"].to_list() == ["A", "B", "C", "D"]
     api.disconnect()
     admin.disconnect()
+
 def test_upsert_returning_single_row(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -340,6 +364,7 @@ def test_upsert_returning_single_row(db):
     assert df["name"][0] == "A"
     api.disconnect()
     admin.disconnect()
+
 def test_upsert_returning_batch_all_inserts(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -352,6 +377,7 @@ def test_upsert_returning_batch_all_inserts(db):
     assert df["name"].to_list() == ["A", "B", "C"]
     api.disconnect()
     admin.disconnect()
+
 def test_upsert_returning_batch_with_conflicts(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -368,6 +394,7 @@ def test_upsert_returning_batch_with_conflicts(db):
     assert full["name"].to_list() == ["A", "B2", "C"]
     api.disconnect()
     admin.disconnect()
+
 def test_upsert_returning_identity_uid(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -384,6 +411,7 @@ def test_upsert_returning_identity_uid(db):
     assert df2.filter(pl.col("Name") == "D")["UID"][0] > 3
     api.disconnect()
     admin.disconnect()
+
 def test_upsert_returning_empty_batch(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -394,6 +422,7 @@ def test_upsert_returning_empty_batch(db):
     assert result is api
     api.disconnect()
     admin.disconnect()
+
 def test_dataframe_input(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -410,6 +439,7 @@ def test_dataframe_input(db):
     assert df["value"][0] == 15.0
     api.disconnect()
     admin.disconnect()
+
 def test_select_columns(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -423,6 +453,7 @@ def test_select_columns(db):
     assert len(df) == 1
     api.disconnect()
     admin.disconnect()
+
 def test_migrate_add_column(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -438,6 +469,7 @@ def test_migrate_add_column(db):
     assert df["value"].to_list() == [None, None]
     api.disconnect()
     admin.disconnect()
+
 def test_migrate_remove_column(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -452,6 +484,7 @@ def test_migrate_remove_column(db):
     assert df["name"].to_list() == ["A", "B"]
     api.disconnect()
     admin.disconnect()
+
 def test_migrate_add_and_remove_column(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -466,6 +499,7 @@ def test_migrate_add_and_remove_column(db):
     assert df["score"].to_list() == [None, None]
     api.disconnect()
     admin.disconnect()
+
 def test_migrate_no_change(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -479,6 +513,7 @@ def test_migrate_no_change(db):
     assert df["name"][0] == "A"
     api.disconnect()
     admin.disconnect()
+
 def test_migrate_no_common_columns(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -491,6 +526,7 @@ def test_migrate_no_common_columns(db):
     assert list(df.columns) == ["code", "value"]
     api.disconnect()
     admin.disconnect()
+
 def test_migration_nondestructive(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -509,6 +545,7 @@ def test_migration_nondestructive(db):
         assert df["name"].to_list() == ["A", "B"]
     api2.disconnect()
     admin.disconnect()
+
 def test_search_by_column(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -526,6 +563,7 @@ def test_search_by_column(db):
     assert "t2" in tables
     api.disconnect()
     admin.disconnect()
+
 def test_search_by_row(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -546,6 +584,7 @@ def test_search_by_row(db):
     assert df.is_empty()
     api.disconnect()
     admin.disconnect()
+
 def test_search_by_row_numeric(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -557,6 +596,7 @@ def test_search_by_row_numeric(db):
     assert df["Table"][0] == "t1"
     api.disconnect()
     admin.disconnect()
+
 def test_primary_key_and_foreign_key(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -571,6 +611,7 @@ def test_primary_key_and_foreign_key(db):
         api.insert(table="orders", data=[{"id": 101, "user_id": 999}])
     api.disconnect()
     admin.disconnect()
+
 def test_composite_primary_key(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -582,6 +623,7 @@ def test_composite_primary_key(db):
         api.insert(table="tenant_users", data=[{"tenant_id": 1, "user_id": 1, "name": "Alice 2"}])
     api.disconnect()
     admin.disconnect()
+
 def test_upsert_implicit_key(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -595,6 +637,7 @@ def test_upsert_implicit_key(db):
     assert df["value"][0] == 20.0
     api.disconnect()
     admin.disconnect()
+
 def test_diff_primary_key(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -603,6 +646,7 @@ def test_diff_primary_key(db):
     assert api.diff(structure={"id": PrimaryKey(pl.Int64), "value": pl.Float64}) is True
     api.disconnect()
     admin.disconnect()
+
 def test_python_types_in_structure(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -616,6 +660,7 @@ def test_python_types_in_structure(db):
     assert isinstance(df["id"][0], int)
     api.disconnect()
     admin.disconnect()
+
 def test_fingerprint_count_fallback(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -633,6 +678,7 @@ def test_fingerprint_count_fallback(db):
     assert fp3 == "2"
     api.disconnect()
     admin.disconnect()
+
 def test_fingerprint_column_fold(db):
     admin = db(admin=True)
     admin.create(database="test_database")
@@ -647,6 +693,7 @@ def test_fingerprint_column_fold(db):
     assert fp2 != fp1
     api.disconnect()
     admin.disconnect()
+
 def test_fingerprint_pg_stat_fast_path(db):
     admin = db(admin=True)
     admin.create(database="test_database")

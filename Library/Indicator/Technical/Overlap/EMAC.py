@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from Library.Indicator.Indicator import IndicatorMode
 from Library.Indicator.Technical.Overlap.MAC import MovingAverageCrossAPI
 from Library.Indicator.Technical.Technical import FAST, MODE, SLOW

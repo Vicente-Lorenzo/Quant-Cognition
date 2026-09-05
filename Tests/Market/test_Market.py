@@ -10,7 +10,6 @@ from Library.Universe.Category import CategoryAPI
 from Library.Universe.Provider import ProviderAPI, Platform
 from Library.Universe.Ticker import TickerAPI
 from Library.Universe.Contract import ContractAPI
-from Library.Universe.Provider import ProviderAPI, Platform
 from Library.Database.Query import QueryAPI
 
 @pytest.fixture(autouse=True)

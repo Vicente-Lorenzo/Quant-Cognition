@@ -8,6 +8,7 @@ from Library.Portfolio.Sizing import (
 )
 from Library.Portfolio.PnL import PnLAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
+from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Account import (
     AccountType,
     MarginMode,
@@ -17,6 +18,7 @@ from Library.Portfolio.Account import (
 from Library.Portfolio.Position import (
     PositionMode,
     PositionType,
+    PositionStatus,
     PositionAPI
 )
 from Library.Portfolio.Order import (
@@ -41,12 +43,14 @@ __all__ = [
     "calculate_risk_parity_volume",
     "PnLAPI",
     "PortfolioAPI",
+    "SessionAPI",
     "AccountType",
     "MarginMode",
     "Environment",
     "AccountAPI",
     "PositionMode",
     "PositionType",
+    "PositionStatus",
     "PositionAPI",
     "OrderType",
     "OrderStatus",

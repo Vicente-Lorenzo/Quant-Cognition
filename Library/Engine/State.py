@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Any, Callable, Union
 from typing_extensions import Self
 from dataclasses import dataclass, field, InitVar
@@ -9,6 +7,7 @@ from Library.Engine.Transition import TransitionAPI
 
 @dataclass(slots=True)
 class StateAPI(DataclassAPI):
+
     Name: Union[str, None]
     End: bool
 

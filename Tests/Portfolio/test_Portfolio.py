@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from datetime import datetime
 from Library.Portfolio.Account import AccountAPI, AccountType, MarginMode, Environment
 from Library.Portfolio.Session import SessionAPI
@@ -11,6 +11,7 @@ from Library.Universe.Category import CategoryAPI
 from Library.Universe.Provider import ProviderAPI, Platform
 from Library.Universe.Ticker import TickerAPI, ContractType
 from Library.Universe.Universe import UniverseAPI
+
 def test_portfolio_initialization(db):
     db.migrate(schema=UniverseAPI.Schema, table=CategoryAPI.Table, structure=CategoryAPI(db=db).Structure)
     db.migrate(schema=UniverseAPI.Schema, table=ProviderAPI.Table, structure=ProviderAPI(db=db).Structure)

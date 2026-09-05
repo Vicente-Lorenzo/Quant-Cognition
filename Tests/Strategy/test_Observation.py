@@ -184,12 +184,15 @@ def test_ddpg_encoder_subclasses_generic_bases():
     assert issubclass(DDPGNormalizationAPI, NormalizerAPI)
 
 class _IdentityNormalizer_(NormalizerAPI):
+
     def transform(self, values, mask):
         return values.astype(np.float32)
 
 class _ConstantObservation_(ObservationAPI):
+
     def _frame_size_(self):
         return 2
+
     def _features_(self, update):
         return [(update, True), (update * 2.0, False)]
 

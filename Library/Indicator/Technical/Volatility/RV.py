@@ -14,9 +14,6 @@ class RealizedVolatilityAPI(TechnicalAPI):
     Type = TechnicalType.Volatility
     Parameters = (PERIOD.revised(default=16), MODE)
 
-    def _extract_(self, market: MarketAPI) -> Union[pl.Series, pl.DataFrame]:
-        return market.CloseTicks.Price.tail()
-
     def batch(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
         if data.is_empty(): return self._pad_()
         log_returns = (data / data.shift(1)).log().fill_null(0.0)

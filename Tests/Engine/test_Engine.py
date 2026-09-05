@@ -124,6 +124,7 @@ def test_engine_perform_transitions_all_machines():
 
 def test_engine_portable_with_custom_enum():
     class TestEvent(IntEnum):
+
         Start = 0
         Stop = 1
     machine = MachineAPI(Name="Custom", Events=len(TestEvent))

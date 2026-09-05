@@ -1,16 +1,27 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime
 from collections.abc import Sequence
-from dataclasses import dataclass, field, InitVar
+from dataclasses import dataclass, field
 from typing import Union, ClassVar, TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Query import QueryAPI
-from Library.Market.Price import Direction, PriceAPI
+from Library.Market.Price import Direction, PriceAPI, calculate_direction
 from Library.Market.Tick import TickAPI
 from Library.Portfolio.PnL import PnLAPI
+from Library.Statistic.Metric import (
+    calculate_annualized_log_return,
+    calculate_annualized_return,
+    calculate_gross_pnl,
+    calculate_log_percentage,
+    calculate_log_return,
+    calculate_net_pnl,
+    calculate_percentage,
+    calculate_pnl_difference,
+    calculate_pnl_return
+)
 from Library.Utility.Typing import MISSING
 
 if TYPE_CHECKING:
@@ -20,7 +31,6 @@ if TYPE_CHECKING:
     from Library.Portfolio.Position import PositionAPI
     from Library.Portfolio.Trade import TradeAPI
     from Library.Market.Bar import BarAPI
-    from Library.Utility.Parameter import Parameter
     from Library.Universe.Security import SecurityAPI
 
 @dataclass(kw_only=True)
@@ -28,8 +38,6 @@ class PortfolioAPI(DatapointAPI):
 
     Schema: ClassVar[str] = "Portfolio"
     Table: ClassVar[str] = "Portfolio"
-
-    Parameter: InitVar[Union[Parameter, None]] = field(default=MISSING)
 
     _account_: Union[AccountAPI, None] = field(default=None, init=False)
     _security_: Union[SecurityAPI, None] = field(default=None, init=False)
@@ -61,8 +69,7 @@ class PortfolioAPI(DatapointAPI):
                       migrate: bool,
                       autosave: bool,
                       autoload: bool,
-                      autooverload: bool,
-                      parameters: Union[Parameter, None] = None) -> None:
+                      autooverload: bool) -> None:
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     @staticmethod
@@ -251,7 +258,6 @@ class PortfolioAPI(DatapointAPI):
         return a if a is not None else 1.0
 
     def update_data(self, data: Union[TickAPI, BarAPI]) -> None:
-        from Library.Statistic.Metric import calculate_pnl_difference, calculate_gross_pnl, calculate_net_pnl
         if isinstance(data, TickAPI):
             bid, ask, timestamp = data.Bid.Price, data.Ask.Price, data.Timestamp.DateTime
             high_bid = low_bid = bid
@@ -362,7 +368,6 @@ class PortfolioAPI(DatapointAPI):
         if dst.Comment is None: dst.Comment = src.Comment
 
     def _compute_target_pnl_(self, pos: PositionAPI, target_price: Union[float, None]) -> Union[float, None]:
-        from Library.Statistic.Metric import calculate_pnl_difference, calculate_gross_pnl, calculate_net_pnl
         entry = pos.EntryPrice.Price if pos.EntryPrice else None
         if target_price is None or entry is None or pos.Volume is None: return None
         comm = pos.CommissionPnL.PnL if pos.CommissionPnL else 0.0
@@ -571,32 +576,27 @@ class PortfolioAPI(DatapointAPI):
 
     @property
     def Direction(self) -> Direction:
-        from Library.Market.Price import calculate_direction
         return calculate_direction(self.NetPnL)
 
     @property
     def Return(self) -> Union[float, None]:
-        from Library.Statistic.Metric import calculate_pnl_return
         if not self._account_ or not self._account_.Balance: return None
         return calculate_pnl_return(self.NetPnL, self._account_.Balance)
 
     @property
     def LogReturn(self) -> Union[float, None]:
-        from Library.Statistic.Metric import calculate_log_return
         ret = self.Return
         if ret is None: return None
         return calculate_log_return(ret)
 
     @property
     def Percentage(self) -> Union[float, None]:
-        from Library.Statistic.Metric import calculate_percentage
         ret = self.Return
         if ret is None: return None
         return calculate_percentage(ret)
 
     @property
     def LogPercentage(self) -> Union[float, None]:
-        from Library.Statistic.Metric import calculate_log_percentage
         log_ret = self.LogReturn
         if log_ret is None: return None
         return calculate_log_percentage(log_ret)
@@ -608,32 +608,28 @@ class PortfolioAPI(DatapointAPI):
 
     @property
     def AnnualizedReturn(self) -> Union[float, None]:
-        from Library.Statistic.Metric import calculate_annualized_return
         ret = self.Return
         if ret is None: return None
-        first = self._first_entry_()
-        if not first: return None
-        duration_sec = (datetime.now() - first).total_seconds()
+        first, last = self._first_entry_(), self._equity_stamp_
+        if not first or last is None: return None
+        duration_sec = (last - first).total_seconds()
         return calculate_annualized_return(ret, duration_sec)
 
     @property
     def AnnualizedLogReturn(self) -> Union[float, None]:
-        from Library.Statistic.Metric import calculate_annualized_log_return
         log_ret = self.LogReturn
         if log_ret is None: return None
-        first = self._first_entry_()
-        if not first: return None
-        duration_sec = (datetime.now() - first).total_seconds()
+        first, last = self._first_entry_(), self._equity_stamp_
+        if not first or last is None: return None
+        duration_sec = (last - first).total_seconds()
         return calculate_annualized_log_return(log_ret, duration_sec)
 
     @property
     def AnnualizedPercentage(self) -> Union[float, None]:
-        from Library.Statistic.Metric import calculate_percentage
         return calculate_percentage(self.AnnualizedReturn)
 
     @property
     def AnnualizedLogPercentage(self) -> Union[float, None]:
-        from Library.Statistic.Metric import calculate_log_percentage
         return calculate_log_percentage(self.AnnualizedLogReturn)
 
     @property

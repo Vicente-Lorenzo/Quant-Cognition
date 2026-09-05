@@ -6,7 +6,7 @@ from argparse import ArgumentParser, Namespace
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Type, Union
+from typing import Union
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -19,55 +19,55 @@ from Library.Utility import HORIZON, MISSING, Missing, Parameter, inspect_tempor
 
 def _parse_() -> Namespace:
     base_parser = ArgumentParser(add_help=False)
-    base_parser.add_argument("--console", type=str, required=False, default=VerboseLevel.Debug.name, choices=[_.name for _ in VerboseLevel])
-    base_parser.add_argument("--file", type=str, required=False, default=VerboseLevel.Debug.name, choices=[_.name for _ in VerboseLevel])
-    base_parser.add_argument("--storage", type=str, required=False, default=VerboseLevel.Warning.name, choices=[_.name for _ in VerboseLevel])
-    base_parser.add_argument("--strategy", type=str, required=False, default=StrategyType.Download.name, choices=[_.name for _ in StrategyType])
-    base_parser.add_argument("--provider", type=str, required=False, default="Spotware")
-    base_parser.add_argument("--ticker", type=str, required=False, default="EURUSD")
-    base_parser.add_argument("--timeframe", type=str, required=False, default="Daily")
-    base_parser.add_argument("--risk-free", type=float, required=False, default=0.0)
-    base_parser.add_argument("--benchmark", type=str, required=False, nargs="?", const="", default=None)
+    base_parser.add_argument("--console", type=str, default=VerboseLevel.Debug.name, choices=[_.name for _ in VerboseLevel])
+    base_parser.add_argument("--file", type=str, default=VerboseLevel.Debug.name, choices=[_.name for _ in VerboseLevel])
+    base_parser.add_argument("--storage", type=str, default=VerboseLevel.Warning.name, choices=[_.name for _ in VerboseLevel])
+    base_parser.add_argument("--strategy", type=str, default=StrategyType.Download.name, choices=[_.name for _ in StrategyType])
+    base_parser.add_argument("--provider", type=str, default="Spotware")
+    base_parser.add_argument("--ticker", type=str, default="EURUSD")
+    base_parser.add_argument("--timeframe", type=str, default="Daily")
+    base_parser.add_argument("--risk-free", type=float, default=0.0)
+    base_parser.add_argument("--benchmark", type=str, nargs="?", const="", default=None)
     base_parser.add_argument("--report", action="store_true", default=False)
     base_parser.add_argument("--export", nargs="?", const=True, default=False, metavar="PATH")
     base_parser.add_argument("--plot", nargs="?", const=True, default=False, metavar="PATH")
-    base_parser.add_argument("--description", type=str, required=False, default=None)
+    base_parser.add_argument("--description", type=str, default=None)
     base_parser.add_argument("--profile", nargs="?", const=True, default=False, metavar="PATH")
-    base_parser.add_argument("--run", type=str, required=False, default=None, metavar="FOLDER")
+    base_parser.add_argument("--run", type=str, default=None, metavar="FOLDER")
 
     period_parser = ArgumentParser(add_help=False)
-    period_parser.add_argument("--start", type=str, required=False, default=HORIZON.strftime("%Y-%m-%d"))
-    period_parser.add_argument("--stop", type=str, required=False, default="2030-01-01")
+    period_parser.add_argument("--start", type=str, default=HORIZON.strftime("%Y-%m-%d"))
+    period_parser.add_argument("--stop", type=str, default="2030-01-01")
 
     account_parser = ArgumentParser(add_help=False)
-    account_parser.add_argument("--account-asset", type=str, required=False, default="EUR")
-    account_parser.add_argument("--account-balance", type=float, required=False, default=10000.0)
-    account_parser.add_argument("--account-leverage", type=float, required=False, default=30.0)
+    account_parser.add_argument("--account-asset", type=str, default="EUR")
+    account_parser.add_argument("--account-balance", type=float, default=10000.0)
+    account_parser.add_argument("--account-leverage", type=float, default=30.0)
 
     realtime_parser = ArgumentParser(add_help=False)
-    realtime_parser.add_argument("--iid", type=str, required=False, default=None)
-    realtime_parser.add_argument("--database", type=str, required=False, default=None, choices=["Quant", "Tests"])
-    realtime_parser.add_argument("--universe-batch", type=int, required=False, default=MISSING)
-    realtime_parser.add_argument("--universe-interval", type=float, required=False, default=MISSING)
-    realtime_parser.add_argument("--universe-workers", type=int, required=False, default=MISSING)
-    realtime_parser.add_argument("--universe-maxsize", type=int, required=False, default=MISSING)
-    realtime_parser.add_argument("--market-batch", type=int, required=False, default=MISSING)
-    realtime_parser.add_argument("--market-interval", type=float, required=False, default=MISSING)
-    realtime_parser.add_argument("--market-workers", type=int, required=False, default=MISSING)
-    realtime_parser.add_argument("--market-maxsize", type=int, required=False, default=MISSING)
-    realtime_parser.add_argument("--portfolio-batch", type=int, required=False, default=MISSING)
-    realtime_parser.add_argument("--portfolio-interval", type=float, required=False, default=MISSING)
-    realtime_parser.add_argument("--portfolio-workers", type=int, required=False, default=MISSING)
-    realtime_parser.add_argument("--portfolio-maxsize", type=int, required=False, default=MISSING)
+    realtime_parser.add_argument("--iid", type=str, default=None)
+    realtime_parser.add_argument("--database", type=str, default=None, choices=["Quant", "Tests"])
+    realtime_parser.add_argument("--universe-batch", type=int, default=MISSING)
+    realtime_parser.add_argument("--universe-interval", type=float, default=MISSING)
+    realtime_parser.add_argument("--universe-workers", type=int, default=MISSING)
+    realtime_parser.add_argument("--universe-maxsize", type=int, default=MISSING)
+    realtime_parser.add_argument("--market-batch", type=int, default=MISSING)
+    realtime_parser.add_argument("--market-interval", type=float, default=MISSING)
+    realtime_parser.add_argument("--market-workers", type=int, default=MISSING)
+    realtime_parser.add_argument("--market-maxsize", type=int, default=MISSING)
+    realtime_parser.add_argument("--portfolio-batch", type=int, default=MISSING)
+    realtime_parser.add_argument("--portfolio-interval", type=float, default=MISSING)
+    realtime_parser.add_argument("--portfolio-workers", type=int, default=MISSING)
+    realtime_parser.add_argument("--portfolio-maxsize", type=int, default=MISSING)
 
     fee_parser = ArgumentParser(add_help=False)
-    fee_parser.add_argument("--spread-type", type=str, required=False, default=SpreadType.Auto.name, choices=[_.name for _ in SpreadType])
-    fee_parser.add_argument("--spread-value", type=float, required=False, default=MISSING)
-    fee_parser.add_argument("--commission-type", type=str, required=False, default=CommissionType.Auto.name, choices=[_.name for _ in CommissionType])
-    fee_parser.add_argument("--commission-value", type=float, required=False, default=MISSING)
-    fee_parser.add_argument("--swap-type", type=str, required=False, default=SwapType.Auto.name, choices=[_.name for _ in SwapType])
-    fee_parser.add_argument("--swap-buy", type=float, required=False, default=MISSING)
-    fee_parser.add_argument("--swap-sell", type=float, required=False, default=MISSING)
+    fee_parser.add_argument("--spread-type", type=str, default=SpreadType.Auto.name, choices=[_.name for _ in SpreadType])
+    fee_parser.add_argument("--spread-value", type=float, default=MISSING)
+    fee_parser.add_argument("--commission-type", type=str, default=CommissionType.Auto.name, choices=[_.name for _ in CommissionType])
+    fee_parser.add_argument("--commission-value", type=float, default=MISSING)
+    fee_parser.add_argument("--swap-type", type=str, default=SwapType.Auto.name, choices=[_.name for _ in SwapType])
+    fee_parser.add_argument("--swap-buy", type=float, default=MISSING)
+    fee_parser.add_argument("--swap-sell", type=float, default=MISSING)
 
     parser = ArgumentParser()
     system_parser = parser.add_subparsers(dest="system", required=True)
@@ -77,49 +77,49 @@ def _parse_() -> Namespace:
     system_parser.add_parser(SystemType.Testing.name, parents=[base_parser, realtime_parser])
 
     backtesting_parser = system_parser.add_parser(SystemType.Backtesting.name, parents=[base_parser, period_parser, account_parser, fee_parser])
-    backtesting_parser.add_argument("--resolution", type=str, required=False, default=MISSING)
+    backtesting_parser.add_argument("--resolution", type=str, default=MISSING)
 
     optimization_parser = system_parser.add_parser(SystemType.Optimization.name, parents=[base_parser, period_parser, account_parser, fee_parser])
-    optimization_parser.add_argument("--training", type=int, required=False, default=0)
-    optimization_parser.add_argument("--validation", type=int, required=False, default=0)
-    optimization_parser.add_argument("--testing", type=int, required=False, default=0)
-    optimization_parser.add_argument("--fitness", type=str, required=False, default=FitnessType.AnnualizedReturn.name, choices=[_.name for _ in FitnessType])
-    optimization_parser.add_argument("--resolution", type=str, required=False, default=MISSING)
-    optimization_parser.add_argument("--selection", type=str, required=False, default=SelectionMode.Best.name, choices=[_.name for _ in SelectionMode])
-    optimization_parser.add_argument("--election", type=str, required=False, default=ElectionMode.Frequency.name, choices=[_.name for _ in ElectionMode])
-    optimization_parser.add_argument("--purge", type=int, required=False, default=None)
-    optimization_parser.add_argument("--embargo", type=int, required=False, default=None)
+    optimization_parser.add_argument("--training", type=int, default=0)
+    optimization_parser.add_argument("--validation", type=int, default=0)
+    optimization_parser.add_argument("--testing", type=int, default=0)
+    optimization_parser.add_argument("--fitness", type=str, default=FitnessType.AnnualizedReturn.name, choices=[_.name for _ in FitnessType])
+    optimization_parser.add_argument("--resolution", type=str, default=MISSING)
+    optimization_parser.add_argument("--selection", type=str, default=SelectionMode.Best.name, choices=[_.name for _ in SelectionMode])
+    optimization_parser.add_argument("--election", type=str, default=ElectionMode.Frequency.name, choices=[_.name for _ in ElectionMode])
+    optimization_parser.add_argument("--purge", type=int, default=None)
+    optimization_parser.add_argument("--embargo", type=int, default=None)
     optimization_parser.add_argument("--rolling", action="store_true")
     optimization_parser.add_argument("--continuous", action="store_true", default=False)
-    optimization_parser.add_argument("--workers", type=int, required=False, default=1)
+    optimization_parser.add_argument("--workers", type=int, default=1)
 
     learning_parser = system_parser.add_parser(SystemType.Learning.name, parents=[base_parser, period_parser, account_parser, fee_parser])
-    learning_parser.add_argument("--selection", type=str, required=False, default=SelectionMode.Best.name, choices=[_.name for _ in SelectionMode])
-    learning_parser.add_argument("--election", type=str, required=False, default=ElectionMode.Last.name, choices=[_.name for _ in ElectionMode])
-    learning_parser.add_argument("--purge", type=int, required=False, default=None)
-    learning_parser.add_argument("--embargo", type=int, required=False, default=None)
-    learning_parser.add_argument("--reward", type=str, required=False, default=RewardType.LogReturn.name, choices=[_.name for _ in RewardType])
-    learning_parser.add_argument("--episodes", type=int, required=False, default=1)
-    learning_parser.add_argument("--epochs", type=int, required=False, default=1)
-    learning_parser.add_argument("--train-frequency", type=int, required=False, default=1)
-    learning_parser.add_argument("--gradient-steps", type=int, required=False, default=1)
-    learning_parser.add_argument("--training", type=int, required=False, default=0)
-    learning_parser.add_argument("--validation", type=int, required=False, default=0)
-    learning_parser.add_argument("--testing", type=int, required=False, default=0)
+    learning_parser.add_argument("--selection", type=str, default=SelectionMode.Best.name, choices=[_.name for _ in SelectionMode])
+    learning_parser.add_argument("--election", type=str, default=ElectionMode.Last.name, choices=[_.name for _ in ElectionMode])
+    learning_parser.add_argument("--purge", type=int, default=None)
+    learning_parser.add_argument("--embargo", type=int, default=None)
+    learning_parser.add_argument("--reward", type=str, default=RewardType.LogReturn.name, choices=[_.name for _ in RewardType])
+    learning_parser.add_argument("--episodes", type=int, default=1)
+    learning_parser.add_argument("--epochs", type=int, default=1)
+    learning_parser.add_argument("--train-frequency", type=int, default=1)
+    learning_parser.add_argument("--gradient-steps", type=int, default=1)
+    learning_parser.add_argument("--training", type=int, default=0)
+    learning_parser.add_argument("--validation", type=int, default=0)
+    learning_parser.add_argument("--testing", type=int, default=0)
     learning_parser.add_argument("--rolling", action="store_true", default=False)
     learning_parser.add_argument("--continuous", action="store_true", default=False)
-    learning_parser.add_argument("--fitness", type=str, required=False, default=FitnessType.AnnualizedReturn.name, choices=[_.name for _ in FitnessType])
-    learning_parser.add_argument("--patience", type=int, required=False, default=0)
-    learning_parser.add_argument("--activity", type=int, required=False, default=0)
-    learning_parser.add_argument("--balance", type=int, required=False, default=0)
-    learning_parser.add_argument("--ratio", type=float, required=False, default=0.0)
+    learning_parser.add_argument("--fitness", type=str, default=FitnessType.AnnualizedReturn.name, choices=[_.name for _ in FitnessType])
+    learning_parser.add_argument("--patience", type=int, default=0)
+    learning_parser.add_argument("--activity", type=int, default=0)
+    learning_parser.add_argument("--balance", type=int, default=0)
+    learning_parser.add_argument("--ratio", type=float, default=0.0)
     learning_parser.add_argument("--mirror", action="store_true", default=False)
-    learning_parser.add_argument("--mirror-ratio", type=float, required=False, default=0.5)
+    learning_parser.add_argument("--mirror-ratio", type=float, default=0.5)
     learning_parser.add_argument("--final", action="store_true", default=False)
-    learning_parser.add_argument("--seed", type=int, required=False, default=None)
-    learning_parser.add_argument("--seeds", type=int, required=False, default=1)
-    learning_parser.add_argument("--workers", type=int, required=False, default=1)
-    learning_parser.add_argument("--threads", type=int, required=False, default=None)
+    learning_parser.add_argument("--seed", type=int, default=None)
+    learning_parser.add_argument("--seeds", type=int, default=1)
+    learning_parser.add_argument("--workers", type=int, default=1)
+    learning_parser.add_argument("--threads", type=int, default=None)
 
     return parser.parse_args()
 
@@ -149,14 +149,14 @@ def _portfolio_(system: SystemType, batch: Union[int, Missing], interval: Union[
         case _: automatic = 0, 0.0, 0, 0
     return _settled_((batch, interval, workers, maxsize), automatic)
 
-def _strategy_(args: Namespace) -> Type[StrategyAPI]:
+def _strategy_(args: Namespace) -> type[StrategyAPI]:
     match StrategyType(args.strategy):
         case StrategyType.Download: return DownloadStrategyAPI
         case StrategyType.NNFX: return NNFXStrategyAPI
         case StrategyType.DDPG: return DDPGStrategyAPI
         case StrategyType.Trend: return TrendStrategyAPI
 
-def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI, timeframe: TimeframeAPI, resolve) -> Union[SystemAPI, None]:
+def _system_(args: Namespace, strategy: type[StrategyAPI], security: SecurityAPI, timeframe: TimeframeAPI, resolve) -> Union[SystemAPI, None]:
     system = SystemType(args.system)
     strategy_type = StrategyType(args.strategy)
     match system:
@@ -284,7 +284,7 @@ def _system_(args: Namespace, strategy: Type[StrategyAPI], security: SecurityAPI
                 description=args.description
             )
 
-def _parameters_(ladder: LadderAPI, strategy: Type[StrategyAPI], rungs: tuple, trails: dict, kind: str) -> Parameter:
+def _parameters_(ladder: LadderAPI, strategy: type[StrategyAPI], rungs: tuple, trails: dict, kind: str) -> Parameter:
     parameters, trails[kind] = ladder.parameterize(strategy, kind, *rungs)
     return parameters
 

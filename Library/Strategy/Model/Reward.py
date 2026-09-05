@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 import math
 
 from Library.Utility.Enumeration import EnumerationAPI
 from Library.Utility.Math import EPSILON
 
 class RewardType(EnumerationAPI):
+
     LogReturn = 0
     DifferentialSharpe = 1
     DifferentialSortino = 2

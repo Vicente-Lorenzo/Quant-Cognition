@@ -19,6 +19,7 @@ _K32_.OpenProcess.argtypes = [wt.DWORD, wt.BOOL, wt.DWORD]
 _K32_.OpenProcess.restype = wt.HANDLE
 
 class PeerExit(SystemExit):
+
     pass
 
 class TransportAPI:

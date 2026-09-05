@@ -27,6 +27,7 @@ def _dataset_(**overrides):
     return DatasetAPI(**fields)
 
 class _Contract_:
+
     PointSize = 0.00001
     PipSize = 0.0001
     LotSize = 100000
@@ -41,10 +42,12 @@ class _Contract_:
     SwapExtraDay = Weekday.Wednesday
 
 class _Price_:
+
     def __init__(self, price):
         self.Price = price
 
 class _Position_:
+
     def __init__(self, direction, stop_loss=None, take_profit=None):
         self.Direction = direction
         self.StopLossPrice = _Price_(stop_loss) if stop_loss is not None else None
@@ -147,6 +150,7 @@ def test_tick_bars_grouping(monkeypatch):
     assert [bid for _, _, bid in out] == [1.10, 1.09, 1.13]
 
 class _ConvTick_:
+
     def __init__(self, ask, bid, abc=None, bbc=None, aqc=None, bqc=None):
         self.Ask = _Price_(ask)
         self.Bid = _Price_(bid)
@@ -276,10 +280,13 @@ def test_candidate_mask_flags_only_reachable_buy_stop():
     assert engine._candidate_mask_(eb, ask_low, ask_high).tolist() == [False, True, False]
 
 class _LogStub_:
+
     def info(self, fn): pass
+
     def debug(self, fn): pass
 
 class _FakeArr_:
+
     size = 7
 
 def _preload_stub_(window: int = 20):

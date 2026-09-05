@@ -23,14 +23,17 @@ if TYPE_CHECKING:
     from Library.Portfolio.Order import OrderAPI
 
 class PositionMode(EnumerationAPI):
+
     Hedging = 0
     Netting = 1
 
 class PositionType(EnumerationAPI):
+
     Normal = 0
     Continuation = 1
 
 class PositionStatus(EnumerationAPI):
+
     Opened = 1
     Closed = 2
 
@@ -98,7 +101,6 @@ class PositionAPI(DatapointAPI):
     @property
     def Structure(self) -> dict:
         from Library.Portfolio.Order import OrderAPI
-        s = super().Structure
         cols = {
             self.ID.UID: PrimaryKey(pl.Int64),
             self.ID.Session: ForeignKey(pl.String, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")'),
@@ -130,10 +132,8 @@ class PositionAPI(DatapointAPI):
             self.ID.MidBalance: pl.Float64(),
             self.ID.Label: pl.String(),
             self.ID.Comment: pl.String(),
+            **super().Structure
         }
-        for k, v in s.items():
-            if k not in cols:
-                cols[k] = v
         return cols
 
     def __post_init__(self,
@@ -752,11 +752,6 @@ class PositionAPI(DatapointAPI):
     @staticmethod
     def _unwrap_price_(val: Union[float, PriceAPI, None]) -> Union[float, None]:
         if isinstance(val, PriceAPI): return val.Price
-        return val if val is not MISSING else None
-
-    @staticmethod
-    def _unwrap_pnl_(val: Union[float, PnLAPI, None]) -> Union[float, None]:
-        if isinstance(val, PnLAPI): return val.PnL
         return val if val is not MISSING else None
 
     def _make_price_(self, val: Union[float, PriceAPI, None], reference: Union[float, None]) -> Union[PriceAPI, None]:

@@ -897,7 +897,6 @@ public class RobotAPI : IDisposable
         return _robot_.ClosePosition(position).IsSuccessful;
     }
 
-
     private bool ProcessActionOpenStopOrder(TradeType trade_type, double volume, double target_price, double? sl_price, double? tp_price)
     {
         var result = _robot_.PlaceStopOrder(trade_type, _robot_.Symbol.Name, volume, target_price, _robot_.InstanceId, stopLoss: sl_price, takeProfit: tp_price, protectionType: null);
@@ -1024,7 +1023,6 @@ public class RobotAPI : IDisposable
                     if (!ProcessActionModifyTakeProfit(ReadInt32(data, 1), NullIfNan(ReadDouble(data, 5)))) _robot_.Stop();
                     break;
                 case ActionID.CloseBuyPosition:
-
                 case ActionID.CloseSellPosition:
                     if (!ProcessActionClosePosition(ReadInt32(data, 1))) _robot_.Stop();
                     break;

@@ -106,7 +106,6 @@ class AppAPI(ShellAPI, RouterAPI):
         self._ids_.add(key)
         return cid
 
-
     def link(self, page: PageAPI) -> None:
         relative_path = inspect_file(page.path, header=True, builder=PurePosixPath)
         relative_anchor = self.anchorize(path=relative_path, relative=True)
@@ -239,7 +238,6 @@ class AppAPI(ShellAPI, RouterAPI):
         self.__init_ids__()
         self._log_.debug(lambda: f"Identify Operation: Registered ({len(self._ids_)} Ids)")
 
-
     def _init_pages_(self) -> None:
         launchpad = self.Launchpad(app=self)
         self.link(launchpad)
@@ -253,15 +251,13 @@ class AppAPI(ShellAPI, RouterAPI):
         launchpad.refresh()
         self._log_.debug(lambda: f"Pages Operation: Loaded ({len(self._pages_)} Pages)")
 
-
     def __register_callback__(self, context, func, name: str, is_page: bool) -> None:
         is_client = getattr(func, "js", False)
         args = list(getattr(func, "args", []))
         kwargs = dict(getattr(func, "kwargs", {}))
         kwargs.pop("memoize", None)
         manager = kwargs.pop("manager", None)
-        if not kwargs.pop("background", False): kwargs.pop("background", None)
-        else: kwargs["background"] = True
+        if kwargs.pop("background", False): kwargs["background"] = True
         if manager: kwargs["background_callback_manager"] = manager
         target = getattr(context, name)() if is_client else getattr(context, name)
         running_extras, cancel_extras, specs = [], [], []

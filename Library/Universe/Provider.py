@@ -12,6 +12,7 @@ from Library.Utility.Enumeration import EnumerationAPI
 if TYPE_CHECKING: from Library.Database.Database import DatabaseAPI
 
 class Provider(EnumerationAPI):
+
     Spotware = 0
     Pepperstone = 1
     ICMarkets = 2
@@ -19,6 +20,7 @@ class Provider(EnumerationAPI):
     Yahoo = 4
 
 class Platform(EnumerationAPI):
+
     cTrader = 0
     MetaTrader4 = 1
     MetaTrader5 = 2

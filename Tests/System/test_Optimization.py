@@ -1,5 +1,3 @@
-import pytest
-
 from Library.Utility.Parameter import Parameter
 from Library.System.Selection import ElectionMode, SelectionMode, select
 from Library.System.Optimization import OptimizationAPI
@@ -8,7 +6,7 @@ from Library.System.Space import (
     apply_candidate,
     build_grid,
     expand_parameter,
-    neighbourhoods,
+    neighborhoods,
     unpack_section,
     flatten_space
 )
@@ -49,33 +47,35 @@ def test_neighbours_differ_in_exactly_one_slot():
 def test_argmax_takes_the_peak_even_when_isolated():
     grid = build_grid(SPACE)
     scores = {0: 1.0, 1: 9.0, 2: 1.0, 3: 1.0, 4: 4.0, 5: 4.2, 6: 4.1, 7: 3.9}
-    chosen, score = select([(c, scores[c.index]) for c in grid], SelectionMode.Best, adjacency=neighbourhoods)
+    chosen, score = select([(c, scores[c.index]) for c in grid], SelectionMode.Best, adjacency=neighborhoods)
     assert chosen.index == 1 and score == 9.0
 
 def test_plateau_prefers_a_stable_region_over_a_lone_spike():
     grid = build_grid(SPACE)
     scores = {0: 1.0, 1: 9.0, 2: 1.0, 3: 1.0, 4: 4.0, 5: 4.2, 6: 4.1, 7: 3.9}
-    chosen, _ = select([(c, scores[c.index]) for c in grid], SelectionMode.Plateau, adjacency=neighbourhoods)
+    chosen, _ = select([(c, scores[c.index]) for c in grid], SelectionMode.Plateau, adjacency=neighborhoods)
     assert chosen.index == 5
 
 def test_selection_accepts_the_mode_by_name():
     grid = build_grid(SPACE)
     scored = [(c, float(c.index)) for c in grid]
-    assert select(scored, "Best", adjacency=neighbourhoods)[0].index == 7
+    assert select(scored, "Best", adjacency=neighborhoods)[0].index == 7
 
 def test_selection_ignores_candidates_without_a_score():
     grid = build_grid(SPACE)
     scored = [(grid[0], None), (grid[1], 2.0), (grid[2], None)]
-    assert select(scored, SelectionMode.Best, adjacency=neighbourhoods)[0].index == 1
+    assert select(scored, SelectionMode.Best, adjacency=neighborhoods)[0].index == 1
 
 def test_selection_without_any_score_returns_nothing():
     grid = build_grid(SPACE)
-    assert select([(candidate, None) for candidate in grid], SelectionMode.Best, adjacency=neighbourhoods) is None
+    assert select([(candidate, None) for candidate in grid], SelectionMode.Best, adjacency=neighborhoods) is None
 
 def test_unpack_space_ignores_absent_and_empty_sections():
     class Block:
+
         def __init__(self, data): self.data = data
     class Holder:
+
         def __init__(self, **sections):
             for name, block in sections.items(): setattr(self, name, block)
     holder = Holder(MoneyManagement=Block({"RiskPercentage": [[0.5, 1.0]], "Ignored": None}),
@@ -85,8 +85,10 @@ def test_unpack_space_ignores_absent_and_empty_sections():
 
 def test_unpack_space_wraps_a_bare_slot_into_options():
     class Block:
+
         def __init__(self, data): self.data = data
     class Holder:
+
         def __init__(self, block): self.TechnicalManagement = block
     space = unpack_section(flatten_space(Holder(Block({"ATR": ["ATR", [14, 21]]}))))
     assert space["TechnicalManagement"]["ATR"] == [["ATR"], [14, 21]]
@@ -115,16 +117,16 @@ def test_apply_candidate_ignores_parameters_absent_from_the_base():
     candidate = CandidateAPI(index=0, overrides={"MoneyManagement": {"Unknown": [1]}})
     assert "Unknown" not in apply_candidate(_base_(), candidate).data["MoneyManagement"]
 
-def test_neighbourhoods_match_pairwise_distance():
+def test_neighborhoods_match_pairwise_distance():
     grid = build_grid(SPACE)
-    adjacency = neighbourhoods(grid)
+    adjacency = neighborhoods(grid)
     for candidate in grid:
         expected = {other.index for other in grid if 0 < candidate.distance(other) <= 1}
         assert adjacency[candidate.index] == expected
 
-def test_neighbourhoods_exclude_the_candidate_itself():
+def test_neighborhoods_exclude_the_candidate_itself():
     grid = build_grid(SPACE)
-    adjacency = neighbourhoods(grid)
+    adjacency = neighborhoods(grid)
     assert all(index not in members for index, members in adjacency.items())
 
 def test_plateau_stays_linear_on_a_large_grid():
@@ -135,7 +137,7 @@ def test_plateau_stays_linear_on_a_large_grid():
     assert len(grid) == 1024
     scored = [(candidate, float(candidate.index % 7)) for candidate in grid]
     start = time.perf_counter()
-    assert select(scored, SelectionMode.Plateau, adjacency=neighbourhoods) is not None
+    assert select(scored, SelectionMode.Plateau, adjacency=neighborhoods) is not None
     assert time.perf_counter() - start < 1.0
 
 def _elector_(stages: list, ledger: dict, election: ElectionMode = ElectionMode.Frequency) -> OptimizationAPI:

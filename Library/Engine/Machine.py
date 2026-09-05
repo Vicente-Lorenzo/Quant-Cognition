@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Any, Union
 from dataclasses import dataclass, field
 
@@ -9,6 +7,7 @@ from Library.Engine.State import StateAPI
 
 @dataclass(slots=True)
 class MachineAPI(DataclassAPI):
+
     Name: Union[str, None]
     Events: int
     At: Union[StateAPI, None] = field(default=None, init=False)

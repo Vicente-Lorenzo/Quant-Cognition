@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime
 from typing import Union, ClassVar
@@ -158,9 +158,6 @@ class TickAPI(DatapointAPI):
         s(self, "UID", (security.UID << cls._MS_BITS_) | datetime_to_epoch(timestamp) if security is not None and security.UID is not None and timestamp is not None else None)
         return self
 
-    def save(self, by: str = "Autosave") -> None:
-        super().save(by=by)
-
     @property
     @overridefield
     def Security(self) -> Union[SecurityAPI, None]:
@@ -203,6 +200,7 @@ class TickAPI(DatapointAPI):
             else:
                 contract = self._security_.Contract if self._security_ is not None else None
                 self._ask_ = PriceAPI(Price=val, Reference=self._bid_.Price if self._bid_ else None, Contract=contract)
+
     @property
     def InvertedAsk(self) -> Union[float, None]:
         if self._ask_ is None or not self._ask_.Price: return None
@@ -220,6 +218,7 @@ class TickAPI(DatapointAPI):
             else:
                 contract = self._security_.Contract if self._security_ is not None else None
                 self._bid_ = PriceAPI(Price=val, Reference=self._ask_.Price if self._ask_ else None, Contract=contract)
+
     @property
     def InvertedBid(self) -> Union[float, None]:
         if self._bid_ is None or not self._bid_.Price: return None

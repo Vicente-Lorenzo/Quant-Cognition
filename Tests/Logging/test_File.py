@@ -1,10 +1,7 @@
 import os
 import sys
 import time
-import tempfile
 from pathlib import Path
-
-import pytest
 
 from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Logging.File import FileAPI

@@ -33,9 +33,11 @@ def _build_():
     from Tests.App.Harness import HarnessAppAPI
 
     class _MatrixLaunchpadAPI_(LaunchpadPageAPI):
+
         _MATRIX_ = (3,)
 
     class _MatrixAppAPI_(HarnessAppAPI):
+
         Launchpad = _MatrixLaunchpadAPI_
 
     return _MatrixAppAPI_()

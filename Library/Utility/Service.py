@@ -8,7 +8,6 @@ from typing import Callable
 from Library.Utility.Profiler import Timer
 from Library.Utility.Typing import MISSING, Missing
 
-
 class ServiceAPI(ABC):
 
     def __init__(self,

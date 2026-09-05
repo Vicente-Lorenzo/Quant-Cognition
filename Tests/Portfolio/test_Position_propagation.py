@@ -1,8 +1,6 @@
-import pytest
 from Library.Portfolio.Position import PositionAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Universe.Contract import ContractAPI
-from Library.Market.Price import PriceAPI
 
 def test_position_security_propagates_contract():
     c1 = ContractAPI(PipSize=0.0001)

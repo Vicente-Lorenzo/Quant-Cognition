@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Union, ClassVar
 
@@ -11,6 +9,7 @@ from Library.Database.Database import PrimaryKey, ForeignKey
 from Library.Database.Datapoint import DatapointAPI
 
 class TaskType(EnumerationAPI):
+
     Batch = 0
     Shell = 1
     Python = 2

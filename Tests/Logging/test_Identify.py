@@ -59,6 +59,7 @@ def test_subclass_comes_from_the_subsystem():
 
 def test_identity_matches_writing_it_by_hand():
     class HandWrittenAPI:
+
         def __init__(self):
             self.automatic = LoggingAPI()
             self.manual = LoggingAPI(type(self).__name__)
@@ -137,6 +138,7 @@ def test_frame_package_honors_a_custom_root():
 
 def test_caller_helpers_describe_their_direct_caller():
     class ProbeAPI:
+
         def look(self): return find_caller_class(), find_caller_module(), find_caller_package()
     klass, module, package = ProbeAPI().look()
     assert klass == "ProbeAPI"

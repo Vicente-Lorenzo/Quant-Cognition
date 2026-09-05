@@ -302,6 +302,6 @@ class PostgresDatabaseAPI(DatabaseAPI):
             condition='schemaname = :fingerprint_schema: AND relname = :fingerprint_table:',
             parameters={"fingerprint_schema": schema, "fingerprint_table": table}
         )
-        records = frame.to_dicts() if hasattr(frame, "to_dicts") else frame.to_dict("records")
+        records = self._records_(frame)
         if records: return str(next(iter(records[0].values())))
         return None

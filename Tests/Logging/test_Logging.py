@@ -1,6 +1,6 @@
 import pytest
 
-from Library.Logging import LoggingAPI, LoggerAPI, VerboseLevel
+from Library.Logging import LoggingAPI, VerboseLevel
 
 def test_lambda_is_not_called_when_gated(recorder):
     calls = []

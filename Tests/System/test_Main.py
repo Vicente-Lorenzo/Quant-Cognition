@@ -18,11 +18,14 @@ def constructed() -> dict:
         if not node.func.id.endswith("API"): continue
         calls[node.func.id] = {keyword.arg for keyword in node.keywords if keyword.arg is not None}
     return calls
+
 def resolve(name: str):
     target = getattr(Main, name, None)
     return target if inspect.isclass(target) else None
+
 def test_main_builds_every_system():
     assert constructed(), "no system constructors found in _system_"
+
 @pytest.mark.parametrize("name", sorted(constructed()))
 def test_every_argument_is_accepted(name):
     system = resolve(name)
@@ -30,6 +33,7 @@ def test_every_argument_is_accepted(name):
     accepted = set(inspect.signature(system.__init__).parameters) - {"self"}
     passed = constructed()[name]
     assert not (passed - accepted), f"{name} is handed {sorted(passed - accepted)} by Main._system_ but does not accept it"
+
 @pytest.mark.parametrize("name", sorted(constructed()))
 def test_every_system_forwards_the_shared_surface(name):
     system = resolve(name)

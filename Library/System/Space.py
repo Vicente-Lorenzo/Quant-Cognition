@@ -221,7 +221,7 @@ def measure_plan(plan: list) -> int:
             chosen = grid[len(grid) // 2].pinned()
     return total
 
-def neighbourhoods(candidates: list) -> dict:
+def neighborhoods(candidates: list) -> dict:
     buckets, adjacency = {}, {candidate.index: set() for candidate in candidates}
     for candidate in candidates:
         items = tuple(sorted(candidate.flatten().items()))
@@ -235,4 +235,4 @@ def neighbourhoods(candidates: list) -> dict:
     for index, members in adjacency.items(): members.discard(index)
     return adjacency
 
-__all__ = ["AUTOMATIC", "SECTIONS", "CandidateAPI", "apply_candidate", "flatten_space", "staged", "unpack_plan", "unpack_stages", "inherited", "resolve_inheritance", "unpack_section", "marked", "declared", "automatic", "admitted", "graduate", "rounds_parameter", "rounds_space", "expand_parameter", "build_grid", "measure_plan", "neighbourhoods"]
+__all__ = ["AUTOMATIC", "SECTIONS", "CandidateAPI", "apply_candidate", "flatten_space", "staged", "unpack_plan", "unpack_stages", "inherited", "resolve_inheritance", "unpack_section", "marked", "declared", "automatic", "admitted", "graduate", "rounds_parameter", "rounds_space", "expand_parameter", "build_grid", "measure_plan", "neighborhoods"]

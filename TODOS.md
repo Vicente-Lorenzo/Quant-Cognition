@@ -332,6 +332,84 @@ ever sync the same `Data`.
 - **`Setup/Install.py` and `Setup/Task.py` both define `provision()`** — different modules, different
   jobs, no collision today. Rename one if it ever confuses.
 
+### 5.1 Review pass 2026-09-05 — flagged, not applied
+
+Findings from the full-codebase pass (every `Library`/`Setup`/`Script`/`Tests`/`Sources` file read). Mechanical, provably inert
+cleanups were applied and staged; everything below is behavioral, design-level or golden-adjacent and waits for a decision.
+
+**Bugs**
+
+- **`Library/Spotware` is drift-broken — future work, leave it broken for now (user decision 2026-09-05).** `Market.py`, `Streaming.py`, `Portfolio.py` construct datapoints with pre-rename
+  keyword names (`TickAPI(SecurityUID=, DateTime=, AskPrice=, BidPrice=)`, `BarAPI(SecurityUID=, TimeframeUID=, DateTime=,
+  OpenBidPrice=…, TickVolume=)`, `OrderAPI(OrderID=, PositionID=…)`, `TradeAPI(TradeID=…)`, `PositionAPI(PositionID=…)`); the
+  `kw_only` datapoints raise `TypeError`. `Tests/Spotware/test_Market.py:52` and `test_Portfolio.py:100-268` assert the stale
+  names too. Fix = rename the kwargs to `Security/Timestamp/Ask/Bid/Volume`, `Timeframe/GapTick..CloseTick`, `UID/Position/…`
+  and update both test files; prove with a live-broker session. Also there: `Execution.py` has 8 pure pass-through buy/sell
+  wrappers (side unused → `partialmethod` or drop), `Streaming.py` imports inside per-message closures, 5 unused imports, and
+  `Spotware.py` carries 12 docstrings outside the exemption list.
+
+**Dead surface (0 callers outside the package `__init__`)** — delete, or keep deliberately as library offering
+
+- `Library/Formulas/` (an xlwings Excel-UDF feature, 0 callers) **stays** — the user intends to renovate it (2026-09-05); the
+  `xlwings` pin stays with it.
+- `Utility/Path.py`: 28 of the 36 `traceback_*`/`inspect_*` grid (≈120 lines); `Utility/Datetime.py`: `string_to_datetime`,
+  `datetime_to_iso`, `iso_to_datetime`, `weekday_shift_datetime` + 7 `<day>_shift_datetime`; `Utility/Runtime.py`: `is_local`,
+  `is_service`, `find_user`, `is_python`, `is_ipython`, `is_terminal`, `is_console`, `match_env_vars`; `Utility/IO.py`:
+  `is_readable`, `is_writable`, `smartlink`/`symlink`/`hardlink`; `Utility/Typing.py`: `findvariable`/`getvariable`;
+  `Utility/HTML.py` (`HtmlAPI`, `htmlize`, `stylize` — only `Tests/Utility/test_HTML.py` uses them).
+- `Portfolio.py`: all 16 `load_/save_/pull_/push_{accounts,orders,positions,trades}` statics (≈150 lines incl. a 25-column
+  Contract JOIN repeated 3×), `calculate_statistics`, `BuyOrders`, `SellOrders`; `Portfolio/Statistic.py`
+  `generate_realized_report`/`generate_unrealized_report`; `Market.py` `load_ticks`/`save_ticks`/`count_ticks`/`load_bars`/`save_bars`;
+  `Universe.py` all 12 `save_*/load_*` + `pull_timeframes`.
+- Convenience properties never read and not emitted by `dict()`: `Account` {IsDemo, IsHedged, IsNetted, UnrealizedReturn,
+  MarginRatio, FreeMarginRatio, CreditRatio}; `Order` {IsAccepted, IsFilled, IsRejected, IsExpired, IsCancelled, ExecutionRatio,
+  UnfilledVolume}; `PnL.LogPnL`; `Position.MarginUtilization`; `Trade` {DurationDays, IsClosed}; `Bar.RangeTick`; `Price.LogPrice`;
+  `Tick.InvertedMid`; `Timestamp` {Sin, Cos, Epoch, Yearday, Millisecond}; `Contract` {IsSpot, IsDerivative, IsLinear,
+  IsNonLinear}; `Ticker` {Dashed, Slashed, Underscored}; `Timeframe.Hours`. Plus ~25 `@overridefield` Position columns computed by
+  every `dict()` and dropped by `reporting_view`.
+- `Database.structured`, `ManagerAPI.delete_run`, `OptimizationAPI.trials`, `BrownianNoiseAPI`, `GeometricBrownianNoiseAPI`
+  (no factory; DDPG hardcodes OU), `Sources/Indicators/Connector/Connector.cs` (the cTrader "Hello world" template) and the
+  empty `Sources/Plugins/Plugin`, `Requirements.txt` (0 bytes).
+
+**Simplifications (behavior-preserving, provable by AST body hash + suite; golden-adjacent ones need the goldens back first)**
+
+- `Position.py`: ~40 `@overridefield` properties are four body shapes (`pnl/(Volume*unit)`, signed price-diff/unit,
+  `min/max(0, x)`, `_max_equity_*_pnl_.<attr> or 0`) → one helper each. `Order`/`Position` share `_unwrap_price_`,
+  `_make_price_`/`_assign_price_`, timestamp assignment and the `Session`/`Account` property pairs → a Portfolio mixin with two hooks.
+- Indicators: a `BaselineAPI(TechnicalAPI)` carrying the four `filter_*/signal_*` rules + `batch` (9 classes × 4 identical
+  methods, 6 identical `batch`, ≈125 lines); `MAC`/`DMAC`/`TMAC` → one `_AVERAGE_` class attribute; ROC/ATR/RV identical
+  `True/True/False/False` rules; `FundamentalAPI` == `SentimentalAPI` == `TechnicalAPI`'s composite half; `MA.py` builds the
+  6-way `match` twice.
+- `SystemAPI._process_updates_` (190 lines, ~70 `match` arms rebuilding the same 7-key context) → `(UpdateID → (class, reader))`
+  table + one `context()`; `_fitness_()` byte-identical in `LearningAPI`/`OptimizationAPI` → `BacktestingAPI`;
+  `Realtime._binary_*_` are `_lower_` class constants (`Tests/System/test_Realtime.py:201` reads `_binary_security_`).
+- `Strategy.py` `strategy_management`: `update_closed/stop_loss/take_profit/margin_call`, `update_modified_*`,
+  `update_closed_order/filled/expired` differ only in the log line → closures. `Hybrid/DDPG.py`: `Defaults["Realtime"]` ==
+  `Defaults["Learning"]` (35 lines), the 12-field state block appears in `__init__` and `_initialize_`, the optional-parameter idiom
+  repeats 10×, `_hedge_(update, close)` never uses `update`.
+- `Model`: `memorize`/`remember`/`_soft_update_`/`decide` scaffold copied into DDPG/SAC/TD3 agents → `AgentAPI`; SAC/TD3
+  `Critic.forward` byte-identical; the whole module uses `_name` privates (RULES 3 says `_name_`); `remember()` annotates a tuple
+  literal instead of `tuple[np.ndarray, ...]`.
+- `Market.py`: `pull_bars` repeats an 11-column tick join 5× (provable by comparing the built SQL); `init_data`/`update_data`/
+  `update_offset` list the same series 3×; `Series.py` `last()`/`tail()` share a 500-char row→`TickAPI` expression and
+  `over/under/crossover/crossunder` a 5-line prelude; `Tick.py` 7 same-shape setters. `Universe.py` 11 live `pull_*/push_*` are one
+  shape; `Timeframe.py` 5 comparison dunders → `total_ordering`.
+- `Database.py`: the 7-line target-validation block is copied into `exists/diff/create/delete/migrate`, `executeone`/`executemany`
+  share a 12-line prelude, `search` repeats an empty-catalog literal 3×, `executemany` logs a failure via `.error` then `.exception`
+  (same double-log in `Service`, `Bloomberg.Streaming`, `Remote`); `Dataclass.py` `tuple/list/dict/json` forward 7 kwargs
+  explicitly. `Auth`: Cloudflare `_verify_` and OIDC `authenticate` share the JWKS + `jwt.decode` block → `_claims_()`.
+- Two near-identical `TrayAPI` classes (`Scheduler/Tray.py`, `Web/Service/Tray.py`); `Runner.load` and
+  `SchedulerAPI._task_` both build a detached `TaskAPI` → `TaskAPI.fetch(db, uid)`; `Logging.File.FileAPI` and
+  `Utility.File.FileAPI` share a name (rename the sink `FileSinkAPI`?).
+- `Sources/Robots/.../Logging.cs` private consts are lower-case; `Tests/Strategy/test_Strategy.py` imports `MagicMock` inside 6
+  tests, `test_Workspace.py` `json` inside 3; comments in 7 test files (`test_Sizing.py` derivations could move into the
+  assertions); `Tests/Benchmark/IPC.py` is a benchmark script living under `Tests/`.
+
+**Rules**
+
+- Test-coverage gaps stand: `Statistic` 1 file / 1889 lines · `Scheduler` 1 / 1700 · `Model` 2 / 1654 · `Web` 3 / 3449 · `Auth`
+  1 / 460 · `Indicator` 4 files / 43 modules.
+
 ---
 
 ## 6. Delivered

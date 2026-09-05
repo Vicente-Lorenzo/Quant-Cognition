@@ -1,6 +1,5 @@
 import sys
 from os import environ, getcwd
-from tempfile import gettempdir
 from typing import Union
 from sys import _getframe
 from pathlib import PurePath, Path

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from typing import Union, ClassVar, TYPE_CHECKING
 from dataclasses import dataclass, field, InitVar

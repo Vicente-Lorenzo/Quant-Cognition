@@ -41,17 +41,20 @@ if TYPE_CHECKING:
     from Library.Utility.Parameter import Parameter
 
 class StrategyType(EnumerationAPI):
+
     Download = 1
     NNFX = 2
     DDPG = 3
     Trend = 4
 
 class Transform(NamedTuple):
+
     Market: bool = True
     Indicators: bool = True
     Portfolio: bool = True
 
 class Threshold(NamedTuple):
+
     Lower: Union[float, None] = None
     Upper: Union[float, None] = None
 
