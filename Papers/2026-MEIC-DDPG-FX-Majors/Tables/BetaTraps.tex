@@ -1,0 +1,19 @@
+\begin{table}[htb!]
+\centering
+\footnotesize
+\begin{tabularx}{\textwidth}{@{}lrrX@{}}
+\toprule
+\textbf{Pair} & \textbf{Return} & \textbf{$p$-value} & \textbf{Why it was rejected} \\
+\midrule
+AUD/USD & $+246.8\%$ & $0.146$ & Failed the screen \\
+AUD/USD & $+142.6\%$ & $0.987$ & Published during the campaign, then withdrawn when the test was run \\
+EUR/USD & $+141.6\%$ & --- & One-sided: long for $86\%$ of the window \\
+GBP/USD & $+259.8\%$ & $0.163$ & Failed the screen \\
+NZD/USD & $+253.9\%$ & $0.258$ & Failed the screen \\
+USD/CHF & $+463.9\%$ & $0.973$ & Positions no better timed than the same positions shuffled; rode the franc trend \\
+USD/CHF & $+341.3\%$ & $0.865$ & As above \\
+\bottomrule
+\end{tabularx}
+\caption{Candidates rejected by the screening of Section~\ref{Subsection:StatisticalScreening}. In every pair the highest-return candidate failed. Ranking on return alone would have selected these models over the ones published, at roughly five times the apparent return and almost none of the measurable skill.}
+\label{Tables:BetaTraps}
+\end{table}

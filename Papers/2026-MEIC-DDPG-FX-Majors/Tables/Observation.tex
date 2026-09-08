@@ -1,0 +1,32 @@
+\begin{table}[htb!]
+\centering
+\footnotesize
+\begin{tabularx}{\textwidth}{@{}llrX@{}}
+\toprule
+\textbf{Indicator} & \textbf{Family} & \textbf{Period} & \textbf{Role in the observation} \\
+\midrule
+ATR & Volatility & 14 & Volatility unit; divides every trend feature and sets the stop distance \\
+\addlinespace
+RV (fast) & Volatility & 16 & Short-horizon realised volatility; divides the momentum features \\
+RV (slow) & Volatility & 480 & Long-horizon realised volatility; its ratio to the fast reading gives the volatility regime \\
+\addlinespace
+ER & Trend & 120 & Efficiency ratio; how directional recent movement has been, bounded in $[0, 1]$ \\
+\addlinespace
+ROC Fast & Momentum & 24 & One day \\
+ROC Medium & Momentum & 120 & One week \\
+ROC Slow & Momentum & 480 & One month \\
+ROC Regime & Momentum & 1{,}440 & One quarter \\
+ROC Epoch & Momentum & 2{,}880 & Two quarters \\
+\addlinespace
+SMA Fast & Trend & 24 & One day \\
+SMA Medium & Trend & 120 & One week \\
+SMA Slow & Trend & 480 & One month \\
+SMA Regime & Trend & 1{,}440 & One quarter \\
+SMA Epoch & Trend & 2{,}880 & Two quarters \\
+SMA Cycle & Trend & 4{,}320 & Three quarters \\
+SMA Era & Trend & 5{,}040 & Roughly one year \\
+\bottomrule
+\end{tabularx}
+\caption{The sixteen technical indicators forming the market context of the observation. Periods are in hourly bars. Each moving average contributes two features, its distance from price and its own differential, both in units of the average true range; each momentum reading contributes one, scaled by the movement expected over its lookback.}
+\label{Tables:Observation}
+\end{table}

@@ -1,0 +1,30 @@
+\begin{table}[htb!]
+\centering
+\footnotesize
+\begin{tabularx}{\textwidth}{@{}llll X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Original} & \textbf{This work} & \textbf{Status} & \textbf{Reason for the difference} \\
+\midrule
+Actor hidden layers & $400 \times 300$ & $64 \times 32$ & Changed & Noisy, non-stationary series supports less capacity \\
+Discount factor $\gamma$ & $0.99$ & $0.9995$ & Changed & Horizon matched to the holding period, months rather than days \\
+Hidden normalisation & Batch & Layer & Changed & Single-observation inference must match batched training \\
+\addlinespace
+Actor learning rate & $10^{-4}$ & $10^{-4}$ & Unchanged & \\
+Critic learning rate & $10^{-3}$ & $10^{-3}$ & Unchanged & \\
+Soft update rate $\tau$ & $0.001$ & $0.001$ & Unchanged & \\
+Batch size $N$ & $64$ & $64$ & Unchanged & \\
+Replay capacity & $10^{6}$ & $10^{6}$ & Unchanged & \\
+Critic weight decay & $10^{-2}$ & $10^{-2}$ & Unchanged & \\
+Noise $\theta$, $\sigma$ & $0.15$, $0.2$ & $0.15$, $0.2$ & Unchanged & \\
+Final layer init & $U[-3\!\times\!10^{-3}, 3\!\times\!10^{-3}]$ & same & Unchanged & \\
+\addlinespace
+Gradient clip & --- & $1.0$ & Added & Bounds a single update against a rare large error \\
+Warmup transitions & --- & $3{,}000$ & Added & First updates drawn from a varied buffer \\
+Actor penalty $\beta$ & --- & $0.001$ & Added & Prevents saturation of the output tangent and constant-action collapse \\
+Reward scale $\lambda$ & --- & $1{,}000$ & Added & Lifts an hourly log return above the critic's approximation error \\
+Reward clip $c$ & --- & $1$ & Added & Numerical safeguard; bounds the raw log return at $\pm 0.1\%$ \\
+\bottomrule
+\end{tabularx}
+\caption{Hyperparameters against the original Deep Deterministic Policy Gradient \cite{lillicrap_continuous_2015}. Three values were changed, five mechanisms were added, and the remainder are the published ones.}
+\label{Tables:Hyperparameters}
+\end{table}

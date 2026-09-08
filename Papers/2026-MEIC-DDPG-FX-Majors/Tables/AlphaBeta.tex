@@ -1,0 +1,19 @@
+\begin{table}[htb!]
+\centering
+\footnotesize
+\begin{tabular}{@{}lrrrrl@{}}
+\toprule
+\textbf{Pair} & \textbf{Beta} & \textbf{Alpha (\%/yr)} & \textbf{Drift (\%/yr)} & \textbf{Mean (\%/yr)} & \textbf{Reading} \\
+\midrule
+AUD/USD & $-2.013$ & $+4.96$ & $+3.22$ & $+8.18$ & Policy plus leveraged trend \\
+EUR/USD & $+0.266$ & $+6.62$ & $+0.01$ & $+6.63$ & Policy, no market exposure \\
+GBP/USD & $-0.054$ & $+11.64$ & $+0.06$ & $+11.70$ & Policy, no market exposure \\
+NZD/USD & $-0.708$ & $+2.79$ & $+1.83$ & $+4.62$ & Policy plus leveraged trend \\
+USD/CAD & $+2.393$ & $+10.02$ & $+4.21$ & $+14.23$ & Policy plus leveraged trend \\
+USD/CHF & $-0.082$ & $+3.91$ & $+0.16$ & $+4.07$ & Policy, no market exposure \\
+USD/JPY & $+1.012$ & $-1.08$ & $+2.64$ & $+1.57$ & No policy; the model is the market \\
+\bottomrule
+\end{tabular}
+\caption{Decomposition of Equation~\ref{Equation:AlphaDrift}, from the yearly regression of Equation~\ref{Equation:AlphaBeta} over 2015 to 2025. Alpha is the return attributable to the policy and drift is the part explained by the pair's own movement. The two sum to the mean yearly return.}
+\label{Tables:AlphaBeta}
+\end{table}

@@ -1,0 +1,16 @@
+\begin{table}[htb!]
+\centering
+\footnotesize
+\begin{tabular}{@{}llrrrr@{}}
+\toprule
+\textbf{Cadence} & \textbf{Threshold} & \textbf{Commission} & \textbf{Return} & \textbf{Sharpe} & \textbf{Max drawdown} \\
+\midrule
+Daily & --- & none & $+42.48\%$ & $0.319$ & $24.4\%$ \\
+Hourly & --- & none & $-38.57\%$ & $-0.308$ & $50.5\%$ \\
+Hourly & --- & 3.5 points & $-64.70\%$ & $-0.732$ & $70.5\%$ \\
+Daily & $0.20$ & 3.5 points & $+34.02\%$ & $0.275$ & $23.5\%$ \\
+\bottomrule
+\end{tabular}
+\caption{Contribution of the two deployment decisions, measured on one EUR/USD model over the full window with nothing retrained. All four rows are the same weights under different execution settings, so the differences are attributable to the deployment layer alone. This model precedes the seven-pair campaign and serves here only to isolate the effect.}
+\label{Tables:Deployment}
+\end{table}

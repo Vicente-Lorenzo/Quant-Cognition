@@ -1,0 +1,27 @@
+\begin{table}[htb!]
+\centering
+\footnotesize
+\begin{tabularx}{\textwidth}{@{}llX@{}}
+\toprule
+\textbf{Setting} & \textbf{Value} & \textbf{Meaning} \\
+\midrule
+Account type & Raw spread, swap-free & An account a retail client can open, quoting the interbank spread and charging no overnight financing \\
+\addlinespace
+Spread & Accurate & The bid-ask difference recorded at the moment of the trade, read from the tick tape rather than assumed \\
+\addlinespace
+Commission & 3.5 points per side & Charged on traded volume; equivalently 3.5 units of the quote currency per standard lot per side, or 7 per round turn \\
+\addlinespace
+Swap & 0 points & The rate a swap-free account charges; not an approximation \\
+\addlinespace
+Account currency & EUR & Profit and loss converted at the rate recorded on the tick that produced it \\
+\addlinespace
+Initial balance & 10,000 & Reported across five starting balances, as described in Section~\ref{Section:ExperimentalResults} \\
+\addlinespace
+Leverage & 30 & The retail limit applicable to major currency pairs \\
+\addlinespace
+Position mode & Netting & One net position per instrument, rather than independent hedged positions \\
+\bottomrule
+\end{tabularx}
+\caption{Cost and account configuration applied to every evaluation reported in this work.}
+\label{Tables:CostModel}
+\end{table}
