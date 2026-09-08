@@ -1,0 +1,14 @@
+\subsection{Future Work}
+\label{Subsection:FutureWork}
+
+The limitations above order the work that follows, because the most useful next step is the one that would most change what the results are worth.
+
+The first is a genuinely held-out evaluation. Training would end before the reporting period begins, and the choice among candidates would be made using only data from before that boundary, so that the reported figures are an out-of-sample estimate rather than a description of the window the models were selected on. This is the single change that would most strengthen the claims, and the framework already supports it; what it needs is a campaign run under the stricter protocol rather than new machinery.
+
+The second follows from it. The procedure used here divides the window once. A walk-forward scheme with several folds, in which each fold trains on the data before it and is evaluated on the data after, would produce an out-of-sample record for the whole period rather than for a single year. Carrying the learned weights from one fold into the next, rather than starting each fold from a fresh initialisation, would test whether an agent adapts as the market changes; this is supported by the framework and was not exercised in this campaign.
+
+The third is to report the variation between training runs. The path-robustness protocol used here varies the starting balance, which measures sensitivity to the entry path but not to the training itself. Reporting the distribution of outcomes across the candidate pool, and where the published model sits within it, would let a reader see how much of a result is method and how much is draw.
+
+Beyond the evaluation, three directions follow from what the agents did. The portfolio of Section~\ref{Subsection:Portfolio} weights the seven equally; weighting by risk, or by the correlation structure, should improve on that, and the near-independence of the components suggests the gain would be real. The observation is a single frame of thirty-eight values, so a recurrent or attention-based encoder that reads a window of history directly is the natural extension, and it was in the original plan for this work. And the framework already runs the same strategy on a live account, so a sustained live deployment would test the one thing no backtest can, which is whether the execution assumptions hold when the orders are real.
+
+The USD/JPY result deserves its own line. The failure there is understood as a consequence of a monotonic price window offering no gradient towards modulating exposure. Whether that is the whole explanation is not established, and the pair should be revisited once the evaluation protocol above is in place.
