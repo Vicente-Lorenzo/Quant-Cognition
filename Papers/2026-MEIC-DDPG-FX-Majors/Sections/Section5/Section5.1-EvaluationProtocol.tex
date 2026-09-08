@@ -1,0 +1,10 @@
+\subsection{Evaluation Protocol}
+\label{Subsection:EvaluationProtocol}
+
+The account, the cost model and the execution engine are described in Section~\ref{Subsection:TradingFramework} and are not repeated here. Three things are specific to the evaluation.
+
+The window runs from 1 January 2015 to 1 January 2026, eleven years. It starts a year after the data begins so that the slowest indicator in the observation, a moving average over five thousand hourly bars, is fully warmed before the first decision.
+
+Every result is measured from five different starting balances, of $9\,900$, $10\,000$, $10\,050$, $10\,100$ and $10\,200$ euros. A trading strategy that depends on its entry point is not a strategy, and small changes to the opening balance shift the rounding of every position size and therefore the whole sequence of trades. Reporting one balance would hide that sensitivity, so the tables give the mean across the five and the spread around it.
+
+Position size is a per-pair parameter, chosen by the sweep described in Section~\ref{Subsection:ExperimentalProcedure} rather than fixed in advance. Five pairs use the reference risk of Equation~\ref{Equation:PositionSizing}, NZD/USD uses one and a half times it, and USD/JPY uses a smaller fraction of it. Position size scales the size of every trade but does not change the policy that chooses them, so the ratios, the alpha and beta decomposition and the correlation structure are all unaffected by it.

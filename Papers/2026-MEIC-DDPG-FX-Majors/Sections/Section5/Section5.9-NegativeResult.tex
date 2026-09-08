@@ -1,0 +1,12 @@
+\subsection{A Negative Result: USD/JPY}
+\label{Subsection:NegativeResult}
+
+USD/JPY did not work, and the reason is understood.
+
+The numbers say the model is the market. Its correlation with the pair's yearly move is $+0.946$ and its beta is $+1.012$, so it carries the pair almost exactly one for one. Its alpha is $-1.07\%$ per year. It returns $+15.7\%$ over the eleven years against roughly $+25\%$ for simply buying and holding the pair, so it underperforms the benchmark that costs nothing to run. The model is long at every point in the window.
+
+The mechanism is in the data. USD/JPY rose from roughly $120$ to $150$ over the period, with the move concentrated and largely one-directional. On such a series, holding a long position is close to optimal, and any deviation from it is punished. The reward signal therefore offers no gradient towards modulating exposure, and the agent settles on the simplest policy that captures the trend. The other six majors mean-revert enough over the same period that two-sided behaviour is rewarded, and their agents learned it.
+
+This was tested rather than assumed. Across seven configurations and $448$ seeds, every run converged to an all-in directional policy. Raising the augmentation that presents the agent with mirrored price series, which was intended to remove exactly this bias, made the resulting policies more binary rather than less.
+
+The result is reported because it is informative. It marks the boundary of the method: this design learns to time exposure in markets that turn, and on a market that does not turn it reduces to holding the trend and pays costs for the privilege. A reader deciding whether to apply the approach elsewhere needs that boundary more than they need a seventh success.

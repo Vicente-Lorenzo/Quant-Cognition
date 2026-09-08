@@ -1,0 +1,30 @@
+\section{Experimental Results}
+\label{Section:ExperimentalResults}
+
+This section reports what the design of Section~\ref{Section:Implementation} produced. Seven agents were trained, one per major currency pair, and each was evaluated over eleven years under the cost model of Table~\ref{Tables:CostModel}. Every figure below traces to a stored run that can be reopened, and the analysis was recomputed from those runs rather than copied from the training logs.
+
+The order of the section is deliberate. Returns come first, then the checks that decide whether those returns mean anything, then the year that was held back, and finally the result of running the seven together.
+
+\input{Sections/Section5/Section5.1-EvaluationProtocol}
+
+\input{Sections/Section5/Section5.2-Benchmarks}
+
+\input{Sections/Section5/Section5.3-PairResults}
+
+\input{Sections/Section5/Section5.4-TradingBehaviour}
+
+\input{Sections/Section5/Section5.5-PathRobustness}
+
+\input{Sections/Section5/Section5.6-AlphaBeta}
+
+\input{Sections/Section5/Section5.7-StatisticalScreening}
+
+\input{Sections/Section5/Section5.8-OutOfSample}
+
+\input{Sections/Section5/Section5.9-NegativeResult}
+
+\input{Sections/Section5/Section5.10-Portfolio}
+
+Two results carry the most weight. Six of the seven agents produced positive alpha against their own market, and three of those did it with a market sensitivity close to zero, which is what separates a strategy from leveraged exposure. And the seven combined behave better than any of them alone, because they are close to uncorrelated.
+
+Against that, the held-out year is negative and the selection is uncorrected. Section~\ref{Section:Conclusion} sets out what those two facts allow the work to claim and what they do not.

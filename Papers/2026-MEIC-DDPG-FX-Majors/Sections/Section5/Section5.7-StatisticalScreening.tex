@@ -1,0 +1,16 @@
+\subsection{Statistical Screening and the Rejected Candidates}
+\label{Subsection:StatisticalScreening}
+
+Every published model had to pass a test against a null built from itself. The model's own sequence of positions is rotated in time, so that it holds the same positions for the same durations but at the wrong moments, and the resulting regime score is the score its holding structure earns by luck alone. The published model must beat that score.
+
+The null has to be computed per model rather than fixed. Measured across the seven pairs it ranges from $48.21$ on GBP/USD to $69.82$ on NZD/USD. A fixed threshold of, say, $55$ would sit below chance on one pair and well above it on another, so it would accept noise in one market and reject skill in another. This was found by trying the fixed threshold first.
+
+The screening produced a result that changes how the whole campaign should be read. \textbf{In every one of the seven pairs, the candidate with the highest return failed the test.} Table~\ref{Tables:BetaTraps} lists the strongest cases. A portfolio built by ranking candidates on return would have selected models averaging roughly $+250\%$, almost all of which is market drift rather than policy.
+
+\input{Tables/BetaTraps}
+
+The USD/CHF case is the clearest. A candidate returning $+463.94\%$, more than nine times the published model, has a permutation $p$-value of $0.973$: its positions are no better timed than the same positions shuffled. It rode the franc's trend. The published model returns a ninth of that and is the one with measurable skill.
+
+Two cases are worth reporting because they are uncomfortable. An AUD/USD candidate returning $+142.55\%$ was published during the campaign and then withdrawn when its $p$-value came out at $0.987$. And on EUR/USD the incumbent model won on four of six metrics, including return, Sharpe, Sortino and drawdown, and was still replaced, because it lost on the one axis that decides whether a result is real.
+
+The limits of this screening should be stated. Each published model was chosen from between $128$ and $256$ candidates, so a $p$-value near $0.05$ is close to what that many draws produce by chance. Under a strict correction for the number of candidates examined, only USD/CAD and GBP/USD, both at $0.0015$, would clearly survive. The permutation test is therefore used here as a screen that rejected bad models, which it demonstrably did, and not as a claim of statistical significance for the ones that remain.

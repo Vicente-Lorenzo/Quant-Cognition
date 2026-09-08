@@ -1,0 +1,18 @@
+\subsection{Results Across the Seven Majors}
+
+Table~\ref{Tables:PairResults} gives the result for each pair, in alphabetical order. Total return over the eleven years ranges from $+226.6\%$ on USD/CAD, the strongest, to $+15.7\%$ on USD/JPY, the weakest. Every pair is profitable, and every pair is profitable from all five starting balances.
+
+\input{Tables/PairResults}
+
+Figure~\ref{Figure:PairEquity} shows each agent against buying and holding its own pair. The shapes differ more than the totals suggest. USD/CAD and GBP/USD grow in steps, with long flat periods between them. EUR/USD is nearly flat for the first six years and produces most of its return after 2021. USD/CHF rises slowly and almost without interruption.
+
+\begin{figure}[htb!]
+\centering
+\includegraphics[width=\textwidth]{Images/PairEquity.pdf}
+\caption{Equity of each agent against buying and holding the same pair, rebased to 100 at the start of the window. All series are net of the spread and commission of Table~\ref{Tables:CostModel}.}
+\label{Figure:PairEquity}
+\end{figure}
+
+USD/CHF deserves separate attention, because it is the best model in the set on every risk measure and the third worst on return. It returns $+50.6\%$ with a Sharpe ratio of $0.802$, a Sortino ratio of $1.552$, a Calmar ratio of $0.492$ and a maximum drawdown of $8.2\%$, and it does so in $220$ trades over eleven years, roughly one position every three weeks. The other six trade between $1\,000$ and $2\,500$ times. A policy that holds a small number of positions for a long time and loses little while doing so is a different kind of object from one that trades constantly, and the selection criteria of Section~\ref{Subsection:ExperimentalProcedure} were built to let such a model win despite its lower return.
+
+Drawdowns are large elsewhere. Five of the seven pairs reach a maximum drawdown above $40\%$, which is more than most traders would accept on a single instrument. This is the strongest argument for the portfolio construction of Section~\ref{Subsection:Portfolio}, where those drawdowns do not coincide.

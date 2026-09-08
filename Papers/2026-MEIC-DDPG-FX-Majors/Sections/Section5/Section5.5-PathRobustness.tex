@@ -1,0 +1,9 @@
+\subsection{Path Robustness}
+
+Each pair was evaluated from the five starting balances of Section~\ref{Subsection:EvaluationProtocol}. The result is the same in every case: all seven pairs are profitable from all five entry points, thirty-five runs in total, with no exceptions.
+
+The spread across the five is small relative to the returns themselves. The relative standard deviation, the standard deviation divided by the mean, runs between $4\%$ and $10\%$ across the seven pairs. USD/JPY is the tightest at $4.4\%$ and GBP/USD the widest at $10.4\%$ in absolute terms, though as a fraction of a much larger return it is the smaller effect.
+
+This matters because of how position sizes are computed. A volume is rounded to the broker's step, so a starting balance a hundred euros higher can round a position differently, which changes the equity available for the next position and eventually the entire sequence of trades. Two runs that differ only in their opening balance are therefore not the same run with a scale factor; they are different sequences. That all thirty-five are profitable says the results do not depend on one particular path through the data.
+
+What this protocol does not measure is the variation between training runs. Each published model is one seed drawn from a pool of $128$ to $256$, and the spread across that pool is a separate question, addressed in Section~\ref{Subsection:StatisticalScreening}.

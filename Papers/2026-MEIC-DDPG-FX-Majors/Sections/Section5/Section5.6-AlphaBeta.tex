@@ -1,0 +1,34 @@
+\subsection{Alpha and Beta Decomposition}
+
+A currency pair moves on its own. An agent that is long a pair which happens to rise will show a profit that has nothing to do with the policy it learned. Total return cannot tell the two apart, so the results are decomposed into the part explained by the market and the part that is not.
+
+For each pair the yearly return of the model is regressed on the yearly move of the pair itself, over the eleven years from 2015 to 2025. Writing $r_i$ for the model return in year $i$ and $m_i$ for the market move in the same year, ordinary least squares gives
+
+\begin{equation}
+\beta = \frac{\sum_i (m_i - \bar{m})(r_i - \bar{r})}{\sum_i (m_i - \bar{m})^2}, \qquad \alpha = \bar{r} - \beta \bar{m}
+\label{Equation:AlphaBeta}
+\end{equation}
+
+$\beta$ is how much of the market's movement the model carries, and $\alpha$ is the average yearly return left once that exposure is removed. The mean return then splits into two parts:
+
+\begin{equation}
+\bar{r} = \underbrace{\alpha}_{\text{policy}} + \underbrace{\beta \bar{m}}_{\text{drift}}
+\label{Equation:AlphaDrift}
+\end{equation}
+
+Table~\ref{Tables:AlphaBeta} gives both terms. Six of the seven pairs have positive alpha. GBP/USD, EUR/USD and USD/CHF combine positive alpha with a beta close to zero, which means almost none of their return comes from the direction the pair happened to move: for GBP/USD, $11.64$ of its $11.70$ percentage points per year are policy and $0.06$ is drift.
+
+\input{Tables/AlphaBeta}
+
+USD/CAD and AUD/USD are different. Both have large betas, $+2.395$ and $-2.008$, so both carry the market at more than twice its own size, in opposite directions. Their alpha is positive and their drift is substantial: $4.21$ of USD/CAD's $14.23$ points per year come from exposure rather than from timing. They are profitable, but a reader should know that a meaningful part of that profit is leverage on a trend, and that it would reverse if the trend did.
+
+USD/JPY is the one failure and is treated in Section~\ref{Subsection:NegativeResult}.
+
+\begin{figure}[htb!]
+\centering
+\includegraphics[width=0.82\textwidth]{Images/AlphaBeta.pdf}
+\caption{Alpha against beta for the seven agents. Points inside the shaded band carry almost no market exposure, so their return is attributable to the policy. USD/JPY sits at a beta of one with negative alpha, which is the signature of a model that has reproduced its own market.}
+\label{Figure:AlphaBeta}
+\end{figure}
+
+This decomposition is reported ahead of total return because it survives a criticism that return does not. The choice of which model to publish was made from a pool of candidates, which inflates whatever measure the choice was made on; but beta is a property of how a policy behaves against its market, and a model cannot be selected into a low beta by luck in the way it can be selected into a high return.
