@@ -1,0 +1,27 @@
+\begin{table}[htb!]
+\centering
+\footnotesize
+\begin{tabularx}{\textwidth}{@{}lXX@{}}
+\toprule
+\textbf{Dimension} & \textbf{Surveyed literature (18 articles)} & \textbf{This work} \\
+\midrule
+Market & Stocks 12, Forex 3, ETFs 2, Futures 1 & Forex, the seven major pairs \\
+\addlinespace
+Data resolution & Bars in 17 of 18, daily in 13; one study works from quotes & Quote-level tick data, with hourly and daily decisions \\
+\addlinespace
+Data span & Ten years or more in 12 of 18, median eleven years & Eleven years, 2015 to 2026 \\
+\addlinespace
+Action space & Discrete 15, continuous 3; one sizes the position & Continuous, setting direction and size together \\
+\addlinespace
+Reward function & Total return 14, Sharpe ratio 3, log return 1 & Log return, with selection on the Calmar ratio and a risk-adjusted composite \\
+\addlinespace
+Trading costs & Charged in 5 of 18 & Quoted spread at the moment of the trade plus the commission of a swap-free raw-spread account \\
+\addlinespace
+Instruments per design & One agent per instrument, or one agent over a basket & Seven pairs trained separately under one design, then combined \\
+\addlinespace
+Reported robustness & Neither the candidate count nor the sensitivity to starting conditions is stated & Five starting balances per pair, with the candidate count stated \\
+\bottomrule
+\end{tabularx}
+\caption{Position of this work against the eighteen surveyed articles.}
+\label{Tables:Positioning}
+\end{table}
