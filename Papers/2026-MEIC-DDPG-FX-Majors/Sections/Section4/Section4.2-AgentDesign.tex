@@ -1,0 +1,118 @@
+\subsection{Agent Design: Observation, Action and Reward}
+\label{Subsection:AgentDesign}
+
+The environment of Section~\ref{Subsection:TradingFramework} supplies prices and charges for trades. Turning it into a reinforcement learning problem requires three further decisions: what the agent sees, what it is allowed to do, and what it is paid for. This subsection states those three and then the algorithm that learns from them. Each decision is reported with the reasoning behind it, because in every case the alternative was tried and behaved worse, and those failures are part of the result.
+
+\subsubsection{Observation Space: Indicators, Encoding and Normalisation}
+
+The agent observes a vector of $38$ values at each hourly bar. Nothing in it is a raw price. A price level carries no information the agent can generalise from, because a policy learned at $1.05$ has no reason to transfer to $1.20$, and eleven years of history spans ranges that differ by more than that. Every feature is therefore a ratio, and the whole observation is dimensionless. Sixteen technical indicators, listed in Table~\ref{Tables:Observation}, supply the market context. They divide into a fast bank describing the last hours to days and a slow bank describing regimes measured in months, so that the agent can distinguish a move within a trend from a change of trend.
+
+\input{Tables/Observation}
+
+The indicator values are encoded as follows, writing $C$ for the bar close, $\sigma_f$ and $\sigma_s$ for the fast and slow realised volatilities, $A$ for the average true range, and $M_i$ for the $i$-th moving average with period $N_i$:
+
+\begin{equation}
+\frac{A}{C}, \qquad \sigma_f, \qquad \ln\!\left(\frac{\sigma_f}{\sigma_s}\right), \qquad \text{ER}
+\label{Equation:VolatilityFeatures}
+\end{equation}
+
+\begin{equation}
+\frac{\text{ROC}(N_j)}{\sigma_f \sqrt{N_j}}, \qquad \frac{C - M_i}{A}, \qquad \frac{M_i - M_i^{-1}}{A}
+\label{Equation:TrendFeatures}
+\end{equation}
+
+Each construction removes a different dependence. Dividing the average true range by the close expresses volatility as a fraction of price. The logarithm of the fast to slow volatility ratio is a volatility regime indicator that is zero when the two agree, positive when volatility is rising and negative when it is falling. Dividing a momentum reading by $\sigma_f \sqrt{N_j}$ scales it by the movement that would be expected over that lookback under a random walk, so that a value near one means a move of ordinary size regardless of the period. Measuring the distance from a moving average in units of the average true range states how far price sits from its trend in terms of the volatility currently being experienced, and the differential of the same quantity gives the direction that trend is moving. The remaining features are the calendar position encoded as four sine and cosine pairs, the current signed exposure as a fraction of the maximum the account could hold, and six values describing the last bar as log returns of its open, high, low and close against the previous close, divided by $\sigma_f$.
+
+Features that are not bounded by construction are standardised by a causal exponentially weighted z-score with $\alpha = 1/200$. Writing $x_t$ for a raw value and $\mu_t$, $s^2_t$ for its running mean and variance:
+
+\begin{equation}
+z_t = \frac{x_t - \mu_{t-1}}{\sqrt{s^2_{t-1} + \epsilon}}
+\label{Equation:Normalisation}
+\end{equation}
+
+\begin{equation}
+\mu_t = \mu_{t-1} + \alpha \delta_t, \qquad s^2_t = (1 - \alpha)\left(s^2_{t-1} + \alpha \delta_t^2\right), \qquad \delta_t = x_t - \mu_{t-1}
+\label{Equation:NormalisationUpdate}
+\end{equation}
+
+The subscript $t-1$ in Equation~\ref{Equation:Normalisation} is the point of the design. A value is standardised using statistics that end at the previous step, and only afterwards is it folded into those statistics. A z-score computed over the whole sample would leak the future into every observation and inflate every result derived from it. Features already bounded, such as the exposure fraction, the efficiency ratio and the calendar encodings, carry a flag that bypasses this layer so that their natural range is preserved.
+
+\subsubsection{Action Space: Position Sizing and Risk}
+
+The agent emits a single continuous value $a \in [-1, 1]$. Its sign is the direction of the position and its magnitude is the fraction of a reference size to hold, so direction and size are one decision rather than two. This is the property that the discrete action sets surveyed in Section~\ref{Section:RelatedWork} cannot express. The reference size is fixed-fractional. Writing $B$ for the account balance, $\rho$ for the risk fraction per position and $k$ for the stop distance in multiples of the average true range, the reference volume $V_{ref}$ is the volume that loses $\rho B$ if price moves $k \cdot A$ against it, and the target volume is that reference scaled by the action:
+
+\begin{equation}
+V_{target} = a \cdot V_{ref}, \qquad V_{ref} = \frac{\rho \, B}{k \, A}
+\label{Equation:PositionSizing}
+\end{equation}
+
+with $\rho = 1\%$ and $k = 1.5$ throughout. The agent therefore never chooses an absolute number of units; it chooses a fraction of a size that the risk rule has already set, and that size shrinks automatically as volatility rises.
+
+One defect in this arithmetic was found during the campaign and is reported here because it affects one of the seven results. The conversion between the quote currency and the account currency is absent from the volume calculation, so the risk actually taken is $\rho / p$ rather than $\rho$, where $p$ is the price of the pair. For pairs quoted near unity the difference is immaterial, and the six pairs quoted against the US Dollar all take approximately the intended $1\%$. For USD/JPY, quoted near $120$ at the start of the sample, the effective risk is $0.008\%$, small enough that the computed volume falls below the broker's minimum and no position can open at all. The compensation applied was to scale $\rho$ by the price, restoring the intended risk per position rather than adding leverage; Section~\ref{Section:ExperimentalResults} reports the level used for each pair. The underlying defect is a limitation of the framework rather than of the method, and it is recorded as future work.
+
+\subsubsection{Reward Function: Log Return, Scaling and Clipping}
+
+The reward at each step is the log return of account equity, scaled and then clipped:
+
+\begin{equation}
+r_t = \operatorname{clip}\!\left(\lambda \ln\!\frac{E_t}{E_{t-1}},\; -c,\; +c\right), \qquad \lambda = 1000, \quad c = 1
+\label{Equation:Reward}
+\end{equation}
+
+The log return is the natural choice for a trading objective because it is additive over time: the per-step rewards telescope to $\ln(E_T / E_0)$, so maximising their sum maximises terminal compounded wealth, and it is independent of account size. The scale factor is not cosmetic, and the reason is a result rather than a convenience. Risk-adjusted rewards of the differential kind described by Moody and Saffell, in which an online estimate of a Sharpe or Sortino ratio is accumulated, are scale-invariant: doubling every position leaves the ratio unchanged. An agent optimising such a reward receives no gradient pushing its position size upward, and in this environment it collapses to roughly $3\%$ of the size available to it, producing a policy that is directionally sensible and financially pointless. A scale-sensitive reward is therefore necessary, and $\lambda$ raises an hourly equity log return, typically of order $10^{-4}$, to a magnitude the critic can resolve against its own approximation error.
+
+The clip is a numerical safeguard of the kind introduced with the Deep Q-Network \cite{mnih_human-level_2015}, applied after the encoding. Its effect here should be stated plainly rather than left implicit, because $\lambda$ and $c$ are not independent: together they clip the raw log return at $\pm c / \lambda = \pm 0.1\%$. On the delivered EUR/USD model the bound is reached on $38.2\%$ of the $68\,155$ hourly steps, with a median absolute scaled reward of $0.70$. For roughly two steps in five the agent is therefore told the direction of the equity move but not its magnitude. That is a real property of the objective, and it is reported here so that the learned behaviour in Section~\ref{Section:ExperimentalResults} is read against the reward the agent actually received.
+
+\subsubsection{Learning Algorithm: DDPG and its Adaptations}
+
+The algorithm is the Deep Deterministic Policy Gradient of Section~\ref{Subsection:DeepReinforcementLearning}, with the actor, critic and their delayed targets as described there, trained from a replay buffer with Ornstein-Uhlenbeck exploration noise. The equations of that section are not repeated. What follows are the six respects in which the implementation departs from the original, each with the reason, and Table~\ref{Tables:Hyperparameters} sets every value against the published one.
+
+\input{Tables/Hyperparameters}
+
+The first departure is the observation and the reward, described above.
+
+The second is the size of the networks. The original uses hidden layers of $400$ and $300$ units for low-dimensional control tasks; here they are $64$ and $32$. A $38$-dimensional observation over a noisy, non-stationary series supports far less capacity than a physics simulator with a clean reward, and larger networks fitted the training window without transferring. The third is the discount factor, raised from $0.99$ to $0.9995$. At an hourly step $\gamma = 0.99$ gives a horizon of about a hundred bars, roughly four days, which is shorter than the positions this strategy is intended to hold. At $0.9995$ the horizon extends to some two thousand bars, on the order of three months, which matches the regime indicators in the observation.
+
+The fourth is normalisation inside the networks. The original applies batch normalisation to the hidden layers; this implementation applies layer normalisation instead. The reason is deployment. Batch normalisation behaves differently on a single sample than on a training batch, because it depends on running statistics accumulated during training, and the agent must act on exactly one observation at a time when it runs on a live account. Layer normalisation normalises across the features of one sample, so the computation performed during training is the computation performed in deployment, and the target networks do not carry a second set of running statistics that must be kept synchronised.
+
+The fifth is gradient clipping. The original specifies none; here the gradient norm of both the actor and the critic is clipped to $1$ before each optimiser step. This bounds the size of a single update and prevents a rare large temporal-difference error from moving the parameters far enough to destabilise the critic. It is a stability measure and nothing more; in particular it does not address the collapse discussed next, which is caused by an absence of gradient rather than an excess of it.
+
+The sixth is a penalty on the actor. This is the one change that alters the objective rather than its optimisation, and it exists because the algorithm as published does not train on this problem. The actor's final layer applies a hyperbolic tangent to a pre-activation $u(s)$ to bound the action, and the derivative of that function vanishes as $|u|$ grows. If the policy is driven into that region it stops responding: the action saturates at $\pm 1$, no gradient flows back, and the agent holds one constant position for the remainder of training. The remedy is to penalise the magnitude of the pre-activation directly, which keeps the policy inside the responsive region of the tangent:
+
+\begin{equation}
+L_{actor} = -\frac{1}{N}\sum_{i} Q\!\left(s_i, \tanh u(s_i) \,\middle|\, \theta^{Q}\right) + \frac{\beta}{N}\sum_{i} u(s_i)^2
+\label{Equation:ActorRegularisation}
+\end{equation}
+
+\begin{figure}[htb!]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  node distance=5mm,
+  layer/.style={draw, rounded corners=1.5pt, align=center, font=\scriptsize, minimum height=9mm, inner sep=3pt, text width=20mm},
+  point/.style={draw, circle, inner sep=1.5pt, font=\scriptsize},
+  flow/.style={-stealth, semithick},
+  pen/.style={-stealth, semithick, dashed}
+]
+\node[layer] (s) {observation\\$s \in \mathbb{R}^{38}$};
+\node[layer, right=of s] (h1) {Linear 64\\LayerNorm\\ReLU};
+\node[layer, right=of h1] (h2) {Linear 32\\LayerNorm\\ReLU};
+\node[layer, right=of h2] (f3) {Linear 1};
+\node[point, right=6mm of f3] (u) {$u$};
+\node[layer, right=6mm of u] (th) {$\tanh$};
+\node[layer, right=of th] (a) {action\\$a \in [-1,1]$};
+\node[font=\scriptsize, below=8mm of u, align=center] (pen) {penalty $\beta\,\overline{u^{2}}$};
+
+\draw[flow] (s) -- (h1);
+\draw[flow] (h1) -- (h2);
+\draw[flow] (h2) -- (f3);
+\draw[flow] (f3) -- (u);
+\draw[flow] (u) -- (th);
+\draw[flow] (th) -- (a);
+\draw[pen] (pen) -- (u);
+\end{tikzpicture}}
+\caption{The actor. Layer normalisation replaces the batch normalisation of the original, so a single observation is processed exactly as a training batch is. The penalty of Equation~\ref{Equation:ActorRegularisation} acts on the pre-activation $u$, before the tangent, which is where saturation would otherwise remove the gradient.}
+\label{Figure:ActorNetwork}
+\end{figure}
+
+with $\beta = 0.001$. Setting $\beta = 0$ recovers the original actor loss exactly, so the change is a strict extension rather than a substitution. Together with the scale-sensitive reward, this is what prevents policy collapse; the two mechanisms address different halves of the same failure, the reward supplying a gradient that rewards larger positions and the penalty keeping the actor in the region where that gradient can act. Everything else follows the published algorithm. The learning rates, the soft update rate, the batch size, the replay capacity, the exploration noise parameters, the critic weight decay and the layer initialisation are the values given in the original work, and a warmup period of $3000$ transitions is used before learning begins so that the first updates are drawn from a buffer with some variety in it rather than from the first few correlated steps of an episode.

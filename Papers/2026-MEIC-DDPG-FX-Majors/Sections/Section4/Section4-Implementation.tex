@@ -1,10 +1,16 @@
 \section{Implementation}
 \label{Section:Implementation}
 
-\textit{[Outline: To rewrite as the implementation that was delivered rather than proposed. LSTM was not used. The reward is a scaled logarithmic return rather than the Sharpe ratio, and that substitution is itself a finding: a scale-invariant reward gives no gradient pushing position size up. The cTrader client-server architecture and its figure survive; the eight-variant plan does not. This section also carries the two deployment decisions that shape the results, the daily decision cadence and the rebalance threshold, and the design of the model selection criteria.]}
+Section~\ref{Section:RelatedWork} set out what the reviewed literature leaves open. This section describes what was built in response: the environment the agent trades in, the agent itself, and the procedure by which it was trained and a single model chosen for each currency pair.
 
-In this section, we present the identified research gaps, an overview of the proposed solution, and the innovative aspects of this solution. The proposed solution aims to contribute to the application of Deep Reinforcement Learning (DRL) in Forex trading by addressing specific research gaps and introducing novel approaches to model architecture, training, and optimisation techniques.
+The order is deliberate. An agent cannot be described apart from the environment that supplies its observations and charges it for its actions, and no number produced by it means anything unless that environment is faithful. The framework therefore comes first, the agent second, and the experimental procedure third.
 
-\input{Sections/Section4/Section4.1-ResearchGaps}
+\input{Sections/Section4/Section4.1-TradingFramework}
 
-\input{Sections/Section4/Section4.2-ProposedSolution}
+\input{Sections/Section4/Section4.2-AgentDesign}
+
+\input{Sections/Section4/Section4.3-ExperimentalProcedure}
+
+Everything described here was fixed before any result was seen: one architecture, one observation, one reward, one selection rule, applied unchanged to seven instruments. That constraint is what makes the outcomes comparable across pairs.
+
+It also makes them falsifiable. A design tuned until it works on a single instrument can always be made to work on that instrument, and nothing in its results distinguishes a strategy from a description of that instrument's history. Applying the same design to seven leaves it nowhere to hide, and the results in Section~\ref{Section:ExperimentalResults} include a pair on which it does not work.
