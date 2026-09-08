@@ -5,9 +5,7 @@ Deep Reinforcement Learning (DRL) combines the decision making of reinforcement 
 
 \subsubsection{Fundamentals and History}
 
-DRL emerged once it became clear that neural networks could act as the function approximators reinforcement learning needed in order to handle high-dimensional input. The result that established the field was the Deep Q-Network, which learned to play a range of Atari 2600 games directly from raw pixels and reached human-level scores on many of them \cite{mnih_playing_2013, mnih_human-level_2015}. It showed that a single architecture could learn control policies from unprocessed, high-dimensional input, without features designed for each individual task.
-
-That result is what prompted interest in applying the same methods to financial markets, where the input is also high-dimensional and the mapping from observation to decision is also unknown. The difference is that an Atari game is stationary and fully observable, while a market is neither, and this is the reason results transfer far less directly than the analogy suggests.
+DRL emerged once it became clear that neural networks could act as the function approximators reinforcement learning needed in order to handle high-dimensional input. The result that established the field was the Deep Q-Network, which learned to play a range of Atari 2600 games directly from raw pixels and reached human-level scores on many of them \cite{mnih_playing_2013, mnih_human-level_2015}. It showed that a single architecture could learn control policies from unprocessed, high-dimensional input, without features designed for each individual task. That result is what prompted interest in applying the same methods to financial markets, where the input is also high-dimensional and the mapping from observation to decision is also unknown. The difference is that an Atari game is stationary and fully observable, while a market is neither, and this is the reason results transfer far less directly than the analogy suggests.
 
 \subsubsection{Deep Value-Based RL Algorithms: Deep Q-Networks}
 
@@ -17,11 +15,7 @@ Following DQN, the Double Deep Q-Network (DDQN) addressed the tendency of DQN to
 
 \subsubsection{Deep Policy-Based RL Algorithms: Deep Policy Gradients}
 
-Deep policy-based algorithms optimise the policy directly instead of deriving it from action values, which is what allows them to operate on continuous actions. In trading this matters because a position has a size as well as a direction, and a method restricted to a discrete action set has to decide that size outside the learned policy.
-
-The Deep Deterministic Policy Gradient (DDPG) algorithm is a model-free, off-policy, actor-critic method for continuous action spaces \cite{lillicrap_continuous_2015}. It maintains four networks: an actor \( \mu(s | \theta^{\mu}) \) that maps a state to a single action, a critic \( Q(s, a | \theta^{Q}) \) that estimates the value of a state-action pair, and delayed copies of both, the target actor \( \mu' \) and the target critic \( Q' \). Transitions are stored in a replay buffer and mini-batches of \( N \) transitions are sampled from it at random.
-
-The critic is trained the same way as in DQN, by minimising the squared error between its estimate and a target built from the observed reward and the value of the next state \cite{lillicrap_continuous_2015}:
+Deep policy-based algorithms optimise the policy directly instead of deriving it from action values, which is what allows them to operate on continuous actions. In trading this matters because a position has a size as well as a direction, and a method restricted to a discrete action set has to decide that size outside the learned policy. The Deep Deterministic Policy Gradient (DDPG) algorithm is a model-free, off-policy, actor-critic method for continuous action spaces \cite{lillicrap_continuous_2015}. It maintains four networks: an actor \( \mu(s | \theta^{\mu}) \) that maps a state to a single action, a critic \( Q(s, a | \theta^{Q}) \) that estimates the value of a state-action pair, and delayed copies of both, the target actor \( \mu' \) and the target critic \( Q' \). Transitions are stored in a replay buffer and mini-batches of \( N \) transitions are sampled from it at random. The critic is trained the same way as in DQN, by minimising the squared error between its estimate and a target built from the observed reward and the value of the next state \cite{lillicrap_continuous_2015}:
 
 \begin{equation}
 y_i = r_i + \gamma \, Q'\!\left(s_{i+1}, \mu'(s_{i+1} | \theta^{\mu'}) \,\middle|\, \theta^{Q'}\right)
