@@ -2,6 +2,10 @@
 
 The benchmark is buying the pair at the start of the window and holding it to the end. It is the honest comparison for a directional strategy on a single instrument: it is available to anyone, it costs one spread, and any strategy that cannot beat it has not earned its complexity. The proposal named a random-signal baseline and a moving-average crossover instead; both were dropped because neither is a strategy a trader would actually hold as an alternative.
 
-The reported metrics are those defined in Section~\ref{Subsection:PerformanceMeasurement}: total and annualised return, the Sharpe, Sortino, Calmar and Sterling ratios, maximum drawdown and the number of trades. Ratios use a zero risk-free rate throughout, so they can be compared with each other across pairs without a rate assumption entering.
+The reported metrics are those defined in Section~\ref{Subsection:PerformanceMeasurement}: total and annualised return, the Sharpe, Sortino, Calmar and Sterling ratios, maximum drawdown and the number of trades. Table~\ref{Tables:PerformanceMetrics} states what each one measures. Ratios use a zero risk-free rate throughout, so they can be compared with each other across pairs without a rate assumption entering.
+
+\input{Tables/PerformanceMetrics}
+
+Four of them deserve a word on why they are all reported rather than one being chosen. Return says how much was made and nothing about the cost of making it. The Sharpe ratio divides return by total volatility, which penalises a strategy for moving upwards as much as for moving downwards. The Sortino ratio corrects that by counting only downside movement. Calmar and Sterling divide by drawdown instead of volatility, the first by the worst loss ever suffered and the second by the average one, so they answer the question an investor actually asks, which is how far the account fell rather than how much it wobbled. A strategy can look strong on one of these and weak on another, and where that happens in this work it is pointed out.
 
 One point applies to every number in this section. Returns are net of the spread quoted at the moment of each trade and of the commission of the account in Table~\ref{Tables:CostModel}. They are therefore not comparable with results computed on bar closes with a fixed or absent spread, and they are lower than the same policies would show under those conditions.

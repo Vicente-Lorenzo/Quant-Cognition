@@ -14,7 +14,7 @@ The total return of such a portfolio is the mean of its components by constructi
 
 \input{Tables/Portfolio}
 
-The maximum drawdown falls from an average of $34.5\%$ to $15.9\%$, and the Sharpe ratio rises from an average of $0.451$ to $0.632$, above every individual pair except USD/CHF. The same return is delivered with less than half the worst loss.
+Figure~\ref{Figure:PortfolioEquity} plots the portfolio against its components. The maximum drawdown falls from an average of $34.5\%$ to $15.9\%$, and the Sharpe ratio rises from an average of $0.451$ to $0.632$, above every individual pair except USD/CHF. The same return is delivered with less than half the worst loss.
 
 \begin{figure}[htb!]
 \centering
@@ -31,5 +31,15 @@ The reason is in Figure~\ref{Figure:Correlation}. The mean correlation between t
 \caption{Correlation between the daily returns of the seven agents over the evaluation window. The mean of the off-diagonal entries is $+0.062$.}
 \label{Figure:Correlation}
 \end{figure}
+
+\subsubsection{Does the Result Depend on the Position Sizes?}
+
+The seven models do not all run at the same position size, as Section~\ref{Subsection:EvaluationProtocol} states, so the portfolio above is the combination as published rather than one built on a common risk level. Whether that choice produces the result is a fair question and it can be answered rather than argued.
+
+Position size is proportional to the account balance, so scaling the risk fraction by a constant scales every position and therefore every per-step return by the same constant. A common-risk variant can be constructed by rescaling each component's returns to the level it would have run at, and recompounding. This ignores the rounding of volumes to the broker's step and any margin limit, so it is an approximation rather than a re-run, but it is close enough to answer the question. Table~\ref{Tables:CommonRisk} gives both versions.
+
+\input{Tables/CommonRisk}
+
+The two portfolios are almost the same. Total return moves from $+91.3\%$ to $+91.6\%$, the Sharpe ratio from $0.632$ to $0.608$ and the maximum drawdown from $15.9\%$ to $19.0\%$. The common-risk version is slightly worse on risk, which is what should be expected: bringing USD/JPY onto the same footing as the others multiplies its positions fivefold and takes its own maximum drawdown to roughly $80\%$. At a seventh of the capital, even that is absorbed. The conclusion of this subsection therefore does not depend on the sizing convention; it depends on the correlation structure, which sizing does not change.
 
 Two qualifications belong with this result. The components do not all run at the same position size, as Section~\ref{Subsection:EvaluationProtocol} states, so the portfolio is the combination as published rather than a risk-parity allocation; equalising the sizes would change the weights but not the correlation structure that produces the benefit. And the portfolio inherits the limitation of its components: in the held-out year of Section~\ref{Subsection:OutOfSample} it returns $-9.8\%$, better than five of the seven pairs and worse than two, which is what an average should do when most of its components fall together for a reason they share.

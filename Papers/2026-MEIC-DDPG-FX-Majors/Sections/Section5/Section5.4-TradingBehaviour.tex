@@ -68,3 +68,28 @@ The long and short shares differ substantially between pairs, from $24\%$ long o
 One statistic in Table~\ref{Tables:Behaviour} is worth isolating. The win rate, the fraction of positions closed at a profit, lies between $49.8\%$ and $55.0\%$ across the seven pairs. Six of the seven are within three points of a coin flip, and the best model in the set by every risk measure, USD/CHF, has the lowest win rate of all at $49.8\%$.
 
 The agents are therefore not profitable because they are right more often than they are wrong. They are profitable because of what they do with a position once it is open: the size held when the position moves favourably is larger than the size held when it does not, and positions that work are held for longer than positions that do not. That is what a continuous action buys, and it is not available to an agent that can only choose a direction. It also explains why USD/CHF can be the strongest model in the set while being wrong slightly more often than a coin: it is small and patient, and the few positions it holds at size are the ones that worked.
+
+\subsubsection{What the Trading Costs}
+
+Because the engine charges the spread quoted at each fill and a real commission schedule, the difference between what the policies earned and what the account kept can be measured rather than estimated.
+
+The commission is recorded directly on every trade. The spread is not, because it is paid inside each fill rather than deducted after it: a buy is filled at the ask and a sell at the bid, so the cost is already embedded in the entry and exit prices. It can nonetheless be recovered exactly, because the two charges scale in the same way. Commission is levied at $3.5$ points per side, seven points for a round turn, and the spread is crossed once per round turn. Both are proportional to the traded volume and both are converted into the account currency at the same rate, so for any position
+
+\begin{equation}
+C_{spread} = \left| C_{commission} \right| \cdot \frac{s}{7}
+\label{Equation:SpreadRecovery}
+\end{equation}
+
+where $s$ is the spread in points at the moment of the trade. Applying Equation~\ref{Equation:SpreadRecovery} to every position, with $s$ taken from the recorded quotes for the month in which the position was opened, gives Table~\ref{Tables:Costs}.
+
+\input{Tables/Costs}
+
+The seven agents earned $85\,039$ euros before costs and kept $64\,112$. Of the difference, $8\,748$ euros went to the spread and $12\,179$ to commission, so \textbf{costs consumed $24.6\%$ of trading profit}. Commission is the larger of the two charges here, which is a consequence of trading a raw-spread account: the spread is narrow by design and the broker recovers its margin explicitly instead. On an account quoting wider spreads with no commission, the same trades would have paid a similar total in a different proportion.
+
+The swap column is absent from Table~\ref{Tables:Costs} because it is zero on every pair. On a swap-free account no overnight financing is charged, so that is the exact figure rather than an approximation, and it matters at this holding horizon: agents holding positions for a median of four to thirteen days would otherwise pay financing on several hundred nights each.
+
+The variation between pairs follows turnover almost exactly, and it is large. USD/CHF takes $220$ positions and surrenders $4.8\%$ of its pre-cost profit, keeping more than nineteen euros in twenty. NZD/USD surrenders $31.1\%$ and GBP/USD $29.5\%$. The same quality of policy therefore delivers very different net results at different trading frequencies, which is why the selection criteria of Section~\ref{Subsection:ExperimentalProcedure} reward long holding periods directly rather than trusting the return figure to account for them, and why the rebalance threshold of Equation~\ref{Equation:Hysteresis} contributes as much as Table~\ref{Tables:Deployment} indicates.
+
+One consequence deserves emphasis because it bears on how the rest of this section should be read. Every return quoted in this work is net of both charges. A study reporting the same policies on bar closes with no spread and no commission would have reported the pre-cost column of Table~\ref{Tables:Costs}, which is a third larger, and it would have been describing a strategy that no account could have traded.
+
+Recovering the spread through Equation~\ref{Equation:SpreadRecovery} works but is indirect, and it relies on the commission being non-zero. The engine computes the spread charge internally when it opens a position and does not currently carry it into the exported trade record as its own field. Recording it there, alongside commission and swap, is a straightforward improvement and is noted in Section~\ref{Subsection:FutureWork}.
