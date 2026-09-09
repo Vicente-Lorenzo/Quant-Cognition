@@ -10,6 +10,28 @@ the alpha decomposition). The 7-pair campaign is complete — see `Research/CAMP
 
 ## 1. Open engine defects
 
+### 1.0 The spread charge is never written to the trade record
+
+`BacktestingAPI._build_position_` charges the spread correctly at open, as
+`gross = (bid - ask) * volume * quote_conversion`, so every reported return is already net of it. But
+that component is folded straight into `GrossPnL` and never surfaces as its own field, while commission
+and swap each get one (`CommissionPnL`, `SwapPnL`). The exported `trades.csv` therefore cannot answer
+"how much did the spread cost", which is the first question anyone asks of a cost model.
+
+It is recoverable only indirectly. Commission is 7 points round turn and the spread is crossed once, and
+both scale identically with volume and conversion, so `spread = |commission| * points / 7` — which is how
+the figure in the thesis was produced. That trick breaks the moment commission is zero, which is exactly
+the configuration used for **training** (`--commission-value 0`), so the frictionless runs cannot be
+decomposed at all.
+
+**Fix:** carry the open-time spread debit on `PositionAPI`/`TradeAPI` as `SpreadPnL`, alongside
+`CommissionPnL` and `SwapPnL`, and add the column to the export. `NetPnL` already accounts for it via
+gross, so the change is additive reporting, not a change to any number — the goldens must stay
+byte-identical on `trades/positions/orders/deals` apart from the new column.
+
+**Why it matters:** measured on the seven delivered models, the spread was 8,748 EUR against 12,179 EUR
+of commission on 85,039 EUR of pre-cost profit. It is 42% of the total cost and currently invisible.
+
 ### 1.1 A backtest contaminates the next one in the same process — mitigated, not fixed
 
 Running any backtest mutates the cached `DatasetAPI` in `BacktestingAPI._PRELOAD_CACHE_`, so a later
