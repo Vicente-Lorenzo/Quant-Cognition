@@ -1,0 +1,18 @@
+\begin{table}[htb!]
+\centering
+\footnotesize
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Measure} & \textbf{As Published} & \textbf{Common Risk} & \textbf{Difference} \\
+\midrule
+Total return & $+91.3\%$ & $+91.6\%$ & $+0.3$ pp \\
+Annualised return & $+6.07\%$ & $+6.09\%$ & $+0.02$ pp \\
+Sharpe ratio & $0.632$ & $0.608$ & $-0.024$ \\
+Sortino ratio & $0.906$ & $0.866$ & $-0.040$ \\
+Calmar ratio & $0.381$ & $0.320$ & $-0.061$ \\
+Maximum drawdown & $15.9\%$ & $19.0\%$ & $+3.1$ pp \\
+\bottomrule
+\end{tabular}
+\caption{The equal-weight portfolio as published against a variant in which every component runs at a common risk level. The common-risk version is built by rescaling each component's per-step returns, which is exact for a strategy whose position size is proportional to balance but ignores volume rounding. The two differ little, so the diversification result does not depend on the sizing choice.}
+\label{Tables:CommonRisk}
+\end{table}
