@@ -1,5 +1,12 @@
 \documentclass[a4paper]{article}
 \input{Preamble}
+% Start every section on an odd (right-hand) page, so the printed copy reads like a book.
+\newcommand{\clearoddpage}{%
+  \clearpage
+  \ifodd\value{page}\relax
+  \else
+    \null\thispagestyle{empty}\clearpage
+  \fi}
 \begin{document}
 
 %%%%%%%%%%%%%%%%
@@ -37,43 +44,43 @@
 %%%%%%%%%%%%%%%%
 % Introduction %
 %%%%%%%%%%%%%%%%
-\clearpage
+\clearoddpage
 \input{Sections/Section1/Section1-Introduction}
 
 %%%%%%%%%%%%%%
 % Background %
 %%%%%%%%%%%%%%
-\clearpage
+\clearoddpage
 \input{Sections/Section2/Section2-Background}
 
 %%%%%%%%%%%%%%%%
 % Related work %
 %%%%%%%%%%%%%%%%
-\clearpage
+\clearoddpage
 \input{Sections/Section3/Section3-RelatedWork}
 
 %%%%%%%%%%%%%%%%%%
 % Implementation %
 %%%%%%%%%%%%%%%%%%
-\clearpage
+\clearoddpage
 \input{Sections/Section4/Section4-Implementation}
 
 %%%%%%%%%%%
 % Results %
 %%%%%%%%%%%
-\clearpage
+\clearoddpage
 \input{Sections/Section5/Section5-ExperimentalResults}
 
 %%%%%%%%%%%%%%
 % Conclusion %
 %%%%%%%%%%%%%%
-\clearpage
+\clearoddpage
 \input{Sections/Section6/Section6-Conclusion}
 
 %%%%%%%%%%%%%%%%
 % Bibliography %
 %%%%%%%%%%%%%%%%
-\clearpage
+\clearoddpage
 \addcontentsline{toc}{section}{\refname}
 \normalem
 \bibliography{Bibliography}
