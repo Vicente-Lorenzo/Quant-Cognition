@@ -123,9 +123,6 @@ public class Connector : Robot
     [Parameter("Storage", Group = "Logging Management", DefaultValue = VerboseLevel.Warning)]
     public VerboseLevel Storage { get; set; }
 
-    [Parameter("Profile", Group = "Logging Management", DefaultValue = false)]
-    public bool Profile { get; set; }
-
     [Parameter("Benchmark", Group = "Analysis Management", DefaultValue = false)]
     public bool Benchmark { get; set; }
 
@@ -140,6 +137,9 @@ public class Connector : Robot
 
     [Parameter("Plot", Group = "Reporting Management", DefaultValue = false)]
     public bool Plot { get; set; }
+
+    [Parameter("Profile", Group = "Reporting Management", DefaultValue = false)]
+    public bool Profile { get; set; }
 
     [Parameter("Description", Group = "Reporting Management", DefaultValue = "")]
     public string Description { get; set; }

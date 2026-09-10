@@ -54,7 +54,7 @@ concurrently.
 
 The 2026-07-05 set was `Trend` on EURUSD and USDJPY across `{D1 2023, H1 2023, D1 2022-25}`. It is gone
 from disk and is not being reconstructed: three of those six gated the same code paths as each other,
-while three real branches had no cover at all. The set below is the same size and covers all of them.
+while three real branches had no cover at all. The set below is smaller and covers all of them.
 
 ### 0.0 Prerequisites
 
@@ -83,7 +83,7 @@ Three checks before the session, or the whole set is void:
    With it off the cross-pair spot freezes and conversions go stale — a silent, plausible-looking wrong
    number.
 
-### 0.1 The six runs
+### 0.1 The five runs
 
 Strategy **`Trend`** throughout. It is the only strategy that drives the full risk machinery — stop
 loss, take profit, break-even move, trailing stop with step re-arming, scale-out — through armed
@@ -96,15 +96,26 @@ auto-resolution runs, which is the production path.
 
 | # | Ticker | `--timeframe` | `--start` | `--stop` | `--account-asset` | `--account-balance` | The only cover for |
 |---|---|---|---|---|---|---|---|
-| 1 | EURUSD | `Daily` | 2023-01-01 | 2024-01-01 | EUR | 10 000 | `account == base` (`1/rate`); commission base **is** the account, so no commission conversion; raw volume clear of `VolumeMin`, which validates sizing rather than clamping |
-| 2 | USDJPY | `Daily` | 2023-01-01 | 2024-01-01 | EUR | 10 000 | third currency with a **non-USD quote**; the only 3-digit, 0.01-pip contract of the seven |
-| 3 | EURUSD | `Daily` | 2023-01-01 | 2024-01-01 | **USD** | 10 000 | **`account == quote`, never tested in any golden**; commission base is not the account |
-| 4 | USDJPY | `Daily` | 2023-01-01 | 2024-01-01 | EUR | **1 000 000** | raw volume clearing `VolumeMin` on a 3-digit pair — **the only run that can decide item 3.2** |
-| 5 | EURUSD | `Hour` | 2023-01-01 | 2024-01-01 | EUR | 10 000 | roughly a thousand trades: the tick tape, auto-resolution and intrabar exits under density |
-| 6 | EURUSD | `Daily` | 2015-01-01 | 2026-01-01 | EUR | 10 000 | eleven years: the 2016-01-11 to 2016-01-25 hole, every DST transition, swap accumulation, and a position still open at the stop date (item 3.6) |
+| 1 | EURUSD | `Hour` | 2023-01-01 | 2024-01-01 | EUR | 10 000 | `account == base` (`1/rate`); commission base **is** the account, so no commission conversion; raw volume clear of `VolumeMin`, so sizing is validated rather than clamping; and the tick tape, auto-resolution and intrabar exits at roughly a thousand trades |
+| 2 | USDJPY | `Hour` | 2023-01-01 | 2024-01-01 | EUR | 10 000 | third currency with a **non-USD quote**; the only 3-digit, 0.01-pip contract of the seven, at the density where sub-pip rounding shows |
+| 3 | EURUSD | `Hour` | 2023-01-01 | 2024-01-01 | **USD** | 10 000 | **`account == quote`, never tested in any golden**; commission base is not the account |
+| 4 | USDJPY | `Hour` | 2023-01-01 | 2024-01-01 | EUR | **1 000 000** | raw volume clearing `VolumeMin` on a 3-digit pair — **the only run that can decide item 3.2**, with a full volume distribution rather than a handful of trades |
+| 5 | EURUSD | `Daily` | 2015-01-01 | 2026-01-01 | EUR | 10 000 | eleven years: **swap accumulation over long holds**, the D1 auto-resolution path, the 2016-01-11 to 2016-01-25 hole, every DST transition, and a position still open at the stop date (item 3.6) |
 
-`--timeframe` takes the friendly key `Daily` or `Hour` — **never** `D1` or `H1`. A wrong key
+`--timeframe` takes the friendly key `Hour` or `Daily` — **never** `H1` or `D1`. A wrong key
 auto-vivifies an empty node and fails silently.
+
+**Why four of five are `Hour`.** Conversion topology, sizing, spread, commission and intrabar exits are
+all timeframe-independent code paths, so running them hourly buys roughly a thousand trades to compare
+against cTrader instead of a few dozen — strictly more chances to catch a discrepancy, at no extra
+cost. This also collapsed what were two separate runs into run 1.
+
+**Why run 5 stays `Daily`.** Trade count is the wrong axis for exactly one thing. Swap accrues per
+24-hour period, so a swap error scales with **hold duration, not trade count** — a thousand short
+hourly trades accrue almost nothing, while positions held for months accrue hundreds of charges each.
+The ~0.5% a year swap residual against cTrader is one of the two documented accuracy floors and is only
+measurable here. Daily is also far cheaper in cTrader over eleven years than hourly would be, so this
+is the better test *and* the faster one.
 
 **Why not the other four majors.** `GBPUSD`, `NZDUSD`, `USDCAD` and `USDCHF` reach no branch these do
 not. All four are 5-digit, 0.0001 pip, `VolumeMin` 1000, commission 45 per million,
@@ -143,7 +154,7 @@ every later comparison is read against.
 `--export` defaults to the temp tier, so pass `--run FOLDER` or retention sweeps the reports. **Commit
 the folders.** The previous set was lost precisely because it never entered git.
 
-**Done when:** six folders committed, the residual against cTrader written down per run, and
+**Done when:** five folders committed, the residual against cTrader written down per run, and
 `verify_lock.py` updated to fingerprint them and passing all three sections.
 
 ### 0.2 The DDPG golden
