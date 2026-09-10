@@ -244,7 +244,9 @@ class SystemAPI(ServiceAPI, ABC):
         nested = (pl.List, pl.Struct) + ((pl.Array,) if hasattr(pl, "Array") else ())
         columns = [name for name, dtype in df.schema.items() if isinstance(dtype, nested)]
         if not columns: return df
-        return df.with_columns([pl.col(name).map_elements(lambda v: json.dumps(v, default=str), return_dtype=pl.Utf8).alias(name) for name in columns])
+        def _encode_(value):
+            return json.dumps(value.to_list() if isinstance(value, pl.Series) else value, default=str)
+        return df.with_columns([pl.col(name).map_elements(_encode_, return_dtype=pl.Utf8).alias(name) for name in columns])
 
     def _publish_(self, name: str, sections: dict) -> Union[Path, None]:
         if self._run_ is None or not sections: return None

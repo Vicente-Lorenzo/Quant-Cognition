@@ -63,7 +63,13 @@ same symbols, only the account currency differs. It exists solely to reach the `
 branch — see 0.1 run 3 — which no golden has ever exercised and which item 3.4 would otherwise land on
 untested.
 
-Three checks before the session, or the whole set is void:
+Both demo accounts are **Hedging**. Record it as part of the protocol, but do not treat it as a
+variable: `Trend` holds one position at a time — `_last_position_id_` is singular, and scale-out
+reduces that position rather than opening a second — so netting and hedging are observationally
+identical here, which is why the lost set matched byte for byte against a hedging backtester. The
+mode only becomes load-bearing when a strategy opens overlapping positions, and none of these do.
+
+Four checks before the session, or the whole set is void:
 
 1. **Fees run at the Spotware demo account's own terms, which is what makes the comparison valid.**
    `Auto` resolves to `Accurate` for spread, commission **and** swap, and `Accurate` reads
@@ -82,6 +88,9 @@ Three checks before the session, or the whole set is void:
 3. **cTrader's "download historical data for additional symbols to convert profit/margin" must be on.**
    With it off the cross-pair spot freezes and conversions go stale — a silent, plausible-looking wrong
    number.
+4. **Set the cBot's `Description` parameter to `Golden1` … `Golden5`** before each cTrader run, in the
+   Reporting Management group. It travels as `--description` into the run folder's `Run.json`, and it is
+   the only thing that tells one auto-minted `<Temp>/Runs/<uid>` folder from another afterwards.
 
 ### 0.1 The five runs
 
@@ -90,9 +99,27 @@ loss, take profit, break-even move, trailing stop with step re-arming, scale-out
 intrabar targets, which is exactly where the engine has to agree with cTrader. `NNFX` is `Trend` minus
 signals; `DDPG` has none of that machinery and gets its own golden at 0.2.
 
-Common flags: `--strategy Trend --provider Spotware --account-leverage 30 --spread-type Auto
---commission-type Auto --swap-type Auto --export --run FOLDER`, with `--resolution` left unset so
-auto-resolution runs, which is the production path.
+**Each configuration is run twice, and the two halves prove different things.** The **cTrader half** is
+the Connector cBot inside cTrader's own Backtesting tab: cTrader owns the account, the date range and
+the feed, and Python mirrors the stream in `Simulation` mode. That half measures **accuracy** — the
+residual against cTrader — and only the user can run it. The **CLI half** is a standalone `Backtesting`
+run over the same window; it is the artifact that becomes the **golden**, because it is the only one
+reproducible without the platform. So every row below is entered twice: once in cTrader's Backtesting
+tab, once as flags.
+
+| Table column | Where it goes in cTrader's Backtesting tab |
+|---|---|
+| Ticker | the chart symbol |
+| `--timeframe` | the chart timeframe — `h1` or `Daily` |
+| `--start` / `--stop` | From / To |
+| `--account-asset` | which demo account is selected, EUR or USD |
+| `--account-balance` | Balance |
+| `--account-leverage` | the account's own leverage, 30 |
+| `--spread-type` / `--commission-type` / `--swap-type` | cTrader's accurate-commission configuration — nothing to set per run |
+
+Common flags for the CLI half: `--strategy Trend --provider Spotware --account-leverage 30
+--spread-type Auto --commission-type Auto --swap-type Auto --export --run FOLDER`, with `--resolution`
+left unset so auto-resolution runs, which is the production path.
 
 | # | Ticker | `--timeframe` | `--start` | `--stop` | `--account-asset` | `--account-balance` | The only cover for |
 |---|---|---|---|---|---|---|---|

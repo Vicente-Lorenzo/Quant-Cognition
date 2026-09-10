@@ -410,12 +410,13 @@ public class RobotAPI : IDisposable
 
     private void SpawnTerminal(string inner_cmd)
     {
+        var escaped_cmd = inner_cmd.Replace("\"", "\\\"");
         try
         {
             var wt_info = new ProcessStartInfo
             {
                 FileName = "wt.exe",
-                Arguments = $"-w cAlgo new-tab --title \"{_robot_.InstanceId}\" cmd.exe /k \"{inner_cmd}\"",
+                Arguments = $"-w cAlgo new-tab --title \"{_robot_.InstanceId}\" cmd.exe /k \"{escaped_cmd}\"",
                 UseShellExecute = true
             };
             Process.Start(wt_info);

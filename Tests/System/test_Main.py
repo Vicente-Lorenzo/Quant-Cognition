@@ -1,9 +1,11 @@
 import ast
 import inspect
+import json
 from pathlib import Path
 
 import pytest
 
+from Library.Logging import LoggingAPI
 from Library.System import Main
 from Library.System.System import SystemAPI
 
@@ -61,3 +63,24 @@ def test_distinct_timeframes_get_distinct_scopes():
     from Library.System.Main import _scope_ as scope
     made = {scope(_Rung_("P"), _Rung_("C"), _Rung_("T"), _Rung_(uid))[-1] for uid in ("Hour", "Daily", "H4", "M15", "Monthly")}
     assert made == {"H1", "D1", "H4", "M15", "MN1"}
+
+class _Args_:
+
+    def __init__(self, **fields):
+        self.system, self.strategy, self.provider = "Simulation", "Trend", "Spotware"
+        self.ticker, self.timeframe, self.description = "EURUSD", "Hour", None
+        for name, value in fields.items(): setattr(self, name, value)
+
+def test_snapshot_writes_the_manifest_without_a_period(tmp_path):
+    from Library.System.Main import _snapshot_ as snapshot
+    snapshot(tmp_path, _Args_(description="Golden 1"), None, LoggingAPI())
+    manifest = json.loads((tmp_path / "Run.json").read_text(encoding="utf-8"))
+    assert manifest["System"] == "Simulation"
+    assert manifest["Description"] == "Golden 1"
+    assert "Start" not in manifest and "Stop" not in manifest
+
+def test_snapshot_keeps_the_period_when_one_is_supplied(tmp_path):
+    from Library.System.Main import _snapshot_ as snapshot
+    snapshot(tmp_path, _Args_(system="Backtesting", start="2023-01-01", stop="2024-01-01"), None, LoggingAPI())
+    manifest = json.loads((tmp_path / "Run.json").read_text(encoding="utf-8"))
+    assert manifest["Start"] == "2023-01-01" and manifest["Stop"] == "2024-01-01"

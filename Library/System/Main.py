@@ -297,8 +297,9 @@ def _snapshot_(folder: Path, args: Namespace, parameters, log: LoggingAPI, trail
         entry.mkdir(parents=True, exist_ok=True)
         data = getattr(parameters, "data", None)
         if data is not None: (entry / "Parameters.yml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+        start, stop = getattr(args, "start", None), getattr(args, "stop", None)
         manifest = {"System": args.system, "Strategy": args.strategy, "Provider": args.provider, "Ticker": args.ticker,
-                    "Timeframe": args.timeframe, "Start": str(args.start), "Stop": str(args.stop),
+                    "Timeframe": args.timeframe, "Start": None if start is None else str(start), "Stop": None if stop is None else str(stop),
                     "Description": args.description, "StartedAt": datetime.now().isoformat(),
                     "Command": " ".join(sys.argv[1:]),
                     "Parameters": trails or None,
