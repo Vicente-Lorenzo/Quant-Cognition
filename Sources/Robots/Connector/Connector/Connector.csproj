@@ -1,10 +1,10 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
     <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
   </PropertyGroup>
-
   <ItemGroup>
-    <PackageReference Include="cTrader.Automate" Version="*" />
+    <PackageReference Include="cTrader.Automate" Version="1.0.19" />
   </ItemGroup>
 </Project>

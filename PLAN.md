@@ -186,20 +186,35 @@ had changed**; the build broke because the feed moved. The only SDK present was 
 - Installed **.NET SDK 10.0.401** via winget, side by side. 6.0.100 remains, so `global.json` pinning
   `6.0.100` is an instant rollback if anything surfaces later. With no `global.json`, `dotnet` selects
   10.0.401.
-- **`cTrader.Automate` stays at `Version="*"`.** It resolves to 1.0.20 today and builds clean —
-  confirmed by deliberately setting 1.0.20 after the upgrade, which is what proves the SDK was the root
-  cause rather than the package.
+- **`cTrader.Automate` is pinned to `1.0.19`** in both projects, which are byte-identical.
 - Both solutions build 0 warnings / 0 errors, still targeting `net6.0`, and emit
   `Sources/Robots/Connector.algo` and `Sources/Indicators/Connector.algo`. The SDK move left `Enum.cs`
   untouched at `8376276ae3a71fbe`; it was regenerated separately in 1.0.2 and is now
   `36d2f69f2fa39698`.
 
-**The policy, decided 2026-09-10: float the package, keep the SDK current.** A cBot is deployed into a
-platform that updates underneath it, so tracking the latest `cTrader.Automate` is the correct default
-and pinning would only defer the same break. The SDK is the thing that must stay ahead — the failure
-was never the package, it was a 2021 MSBuild meeting a 2026 targets file. **If a future publish breaks
-the build, upgrade the SDK rather than pinning the package.** A short-lived pin to unblock an urgent
-session is fine; a permanent one is not.
+**⚠ The `dotnet` CLI is NOT the toolchain that matters. cTrader's Build button is.**
+
+This cost a wrong fix on 2026-09-10 and is the single most important thing in this section. The package
+was briefly unpinned to `Version="*"` on the reasoning that a cBot should track the platform it deploys
+into, and the CLI built clean on SDK 10 — but **cTrader's own Build still failed with the identical
+`MSB4185` at `cTrader.Automate.targets` line 23**. cTrader bundles only the .NET 6.0.0 runtime and
+targeting pack plus RoslynPad; it ships no SDK and no MSBuild, sets no `DOTNET_*` overrides and writes
+no `global.json`, yet it plainly does not compile through the system SDK 10.0.401. Whatever it invokes
+rejects `[System.Environment]::Version`, and **MSBuild does not short-circuit the `AND` in that
+condition**, so the failure cannot be dodged by pre-setting `_TaskAssemblyTFM` from the project file.
+
+**The rule: `cTrader.Automate` is pinned to the newest version cTrader's own Build accepts.** Bump it
+deliberately when cTrader updates, and verify by clicking Build — never by a CLI build, which uses a
+different compiler and will report success on a version the platform cannot compile. The package can
+only float as fast as the slowest toolchain that builds it, and that toolchain is cTrader's.
+
+**`net6.0` is a requirement, not legacy debt.** cTrader bundles `Microsoft.NETCore.App.Ref` **6.0.0**
+and nothing newer, so retargeting would break the `.algo`. That question is closed.
+
+**cTrader owns the `.csproj` formatting.** Opening or building in cTrader rewrites the file — it adds a
+UTF-8 BOM and an XML declaration and strips blank lines between element groups. Both projects are
+stored in exactly that form so cTrader's normalisation is a no-op and they stay identical; do not
+"clean up" the BOM, it comes straight back.
 
 **Still outstanding, and only you can do it.** The `.algo` files are now produced by the 1.0.20
 toolchain on SDK 10. **Load both in cTrader and confirm they run**, ideally with one live round-trip.
