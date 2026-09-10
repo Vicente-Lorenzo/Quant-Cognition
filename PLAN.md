@@ -28,7 +28,8 @@ corrected engine, and it replaces the first only if it is stronger.
 | **4** | Optimization and Learning | Phase 3 complete | after 3 |
 | **5** | Web app | 2.8 complete | after 2.8 |
 | **6** | Remaining | none | any time |
-| **7** | Live trading panel at `/trading` | Phases 1, 3 and 5 complete | last |
+| **7** | Indicator connector — Python indicators on cTrader charts | Phases 1 and 3 complete | after 3 |
+| **8** | Live trading panel at `/trading` | Phases 1, 3 and 5 complete | last |
 
 **Three rules bind the order.**
 
@@ -51,38 +52,118 @@ concurrently.
 
 ## Phase 0 — Safety net
 
-### 0.1 Regenerate the six goldens
+The 2026-07-05 set was `Trend` on EURUSD and USDJPY across `{D1 2023, H1 2023, D1 2022-25}`. It is gone
+from disk and is not being reconstructed: three of those six gated the same code paths as each other,
+while three real branches had no cover at all. The set below is the same size and covers all of them.
 
-**Blocked on you — one cTrader session.**
+### 0.0 Prerequisites
 
-Protocol: strategy `Trend`, auto resolution, `--export`, EUR 10 000, tick data, provider Spotware.
-`EURUSD` and `USDJPY` crossed with `{D1 2023, H1 2023, D1 2022-25}` gives six reports. Expected trade
-counts from the 2026-07-05 set: EURUSD 37 / 1025 / 112, USDJPY 14 / 709 / 58.
+**A second Spotware demo account denominated in USD**, alongside the existing EUR one. Same broker,
+same symbols, only the account currency differs. It exists solely to reach the `account == quote`
+branch — see 0.1 run 3 — which no golden has ever exercised and which item 3.4 would otherwise land on
+untested.
 
-`--export` now defaults to the temp tier, so pass `--run FOLDER` explicitly or the reports land where
-retention will sweep them. Commit the six folders — the previous set was lost precisely because it was
-never in git.
+Three checks before the session, or the whole set is void:
 
-The accuracy floor is data-bound, not a defect: a sub-pip intrabar exit residual and a swap residual
-of roughly 0.5% a year. `net.csv` differs from the 2026-07-05 files by design (Annualized labels,
-Upside and Downside Volatility rows); the gate is `trades`, `positions`, `orders` and `deals`.
+1. **Fees run at the Spotware demo account's own terms, which is what makes the comparison valid.**
+   `Auto` resolves to `Accurate` for spread, commission **and** swap, and `Accurate` reads
+   `Universe.Contract`: `Commission` 45.0 as `BaseAssetPerMillionVolume`, `SwapMode` `Pips` with
+   per-pair `SwapLong`/`SwapShort`, `SwapPeriod` 24. **45 is correct here** — it is the demo standard,
+   and cTrader's accurate-commission backtest configuration charges exactly that. Do not change it.
 
-**Done when:** six folders committed and `verify_lock.py` passes all three sections.
+   **Do not confuse this with the thesis cost model.** The thesis deliberately models a *different*
+   account — raw-spread and swap-free, commission 3.5 USD per 100 000, i.e. 35 per million — because 45
+   is unrepresentative of what this strategy would actually be traded on. Two configurations, two
+   purposes: the goldens prove the **engine** matches cTrader, the thesis prices a **realistic broker**.
+   Neither is a defect in the other, and neither should be edited to match.
+2. **Leave swap on.** Do not zero it to match the swap-free thesis account, for the same reason. Swap
+   is the known ~0.5% a year residual against cTrader and these runs are what pin it; the swap-free
+   configuration only removes a term, so it cannot introduce an error these would miss.
+3. **cTrader's "download historical data for additional symbols to convert profit/margin" must be on.**
+   With it off the cross-pair spot freezes and conversions go stale — a silent, plausible-looking wrong
+   number.
 
-### 0.2 Capture the USD/JPY sizing control in the same session
+### 0.1 The six runs
 
-**Blocked on you — same cTrader session.**
+Strategy **`Trend`** throughout. It is the only strategy that drives the full risk machinery — stop
+loss, take profit, break-even move, trailing stop with step re-arming, scale-out — through armed
+intrabar targets, which is exactly where the engine has to agree with cTrader. `NNFX` is `Trend` minus
+signals; `DDPG` has none of that machinery and gets its own golden at 0.2.
 
-Run the `USDJPY D1 2022-25` backtest again at roughly 1 000 000 EUR. All 781 USD/JPY golden trades sit
-at exactly `VolumeMin` — one distinct volume, 100% at the floor — because `calculate_normalized_volume`
-clamps upward. The byte-identical match therefore proves both engines clamp, not that raw sizing
-agrees. EURUSD spans 2 000 to 82 000 across 61 distinct volumes and does validate it.
+Common flags: `--strategy Trend --provider Spotware --account-leverage 30 --spread-type Auto
+--commission-type Auto --swap-type Auto --export --run FOLDER`, with `--resolution` left unset so
+auto-resolution runs, which is the production path.
 
-This single run decides item 3.2. If cTrader's volumes stay tiny, our engine is faithful and must not
-change. If they come out roughly 150x larger, the fix is warranted. Re-baselining without this control
-anchors the framework to the wrong reference permanently.
+| # | Ticker | `--timeframe` | `--start` | `--stop` | `--account-asset` | `--account-balance` | The only cover for |
+|---|---|---|---|---|---|---|---|
+| 1 | EURUSD | `Daily` | 2023-01-01 | 2024-01-01 | EUR | 10 000 | `account == base` (`1/rate`); commission base **is** the account, so no commission conversion; raw volume clear of `VolumeMin`, which validates sizing rather than clamping |
+| 2 | USDJPY | `Daily` | 2023-01-01 | 2024-01-01 | EUR | 10 000 | third currency with a **non-USD quote**; the only 3-digit, 0.01-pip contract of the seven |
+| 3 | EURUSD | `Daily` | 2023-01-01 | 2024-01-01 | **USD** | 10 000 | **`account == quote`, never tested in any golden**; commission base is not the account |
+| 4 | USDJPY | `Daily` | 2023-01-01 | 2024-01-01 | EUR | **1 000 000** | raw volume clearing `VolumeMin` on a 3-digit pair — **the only run that can decide item 3.2** |
+| 5 | EURUSD | `Hour` | 2023-01-01 | 2024-01-01 | EUR | 10 000 | roughly a thousand trades: the tick tape, auto-resolution and intrabar exits under density |
+| 6 | EURUSD | `Daily` | 2015-01-01 | 2026-01-01 | EUR | 10 000 | eleven years: the 2016-01-11 to 2016-01-25 hole, every DST transition, swap accumulation, and a position still open at the stop date (item 3.6) |
 
-**Done when:** the control report is stored beside the goldens with a note recording which way it fell.
+`--timeframe` takes the friendly key `Daily` or `Hour` — **never** `D1` or `H1`. A wrong key
+auto-vivifies an empty node and fails silently.
+
+**Why not the other four majors.** `GBPUSD`, `NZDUSD`, `USDCAD` and `USDCHF` reach no branch these do
+not. All four are 5-digit, 0.0001 pip, `VolumeMin` 1000, commission 45 per million,
+`SwapMode` `Pips` — structurally identical to run 1 or run 2.
+
+**Two optional additions, if the session has room.** Neither gates a branch, so neither is required.
+`AUDUSD Daily 2023 EUR 10 000` is the only major with a **positive** `SwapLong` (+0.105 against
+EURUSD's -2.445), so it is the only way to prove a swap credit is credited rather than debited — an
+arithmetic risk, not a code path. `USDJPY Hour 2023 EUR 10 000` puts the 3-digit contract under the
+same density as run 5, which is where the sub-pip intrabar residual compounds fastest.
+
+**Why 4 needs its own run.** All 781 USD/JPY trades in the old set sat at exactly `VolumeMin` — one
+distinct volume, 100% at the floor — because `calculate_normalized_volume` clamps upward. The
+byte-identical match therefore proved both engines clamp, not that raw sizing agrees. EURUSD spanned
+2 000 to 82 000 across 61 distinct volumes and did validate it. If cTrader's volumes at a million
+stay tiny, our engine is faithful and item 3.2 must not change it; if they come out roughly 150 times
+larger, the fix is warranted. Deciding 3.2 without this control anchors the framework to the wrong
+reference permanently.
+
+**The split that makes this set a tripwire for item 2.6.** `_needs_conversion_` is
+`account_asset not in (base, quote)`, so the set partitions itself:
+
+| Reads the stored conversion columns | Runs | Expected when 2.6 drops them |
+|---|---|---|
+| **No** — derives from the pair's own price | 1, 3, 5, 6 | **must stay byte-identical**; any movement is a real regression |
+| **Yes** — reads the EUR-denominated columns | 2, 4 | break expected; explain the float-ordering residual and carry it to 3.9 |
+
+**What is compared:** `trades`, `positions`, `orders` and `deals`, byte for byte. `net.csv` is excluded
+by design — label drift (`Annualised` against `Annualized`) and the Upside/Downside Volatility rows
+make it a moving target.
+
+**The accuracy floor is data-bound, not a defect:** a sub-pip intrabar exit residual, and a swap
+residual of roughly 0.5% a year. Record both against cTrader at creation time; they are the tolerance
+every later comparison is read against.
+
+`--export` defaults to the temp tier, so pass `--run FOLDER` or retention sweeps the reports. **Commit
+the folders.** The previous set was lost precisely because it never entered git.
+
+**Done when:** six folders committed, the residual against cTrader written down per run, and
+`verify_lock.py` updated to fingerprint them and passing all three sections.
+
+### 0.2 The DDPG golden
+
+**No cTrader session — we generate this one ourselves.**
+
+Every golden the framework has ever had ran `Trend`. The DDPG sizing path — `_reference_volume_`, which
+items 3.2 and 3.3 both change, and which every published thesis number rides on — has **no regression
+gate at all**.
+
+`--strategy DDPG --ticker EURUSD --timeframe Hour --start 2015-01-01 --stop 2026-01-01
+--account-asset EUR --account-balance 10000`, with `Weights` pointed at the committed champion under
+`Research/DDPG-EURUSD-H1/Models/`.
+
+This is a **self-consistency** golden, not a cTrader-equivalence one. It answers "did this refactor
+move the DDPG path", never "does cTrader agree". Label it distinctly in `verify_lock.py` so the two
+kinds are never read as the same guarantee. It costs nothing and catches the change most likely to
+silently invalidate the campaign.
+
+**Done when:** the run is committed and re-running it reproduces byte-identically.
 
 ---
 
@@ -90,6 +171,104 @@ anchors the framework to the wrong reference permanently.
 
 Goal: one connector abstraction, Spotware first, capturing continuously — replacing the per-ticker
 Download-strategy cBot workflow.
+
+### 1.0 Modernise the .NET toolchain — DONE 2026-09-10, one verification outstanding
+
+**What was wrong.** Both csproj files carried `<PackageReference Include="cTrader.Automate"
+Version="*" />`. A floating version, so NuGet silently took 1.0.20 the moment it was published, and
+1.0.20's targets file probes for .NET 10 via `$([System.Environment]::Version.Major)` — a property
+function the installed MSBuild 17.0 refused to evaluate, failing with `MSB4185`. **Nothing in the repo
+had changed**; the build broke because the feed moved. The only SDK present was 6.0.100, from November
+2021, out of support since November 2024.
+
+**What was done.**
+
+- Installed **.NET SDK 10.0.401** via winget, side by side. 6.0.100 remains, so `global.json` pinning
+  `6.0.100` is an instant rollback if anything surfaces later. With no `global.json`, `dotnet` selects
+  10.0.401.
+- **`cTrader.Automate` stays at `Version="*"`.** It resolves to 1.0.20 today and builds clean —
+  confirmed by deliberately setting 1.0.20 after the upgrade, which is what proves the SDK was the root
+  cause rather than the package.
+- Both solutions build 0 warnings / 0 errors, still targeting `net6.0`, and emit
+  `Sources/Robots/Connector.algo` and `Sources/Indicators/Connector.algo`. The SDK move left `Enum.cs`
+  untouched at `8376276ae3a71fbe`; it was regenerated separately in 1.0.2 and is now
+  `36d2f69f2fa39698`.
+
+**The policy, decided 2026-09-10: float the package, keep the SDK current.** A cBot is deployed into a
+platform that updates underneath it, so tracking the latest `cTrader.Automate` is the correct default
+and pinning would only defer the same break. The SDK is the thing that must stay ahead — the failure
+was never the package, it was a 2021 MSBuild meeting a 2026 targets file. **If a future publish breaks
+the build, upgrade the SDK rather than pinning the package.** A short-lived pin to unblock an urgent
+session is fine; a permanent one is not.
+
+**Still outstanding, and only you can do it.** The `.algo` files are now produced by the 1.0.20
+toolchain on SDK 10. **Load both in cTrader and confirm they run**, ideally with one live round-trip.
+Everything above is compile-time evidence; none of it proves the platform accepts the artefact.
+
+Do this **before 1.7**, which rebuilds and reinstalls the `.algo` after an enum renumber. Confirming the
+toolchain now means a wire-ID mismatch there can only be the enum change, never the compiler.
+
+### 1.0.1 Sources hard pass — done 2026-09-10
+
+Every tracked file under `Sources/` was read and both solutions were rebuilt after each change. Twelve
+files are tracked; `.idea/`, `bin/`, `obj/` and `*.algo` are correctly gitignored, and `Sources/Export`
+plus `Sources/Plugins/Plugin/Plugin` are empty scaffolding git does not carry.
+
+**Fixed and staged.**
+
+- **The two `.csproj` files are now byte-identical.** `Sources/Indicators` was missing
+  `SuppressTfmSupportBuildWarnings` and carried a trailing newline the other did not.
+- **Three dead `using` directives removed** from `Sources/Robots/Connector/Connector/Connector.cs` —
+  `cAlgo.API.Collections`, `cAlgo.API.Indicators`, `cAlgo.API.Internals`, all cTrader template
+  leftovers. Every `using` in all six Robots files was then verified by removing it and rebuilding:
+  the remaining nineteen are genuinely used.
+- **Six private constants in `Logging.cs`** renamed from `_lower_` to `_UPPER_` per the naming rule
+  (`_default_error_log_` to `_DEFAULT_ERROR_LOG_`, and the five beside it). File-local, no other
+  reference in the tree.
+
+**Verified as non-issues, so nobody re-opens them.**
+
+- Line endings look mixed in the working tree but `.gitattributes` already carries `* text=auto
+  eol=lf`, so the repository is uniform and the CRLF warnings on `git add` are checkout artifacts.
+- The two `.sln` files are identical apart from their project GUIDs, which is correct.
+- **The `CA1416` and `CS0618` backlog recorded in 6.7 is stale.** Both solutions build warning-free in
+  Debug *and* Release, and did so on SDK 6.0.100 before the upgrade, so this is not an SDK artefact.
+  Removed from 6.7.
+
+**Two decisions left, both yours.**
+
+1. **`Sources/Indicators` is not a peer project — it is the untouched cTrader template.** Its single
+   file still prints `"Hello world!"` from `Initialize()` with an empty `Calculate()`, four of its five
+   `using` directives are dead, and it declares `namespace cAlgo.Indicators` where the Robots project
+   declares `namespace Connector`. Making it *look* symmetric would be polishing scaffolding. Either
+   implement it, delete it, or leave it and accept that the asymmetry is real and intended. I left the
+   source untouched and only made the project file symmetric.
+### 1.0.2 Enum.cs — done 2026-09-10
+
+Fixed in the **generator**, never in the output. `Setup/Enum.py` now emits:
+
+- **A file-scoped `namespace Connector;`**, matching all six hand-written files; the old block-scoped
+  form was the last file in the project indented an extra level.
+- **An `// <auto-generated>` header** naming `Setup/Enum.py` and the `python -m Setup.Enum` command.
+  This is the one comment the no-comment rule should never have excluded: the file's single documented
+  trap is that hand-editing it silently desynchronises the wire, and until now nothing in the file said
+  so. Roslyn also skips analyzers on files marked this way, which is correct for generated output.
+
+**Safety, in the order it was checked.** Every enum name, member and value was diffed
+whitespace-normalised against the previous output: **171 members across 7 enums, identical**. Only
+layout changed. A wire-ID or member rename here mis-decodes silently, so this was verified before the
+build, not after. The generator is idempotent — a second run is byte-identical. `[System.Flags]` is
+still emitted for `Stream`, and the build is clean.
+
+**The pinned hash moves to `36d2f69f2fa39698`**, updated in `RULES.md` and `ARCHITECTURE.md`.
+
+**Deliberate, not an omission:** `Stream.All` is absent from the C# output because Python's `IntFlag`
+excludes composite aliases from iteration. That is correct — the C# side receives a bitmask and tests
+bits; it never needs the alias.
+
+**Still to do when 7.1 lands.** `OUTPUT_PATH` is a single hardcoded path into the Robots project. The
+indicator connector needs the same enums, so the generator will have to emit to both projects. Left
+alone deliberately — a one-element list today would be speculative generality.
 
 ### 1.1 Feed equivalence: Open API against the Download cBot
 
@@ -758,11 +937,66 @@ first.
   break FK-referenced tables such as Scheduler to Auth.User on boot.
 - **`Setup/Install.py` and `Setup/Task.py` both define `provision()`** — different modules, different jobs,
   no collision today. Rename one if it ever confuses.
-- **C# warnings**, non-breaking: two `CA1416`, three `CS0618` deprecated order APIs.
+- ~~C# warnings: two `CA1416`, three `CS0618` deprecated order APIs.~~ **Stale — closed 2026-09-10.**
+  Both solutions build warning-free in Debug and Release, on SDK 6.0.100 and 10.0.401 alike. See 1.0.1.
 
 ---
 
-## Phase 7 — Live trading panel at `/trading`
+## Phase 7 — Indicator connector
+
+`Sources/Indicators/Connector` is the untouched cTrader indicator template today (see 1.0.1). This is
+what it becomes: **a bridge that plots a Python-implemented indicator directly onto a cTrader chart, so
+it can be compared against cTrader's own built-in by eye and by value.**
+
+That makes it a **validation instrument, not a feature.** `Library/Indicator/Technical` is the input
+half of every strategy in the framework — the DDPG feature bank alone is 16 indicators — and nothing
+has ever proven those implementations agree with the platform's. A silent disagreement in, say, `ATR`
+or `ER` does not crash anything; it quietly changes every observation the agent ever sees. This phase
+is how that class of error stops being invisible.
+
+### 7.1 The bridge
+
+Mirror the Robots connector rather than inventing a second mechanism: shared memory, single-slot
+request/response lockstep, the same `Protocol` vocabulary. An indicator is a far smaller surface than a
+robot — it needs bars in and a series out, with no orders, positions or account state — so the
+subscription is minimal and most of `Action/` and `Update/` does not apply.
+
+**`Setup/Enum.py` must emit into both projects** once this starts; `OUTPUT_PATH` is currently a single
+hardcoded path (see 1.0.2). The two `.algo` artefacts must always be generated from the same enum
+source, or the wire mis-decodes exactly as it would between mismatched robot builds.
+
+### 7.2 The comparison harness
+
+The point of the phase, and worth designing before the bridge:
+
+- Plot the Python series and cTrader's native equivalent on the same chart, and a **difference series**
+  beneath. Eyeballing two overlapping lines hides small persistent offsets; a difference pane does not.
+- Report the maximum absolute difference, and the bar index where it occurs, over the loaded range.
+- **Warmup is where these will actually disagree.** A rolling indicator's first N bars depend on how
+  the seed is chosen — cTrader and this framework need not agree, and a difference that vanishes after
+  N bars is a warmup convention mismatch rather than a formula error. Report the two regimes
+  separately or the diagnosis is wrong.
+- Where the framework has no native counterpart, the comparison is against a hand-computed fixture
+  instead, not skipped.
+
+### 7.3 Coverage
+
+Start with the DDPG feature bank, since those are the implementations carrying published results:
+`ATR 14`, `ER 120`, `RV 16/480`, the `SMA` family and the `ROC` family. Then the rest of
+`Library/Indicator/Technical`. Record each verdict — agrees, agrees after warmup, or disagrees with the
+measured magnitude.
+
+**A disagreement is a finding, not a bug to rush.** If a Python indicator differs from cTrader's, the
+framework's own goldens and campaign are internally consistent regardless; what changes is the claim
+that can be made about it. Decide per indicator whether to match the platform or document the
+difference — do not reflexively change an implementation the published results depend on.
+
+**Done when:** the connector plots any registered Python indicator on a cTrader chart beside its native
+counterpart with a difference pane, and the feature-bank indicators each carry a recorded verdict.
+
+---
+
+## Phase 8 — Live trading panel at `/trading`
 
 `Library/Web/Trading/Trading.py` is a 910-byte placeholder today: a title, a lead paragraph and a panel
 reading "No strategies running." This phase replaces it with the console the framework is actually for.
@@ -772,7 +1006,7 @@ It is last because it consumes almost everything above it: per-tick updates need
 non-EUR account needs generic currency (3.4); a hedged account needs 3.5; surviving a restart needs 6.3;
 and the run and result surfaces it links into come from 2.8.
 
-### 7.1 The transport seam
+### 8.1 The transport seam
 
 Every other page in the app either polls on a timer or renders an immutable artifact and does not poll
 at all. **A live panel is neither.** It needs push, and it needs to stay correct when push drops.
@@ -786,7 +1020,7 @@ at all. **A live panel is neither.** It needs push, and it needs to stay correct
   slow poll — never silently show stale prices as though they were live. Stale numbers on a trading
   screen are worse than no numbers.
 
-### 7.2 Account header
+### 8.2 Account header
 
 Balance, equity, margin used, free margin, margin level, unrealized P&L, and open exposure broken out by
 currency. Equity and margin level update per tick; balance only on a closed deal.
@@ -794,7 +1028,7 @@ currency. Equity and margin level update per tick; balance only on a closed deal
 Margin level is the number that matters when things go wrong, so it gets a status treatment — good,
 warning, serious, critical — with an icon and a label, never colour alone.
 
-### 7.3 Position and order blotters
+### 8.3 Position and order blotters
 
 Two virtualized `LightweightTableAPI` grids.
 
@@ -806,7 +1040,7 @@ it. Row actions: modify stop and target, close partially, close fully.
 
 Both need a totals row that is computed server-side, not summed in the browser from a thinned payload.
 
-### 7.4 Order ticket
+### 8.4 Order ticket
 
 Market, limit and stop, with the volume field driven by the **same** sizing path the engine uses — not a
 reimplementation. After 3.2 and 3.3 there is exactly one correct sizing formula in the framework and this
@@ -815,7 +1049,7 @@ ticket must call it, so that what the panel shows and what the engine does can n
 Show the derived risk in account currency and as a percentage of balance before the button is armed.
 Stops and targets accept pips or price, and convert visibly.
 
-### 7.5 Strategy control and the kill switch
+### 8.5 Strategy control and the kill switch
 
 Which strategies are deployed, on which securities and timeframes, what state each Signal and Risk
 machine is in, and how long since the last update. Per-strategy start, stop and flatten.
@@ -828,7 +1062,7 @@ where `Run.log` will capture it even if the process dies immediately after.
 Mutations are `Editor` and above through the existing router gate. A `Viewer` sees the panel and touches
 nothing.
 
-### 7.6 Live chart
+### 8.6 Live chart
 
 One Lightweight chart per watched security: price, the open position overlaid with its entry, stop and
 target as price lines, and fill markers as they arrive. The live signal tape from 2.8 item 3 goes
@@ -838,13 +1072,13 @@ than only in hindsight.
 Reuse `Library/Statistic/Workspace.py` for the spec — it is the single composition layer and imports no
 Dash, so the same definition serves the panel and the backtest view.
 
-### 7.7 Connection health
+### 8.7 Connection health
 
 Connector state, last heartbeat, tick latency, ticks a second, reconnect count, and the current
 subscription per strategy. This is the panel that answers "is it actually running", and it is the first
 thing to look at when a result looks wrong.
 
-### 7.8 iPad
+### 8.8 iPad
 
 The whole panel is subject to 5.5, and more strictly: this is the page most likely to be opened away from
 the desk. Blotter rows need touch-sized targets, the order ticket must be usable one-handed, and the kill

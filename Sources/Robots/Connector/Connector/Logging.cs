@@ -8,12 +8,12 @@ public class Logging
     private readonly VerboseLevel _verbose_;
     private readonly string _cname_;
 
-    private const string _default_exception_log_ = "EXCEPTION";
-    private const string _default_error_log_ = "ERROR";
-    private const string _default_warning_log_ = "WARNING";
-    private const string _default_info_log_ = "INFO";
-    private const string _default_debug_log_ = "DEBUG";
-    private const string _default_alert_log_ = "ALERT";
+    private const string _DEFAULT_EXCEPTION_LOG_ = "EXCEPTION";
+    private const string _DEFAULT_ERROR_LOG_ = "ERROR";
+    private const string _DEFAULT_WARNING_LOG_ = "WARNING";
+    private const string _DEFAULT_INFO_LOG_ = "INFO";
+    private const string _DEFAULT_DEBUG_LOG_ = "DEBUG";
+    private const string _DEFAULT_ALERT_LOG_ = "ALERT";
 
     public Logging(Algo algo, string cname, VerboseLevel verbose)
     {
@@ -29,10 +29,10 @@ public class Logging
         _algo_.Print(log_message);
     }
 
-    public void Exception(string message) => LogMessage(VerboseLevel.Exception, _default_exception_log_, message);
-    public void Error(string message) => LogMessage(VerboseLevel.Error, _default_error_log_, message);
-    public void Warning(string message) => LogMessage(VerboseLevel.Warning, _default_warning_log_, message);
-    public void Alert(string message) => LogMessage(VerboseLevel.Alert, _default_alert_log_, message);
-    public void Info(string message) => LogMessage(VerboseLevel.Info, _default_info_log_, message);
-    public void Debug(string message) => LogMessage(VerboseLevel.Debug, _default_debug_log_, message);
+    public void Exception(string message) => LogMessage(VerboseLevel.Exception, _DEFAULT_EXCEPTION_LOG_, message);
+    public void Error(string message) => LogMessage(VerboseLevel.Error, _DEFAULT_ERROR_LOG_, message);
+    public void Warning(string message) => LogMessage(VerboseLevel.Warning, _DEFAULT_WARNING_LOG_, message);
+    public void Alert(string message) => LogMessage(VerboseLevel.Alert, _DEFAULT_ALERT_LOG_, message);
+    public void Info(string message) => LogMessage(VerboseLevel.Info, _DEFAULT_INFO_LOG_, message);
+    public void Debug(string message) => LogMessage(VerboseLevel.Debug, _DEFAULT_DEBUG_LOG_, message);
 }
