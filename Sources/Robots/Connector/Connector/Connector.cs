@@ -129,6 +129,9 @@ public class Connector : Robot
     [Parameter("Benchmark Tickers", Group = "Analysis Management", DefaultValue = "")]
     public string BenchmarkTickers { get; set; }
 
+    [Parameter("Profile", Group = "Reporting Management", DefaultValue = false)]
+    public bool Profile { get; set; }
+
     [Parameter("Report", Group = "Reporting Management", DefaultValue = true)]
     public bool Report { get; set; }
 
@@ -137,9 +140,6 @@ public class Connector : Robot
 
     [Parameter("Plot", Group = "Reporting Management", DefaultValue = false)]
     public bool Plot { get; set; }
-
-    [Parameter("Profile", Group = "Reporting Management", DefaultValue = false)]
-    public bool Profile { get; set; }
 
     [Parameter("Description", Group = "Reporting Management", DefaultValue = "")]
     public string Description { get; set; }
