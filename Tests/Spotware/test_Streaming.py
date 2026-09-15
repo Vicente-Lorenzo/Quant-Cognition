@@ -46,12 +46,12 @@ def test_ticks_dispatches_events(spotware):
     spotware._responses_.append(fire)
     spotware._responses_.append(ProtoOAUnsubscribeSpotsRes())
     received = []
-    spotware.streaming.ticks(symbols=1, callback=lambda d: received.append(d), frame=False, limit=3)
+    spotware.streaming.ticks(symbols=1, callback=lambda d: received.append(d), frame=False, limit=3, timeout=5)
     assert len(received) == 3
-    assert all(r["SecurityUID"] == 1 for r in received)
-    assert received[0]["BidPrice"] == pytest.approx(1.05)
-    assert received[0]["AskPrice"] == pytest.approx(1.05002)
-    assert received[1]["BidPrice"] == pytest.approx(1.0501)
+    assert all(r["Symbol"] == 1 for r in received)
+    assert received[0]["Bid"] == pytest.approx(1.05)
+    assert received[0]["Ask"] == pytest.approx(1.05002)
+    assert received[1]["Bid"] == pytest.approx(1.0501)
     assert type(spotware._sent_[0]).__name__ == "ProtoOASubscribeSpotsReq"
     assert list(spotware._sent_[0].symbolId) == [1]
     assert type(spotware._sent_[1]).__name__ == "ProtoOAUnsubscribeSpotsReq"
@@ -63,7 +63,7 @@ def test_ticks_respects_limit(spotware):
     spotware._responses_.append(fire)
     spotware._responses_.append(ProtoOAUnsubscribeSpotsRes())
     received = []
-    spotware.streaming.ticks(symbols=[1], callback=lambda d: received.append(d), frame=False, limit=4)
+    spotware.streaming.ticks(symbols=[1], callback=lambda d: received.append(d), frame=False, limit=4, timeout=5)
     assert len(received) == 4
 def test_ticks_frame_output(spotware):
     def fire(request, api):
@@ -72,12 +72,12 @@ def test_ticks_frame_output(spotware):
     spotware._responses_.append(fire)
     spotware._responses_.append(ProtoOAUnsubscribeSpotsRes())
     received = []
-    spotware.streaming.ticks(symbols=[1], callback=lambda df: received.append(df), frame=True, limit=1)
+    spotware.streaming.ticks(symbols=[1], callback=lambda df: received.append(df), frame=True, limit=1, timeout=5)
     assert len(received) == 1
     df = received[0]
     assert len(df) == 1
-    assert df["SecurityUID"][0] == 1
-    assert df["BidPrice"][0] == pytest.approx(1.05)
+    assert df["Symbol"][0] == 1
+    assert df["Bid"][0] == pytest.approx(1.05)
 def test_depth_new_and_deleted_quotes(spotware):
     def fire(request, api):
         api.push(_depth_event(1, new=[(100, 5, 105000, 105010), (101, 10, None, 105015)], deleted=[99]))
@@ -85,14 +85,14 @@ def test_depth_new_and_deleted_quotes(spotware):
     spotware._responses_.append(fire)
     spotware._responses_.append(ProtoOAUnsubscribeDepthQuotesRes())
     received = []
-    spotware.streaming.depth(symbols=1, callback=lambda d: received.append(d), frame=False, limit=1)
+    spotware.streaming.depth(symbols=1, callback=lambda d: received.append(d), frame=False, limit=1, timeout=5)
     assert len(received) == 1
     rows = received[0]
     assert len(rows) == 3
-    by_id = {r["QuoteId"]: r for r in rows}
+    by_id = {r["Quote"]: r for r in rows}
     assert by_id[100]["Action"] == "New"
-    assert by_id[100]["BidPrice"] == pytest.approx(1.05)
-    assert by_id[101]["BidPrice"] is None
+    assert by_id[100]["Bid"] == pytest.approx(1.05)
+    assert by_id[101]["Bid"] is None
     assert by_id[99]["Action"] == "Deleted"
 def test_bars_live_filters_by_period_and_symbol(spotware):
     def fire(request, api):
@@ -110,10 +110,10 @@ def test_bars_live_filters_by_period_and_symbol(spotware):
     spotware._responses_.append(fire)
     spotware._responses_.append(ProtoOAUnsubscribeLiveTrendbarRes())
     received = []
-    spotware.streaming.bars(symbol=1, timeframe="M1", callback=lambda d: received.append(d), frame=False, limit=1)
+    spotware.streaming.bars(symbol=1, timeframe="M1", callback=lambda d: received.append(d), frame=False, limit=1, timeout=5)
     assert len(received) == 1
-    assert received[0]["TimeframeUID"] == "M1"
-    assert received[0]["OpenBidPrice"] == pytest.approx(1.005)
+    assert received[0]["Timeframe"] == "M1"
+    assert received[0]["Open"] == pytest.approx(1.005)
     assert type(spotware._sent_[0]).__name__ == "ProtoOASubscribeLiveTrendbarReq"
 def test_ticks_ignores_unrelated_symbols(spotware):
     def fire(request, api):
@@ -123,6 +123,6 @@ def test_ticks_ignores_unrelated_symbols(spotware):
     spotware._responses_.append(fire)
     spotware._responses_.append(ProtoOAUnsubscribeSpotsRes())
     received = []
-    spotware.streaming.ticks(symbols=[1], callback=lambda d: received.append(d), frame=False, limit=1)
+    spotware.streaming.ticks(symbols=[1], callback=lambda d: received.append(d), frame=False, limit=1, timeout=5)
     assert len(received) == 1
-    assert received[0]["SecurityUID"] == 1
+    assert received[0]["Symbol"] == 1

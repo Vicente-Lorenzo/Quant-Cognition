@@ -1,14 +1,18 @@
 import math
-from datetime import date
+from datetime import date, datetime
 from types import SimpleNamespace
 from Library.Database.Dataframe import pl
 from Library.Statistic.Label import (
     CALMARRATIO,
+    MAXBALANCEDRAWDOWNPERC,
+    MAXHOLDINGTIME,
     NET_TOTAL_AGGREGATED,
+    NET_TOTAL_INDIVIDUAL,
     SHARPERATIO,
     SORTINORATIO,
     STATISTICS_METRICS_LABEL,
-    STERLINGRATIO
+    STERLINGRATIO,
+    TOTALTRADESVALUE
 )
 from Library.Statistic.Metric import (
     calculate_annualized_volatility,
@@ -17,11 +21,13 @@ from Library.Statistic.Metric import (
     equity_curve_ratios
 )
 from Library.Portfolio.Statistic import (
+    _aligned_positions_,
     calculate_drawdown,
     calculate_volatility,
     generate_net_report
 )
 from Library.Portfolio.Position import PositionAPI
+from Library.Portfolio.Trade import TradeAPI
 
 LOG = str(PositionAPI.ID.LogReturn)
 PNL = str(PositionAPI.ID.NetPnL)
@@ -94,3 +100,53 @@ def test_net_report_overrides_total_ratios_with_bar_curve():
     assert abs(_cell_(SORTINORATIO) - 4.0) < 1e-9
     assert abs(_cell_(SHARPERATIO) - 2.0 / 3.0) < 1e-9
     assert abs(_cell_(STERLINGRATIO) - 9.0) < 1e-9
+def _frames_():
+    trades = pl.DataFrame({
+        str(TradeAPI.ID.UID): [1, 2],
+        str(TradeAPI.ID.Position): [10, 10],
+        str(PositionAPI.ID.Direction): ["Buy", "Buy"],
+        str(PositionAPI.ID.Volume): [1000.0, 1000.0],
+        str(PositionAPI.ID.EntryTimestamp): [datetime(2023, 1, 2, 8), datetime(2023, 1, 2, 8)],
+        str(TradeAPI.ID.ExitTimestamp): [datetime(2023, 1, 2, 12), datetime(2023, 1, 2, 20)],
+        str(PositionAPI.ID.EntryPrice): [1.1, 1.1],
+        str(TradeAPI.ID.ExitPrice): [1.12, 1.09],
+        PNL: [50.0, -20.0]
+    })
+    positions = pl.DataFrame({
+        str(PositionAPI.ID.UID): [11],
+        str(PositionAPI.ID.Direction): ["Sell"],
+        str(PositionAPI.ID.Volume): [1000.0],
+        str(PositionAPI.ID.EntryTimestamp): [datetime(2023, 1, 3, 9)],
+        str(PositionAPI.ID.EntryPrice): [1.2],
+        str(TradeAPI.ID.ExitPrice): [None],
+        PNL: [5.0]
+    })
+    return trades, positions
+
+def test_aligned_positions_supplies_the_columns_the_concat_would_drop():
+    trades, positions = _frames_()
+    aligned = _aligned_positions_(positions, trades)
+    assert str(TradeAPI.ID.Position) in aligned.columns
+    assert aligned[str(TradeAPI.ID.Position)].to_list() == [11]
+    assert str(TradeAPI.ID.ExitTimestamp) in aligned.columns
+    assert aligned[str(TradeAPI.ID.ExitTimestamp)].to_list() == [None]
+
+def test_open_position_does_not_disable_aggregation():
+    trades, positions = _frames_()
+    report = generate_net_report(positions, trades, SimpleNamespace(Balance=10000.0), date(2023, 1, 1), date(2023, 2, 1))
+    def _cell_(label, column): return report.filter(pl.col(STATISTICS_METRICS_LABEL) == label)[column].item()
+    assert _cell_(TOTALTRADESVALUE, NET_TOTAL_INDIVIDUAL) == 3.0
+    assert _cell_(TOTALTRADESVALUE, NET_TOTAL_AGGREGATED) == 2.0
+
+def test_balance_drawdown_uses_the_opening_balance_not_the_closing_one():
+    trades = pl.DataFrame({str(PositionAPI.ID.Direction): ["Buy", "Buy"], PNL: [-3000.0, 0.0]})
+    empty = pl.DataFrame()
+    report = generate_net_report(empty, trades, SimpleNamespace(Balance=7000.0), date(2023, 1, 1), date(2024, 1, 1), [10000.0, 7000.0])
+    percentage = report.filter(pl.col(STATISTICS_METRICS_LABEL) == MAXBALANCEDRAWDOWNPERC)[NET_TOTAL_INDIVIDUAL].item()
+    assert abs(percentage - 30.0) < 1e-9
+
+def test_holding_time_measures_entry_to_exit_with_a_position_open():
+    trades, positions = _frames_()
+    report = generate_net_report(positions, trades, SimpleNamespace(Balance=10000.0), date(2023, 1, 1), date(2023, 2, 1))
+    maximum = report.filter(pl.col(STATISTICS_METRICS_LABEL) == MAXHOLDINGTIME)[NET_TOTAL_INDIVIDUAL].item()
+    assert maximum < 30.0

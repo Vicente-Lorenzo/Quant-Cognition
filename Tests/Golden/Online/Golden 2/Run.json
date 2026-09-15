@@ -1,0 +1,21 @@
+{
+  "System": "Simulation",
+  "Strategy": "Trend",
+  "Provider": "Spotware",
+  "Ticker": "USDJPY",
+  "Timeframe": "Hour",
+  "Description": "Golden 2",
+  "StartedAt": "2026-09-10T19:18:56.378745",
+  "Command": "Simulation --console Debug --file Debug --storage Warning --strategy Trend --provider Spotware --ticker USDJPY --timeframe Hour --iid 9fad9278-09d1-4865-87a7-926b201aeaa7 --database Quant --report --export --profile --description Golden 2",
+  "Parameters": {
+    "Realtime": [
+      "Defaults"
+    ]
+  },
+  "Scope": [
+    "Spotware(cTrader)",
+    "Forex(Major)",
+    "USDJPY",
+    "H1"
+  ]
+}

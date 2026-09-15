@@ -3,6 +3,7 @@ import pytest
 from datetime import datetime, timezone
 import Library.Market
 import Library.Portfolio
+from Library.Portfolio.Order import TimeInForce
 from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOAExecutionEvent,
     ProtoOAOrderErrorEvent,
@@ -21,7 +22,7 @@ def _execution(order_id: Union[int, None] = None, position_id: Union[int, None] 
     return ev
 def test_market_order_buy_sends_correct_request(spotware):
     spotware._responses_.append(_execution(order_id=11, position_id=101, deal_id=201))
-    df = spotware.execution.market_order("BUY", symbol=1, volume=1000)
+    df = spotware.execution.market_order("BUY", symbol=1, volume=10)
     sent = spotware._sent_[0]
     assert type(sent).__name__ == "ProtoOANewOrderReq"
     assert sent.orderType == 1
@@ -33,7 +34,7 @@ def test_market_order_buy_sends_correct_request(spotware):
     assert df["DealID"][0] == 201
 def test_market_buy_order_delegates(spotware):
     spotware._responses_.append(_execution(order_id=12))
-    spotware.execution.market_buy_order(symbol=2, volume=500)
+    spotware.execution.market_buy_order(symbol=2, volume=5)
     sent = spotware._sent_[0]
     assert sent.orderType == 1
     assert sent.tradeSide == 1
@@ -41,7 +42,7 @@ def test_market_buy_order_delegates(spotware):
     assert sent.volume == 500
 def test_market_sell_order_delegates(spotware):
     spotware._responses_.append(_execution(order_id=13))
-    spotware.execution.market_sell_order(symbol=3, volume=750)
+    spotware.execution.market_sell_order(symbol=3, volume=7.5)
     sent = spotware._sent_[0]
     assert sent.orderType == 1
     assert sent.tradeSide == 2
@@ -63,7 +64,7 @@ def test_range_sell_order_sets_sell_side(spotware):
     assert sent.tradeSide == 2
 def test_limit_buy_order_sends_limit_price_and_tif(spotware):
     spotware._responses_.append(_execution(order_id=21))
-    spotware.execution.limit_buy_order(symbol=1, volume=1000, price=1.1, time_in_force="GTC")
+    spotware.execution.limit_buy_order(symbol=1, volume=1000, price=1.1, time_in_force="GoodTillCancel")
     sent = spotware._sent_[0]
     assert sent.orderType == 2
     assert sent.tradeSide == 1
@@ -72,7 +73,7 @@ def test_limit_buy_order_sends_limit_price_and_tif(spotware):
 def test_limit_sell_order_with_expiration(spotware):
     spotware._responses_.append(_execution(order_id=22))
     expiration = datetime(2030, 1, 1, tzinfo=timezone.utc)
-    spotware.execution.limit_sell_order(symbol=1, volume=1000, price=1.2, time_in_force="GTD", expiration=expiration)
+    spotware.execution.limit_sell_order(symbol=1, volume=1000, price=1.2, time_in_force=TimeInForce.GoodTillDate, expiration=expiration)
     sent = spotware._sent_[0]
     assert sent.orderType == 2
     assert sent.tradeSide == 2
@@ -107,12 +108,14 @@ def test_stop_limit_sell_order_sets_sell_side(spotware):
     sent = spotware._sent_[0]
     assert sent.orderType == 6
     assert sent.tradeSide == 2
-def test_market_order_passes_sl_tp_and_flags(spotware):
+def test_market_order_passes_relative_sl_tp_and_flags(spotware):
     spotware._responses_.append(_execution(order_id=51))
-    spotware.execution.market_order("BUY", symbol=1, volume=1000, stop_loss=1.0, take_profit=1.5, label="L", comment="C", client_order_id="CID", trailing=True, guaranteed=True)
+    spotware.execution.market_order("BUY", symbol=1, volume=10, relative_stop_loss=0.005, relative_take_profit=0.01, label="L", comment="C", client_order_id="CID", trailing=True, guaranteed=True)
     sent = spotware._sent_[0]
-    assert sent.stopLoss == pytest.approx(1.0)
-    assert sent.takeProfit == pytest.approx(1.5)
+    assert sent.relativeStopLoss == 500
+    assert sent.relativeTakeProfit == 1000
+    assert not sent.HasField("stopLoss")
+    assert not sent.HasField("takeProfit")
     assert sent.label == "L"
     assert sent.comment == "C"
     assert sent.clientOrderId == "CID"
@@ -120,7 +123,7 @@ def test_market_order_passes_sl_tp_and_flags(spotware):
     assert sent.guaranteedStopLoss is True
 def test_modify_order_sends_amend_request(spotware):
     spotware._responses_.append(_execution(order_id=61))
-    spotware.execution.modify_order(order=61, volume=2000, limit_price=1.25, stop_loss=1.0, take_profit=1.5, trailing=True)
+    spotware.execution.modify_order(order=61, volume=20, limit_price=1.25, stop_loss=1.0, take_profit=1.5, trailing=True)
     sent = spotware._sent_[0]
     assert type(sent).__name__ == "ProtoOAAmendOrderReq"
     assert sent.orderId == 61
@@ -129,20 +132,6 @@ def test_modify_order_sends_amend_request(spotware):
     assert sent.stopLoss == pytest.approx(1.0)
     assert sent.takeProfit == pytest.approx(1.5)
     assert sent.trailingStopLoss is True
-def test_modify_buy_order_delegates(spotware):
-    spotware._responses_.append(_execution(order_id=62))
-    spotware.execution.modify_buy_order(order=62, volume=1500)
-    sent = spotware._sent_[0]
-    assert type(sent).__name__ == "ProtoOAAmendOrderReq"
-    assert sent.orderId == 62
-    assert sent.volume == 1500
-def test_modify_sell_order_delegates(spotware):
-    spotware._responses_.append(_execution(order_id=63))
-    spotware.execution.modify_sell_order(order=63, stop_price=1.15)
-    sent = spotware._sent_[0]
-    assert type(sent).__name__ == "ProtoOAAmendOrderReq"
-    assert sent.orderId == 63
-    assert sent.stopPrice == pytest.approx(1.15)
 def test_close_order_sends_cancel_request(spotware):
     spotware._responses_.append(_execution(order_id=71))
     df = spotware.execution.close_order(order=71)
@@ -150,16 +139,6 @@ def test_close_order_sends_cancel_request(spotware):
     assert type(sent).__name__ == "ProtoOACancelOrderReq"
     assert sent.orderId == 71
     assert df["OrderID"][0] == 71
-def test_close_buy_order_delegates(spotware):
-    spotware._responses_.append(_execution(order_id=72))
-    spotware.execution.close_buy_order(order=72)
-    assert type(spotware._sent_[0]).__name__ == "ProtoOACancelOrderReq"
-    assert spotware._sent_[0].orderId == 72
-def test_close_sell_order_delegates(spotware):
-    spotware._responses_.append(_execution(order_id=73))
-    spotware.execution.close_sell_order(order=73)
-    assert type(spotware._sent_[0]).__name__ == "ProtoOACancelOrderReq"
-    assert spotware._sent_[0].orderId == 73
 def test_modify_position_sends_amend_sltp_request(spotware):
     spotware._responses_.append(_execution(position_id=81))
     spotware.execution.modify_position(position=81, stop_loss=1.0, take_profit=1.5, trailing=True)
@@ -169,39 +148,15 @@ def test_modify_position_sends_amend_sltp_request(spotware):
     assert sent.stopLoss == pytest.approx(1.0)
     assert sent.takeProfit == pytest.approx(1.5)
     assert sent.trailingStopLoss is True
-def test_modify_buy_position_delegates(spotware):
-    spotware._responses_.append(_execution(position_id=82))
-    spotware.execution.modify_buy_position(position=82, stop_loss=1.0)
-    assert type(spotware._sent_[0]).__name__ == "ProtoOAAmendPositionSLTPReq"
-    assert spotware._sent_[0].positionId == 82
-def test_modify_sell_position_delegates(spotware):
-    spotware._responses_.append(_execution(position_id=83))
-    spotware.execution.modify_sell_position(position=83, take_profit=1.5)
-    assert type(spotware._sent_[0]).__name__ == "ProtoOAAmendPositionSLTPReq"
-    assert spotware._sent_[0].positionId == 83
 def test_close_position_sends_close_request(spotware):
     spotware._responses_.append(_execution(position_id=91, deal_id=301))
-    df = spotware.execution.close_position(position=91, volume=1000)
+    df = spotware.execution.close_position(position=91, volume=10)
     sent = spotware._sent_[0]
     assert type(sent).__name__ == "ProtoOAClosePositionReq"
     assert sent.positionId == 91
     assert sent.volume == 1000
     assert df["PositionID"][0] == 91
     assert df["DealID"][0] == 301
-def test_close_buy_position_delegates(spotware):
-    spotware._responses_.append(_execution(position_id=92))
-    spotware.execution.close_buy_position(position=92, volume=500)
-    sent = spotware._sent_[0]
-    assert type(sent).__name__ == "ProtoOAClosePositionReq"
-    assert sent.positionId == 92
-    assert sent.volume == 500
-def test_close_sell_position_delegates(spotware):
-    spotware._responses_.append(_execution(position_id=93))
-    spotware.execution.close_sell_position(position=93, volume=250)
-    sent = spotware._sent_[0]
-    assert type(sent).__name__ == "ProtoOAClosePositionReq"
-    assert sent.positionId == 93
-    assert sent.volume == 250
 def test_execution_frame_captures_order_error(spotware):
     err = ProtoOAOrderErrorEvent()
     err.ctidTraderAccountId = 123
@@ -259,7 +214,7 @@ def test_market_order_batches_symbols_and_volumes(spotware):
     spotware._responses_.append(_execution(order_id=101, position_id=201, deal_id=301))
     spotware._responses_.append(_execution(order_id=102, position_id=202, deal_id=302))
     spotware._responses_.append(_execution(order_id=103, position_id=203, deal_id=303))
-    df = spotware.execution.market_order("BUY", symbol=[1, 2, 3], volume=[1000, 2000, 3000])
+    df = spotware.execution.market_order("BUY", symbol=[1, 2, 3], volume=[10, 20, 30])
     assert len(df) == 3
     assert len(spotware._sent_) == 3
     assert [s.symbolId for s in spotware._sent_] == [1, 2, 3]
@@ -269,7 +224,7 @@ def test_market_order_batches_symbols_and_volumes(spotware):
 def test_market_order_broadcasts_scalars_against_sequence(spotware):
     spotware._responses_.append(_execution(order_id=111))
     spotware._responses_.append(_execution(order_id=112))
-    spotware.execution.market_order(side=["BUY", "SELL"], symbol=5, volume=1000)
+    spotware.execution.market_order(side=["BUY", "SELL"], symbol=5, volume=10)
     assert len(spotware._sent_) == 2
     assert [s.tradeSide for s in spotware._sent_] == [1, 2]
     assert [s.symbolId for s in spotware._sent_] == [5, 5]
@@ -280,14 +235,14 @@ def test_batch_mismatched_lengths_raises(spotware):
 def test_limit_order_batches_prices_and_tif(spotware):
     spotware._responses_.append(_execution(order_id=121))
     spotware._responses_.append(_execution(order_id=122))
-    spotware.execution.limit_order(side="BUY", symbol=[1, 2], volume=[500, 600], price=[1.1, 1.2])
+    spotware.execution.limit_order(side="BUY", symbol=[1, 2], volume=[5, 6], price=[1.1, 1.2])
     assert len(spotware._sent_) == 2
     assert [s.limitPrice for s in spotware._sent_] == pytest.approx([1.1, 1.2])
     assert [s.volume for s in spotware._sent_] == [500, 600]
 def test_modify_order_batches(spotware):
     spotware._responses_.append(_execution(order_id=131))
     spotware._responses_.append(_execution(order_id=132))
-    spotware.execution.modify_order(order=[131, 132], volume=[1500, 2500])
+    spotware.execution.modify_order(order=[131, 132], volume=[15, 25])
     assert len(spotware._sent_) == 2
     assert all(type(s).__name__ == "ProtoOAAmendOrderReq" for s in spotware._sent_)
     assert [s.orderId for s in spotware._sent_] == [131, 132]
@@ -340,7 +295,7 @@ def test_close_position_resolves_full_volume_when_missing(spotware):
 def test_close_position_batches_ids_and_volumes(spotware):
     spotware._responses_.append(_execution(position_id=421, deal_id=701))
     spotware._responses_.append(_execution(position_id=422, deal_id=702))
-    spotware.execution.close_position(position=[421, 422], volume=[500, 1500])
+    spotware.execution.close_position(position=[421, 422], volume=[5, 15])
     assert len(spotware._sent_) == 2
     assert all(type(s).__name__ == "ProtoOAClosePositionReq" for s in spotware._sent_)
     assert [s.positionId for s in spotware._sent_] == [421, 422]

@@ -658,12 +658,23 @@ def equity_metrics(initial_balance: float, deals: pl.DataFrame) -> dict:
         MEANEQUITYRUNUPPERC: (mean_ru / trough) * 100.0 if trough else 0.0
     }
 
+def _aligned_positions_(positions: pl.DataFrame, trades: pl.DataFrame) -> pl.DataFrame:
+    uid = str(PositionAPI.ID.UID)
+    position = str(TradeAPI.ID.Position)
+    exit_timestamp = str(TradeAPI.ID.ExitTimestamp)
+    if position in trades.columns and position not in positions.columns and uid in positions.columns:
+        positions = positions.with_columns(pl.col(uid).cast(trades.schema[position]).alias(position))
+    if exit_timestamp in trades.columns and exit_timestamp not in positions.columns:
+        positions = positions.with_columns(pl.lit(None).cast(trades.schema[exit_timestamp]).alias(exit_timestamp))
+    return positions
+
 def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, account: Union[AccountAPI, None], start: date, stop: date, equity_curve: Union[list, None] = None, excursions: Union[dict, None] = None, risk_free: float = 0.0) -> pl.DataFrame:
-    initial_balance = (account.Balance if account is not None else 0.0) or 0.0
+    initial_balance = (equity_curve[0] if equity_curve else None) or (account.Balance if account is not None else 0.0) or 0.0
     safe_positions = _safe_df_(positions_df)
     safe_trades = _safe_df_(trades_df)
     if not safe_trades.is_empty() and not safe_positions.is_empty():
-        common_cols = list(set(safe_trades.columns).intersection(safe_positions.columns))
+        safe_positions = _aligned_positions_(safe_positions, safe_trades)
+        common_cols = [column for column in safe_trades.columns if column in safe_positions.columns]
         net_df = pl.concat([safe_trades.select(common_cols), safe_positions.select(common_cols)], how="vertical_relaxed")
     elif not safe_trades.is_empty():
         net_df = safe_trades

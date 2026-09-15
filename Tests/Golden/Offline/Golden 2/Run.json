@@ -1,0 +1,22 @@
+{
+  "System": "Backtesting",
+  "Strategy": "Trend",
+  "Provider": "Spotware",
+  "Ticker": "USDJPY",
+  "Timeframe": "Hour",
+  "Start": "2023-01-01",
+  "Stop": "2024-01-01",
+  "StartedAt": "2026-09-11T16:55:08.314554",
+  "Command": "Backtesting --strategy Trend --provider Spotware --ticker USDJPY --timeframe Hour --start 2023-01-01 --stop 2024-01-01 --account-asset EUR --account-balance 10000 --account-leverage 30 --spread-type Auto --commission-type Auto --swap-type Auto --console Warning --file Warning --storage Warning --export --run C:\\Users\\Admin\\AppData\\Local\\cAlgo\\Data\\Runs\\Offline Golden 2",
+  "Parameters": {
+    "Backtesting": [
+      "Defaults"
+    ]
+  },
+  "Scope": [
+    "Spotware(cTrader)",
+    "Forex(Major)",
+    "USDJPY",
+    "H1"
+  ]
+}

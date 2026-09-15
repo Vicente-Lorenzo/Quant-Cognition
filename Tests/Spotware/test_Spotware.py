@@ -1,7 +1,11 @@
 import pytest
+from datetime import datetime, timedelta, timezone
 import Library.Market
 import Library.Portfolio
+from Library.Portfolio.Order import OrderStatus, TimeInForce
 from Library.Spotware import SpotwareAPI, UniverseAPI, MarketAPI, StreamingAPI, PortfolioAPI
+from ctrader_open_api.messages.OpenApiCommonMessages_pb2 import ProtoMessage
+from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOAOrder, ProtoOAOrderType, ProtoOAQuoteType, ProtoOATimeInForce, ProtoOATrader
 from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOAApplicationAuthRes,
     ProtoOAAccountAuthRes,
@@ -58,29 +62,46 @@ def test_authenticate_skips_account_without_credentials(spotware):
     assert spotware._app_authed_ is True
     assert spotware._account_authed_ is False
     assert len(spotware._sent_) == 1
-@pytest.mark.skip(reason="Hangs during execution")
-def test_send_raises_on_error_payload():
-    from ctrader_open_api.messages.OpenApiCommonMessages_pb2 import ProtoMessage
-    class _Reactor:
-        pass
+def test_send_raises_on_error_payload(monkeypatch):
     api = SpotwareAPI(client_id="x", client_secret="y")
-    api._reactor_ = _Reactor()
-    class _Conn:
-        def send(self, request, responseTimeoutInSeconds=None):
-            pass
-    api._connection_ = _Conn()
-    err = ProtoOAErrorRes(errorCode="BAD", description="nope")
-    wrapped = ProtoMessage(payloadType=err.payloadType, payload=err.SerializeToString())
-    from twisted.internet import threads as _threads
-    original = _threads.blockingCallFromThread
-    _threads.blockingCallFromThread = lambda reactor, f, *args, **kwargs: wrapped
-    try:
-        with pytest.raises(RuntimeError) as exc:
-            api._send_(object())
-        assert "BAD" in str(exc.value)
-        assert "nope" in str(exc.value)
-    finally:
-        _threads.blockingCallFromThread = original
+    api._connection_ = type("Connection", (), {"send": None})()
+    error = ProtoOAErrorRes(errorCode="BAD", description="nope")
+    wrapped = ProtoMessage(payloadType=error.payloadType, payload=error.SerializeToString())
+    monkeypatch.setattr("Library.Spotware.Spotware.blockingCallFromThread", lambda reactor, function, *args, **kwargs: wrapped)
+    with pytest.raises(RuntimeError, match="BAD · nope"):
+        api._send_(object())
+def test_disconnect_does_not_block_without_a_running_reactor():
+    api = SpotwareAPI(client_id="x", client_secret="y")
+    api._connection_ = object()
+    api.disconnect()
+    assert api.disconnected() is True
+def test_message_stamps_the_account_only_where_the_field_exists(spotware):
+    assert spotware._message_("ProtoOATraderReq").ctidTraderAccountId == 123
+    assert spotware._message_("ProtoOAApplicationAuthReq", clientId="c", clientSecret="s").clientId == "c"
+def test_code_resolves_wire_names_framework_members_and_integers():
+    assert SpotwareAPI._code_(ProtoOAQuoteType, "BID") == 1
+    assert SpotwareAPI._code_(ProtoOAQuoteType, "ask") == 2
+    assert SpotwareAPI._code_(ProtoOAQuoteType, 2) == 2
+    assert SpotwareAPI._code_(ProtoOAOrderType, "StopLimit") == 6
+    assert SpotwareAPI._code_(ProtoOATimeInForce, TimeInForce.GoodTillCancel) == 2
+    with pytest.raises(ValueError, match="Not a member"):
+        SpotwareAPI._code_(ProtoOAQuoteType, "Mid")
+def test_named_strips_the_shared_prefix_and_matches_framework_enums():
+    order = ProtoOAOrder(orderType=5, orderStatus=5)
+    assert SpotwareAPI._named_(order, "orderType") == "MarketRange"
+    assert OrderStatus[SpotwareAPI._named_(order, "orderStatus")] is OrderStatus.Cancelled
+    assert SpotwareAPI._named_(order, "timeInForce") is None
+def test_epoch_is_exact_integer_milliseconds_in_utc():
+    assert SpotwareAPI._epoch_(datetime(2020, 1, 1)) == 1577836800000
+    assert SpotwareAPI._epoch_(datetime(2020, 1, 1, tzinfo=timezone.utc)) == 1577836800000
+    assert SpotwareAPI._epoch_(datetime(2020, 1, 1, 1, tzinfo=timezone(timedelta(hours=1)))) == 1577836800000
+    assert SpotwareAPI._epoch_(datetime(2020, 1, 1, 0, 0, 0, 123000)) == 1577836800123
+    assert SpotwareAPI._stamp_(1577836800123) == datetime(2020, 1, 1, 0, 0, 0, 123000)
+    assert SpotwareAPI._stamp_(0) is None
+def test_money_honours_zero_money_digits():
+    assert SpotwareAPI._money_(ProtoOATrader(moneyDigits=0)) == 1
+    assert SpotwareAPI._money_(ProtoOATrader(moneyDigits=8)) == 10 ** 8
+    assert SpotwareAPI._money_(ProtoOATrader()) == 100
 def test_subscribe_and_unsubscribe_handlers(spotware):
     received = []
     def handler(msg): received.append(msg)

@@ -1,0 +1,21 @@
+{
+  "System": "Simulation",
+  "Strategy": "Trend",
+  "Provider": "Spotware",
+  "Ticker": "EURUSD",
+  "Timeframe": "Hour",
+  "Description": "Golden 3",
+  "StartedAt": "2026-09-10T19:22:57.559764",
+  "Command": "Simulation --console Debug --file Debug --storage Warning --strategy Trend --provider Spotware --ticker EURUSD --timeframe Hour --iid 9fad9278-09d1-4865-87a7-926b201aeaa7 --database Quant --report --export --profile --description Golden 3",
+  "Parameters": {
+    "Realtime": [
+      "Defaults"
+    ]
+  },
+  "Scope": [
+    "Spotware(cTrader)",
+    "Forex(Major)",
+    "EURUSD",
+    "H1"
+  ]
+}

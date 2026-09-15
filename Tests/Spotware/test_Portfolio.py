@@ -39,6 +39,7 @@ def test_account_scales_balance_by_money_digits(spotware):
     t.nonWithdrawableBonus = 0
     t.swapFree = False
     t.leverageInCents = 10000
+    t.accountType = 0
     t.totalMarginCalculationType = 0
     t.maxLeverage = 30000
     t.frenchRisk = False
@@ -97,7 +98,7 @@ def test_position_filters_by_id(spotware):
     df = spotware.portfolio.position(id=222)
     assert len(df) == 1
     assert df["PositionID"][0] == 222
-    assert df["SecurityUID"][0] == 2
+    assert df["Symbol"][0] == 2
     assert df["Direction"][0] == "Sell"
     assert type(spotware._sent_[0]).__name__ == "ProtoOAReconcileReq"
 def test_positions_parses_reconcile(spotware):
@@ -126,9 +127,9 @@ def test_positions_parses_reconcile(spotware):
     df = spotware.portfolio.positions()
     assert len(df) == 1
     assert df["PositionID"][0] == 555
-    assert df["SecurityUID"][0] == 1
+    assert df["Symbol"][0] == 1
     assert df["Direction"][0] == "Buy"
-    assert df["Volume"][0] == 10000
+    assert df["Volume"][0] == pytest.approx(100.0)
     assert df["EntryPrice"][0] == pytest.approx(1.05)
     assert df["CommissionPnL"][0] == pytest.approx(-2.0)
     assert df["UsedMargin"][0] == pytest.approx(500.0)
@@ -153,7 +154,7 @@ def test_order_fetches_single_by_id(spotware):
     df = spotware.portfolio.order(id=42)
     assert len(df) == 1
     assert df["OrderID"][0] == 42
-    assert df["SecurityUID"][0] == 3
+    assert df["Symbol"][0] == 3
     assert df["Direction"][0] == "Buy"
     sent = spotware._sent_[0]
     assert type(sent).__name__ == "ProtoOAOrderDetailsReq"
@@ -179,7 +180,7 @@ def test_orders_pending_via_reconcile(spotware):
     df = spotware.portfolio.orders()
     assert len(df) == 1
     assert df["OrderID"][0] == 1
-    assert df["SecurityUID"][0] == 5
+    assert df["Symbol"][0] == 5
     assert df["Direction"][0] == "Sell"
     assert type(spotware._sent_[0]).__name__ == "ProtoOAReconcileReq"
 def test_orders_historical_with_range(spotware):
@@ -265,7 +266,7 @@ def test_trade_filters_single_closing_deal_by_id(spotware):
     assert len(df) == 1
     assert df["TradeID"][0] == 801
     assert df["PositionID"][0] == 778
-    assert df["SecurityUID"][0] == 2
+    assert df["Symbol"][0] == 2
     assert df["Direction"][0] == "Sell"
     sent = spotware._sent_[0]
     assert type(sent).__name__ == "ProtoOADealListReq"
@@ -321,7 +322,7 @@ def test_trades_filters_to_closing_deals(spotware):
     assert len(df) == 1
     assert df["TradeID"][0] == 700
     assert df["PositionID"][0] == 555
-    assert df["SecurityUID"][0] == 1
+    assert df["Symbol"][0] == 1
     assert df["Direction"][0] == "Sell"
     assert df["EntryPrice"][0] == pytest.approx(1.04)
     assert df["ExitPrice"][0] == pytest.approx(1.05)
@@ -366,5 +367,5 @@ def test_cashflow_parses_entries(spotware):
     assert len(df) == 1
     assert df["Balance"][0] == pytest.approx(1000.0)
     assert df["Delta"][0] == pytest.approx(500.0)
-    assert df["OperationType"][0] == 1
+    assert df["OperationType"][0] == "Withdraw"
     assert type(spotware._sent_[0]).__name__ == "ProtoOACashFlowHistoryListReq"

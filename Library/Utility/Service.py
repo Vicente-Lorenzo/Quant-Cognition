@@ -47,7 +47,7 @@ class ServiceAPI(ABC):
             if not self.guarded():
                 self._guard_ = self.disconnect
                 try: atexit.register(self._guard_)
-                except: pass
+                except Exception: pass
             timer.stop()
             self._log_.info(lambda: f"Connect Operation: Connected ({timer.result()})")
             return self
@@ -80,7 +80,7 @@ class ServiceAPI(ABC):
             timer.stop()
             if self.guarded():
                 try: atexit.unregister(self._guard_)
-                except: pass
+                except Exception: pass
                 self._guard_ = None
             self._log_.info(lambda: f"Disconnect Operation: Disconnected ({timer.result()})")
             return self
@@ -100,7 +100,7 @@ class ServiceAPI(ABC):
 
     def __del__(self):
         try: self.disconnect()
-        except: pass
+        except Exception: pass
 
     def _fetch_(self, callback: Callable, abort: Callable = None):
         timer = Timer()

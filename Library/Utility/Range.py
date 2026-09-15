@@ -45,7 +45,7 @@ class RangeAPI:
         found = cls._PATTERN_.match(value)
         if found is None: return None
         low, high, step = (Decimal(part) if part is not None else None for part in found.groups())
-        if high < low: return None
+        if high < low: raise ValueError(f"Range {value!r}: Failed · High below Low")
         return cls(Low=cls._number_(low), High=cls._number_(high), Step=cls._number_(step) if step else 1)
 
     def ladder(self) -> tuple:

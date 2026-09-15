@@ -1,0 +1,22 @@
+{
+  "System": "Backtesting",
+  "Strategy": "Trend",
+  "Provider": "Spotware",
+  "Ticker": "EURUSD",
+  "Timeframe": "Daily",
+  "Start": "2015-01-01",
+  "Stop": "2026-01-01",
+  "StartedAt": "2026-09-11T16:55:27.122150",
+  "Command": "Backtesting --strategy Trend --provider Spotware --ticker EURUSD --timeframe Daily --start 2015-01-01 --stop 2026-01-01 --account-asset EUR --account-balance 10000 --account-leverage 30 --spread-type Auto --commission-type Auto --swap-type Auto --console Warning --file Warning --storage Warning --export --run C:\\Users\\Admin\\AppData\\Local\\cAlgo\\Data\\Runs\\Offline Golden 5",
+  "Parameters": {
+    "Backtesting": [
+      "Defaults"
+    ]
+  },
+  "Scope": [
+    "Spotware(cTrader)",
+    "Forex(Major)",
+    "EURUSD",
+    "D1"
+  ]
+}

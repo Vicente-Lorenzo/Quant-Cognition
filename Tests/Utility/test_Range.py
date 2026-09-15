@@ -23,9 +23,13 @@ def test_parse_accepts_both_separators(text, expected):
     parsed = RangeAPI.parse(text)
     assert (parsed.Low, parsed.High, parsed.Step) == expected
 
-@pytest.mark.parametrize("text", ["SMA", "50-5", "", "Auto", "5:5"])
+@pytest.mark.parametrize("text", ["SMA", "", "Auto", "5:5"])
 def test_parse_rejects_anything_that_is_not_a_range(text):
     assert RangeAPI.parse(text) is None
+
+def test_parse_refuses_an_inverted_range_by_name():
+    with pytest.raises(ValueError, match="50-5"):
+        RangeAPI.parse("50-5")
 
 def test_parse_is_idempotent():
     parsed = RangeAPI.parse("5-50:5")

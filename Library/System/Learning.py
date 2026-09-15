@@ -30,7 +30,7 @@ from Library.System.Backtesting import BacktestingAPI, DatasetAPI
 from Library.System.Selection import ElectionMode, SelectionMode, elect, select
 from Library.Utility.Enumeration import EnumerationAPI
 from Library.Universe.Contract import CommissionType, SpreadType, SwapType
-from Library.Utility.IO import mkdir, write_json
+from Library.Utility.IO import mkdir, remove, write_json
 from Library.Utility.Parameter import Parameter
 from Library.Utility.Progress import ProgressAPI
 from Library.Utility.Profiler import timer
@@ -270,7 +270,7 @@ class LearningAPI(BacktestingAPI):
     @classmethod
     def _stash_(cls, directory: Path, label: str) -> Path:
         target = directory / label
-        if target.exists(): shutil.rmtree(target)
+        remove(target)
         mkdir(target)
         for item in directory.iterdir():
             if item.is_dir() and not item.name.startswith(cls._RESERVED_): shutil.copytree(item, target / item.name)
@@ -286,7 +286,7 @@ class LearningAPI(BacktestingAPI):
         if not source.is_dir(): return False
         for item in source.iterdir():
             target = directory / item.name
-            if target.exists(): shutil.rmtree(target)
+            remove(target)
             shutil.copytree(item, target)
         return True
 
@@ -451,7 +451,7 @@ class LearningAPI(BacktestingAPI):
                     self._revive_(directory, f"Episode {episode}")
                     self._log_.info(lambda e=episode, m=self._selection_: f"Episode Learning: Selected · {m.name} · Episode {e}")
                 for spent in directory.glob("Episode *"):
-                    shutil.rmtree(spent, ignore_errors=True)
+                    remove(spent)
             fold_metrics.append(best_validation)
             fold_returns.append(best_return)
             if validation_window is not None:

@@ -1,5 +1,5 @@
 from typing import Final, Union
-from datetime import datetime, date, time, timedelta
+from datetime import datetime, date, time, timedelta, timezone, tzinfo
 from dateutil.relativedelta import relativedelta, weekday
 
 from Library.Utility.Enumeration import EnumerationAPI
@@ -25,7 +25,8 @@ def datetime_to_string(dt: Union[datetime, date, time], fmt: str) -> str:
 def string_to_datetime(date_str: str, fmt_str: str) -> datetime:
     return datetime.strptime(date_str, fmt_str)
 
-def datetime_to_timestamp(dt: Union[datetime, date, time], milliseconds: bool = False) -> float:
+def datetime_to_timestamp(dt: Union[datetime, date, time], milliseconds: bool = False, zone: Union[tzinfo, None] = None) -> float:
+    if isinstance(dt, datetime) and dt.tzinfo is None: dt = dt.replace(tzinfo=zone or timezone.utc)
     ts = dt.timestamp()
     return ts * 1000 if milliseconds else ts
 
@@ -35,8 +36,9 @@ def datetime_to_epoch(dt: datetime, epoch: datetime = EPOCH, unit: timedelta = M
 def epoch_to_datetime(value: int, epoch: datetime = EPOCH, unit: timedelta = MILLISECOND) -> datetime:
     return epoch + value * unit
 
-def timestamp_to_datetime(ts: float, milliseconds: bool = False) -> datetime:
-    return datetime.fromtimestamp(ts / 1000 if milliseconds else ts)
+def timestamp_to_datetime(ts: float, milliseconds: bool = False, zone: Union[tzinfo, None] = None) -> datetime:
+    stamp = datetime.fromtimestamp(ts / 1000 if milliseconds else ts, tz=timezone.utc)
+    return stamp.replace(tzinfo=None) if zone is None else stamp.astimezone(zone)
 
 def datetime_to_iso(dt: datetime) -> str:
     return dt.isoformat()
@@ -86,8 +88,12 @@ def seconds_to_clock(seconds: Union[int, float, None]) -> str:
     minutes, seconds = divmod(remainder, 60)
     return f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes:02d}:{seconds:02d}"
 
+def utc_now(zone: Union[tzinfo, None] = None) -> datetime:
+    stamp = datetime.now(tz=timezone.utc)
+    return stamp.replace(tzinfo=None) if zone is None else stamp.astimezone(zone)
+
 def weekday_shift_datetime(wd: Weekday, shift: int, today: Union[datetime, None] = None) -> datetime:
-    today = today if today is not None else datetime.today()
+    today = today if today is not None else utc_now()
     shift = shift - 1 if today.weekday() > wd.value else shift
     return today + relativedelta(weekday=weekday(wd.value)(shift))
 

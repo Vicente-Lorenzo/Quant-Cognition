@@ -1,3 +1,4 @@
+import pytest
 import Library.Market
 import Library.Portfolio
 from ctrader_open_api.messages.OpenApiMessages_pb2 import (
@@ -30,8 +31,8 @@ def test_tickers_parses_light_symbols(spotware):
     spotware._responses_.append(res)
     df = spotware.universe.tickers()
     assert len(df) == 2
-    assert df["SecurityUID"].to_list() == [1, 2]
-    assert df["TickerUID"].to_list() == ["EURUSD", "GBPUSD"]
+    assert df["Symbol"].to_list() == [1, 2]
+    assert df["Ticker"].to_list() == ["EURUSD", "GBPUSD"]
     sent = spotware._sent_[0]
     assert type(sent).__name__ == "ProtoOASymbolsListReq"
     assert sent.ctidTraderAccountId == 123
@@ -44,7 +45,7 @@ def test_tickers_includes_archived_when_flag_set(spotware):
     spotware._responses_.append(res)
     df = spotware.universe.tickers(archived=True)
     assert len(df) == 2
-    assert set(df["SecurityUID"].to_list()) == {1, 99}
+    assert set(df["Symbol"].to_list()) == {1, 99}
     assert spotware._sent_[0].includeArchivedSymbols is True
 def test_tickers_empty_response(spotware):
     spotware._responses_.append(ProtoOASymbolsListRes())
@@ -67,10 +68,12 @@ def test_ticker_detail_fetch(spotware):
     spotware._responses_.append(res)
     df = spotware.universe.ticker(ids=1)
     assert len(df) == 1
-    assert df["SecurityUID"][0] == 1
+    assert df["Symbol"][0] == 1
     assert df["Digits"][0] == 5
     assert df["PipPosition"][0] == 4
-    assert df["LotSize"][0] == 100000
+    assert df["LotSize"][0] == pytest.approx(1000.0)
+    assert df["MinVolume"][0] == pytest.approx(10.0)
+    assert df["CommissionType"][0] == "UsdPerMillionUsd"
     sent = spotware._sent_[0]
     assert list(sent.symbolId) == [1]
 def test_ticker_detail_multiple_ids(spotware):

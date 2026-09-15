@@ -8,7 +8,7 @@ from datetime import datetime
 from time import perf_counter
 from dataclasses import dataclass, field
 
-from Library.Utility.Datetime import datetime_to_string, seconds_to_string
+from Library.Utility.Datetime import datetime_to_string, seconds_to_string, utc_now
 
 @dataclass(kw_only=True)
 class Timer:
@@ -49,7 +49,7 @@ def profiler(func: Callable, destination=True):
         from Library.Logging import LoggingAPI
         from Library.Utility.Path import inspect_destination
         log = LoggingAPI()
-        timestamp = datetime_to_string(datetime.now(), "%Y%m%d-%H%M%S")
+        timestamp = datetime_to_string(utc_now(), "%Y%m%d-%H%M%S")
         with cProfile.Profile() as pr:
             result = func(*args, **kwargs)
         stats = pstats.Stats(pr, stream=io.StringIO())
