@@ -9,6 +9,8 @@
     var hosts = new WeakMap();
     var pending = new WeakMap();
 
+    var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
     var noop = function () {};
 
     var palette = function (node, override) {
@@ -46,6 +48,24 @@
         if (kind === "percent") return value.toFixed(2) + "%";
         if (kind === "integer") return Math.round(value).toLocaleString();
         return value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    };
+
+    var date = function (values) {
+        return values.year + "-" + values.month + "-" + values.day;
+    };
+
+    var clock = function (time) {
+        var values = window.AppZone.epoch(time);
+        return date(values) + " " + values.hour + ":" + values.minute;
+    };
+
+    var tickmark = function (time, type) {
+        var values = window.AppZone.epoch(time);
+        if (type === LightweightCharts.TickMarkType.Year) return values.year;
+        if (type === LightweightCharts.TickMarkType.Month) return MONTHS[Number(values.month) - 1];
+        if (type === LightweightCharts.TickMarkType.DayOfMonth) return String(Number(values.day));
+        if (type === LightweightCharts.TickMarkType.Time) return values.hour + ":" + values.minute;
+        return values.hour + ":" + values.minute + ":" + values.second;
     };
 
     var space = function (name) {
@@ -140,6 +160,7 @@
             var holder = element("div", "lw-chart", section);
             var margins = pane.margins || {top: 0.10, bottom: 0.08};
             var ordinal = pane.scale === "index";
+            var zoned = !ordinal && !!window.AppZone;
             var spine = [];
             var marks = pane.labels || [];
             var ticker = function (value) {
@@ -155,13 +176,13 @@
                 leftPriceScale: {borderColor: theme.border, scaleMargins: pane.underlay || margins, visible: false},
                 timeScale: {borderColor: theme.border, timeVisible: !ordinal, secondsVisible: false,
                             rightOffset: ordinal ? 0 : 4, visible: !!pane.last, minBarSpacing: 0.02,
-                            tickMarkFormatter: ordinal ? function (value) { return ticker(value); } : undefined},
+                            tickMarkFormatter: ordinal ? function (value) { return ticker(value); } : (zoned ? tickmark : undefined)},
                 crosshair: {mode: LightweightCharts.CrosshairMode.Normal,
                             vertLine: {color: theme.muted, width: 1, style: 3, labelBackgroundColor: theme.border},
                             horzLine: {color: theme.muted, width: 1, style: 3, labelBackgroundColor: theme.border}},
                 handleScale: {axisPressedMouseMove: {time: true, price: false}},
                 localization: {priceFormatter: function (value) { return format(pane.format, value); },
-                               timeFormatter: ordinal ? function (value) { return ticker(value); } : undefined}
+                               timeFormatter: ordinal ? function (value) { return ticker(value); } : (zoned ? clock : undefined)}
             });
             instance.__scale__ = pane.scale || "time";
             saver.onclick = function () {
@@ -176,7 +197,7 @@
                 watcher.observe(holder);
                 watchers.push(watcher);
             }
-            frames.push({section: section, instance: instance, flex: pane.flex || 20, scale: pane.scale || "time"});
+            frames.push({section: section, instance: instance, flex: pane.flex || 20, scale: pane.scale || "time", zoned: zoned});
             toggle.onclick = function () {
                 var collapsed = section.classList.toggle("lw-collapsed");
                 section.style.flex = collapsed ? "0 0 auto" : (pane.flex || 20) + " 1 0";
@@ -322,7 +343,7 @@
         }
         var syncing = false;
         var stamps_ = (data.timeline || []).map(function (point) { return point.time; });
-        var brush = null;
+        var brush = null, current = null;
         if (stamps_.length > 1 && charts.length) {
             var span = element("div", "lw-range", body);
             body.insertBefore(span, body.firstChild);
@@ -335,9 +356,9 @@
             var last = stamps_.length - 1;
             var moment = function (index) {
                 var stamp = stamps_[Math.max(0, Math.min(last, Math.round(index)))];
-                return new Date(stamp * 1000).toISOString().slice(0, 10);
+                return window.AppZone ? date(window.AppZone.epoch(stamp)) : new Date(stamp * 1000).toISOString().slice(0, 10);
             };
-            var current = {from: 0, to: last};
+            current = {from: 0, to: last};
             brush = function (range) {
                 if (!range) return;
                 current = {from: Math.max(0, range.from), to: Math.min(last, range.to)};
@@ -413,6 +434,12 @@
         requestAnimationFrame(function () { charts.forEach(function (instance) { instance.timeScale().fitContent(); }); refreshAxis(); });
         return {
             theme: theme,
+            rezone: function () {
+                frames.forEach(function (frame) {
+                    if (frame.zoned) frame.instance.applyOptions({timeScale: {tickMarkFormatter: tickmark}, localization: {timeFormatter: clock}});
+                });
+                if (brush) brush(current);
+            },
             dispose: function () {
                 watchers.forEach(function (watcher) { try { watcher.disconnect(); } catch (error) {} });
                 charts.forEach(function (instance) { try { instance.remove(); } catch (error) {} });
@@ -504,11 +531,21 @@
             return column < 0 ? null : (current.rows[index] || [])[column];
         };
 
+        var fill = function (cell, text) {
+            var value = text == null ? "" : String(text);
+            if (window.AppZone && window.AppZone.pattern.test(value)) cell.setAttribute("data-utc", value);
+            else cell.removeAttribute("data-utc");
+            cell.textContent = value;
+            if (value) cell.title = value;
+            else cell.removeAttribute("title");
+        };
+
         var edit = function (cell, record, column) {
             if (cell.firstChild && cell.firstChild.tagName === "INPUT") return;
             var definition = current.columns[column];
             var original = record.cells[column] == null ? "" : String(record.cells[column]);
             var settled = false;
+            cell.removeAttribute("data-utc");
             cell.textContent = "";
             var input = element("input", "lw-input", cell);
             input.value = original;
@@ -517,7 +554,7 @@
                 settled = true;
                 var value = input.value;
                 var changed = commit && value !== original;
-                cell.textContent = changed ? value : original;
+                fill(cell, changed ? value : original);
                 if (!changed) return;
                 record.cells[column] = value;
                 current.rows[record.index][column] = value;
@@ -561,12 +598,7 @@
                     var definition = current.columns[column];
                     if (definition.align) cell.style.textAlign = definition.align;
                     if (definition.markdown) cell.innerHTML = record.cells[column];
-                    else if (window.AppZone && window.AppZone.pattern.test(record.cells[column])) {
-                        cell.setAttribute("data-utc", record.cells[column]);
-                        cell.textContent = window.AppZone.format(record.cells[column]);
-                    }
-                    else cell.textContent = record.cells[column];
-                    if (!definition.markdown && cell.textContent) cell.title = cell.textContent;
+                    else fill(cell, record.cells[column]);
                     if (definition.editable && edition) {
                         cell.classList.add("lw-writable");
                         cell.ondblclick = editor(cell, record, column);
@@ -843,7 +875,17 @@
         }
     }).observe(document.body, {childList: true, subtree: true, characterData: true});
 
+    var rezone = function () {
+        var nodes = document.querySelectorAll("[data-role][data-workspace]");
+        for (var index = 0; index < nodes.length; index++) {
+            var instance = hosts.get(nodes[index]);
+            if (instance && instance.rezone) instance.rezone();
+        }
+    };
+
     new MutationObserver(function () { refresh(); }).observe(document.documentElement, {attributes: true, attributeFilter: ["data-bs-theme"]});
+
+    new MutationObserver(function () { rezone(); }).observe(document.documentElement, {attributes: true, attributeFilter: ["data-zone"]});
 
     window.Quant = window.Quant || {};
     window.Quant.lightweight = {mount: mount, unmount: unmount, refresh: refresh, scan: scan, spaces: spaces};

@@ -40,5 +40,5 @@ class StreamingAPI(ServiceAPI):
         except KeyboardInterrupt:
             self._log_.info(lambda: "Streaming Operation: Interrupted by User")
         except Exception as e:
-            self._log_.failure(lambda: f"Streaming Operation: Failed · {e}")
+            self._log_.failure(lambda e=e: f"Streaming Operation: Failed · {e}")
             raise

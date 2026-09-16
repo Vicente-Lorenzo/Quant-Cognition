@@ -47,7 +47,7 @@ class TableAPI(RefreshAPI, PageAPI):
 
     @classmethod
     def workspace(cls, name: str, columns: list, rows: list, *, key: str = "UID", markdown=(), base: str = None,
-                  selection: dict = None, edition: dict = None, title: str = None, editable=()) -> WorkspaceAPI:
+                  selection: dict = None, edition: dict = None, title: str = MISSING, editable=()) -> WorkspaceAPI:
         return WorkspaceAPI(
             title=title or name,
             sheets=[cls.sheet(name, columns, rows, key, markdown=markdown, editable=editable)],
@@ -92,9 +92,9 @@ class TableAPI(RefreshAPI, PageAPI):
     def _remove_(self, keys: list) -> None:
         raise NotImplementedError
 
-    def _workspace_(self, columns: list = None, rows: list = None) -> WorkspaceAPI:
-        columns = self._columns_() if columns is None else columns
-        rows = self._rows_() if rows is None else rows
+    def _workspace_(self, columns: list = MISSING, rows: list = MISSING) -> WorkspaceAPI:
+        columns = self._columns_() if columns is MISSING else columns
+        rows = self._rows_() if rows is MISSING else rows
         base = self._detail_base_() if self._NAVIGABLE_ else None
         return self.workspace(
             self._SHEET_,

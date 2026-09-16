@@ -46,8 +46,8 @@ class SettingsPageAPI(PageAPI):
             TextAPI(text="Appearance", classname="panel-title", builder=html.H5),
             TextAPI(text="Cycle between light · dark · system themes · Your choice is remembered on this device", classname="settings-note", builder=html.P),
             ContainerAPI(fluid=True, classname="settings-row", elements=[TextAPI(text="Theme", classname="settings-label"), theme]),
-            TextAPI(text="Timestamps are stored in UTC and shown in this zone on this device · Browser follows the device clock", classname="settings-note", builder=html.P),
-            html.Div([html.Span("Time zone", className="settings-label"), self._zone_()], className="settings-row"),
+            TextAPI(text="Timestamps on pages and charts are shown in this zone on this device · Exports stay in UTC · Browser follows the device clock", classname="settings-note", builder=html.P),
+            html.Div([html.Span("Time Zone", className="settings-label"), self._zone_()], className="settings-row"),
         ])
 
     def _zone_(self) -> dcc.Dropdown:

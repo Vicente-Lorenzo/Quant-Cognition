@@ -6,6 +6,7 @@ from typing import Union, TYPE_CHECKING
 from Library.Auth.Password import PasswordAPI
 from Library.Auth.Role import RoleAPI
 from Library.Auth.User import UserAPI
+from Library.Utility.Typing import MISSING
 
 if TYPE_CHECKING:
     from flask import Request
@@ -25,7 +26,7 @@ class AuthProviderAPI(ABC):
         return None
 
     @staticmethod
-    def _claims_(token: str, jwks: str, audience: Union[str, None], issuer: Union[str, None] = None) -> Union[dict, None]:
+    def _claims_(token: str, jwks: str, audience: Union[str, None], issuer: Union[str, None] = MISSING) -> Union[dict, None]:
         try:
             import jwt
             from jwt import PyJWKClient
@@ -33,7 +34,7 @@ class AuthProviderAPI(ABC):
             return None
         try:
             key = PyJWKClient(jwks).get_signing_key_from_jwt(token).key
-            return jwt.decode(token, key, algorithms=["RS256"], audience=audience, issuer=issuer)
+            return jwt.decode(token, key, algorithms=["RS256"], audience=audience, issuer=None if issuer is MISSING else issuer)
         except Exception:
             return None
 

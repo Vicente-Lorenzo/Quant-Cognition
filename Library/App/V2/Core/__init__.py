@@ -5,7 +5,8 @@ from Library.App.V2.Core.Callback import (
     State,
     InjectionType,
     serverside_callback,
-    clientside_callback
+    clientside_callback,
+    modal_callbacks
 )
 from Library.App.V2.Core.Injection import (
     InjectionAPI,
@@ -27,6 +28,7 @@ __all__ = [
     "InjectionType",
     "serverside_callback",
     "clientside_callback",
+    "modal_callbacks",
     "InjectionAPI",
     "InjectorAPI",
     "GlobalAPI",

@@ -7,7 +7,7 @@ from typing_extensions import Self
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Callable
 
-from Library.Utility.Typing import hasattribute, getattribute
+from Library.Utility.Typing import MISSING, hasattribute, getattribute
 
 if TYPE_CHECKING: from Library.App.V2 import AppAPI, PageAPI, Component
 
@@ -99,9 +99,9 @@ class InjectionType(Enum):
     Append = 3
 
     @classmethod
-    def coerce(cls, value, default: InjectionType = None) -> Self:
+    def coerce(cls, value, default: InjectionType = MISSING) -> Self:
         if isinstance(value, cls): return value
-        if value is True: return default or cls.Hidden
+        if value is True: return cls.Hidden if default is MISSING else default
         return cls.Disabled
 
 def _layout_(specs: list[dict], original_args: list | tuple) -> tuple[list, dict]:
@@ -294,3 +294,17 @@ def serverside_callback(*args,
                         progress_default: Any = None,
                         **kwargs) -> Callable:
     return callback(*args, js=False, on_init=on_init, on_click=on_click, on_enter=on_enter, on_reenter=on_reenter, on_route=on_route, on_leave=on_leave, on_clean_memory=on_clean_memory, on_clean_session=on_clean_session, on_clean_local=on_clean_local, on_clean_reset=on_clean_reset, on_loading=on_loading, on_loading_content=on_loading_content, on_loading_sidebar=on_loading_sidebar, on_email=on_email, background=background, memoize=memoize, manager=manager, running=running, progress=progress, cancel=cancel, interval=interval, progress_default=progress_default, **kwargs)
+
+def modal_callbacks(modal: ComponentID, opener: ComponentID = MISSING, closer: ComponentID = MISSING) -> tuple:
+    callbacks = []
+    if opener is not MISSING:
+        @serverside_callback(Output(modal, "is_open"), Input(opener, "n_clicks"), on_click=InjectionType.Hidden)
+        def _open_modal_(self, clicks):
+            return True
+        callbacks.append(_open_modal_)
+    if closer is not MISSING:
+        @serverside_callback(Output(modal, "is_open"), Input(closer, "n_clicks"), on_click=InjectionType.Hidden)
+        def _close_modal_(self, clicks):
+            return False
+        callbacks.append(_close_modal_)
+    return tuple(callbacks)

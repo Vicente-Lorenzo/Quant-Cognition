@@ -1,5 +1,5 @@
 import uuid
-from typing import Generic
+from typing import Callable, Generic
 from typing_extensions import Self
 
 import dash
@@ -9,8 +9,10 @@ from dash.exceptions import PreventUpdate
 
 from Library.App.V2 import AppType
 from Library.App.V2.Component.Component import Component, ComponentAPI, ButtonAPI, IconAPI, IntervalAPI, StorageAPI, SwitchAPI, TextAPI
+from Library.App.V2.Component.Field import FieldAPI
 from Library.App.V2.Core.Callback import ComponentID, Output, Input, State, InjectionType, serverside_callback
 from Library.Logging import LoggingAPI
+from Library.Utility.Typing import MISSING
 
 class PageAPI(Generic[AppType]):
 
@@ -99,9 +101,58 @@ class PageAPI(Generic[AppType]):
     def _switch_(self, id: dict, label: str, value, help: str) -> html.Div:
         return html.Div([*SwitchAPI(id=id, label=label, value=value).build(), *self._help_(help)], className="app-switch-field")
 
+    def _block_(self, entry: FieldAPI) -> html.Div:
+        if entry.switched: return self._switch_(entry.bind(self), entry.label, entry.initial(self), entry.help)
+        control = entry.build(self)
+        if entry.suffix: control = [html.Div([*control, *entry.suffix(self)], className=entry.wrapper)]
+        return self._field_(entry.label, control, help=entry.help)
+
+    def _form_(self, fields) -> list:
+        body, row, current = [], [], None
+        for entry in fields:
+            if not entry.rendered: continue
+            block = self._block_(entry)
+            if entry.group and entry.group == current:
+                row.append(block)
+                continue
+            if row: body.append(html.Div(row, className="app-field-row"))
+            row, current = ([block], entry.group) if entry.group else ([], None)
+            if not entry.group: body.append(block)
+        if row: body.append(html.Div(row, className="app-field-row"))
+        return body
+
+    def _selection_(self, state, message: str) -> list:
+        from Library.App.V2.Lightweight.Table import TableAPI
+        keys = TableAPI.selected(state)
+        if not keys: self.app.notify.warning(message, header="No Selection")
+        return keys
+
+    def _tally_(self, keys: list, action: Callable, done: str, blocked: str = MISSING):
+        count = sum(1 for key in keys if action(key))
+        if not count:
+            if blocked: self.app.notify.warning(blocked, header="No Action")
+            return dash.no_update
+        self.app.notify.success(f"{count} {done}", header="Done")
+        return RefreshAPI.token()
+
+    def _trial_(self, work: Callable, failure: str) -> bool:
+        try:
+            work()
+        except Exception as error:
+            self.app.notify.error(str(error), header=failure)
+            return False
+        return True
+
     def register(self, *, page: str = None, type: str, name: str, portable: str = "", **kwargs) -> dict:
         page = page or self.endpoint or "global"
         return self.app.register(page=page, type=type, name=name, portable=portable, **kwargs)
+
+    def segments(self, pathname: str) -> list[str]:
+        if not pathname or self.parent is None: return []
+        endpoint = self.app.anchorize(path=pathname, relative=False)
+        prefix = self.parent.anchor
+        if not endpoint.startswith(prefix + "/"): return []
+        return [part for part in endpoint[len(prefix) + 1:].split("/") if part]
 
     @property
     def anchor(self) -> str:
@@ -244,6 +295,10 @@ class RefreshAPI:
 
     _POLL_ = 10000
 
+    @staticmethod
+    def token() -> str:
+        return uuid.uuid4().hex
+
     def _refresh_ids_(self) -> None:
         self.RELOAD_STORE_ID = self.register(type="store", name="reload")
         self.FINGERPRINT_STORE_ID = self.register(type="store", name="fingerprint")
@@ -267,7 +322,7 @@ class RefreshAPI:
         on_enter=InjectionType.Hidden,
     )
     def _enter_(self):
-        return uuid.uuid4().hex, (self._fingerprint_() or dash.no_update)
+        return self.token(), (self._fingerprint_() or dash.no_update)
 
     @serverside_callback(
         Output(RELOAD_STORE_ID, "data"),
@@ -275,7 +330,7 @@ class RefreshAPI:
         on_click=InjectionType.Hidden,
     )
     def _refresh_(self, clicks):
-        return uuid.uuid4().hex
+        return self.token()
 
     @serverside_callback(
         Output(RELOAD_STORE_ID, "data"),
@@ -287,4 +342,4 @@ class RefreshAPI:
         if not intervals: raise PreventUpdate
         token = self._fingerprint_()
         if token is not None and token == previous: raise PreventUpdate
-        return uuid.uuid4().hex, (dash.no_update if token is None else token)
+        return self.token(), (dash.no_update if token is None else token)

@@ -7,7 +7,7 @@ import dash_bootstrap_components as dbc
 
 from Library.App.V2.Core.Callback import Output, Input, State, InjectionType, clientside_callback
 from Library.App.V2.Core.Identity import GlobalAPI
-from Library.App.V2.Component.Component import Component, ButtonAPI, IconAPI, LoadingAPI, ModalAPI, StorageAPI, TextAPI, tooltip
+from Library.App.V2.Component.Component import Component, ComponentAPI, ButtonAPI, IconAPI, LoadingAPI, ModalAPI, StorageAPI, TextAPI
 from Library.App.V2.Core.Layout import DefaultLayoutAPI
 from Library.App.V2.Session import TriggerAPI
 
@@ -128,7 +128,7 @@ class ShellAPI(GlobalAPI):
 
     @staticmethod
     def _tip_(target: dict, text: str, placement: str = "bottom") -> Component:
-        return tooltip(target, text, placement)
+        return ComponentAPI.tip(target, text, placement)
 
     def _init_navigation_(self) -> None:
         for endpoint, page in self._pages_.items():

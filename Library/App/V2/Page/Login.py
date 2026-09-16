@@ -1,6 +1,6 @@
 from dash import dcc, html
 
-from Library.App.V2.Component.Component import Component, IconAPI, TextAPI, InputAPI, ButtonAPI
+from Library.App.V2.Component.Component import Component, InputAPI, ButtonAPI
 from Library.App.V2.Page.Page import PageAPI
 
 class LoginPageAPI(PageAPI):
@@ -17,7 +17,7 @@ class LoginPageAPI(PageAPI):
             html.Form([
                 *InputAPI(id=app.GLOBAL_LOGINPAGE_USER_ID, placeholder="Username", type="text", name="username", autocomplete="username", classname="app-login-input").build(),
                 *InputAPI(id=app.GLOBAL_LOGINPAGE_PASS_ID, placeholder="Password", type="password", name="password", autocomplete="current-password", submits=0, classname="app-login-input").build(),
-                *ButtonAPI(id=app.GLOBAL_LOGINPAGE_SUBMIT_ID, background="primary", clicks=0, type="button", classname="app-login-submit", label=[IconAPI(icon="bi bi-box-arrow-in-right"), TextAPI(text="Sign In")]).build(),
+                *ButtonAPI(id=app.GLOBAL_LOGINPAGE_SUBMIT_ID, background="primary", clicks=0, type="button", classname="app-login-submit", label=self._icon_("bi bi-box-arrow-in-right", "Sign In")).build(),
             ], className="app-login-form"),
         ]
         if not app._private_():
@@ -25,6 +25,6 @@ class LoginPageAPI(PageAPI):
         if app._contact_:
             children.append(html.Div([
                 html.Span("Need an account?", className="app-login-hint"),
-                *ButtonAPI(id=app.GLOBAL_LOGINPAGE_SIGNUP_ID, background="link", clicks=0, type="button", classname="app-login-signup", label=[IconAPI(icon="bi bi-person-plus"), TextAPI(text="Request Access")]).build(),
+                *ButtonAPI(id=app.GLOBAL_LOGINPAGE_SIGNUP_ID, background="link", clicks=0, type="button", classname="app-login-signup", label=self._icon_("bi bi-person-plus", "Request Access")).build(),
             ], className="app-login-signup-row"))
         return html.Div(html.Div(children, className="app-login-card"), className="app-login-page")

@@ -113,8 +113,7 @@ class OnEmailInjectionAPI(InjectionAPI):
         super().__init__(flag="on_email", default=InjectionType.Append)
 
     def args(self, is_page: bool) -> list:
-        from Library.App.V2 import AppAPI
-        return [Output(AppAPI.GLOBAL_EMAIL_STORAGE_ID, "data")]
+        return [Output(GlobalAPI.GLOBAL_EMAIL_STORAGE_ID, "data")]
 
     def post(self, app, is_page: bool) -> Callable:
         return self._email_
