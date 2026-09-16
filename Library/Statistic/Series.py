@@ -1,3 +1,5 @@
+from Library.Statistic.Metric import series_returns
+
 def underwater(equity: list) -> list:
     peak, series = None, []
     for stamp, value in equity:
@@ -83,7 +85,7 @@ def covariant(equity: list, benchmark: list, window: int = 63) -> list:
 
 def distribution(equity: list, buckets: int = 41) -> list:
     values = [value for _, value in equity if value is not None]
-    returns = [values[index] / values[index - 1] - 1.0 for index in range(1, len(values)) if values[index - 1]]
+    returns = [value for value in series_returns(values) if value is not None]
     if len(returns) < buckets: return []
     lowest, highest = min(returns), max(returns)
     if highest <= lowest: return []

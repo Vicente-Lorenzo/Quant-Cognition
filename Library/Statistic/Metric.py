@@ -58,6 +58,23 @@ def calculate_duration_seconds(start: date, stop: date) -> float:
     if not start or not stop: return 0.0
     return (stop - start).days * 86400.0
 
+def calculate_years(start: date, stop: date, trading_days: int = 365) -> float:
+    duration_seconds = calculate_duration_seconds(start, stop)
+    return duration_seconds / (trading_days * 86400.0) if duration_seconds and duration_seconds > 0.0 else 0.0
+
+def calculate_deviation(values: list, mean: float) -> float:
+    count = len(values)
+    return math.sqrt(sum((value - mean) ** 2 for value in values) / (count - 1)) if count > 1 else 0.0
+
+def calculate_drawdowns(values: list) -> tuple[float, float]:
+    peak, maximum, total = values[0], 0.0, 0.0
+    for value in values:
+        if value > peak: peak = value
+        drawdown = (peak - value) / peak if peak else 0.0
+        if drawdown > maximum: maximum = drawdown
+        total += drawdown
+    return maximum, total / len(values)
+
 def calculate_annualized_return(ret: float, duration_seconds: float, trading_days: int = 365, pct: bool = False) -> float:
     if not ret or not duration_seconds or duration_seconds <= 0.0: return 0.0
     ret = ret / 100.0 if pct else ret
@@ -120,25 +137,18 @@ def equity_curve_ratios(curve: Union[list, None], start: date, stop: date, tradi
     if not curve or len(curve) < 2: return None
     returns = [(curve[i] / curve[i - 1] - 1.0) if curve[i - 1] else 0.0 for i in range(1, len(curve))]
     n = len(returns)
-    duration_seconds = calculate_duration_seconds(start, stop)
-    years = duration_seconds / (trading_days * 86400.0) if duration_seconds and duration_seconds > 0.0 else 0.0
+    years = calculate_years(start, stop, trading_days)
     periods = n / years if years > 0.0 else 0.0
     annualize = math.sqrt(periods) if periods > 0.0 else 0.0
     mean = sum(returns) / n
-    variance = sum((value - mean) ** 2 for value in returns) / (n - 1) if n > 1 else 0.0
-    deviation = math.sqrt(variance)
+    deviation = calculate_deviation(returns, mean)
     downside = math.sqrt(sum(value ** 2 for value in returns if value < 0.0) / n)
     sharpe = (mean / deviation) * annualize if deviation > 0.0 else 0.0
     sortino = (mean / downside) * annualize if downside > 0.0 else 0.0
     if max_drawdown is None or mean_drawdown is None:
-        peak, curve_max, curve_sum = curve[0], 0.0, 0.0
-        for value in curve:
-            if value > peak: peak = value
-            drawdown = (peak - value) / peak if peak else 0.0
-            if drawdown > curve_max: curve_max = drawdown
-            curve_sum += drawdown
+        curve_max, curve_mean = calculate_drawdowns(curve)
         max_drawdown = curve_max if max_drawdown is None else max_drawdown
-        mean_drawdown = curve_sum / len(curve) if mean_drawdown is None else mean_drawdown
+        mean_drawdown = curve_mean if mean_drawdown is None else mean_drawdown
     total_return = (curve[-1] / curve[0] - 1.0) if curve[0] else 0.0
     annualized_return = ((1.0 + total_return) ** (1.0 / years) - 1.0) if years > 0.0 and (1.0 + total_return) > 0.0 else 0.0
     calmar = annualized_return / max_drawdown if max_drawdown > 0.0 else 0.0
@@ -175,21 +185,13 @@ def standalone_metrics(values: list, start: date, stop: date, trading_days: int 
     if len(clean) < 2: return {}
     returns = [value for value in series_returns(values) if value is not None]
     count = len(returns)
-    duration_seconds = calculate_duration_seconds(start, stop)
-    years = duration_seconds / (trading_days * 86400.0) if duration_seconds and duration_seconds > 0.0 else 0.0
+    years = calculate_years(start, stop, trading_days)
     periods = count / years if years > 0.0 else 0.0
     mean = sum(returns) / count if count else 0.0
-    variance = sum((value - mean) ** 2 for value in returns) / (count - 1) if count > 1 else 0.0
-    deviation = math.sqrt(variance)
+    deviation = calculate_deviation(returns, mean)
     total_return = clean[-1] / clean[0] - 1.0 if clean[0] else 0.0
     annualized = ((1.0 + total_return) ** (1.0 / years) - 1.0) if years > 0.0 and (1.0 + total_return) > 0.0 else 0.0
-    peak, drawdown_max, drawdown_sum = clean[0], 0.0, 0.0
-    for value in clean:
-        if value > peak: peak = value
-        drawdown = (peak - value) / peak if peak else 0.0
-        drawdown_sum += drawdown
-        if drawdown > drawdown_max: drawdown_max = drawdown
-    drawdown_mean = drawdown_sum / len(clean)
+    drawdown_max, drawdown_mean = calculate_drawdowns(clean)
     downside = math.sqrt(sum(value ** 2 for value in returns if value < 0.0) / count) if count else 0.0
     annualize = math.sqrt(periods) if periods > 0.0 else 0.0
     rate = ((1.0 + risk_free) ** (1.0 / periods) - 1.0) if periods > 0.0 and risk_free else 0.0
@@ -232,11 +234,11 @@ def relative_metrics(strategy: list, benchmark: list, periods: float, risk_free:
     alpha = (annual - (risk_free + beta * (reference - risk_free))) if annual is not None and reference is not None else excess * periods
     residuals = [(first - rate) - excess - beta * (second - rate) for first, second in pairs]
     residual_mean = sum(residuals) / count
-    residual_deviation = math.sqrt(sum((value - residual_mean) ** 2 for value in residuals) / (count - 1))
+    residual_deviation = calculate_deviation(residuals, residual_mean)
     significance = excess / (residual_deviation / math.sqrt(count)) if residual_deviation > EPSILON else 0.0
     differences = [first - second for first, second in pairs]
     difference_mean = sum(differences) / count
-    difference_deviation = math.sqrt(sum((value - difference_mean) ** 2 for value in differences) / (count - 1))
+    difference_deviation = calculate_deviation(differences, difference_mean)
     tracking = difference_deviation * math.sqrt(periods) if periods > 0.0 else 0.0
     information = (difference_mean / difference_deviation) * math.sqrt(periods) if difference_deviation > EPSILON and periods > 0.0 else 0.0
     upside = [(first, second) for first, second in pairs if second > 0.0]
@@ -252,4 +254,4 @@ def relative_metrics(strategy: list, benchmark: list, periods: float, risk_free:
         BENCHMARK_UPSIDECAPTURE: capture(upside), BENCHMARK_DOWNSIDECAPTURE: capture(downside)
     }
 
-__all__ = ["calculate_log_value", "calculate_price_return", "calculate_pnl_return", "calculate_log_return", "calculate_percentage", "calculate_log_percentage", "calculate_duration_seconds", "calculate_annualized_return", "calculate_annualized_log_return", "calculate_pnl_difference", "calculate_gross_pnl", "calculate_net_pnl", "calculate_rate_perc", "calculate_average", "calculate_expected", "calculate_annualized_volatility", "calculate_risk_to_reward", "calculate_profit_factor", "calculate_ratio", "calculate_sharpe", "calculate_sortino", "calculate_calmar", "calculate_sterling", "equity_curve_ratios", "equity_excursion", "align_series", "series_returns", "standalone_metrics", "daily_series", "relative_metrics"]
+__all__ = ["calculate_log_value", "calculate_price_return", "calculate_pnl_return", "calculate_log_return", "calculate_percentage", "calculate_log_percentage", "calculate_duration_seconds", "calculate_years", "calculate_deviation", "calculate_drawdowns", "calculate_annualized_return", "calculate_annualized_log_return", "calculate_pnl_difference", "calculate_gross_pnl", "calculate_net_pnl", "calculate_rate_perc", "calculate_average", "calculate_expected", "calculate_annualized_volatility", "calculate_risk_to_reward", "calculate_profit_factor", "calculate_ratio", "calculate_sharpe", "calculate_sortino", "calculate_calmar", "calculate_sterling", "equity_curve_ratios", "equity_excursion", "align_series", "series_returns", "standalone_metrics", "daily_series", "relative_metrics"]

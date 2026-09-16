@@ -24,6 +24,7 @@ from Library.Statistic.Payload import (
     diurnal,
     grouped,
     ordinal,
+    scored,
     searched,
     stitch,
     tabulate,
@@ -101,16 +102,15 @@ def walkforward(folds: list, elected: list = None) -> tuple[list, list]:
     held = [(stamp, value) for stamp, value in (elected or []) if opening <= PointAPI.epoch(stamp) <= closing]
     if held: series.append(SeriesAPI(key="elected", name="Elected Model", color="band", width=2, data=PointAPI.line(PointAPI.rebase(held))))
     pane = PaneAPI(id="walkforward", title="Walk-Forward · Each Fold Out of Sample (rebased 100)", flex=20, format=FormatType.Value, datum=100.0, series=series)
-    sheet = SheetAPI.frame(name="Folds", columns=list(marks[0].keys()), rows=marks, key="Fold")
-    return [pane], [sheet]
+    return [pane], [SheetAPI.records("Folds", marks, key="Fold")]
 
 _SEARCH_ = ("accent", "band", "up", "exit", "benchmark2", "benchmark1", "long", "short")
 
 def convergence(journal: list) -> list:
-    scored = [record for record in journal if record.get("Fitness") is not None]
-    if len(scored) < 2: return []
+    trials = scored(journal)
+    if len(trials) < 2: return []
     running, summit = [], None
-    for record in scored:
+    for record in trials:
         summit = record["Fitness"] if summit is None else max(summit, record["Fitness"])
         running.append(summit)
     trace = [SeriesAPI(key="best", name="Best So Far", color="up", width=2, data=ordinal(running)),
@@ -122,16 +122,16 @@ def convergence(journal: list) -> list:
                  axis=AxisType.Left,
                  toggle=True,
                  visible=True,
-                 data=ordinal([record["Fitness"] for record in scored])
+                 data=ordinal([record["Fitness"] for record in trials])
              )]
-    return [PaneAPI(id="convergence", scale="index", title=f"Search Convergence · {len(scored)} Scored Trials", flex=18, format=FormatType.Value, series=trace)]
+    return [PaneAPI(id="convergence", scale="index", title=f"Search Convergence · {len(trials)} Scored Trials", flex=18, format=FormatType.Value, series=trace)]
 
 def sensitivity(journal: list, budget: int = 6) -> list:
-    scored = [record for record in journal if record.get("Fitness") is not None]
+    trials = scored(journal)
     panes = []
-    for name in searched(scored)[:budget]:
+    for name in searched(trials)[:budget]:
         marks = {}
-        for record in scored:
+        for record in trials:
             value = record.get(name)
             if value is None: continue
             marks.setdefault(str(value), []).append(record["Fitness"])
@@ -215,16 +215,14 @@ def episodes(journal: list) -> list:
                     title="Learning Curves · validation fitness per episode", series=series)]
 
 def leaderboard(journal: list) -> list:
-    scored = [record for record in journal if record.get("Fitness") is not None]
-    if not scored: return []
-    names = searched(scored)
-    axes = [name for name in ("Fold", "Stage", "Round", "Candidate") if any(record.get(name) is not None for record in scored)]
+    trials = scored(journal)
+    if not trials: return []
+    names = searched(trials)
+    axes = [name for name in ("Fold", "Stage", "Round", "Candidate") if any(record.get(name) is not None for record in trials)]
     rows = [{"UID": str(index), **{name: record.get(name) for name in axes},
              "Fitness": round(record["Fitness"], 6), **{name: record.get(name) for name in names}}
-            for index, record in enumerate(sorted(scored, key=lambda record: record["Fitness"], reverse=True), start=1)]
-    sheet = SheetAPI.frame(name="Candidates", columns=[*axes, "Fitness", *names], rows=rows)
-    sheet.height = len(rows)
-    return [sheet]
+            for index, record in enumerate(sorted(trials, key=lambda record: record["Fitness"], reverse=True), start=1)]
+    return [SheetAPI.frame(name="Candidates", columns=[*axes, "Fitness", *names], rows=rows)]
 
 def analysis(journal: list, folds: list) -> tuple[list, list]:
     panes, sheets = [], []
@@ -238,25 +236,17 @@ def analysis(journal: list, folds: list) -> tuple[list, list]:
     panes.extend(sensitivity(journal))
     if staged:
         marks = winners(journal, "Fold", "Stage")
-        if marks:
-            sheet = SheetAPI.frame(name="Stages", columns=list(marks[0].keys()), rows=marks)
-            sheet.height = len(marks)
-            sheets.append(sheet)
+        if marks: sheets.append(SheetAPI.records("Stages", marks))
     if rounded:
         marks = winners(journal, "Fold", "Stage", "Round")
-        if marks:
-            sheet = SheetAPI.frame(name="Rounds", columns=list(marks[0].keys()), rows=marks)
-            sheet.height = len(marks)
-            sheets.append(sheet)
+        if marks: sheets.append(SheetAPI.records("Rounds", marks))
     if any(record.get("Episode") is not None for record in journal):
         seeded = any(record.get("Seed") is not None for record in journal)
         marks = [{**({"Seed": record.get("Seed")} if seeded else {}),
                   "Fold": record.get("Fold"), "Episode": record.get("Episode"),
                   "Train": record.get("Train"), "Validation": record.get("Validation"),
                   "Return (%)": record.get("Return"), "Eligible": record.get("Eligible")} for record in journal]
-        sheet = SheetAPI.frame(name="Episodes", columns=list(marks[0].keys()), rows=marks)
-        sheet.height = len(marks)
-        sheets.append(sheet)
+        sheets.append(SheetAPI.records("Episodes", marks))
     sheets.extend(leaderboard(journal))
     return panes, sheets
 
@@ -427,7 +417,7 @@ def backtest(*, title: str, description: str = None, currency: str = "", anchor=
 
     calendar = periodic(equity)
     if calendar:
-        tables.append(SheetAPI.frame(name="Monthly", columns=list(calendar[0].keys()), rows=calendar))
+        tables.append(SheetAPI.records("Monthly", calendar))
 
     return WorkspaceAPI(title=title, description=description, currency=currency, panes=panes, sheets=tables,
                         spans=spans, deals=map, markers=markers, dealmap=dealmap)

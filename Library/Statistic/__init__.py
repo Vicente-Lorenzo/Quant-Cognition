@@ -126,6 +126,9 @@ from Library.Statistic.Metric import (
     calculate_percentage,
     calculate_log_percentage,
     calculate_duration_seconds,
+    calculate_years,
+    calculate_deviation,
+    calculate_drawdowns,
     calculate_annualized_return,
     calculate_annualized_log_return,
     calculate_pnl_difference,
@@ -169,6 +172,7 @@ from Library.Statistic.Payload import (
     ordinal,
     grouped,
     searched,
+    scored,
     winners
 )
 from Library.Statistic.Workspace import (
@@ -330,6 +334,9 @@ __all__ = [
     "calculate_percentage",
     "calculate_log_percentage",
     "calculate_duration_seconds",
+    "calculate_years",
+    "calculate_deviation",
+    "calculate_drawdowns",
     "calculate_annualized_return",
     "calculate_annualized_log_return",
     "calculate_pnl_difference",
@@ -369,6 +376,7 @@ __all__ = [
     "ordinal",
     "grouped",
     "searched",
+    "scored",
     "winners",
     "SeriesType",
     "AxisType",

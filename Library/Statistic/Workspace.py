@@ -5,7 +5,9 @@ from datetime import date, datetime, timezone
 from typing import Any
 from typing_extensions import Self
 
+from Library.Statistic.Metric import align_series
 from Library.Utility.Enumeration import EnumerationAPI
+from Library.Utility.Datetime import datetime_to_timestamp
 
 class SeriesType(EnumerationAPI):
 
@@ -44,7 +46,7 @@ class PointAPI:
     @staticmethod
     def epoch(stamp) -> int:
         if isinstance(stamp, (int, float)): return int(stamp)
-        if isinstance(stamp, datetime): return int(stamp.replace(tzinfo=timezone.utc).timestamp())
+        if isinstance(stamp, datetime): return int(datetime_to_timestamp(stamp))
         if isinstance(stamp, date): return int(datetime(stamp.year, stamp.month, stamp.day, tzinfo=timezone.utc).timestamp())
         return int(stamp)
 
@@ -81,14 +83,7 @@ class PointAPI:
 
     @staticmethod
     def conform(series: list, spine: list) -> list:
-        if not series or not spine: return []
-        conformed, index, current = [], 0, None
-        for stamp in spine:
-            while index < len(series) and series[index][0] <= stamp:
-                current = series[index][1]
-                index += 1
-            conformed.append((stamp, current))
-        return conformed
+        return list(zip(spine, align_series(spine, series)))
 
     @staticmethod
     def rebase(series: list, anchor=None, base: float = 100.0) -> list:
@@ -314,6 +309,10 @@ class SheetAPI(SpecAPI):
         body = [[PointAPI.cell(row.get(name)) for name in names] for row in rows]
         links = [cls.identify(row.get(key)) for row in rows] if any(key in row for row in rows) else []
         return cls(name=name, columns=definitions, rows=body, keys=links, height=len(rows), shown=len(body))
+
+    @classmethod
+    def records(cls, name: str, rows: list, key: str = "UID") -> Self:
+        return cls.frame(name=name, columns=list(rows[0].keys()), rows=rows, key=key)
 
     @staticmethod
     def identify(value) -> list:

@@ -25,8 +25,8 @@ def diurnal(points: list) -> list:
     buckets = {}
     for point in points:
         if point.get("value") is None: continue
-        buckets[int(point["time"]) // 86400] = point["value"]
-    return [{"time": day * 86400, "value": value} for day, value in sorted(buckets.items())]
+        buckets[int(point["time"]) // STRIDE] = point["value"]
+    return [{"time": day * STRIDE, "value": value} for day, value in sorted(buckets.items())]
 
 def stitch(folds: list) -> tuple[list, list]:
     curve, marks, level = [], [], 100.0
@@ -64,14 +64,17 @@ def searched(journal: list) -> list:
             if name not in reserved and name not in names: names.append(name)
     return names
 
+def scored(journal: list) -> list:
+    return [record for record in journal if record.get("Fitness") is not None]
+
 def winners(journal: list, *keys: str) -> list:
-    scored = [record for record in journal if record.get("Fitness") is not None]
-    names = searched(scored)
+    trials = scored(journal)
+    names = searched(trials)
     marks = []
-    for coordinates, records in grouped(scored, *keys).items():
+    for coordinates, records in grouped(trials, *keys).items():
         best = max(records, key=lambda record: record["Fitness"])
         marks.append({**dict(zip(keys, coordinates)), "Trials": len(records), "Fitness": round(best["Fitness"], 6),
                       "Candidate": best.get("Candidate"), **{name: best.get(name) for name in names}})
     return sorted(marks, key=lambda mark: tuple((mark.get(key) is None, mark.get(key)) for key in keys))
 
-__all__ = ["STRIDE", "tabulate", "transpose", "trace", "diurnal", "stitch", "tick", "ordinal", "grouped", "searched", "winners"]
+__all__ = ["STRIDE", "tabulate", "transpose", "trace", "diurnal", "stitch", "tick", "ordinal", "grouped", "searched", "scored", "winners"]
