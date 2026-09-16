@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import math
 from typing import Union
 from datetime import datetime
@@ -5,6 +7,7 @@ from calendar import monthrange, isleap
 from dataclasses import dataclass, field
 
 from Library.Database.Dataclass import DataclassAPI
+from Library.Utility.Datetime import datetime_to_timestamp
 from Library.Utility.Typing import MISSING
 
 @dataclass(kw_only=True)
@@ -52,9 +55,18 @@ class TimestampAPI(DataclassAPI):
     def UID(self, val) -> None:
         if val is not MISSING: self.DateTime = val
 
+    @classmethod
+    def assign(cls, backing: Union[TimestampAPI, None], value: Union[datetime, TimestampAPI, None]) -> Union[TimestampAPI, None]:
+        if isinstance(value, cls): return value
+        if value is MISSING or value is None: return backing
+        if backing:
+            backing.DateTime = value
+            return backing
+        return cls(DateTime=value)
+
     @property
     def Epoch(self) -> float:
-        return self.DateTime.timestamp()
+        return datetime_to_timestamp(self.DateTime)
 
     @property
     def Year(self) -> CycleAPI:

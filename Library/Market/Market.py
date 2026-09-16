@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from dataclasses import dataclass, field
-from collections.abc import Sequence
 from typing import Union, ClassVar, TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
@@ -42,18 +41,21 @@ class MarketAPI(DatapointAPI):
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     @staticmethod
-    def load_ticks(data: Union[TickAPI, Sequence[TickAPI]]) -> None:
-        if isinstance(data, (list, tuple)):
-            for tick in data: tick.load()
-        else:
-            data.load()
+    def _project_(alias: str, name: str) -> str:
+        from Library.Market.Tick import TickAPI
+        columns = (TickAPI.ID.UID, TickAPI.ID.Timestamp, TickAPI.ID.Security, TickAPI.ID.Ask, TickAPI.ID.Mid, TickAPI.ID.Bid, TickAPI.ID.AskBaseConversion, TickAPI.ID.BidBaseConversion, TickAPI.ID.AskQuoteConversion, TickAPI.ID.BidQuoteConversion, TickAPI.ID.Volume)
+        return ", ".join(f'{alias}."{column}" AS "{name}.{column}"' for column in columns)
 
-    @staticmethod
-    def save_ticks(data: Union[TickAPI, Sequence[TickAPI]], by: str = "Autosave") -> None:
-        if isinstance(data, (list, tuple)):
-            for tick in data: tick.save(by=by)
+    def _bind_(self, bar: bool) -> None:
+        if bar:
+            self.GapTicks.init_data(self._data_)
+            self.OpenTicks.init_data(self._data_)
+            self.HighTicks.init_data(self._data_)
+            self.LowTicks.init_data(self._data_)
+            self.CloseTicks.init_data(self._data_)
+            self.Volume.init_data(self._data_)
         else:
-            data.save(by=by)
+            self.Ticks.init_data(self._data_)
 
     @staticmethod
     def pull_ticks(db: DatabaseAPI, security: int, start: datetime, stop: datetime, columns: Union[list[str], None] = None) -> pl.DataFrame:
@@ -90,20 +92,6 @@ class MarketAPI(DatapointAPI):
         db.upsert(schema=TickAPI.Schema, table=TickAPI.Table, data=data, key=[str(TickAPI.ID.UID)])
 
     @staticmethod
-    def load_bars(data: Union[BarAPI, Sequence[BarAPI]]) -> None:
-        if isinstance(data, (list, tuple)):
-            for bar in data: bar.load()
-        else:
-            data.load()
-
-    @staticmethod
-    def save_bars(data: Union[BarAPI, Sequence[BarAPI]], by: str = "Autosave") -> None:
-        if isinstance(data, (list, tuple)):
-            for bar in data: bar.save(by=by)
-        else:
-            data.save(by=by)
-
-    @staticmethod
     def pull_bars(db: DatabaseAPI, security: int, timeframe: str, start: Union[datetime, None] = None, stop: Union[datetime, None] = None, limit: Union[int, None] = None) -> pl.DataFrame:
         from Library.Market.Bar import BarAPI
         from Library.Market.Tick import TickAPI
@@ -111,31 +99,11 @@ class MarketAPI(DatapointAPI):
         SELECT b."{BarAPI.ID.Timestamp}", b."{BarAPI.ID.Security}", b."{BarAPI.ID.Timeframe}",
                b."{BarAPI.ID.GapTick}", b."{BarAPI.ID.OpenTick}", b."{BarAPI.ID.HighTick}", b."{BarAPI.ID.LowTick}", b."{BarAPI.ID.CloseTick}",
                b."{BarAPI.ID.Volume}", b."{BarAPI.ID.UpdatedBy}", b."{BarAPI.ID.UpdatedAt}",
-               g."{TickAPI.ID.UID}" AS "{BarAPI.OID.GapTick.UID}", g."{TickAPI.ID.Timestamp}" AS "{BarAPI.OID.GapTick.Timestamp}", g."{TickAPI.ID.Security}" AS "{BarAPI.OID.GapTick.Security}",
-               g."{TickAPI.ID.Ask}" AS "{BarAPI.OID.GapTick.Ask}", g."{TickAPI.ID.Mid}" AS "{BarAPI.OID.GapTick.Mid}", g."{TickAPI.ID.Bid}" AS "{BarAPI.OID.GapTick.Bid}",
-               g."{TickAPI.ID.AskBaseConversion}" AS "{BarAPI.OID.GapTick.AskBaseConversion}", g."{TickAPI.ID.BidBaseConversion}" AS "{BarAPI.OID.GapTick.BidBaseConversion}",
-               g."{TickAPI.ID.AskQuoteConversion}" AS "{BarAPI.OID.GapTick.AskQuoteConversion}", g."{TickAPI.ID.BidQuoteConversion}" AS "{BarAPI.OID.GapTick.BidQuoteConversion}",
-               g."{TickAPI.ID.Volume}" AS "{BarAPI.OID.GapTick.Volume}",
-               o."{TickAPI.ID.UID}" AS "{BarAPI.OID.OpenTick.UID}", o."{TickAPI.ID.Timestamp}" AS "{BarAPI.OID.OpenTick.Timestamp}", o."{TickAPI.ID.Security}" AS "{BarAPI.OID.OpenTick.Security}",
-               o."{TickAPI.ID.Ask}" AS "{BarAPI.OID.OpenTick.Ask}", o."{TickAPI.ID.Mid}" AS "{BarAPI.OID.OpenTick.Mid}", o."{TickAPI.ID.Bid}" AS "{BarAPI.OID.OpenTick.Bid}",
-               o."{TickAPI.ID.AskBaseConversion}" AS "{BarAPI.OID.OpenTick.AskBaseConversion}", o."{TickAPI.ID.BidBaseConversion}" AS "{BarAPI.OID.OpenTick.BidBaseConversion}",
-               o."{TickAPI.ID.AskQuoteConversion}" AS "{BarAPI.OID.OpenTick.AskQuoteConversion}", o."{TickAPI.ID.BidQuoteConversion}" AS "{BarAPI.OID.OpenTick.BidQuoteConversion}",
-               o."{TickAPI.ID.Volume}" AS "{BarAPI.OID.OpenTick.Volume}",
-               h."{TickAPI.ID.UID}" AS "{BarAPI.OID.HighTick.UID}", h."{TickAPI.ID.Timestamp}" AS "{BarAPI.OID.HighTick.Timestamp}", h."{TickAPI.ID.Security}" AS "{BarAPI.OID.HighTick.Security}",
-               h."{TickAPI.ID.Ask}" AS "{BarAPI.OID.HighTick.Ask}", h."{TickAPI.ID.Mid}" AS "{BarAPI.OID.HighTick.Mid}", h."{TickAPI.ID.Bid}" AS "{BarAPI.OID.HighTick.Bid}",
-               h."{TickAPI.ID.AskBaseConversion}" AS "{BarAPI.OID.HighTick.AskBaseConversion}", h."{TickAPI.ID.BidBaseConversion}" AS "{BarAPI.OID.HighTick.BidBaseConversion}",
-               h."{TickAPI.ID.AskQuoteConversion}" AS "{BarAPI.OID.HighTick.AskQuoteConversion}", h."{TickAPI.ID.BidQuoteConversion}" AS "{BarAPI.OID.HighTick.BidQuoteConversion}",
-               h."{TickAPI.ID.Volume}" AS "{BarAPI.OID.HighTick.Volume}",
-               l."{TickAPI.ID.UID}" AS "{BarAPI.OID.LowTick.UID}", l."{TickAPI.ID.Timestamp}" AS "{BarAPI.OID.LowTick.Timestamp}", l."{TickAPI.ID.Security}" AS "{BarAPI.OID.LowTick.Security}",
-               l."{TickAPI.ID.Ask}" AS "{BarAPI.OID.LowTick.Ask}", l."{TickAPI.ID.Mid}" AS "{BarAPI.OID.LowTick.Mid}", l."{TickAPI.ID.Bid}" AS "{BarAPI.OID.LowTick.Bid}",
-               l."{TickAPI.ID.AskBaseConversion}" AS "{BarAPI.OID.LowTick.AskBaseConversion}", l."{TickAPI.ID.BidBaseConversion}" AS "{BarAPI.OID.LowTick.BidBaseConversion}",
-               l."{TickAPI.ID.AskQuoteConversion}" AS "{BarAPI.OID.LowTick.AskQuoteConversion}", l."{TickAPI.ID.BidQuoteConversion}" AS "{BarAPI.OID.LowTick.BidQuoteConversion}",
-               l."{TickAPI.ID.Volume}" AS "{BarAPI.OID.LowTick.Volume}",
-               c."{TickAPI.ID.UID}" AS "{BarAPI.OID.CloseTick.UID}", c."{TickAPI.ID.Timestamp}" AS "{BarAPI.OID.CloseTick.Timestamp}", c."{TickAPI.ID.Security}" AS "{BarAPI.OID.CloseTick.Security}",
-               c."{TickAPI.ID.Ask}" AS "{BarAPI.OID.CloseTick.Ask}", c."{TickAPI.ID.Mid}" AS "{BarAPI.OID.CloseTick.Mid}", c."{TickAPI.ID.Bid}" AS "{BarAPI.OID.CloseTick.Bid}",
-               c."{TickAPI.ID.AskBaseConversion}" AS "{BarAPI.OID.CloseTick.AskBaseConversion}", c."{TickAPI.ID.BidBaseConversion}" AS "{BarAPI.OID.CloseTick.BidBaseConversion}",
-               c."{TickAPI.ID.AskQuoteConversion}" AS "{BarAPI.OID.CloseTick.AskQuoteConversion}", c."{TickAPI.ID.BidQuoteConversion}" AS "{BarAPI.OID.CloseTick.BidQuoteConversion}",
-               c."{TickAPI.ID.Volume}" AS "{BarAPI.OID.CloseTick.Volume}"
+               {MarketAPI._project_("g", BarAPI.ID.GapTick)},
+               {MarketAPI._project_("o", BarAPI.ID.OpenTick)},
+               {MarketAPI._project_("h", BarAPI.ID.HighTick)},
+               {MarketAPI._project_("l", BarAPI.ID.LowTick)},
+               {MarketAPI._project_("c", BarAPI.ID.CloseTick)}
         FROM "{BarAPI.Schema}"."{BarAPI.Table}" b
         LEFT JOIN "{TickAPI.Schema}"."{TickAPI.Table}" g ON b."{BarAPI.ID.GapTick}"   = g."{TickAPI.ID.UID}"
         LEFT JOIN "{TickAPI.Schema}"."{TickAPI.Table}" o ON b."{BarAPI.ID.OpenTick}"  = o."{TickAPI.ID.UID}"
@@ -180,15 +148,7 @@ class MarketAPI(DatapointAPI):
     def init_data(self, data: pl.DataFrame) -> None:
         from Library.Market.Bar import BarAPI
         self._data_ = data.rechunk()
-        if str(BarAPI.ID.Timeframe) in data.columns:
-            self.GapTicks.init_data(self._data_)
-            self.OpenTicks.init_data(self._data_)
-            self.HighTicks.init_data(self._data_)
-            self.LowTicks.init_data(self._data_)
-            self.CloseTicks.init_data(self._data_)
-            self.Volume.init_data(self._data_)
-        else:
-            self.Ticks.init_data(self._data_)
+        self._bind_(str(BarAPI.ID.Timeframe) in data.columns)
 
     def update_data(self, data: Union[TickAPI, BarAPI, pl.DataFrame]) -> None:
         from Library.Market.Bar import BarAPI
@@ -200,15 +160,7 @@ class MarketAPI(DatapointAPI):
             self._data_ = df.rechunk()
         else:
             self._data_.extend(df)
-        if bar:
-            self.GapTicks.init_data(self._data_)
-            self.OpenTicks.init_data(self._data_)
-            self.HighTicks.init_data(self._data_)
-            self.LowTicks.init_data(self._data_)
-            self.CloseTicks.init_data(self._data_)
-            self.Volume.init_data(self._data_)
-        else:
-            self.Ticks.init_data(self._data_)
+        self._bind_(bar)
 
     def update_offset(self, offset: int = 1) -> None:
         self._offset_ = offset

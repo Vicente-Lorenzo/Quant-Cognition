@@ -46,6 +46,29 @@ class PriceAPI(DataclassAPI):
     def UID(self, value) -> None:
         if value is not MISSING: self.Price = value
 
+    @classmethod
+    def unwrap(cls, value: Union[float, PriceAPI, None]) -> Union[float, None]:
+        if isinstance(value, cls): return value.Price
+        return value if value is not MISSING else None
+
+    @classmethod
+    def make(cls, value: Union[float, PriceAPI, None], reference: Union[float, None] = None, contract: Union[ContractAPI, None] = None) -> Union[PriceAPI, None]:
+        if isinstance(value, cls):
+            if value.Contract is None: value.Contract = contract
+            if value.Reference is None: value.Reference = reference
+            return value
+        if value is MISSING or value is None: return None
+        return cls(Price=value, Reference=reference, Contract=contract)
+
+    @classmethod
+    def assign(cls, backing: Union[PriceAPI, None], value: Union[float, PriceAPI, None], reference: Union[float, None] = None, contract: Union[ContractAPI, None] = None) -> Union[PriceAPI, None]:
+        if isinstance(value, cls): return value
+        if value is MISSING or value is None: return backing
+        if backing:
+            backing.Price = value
+            return backing
+        return cls(Price=value, Reference=reference, Contract=contract)
+
     @property
     def LogPrice(self) -> Union[float, None]:
         return calculate_log_value(self.Price)

@@ -13,7 +13,6 @@ from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.PnL import PnLAPI
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Account import AccountAPI
-from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Market.Timestamp import TimestampAPI
 from Library.Market.Price import PriceAPI, Direction
@@ -103,10 +102,10 @@ class PositionAPI(DatapointAPI):
         from Library.Portfolio.Order import OrderAPI
         cols = {
             self.ID.UID: PrimaryKey(pl.Int64),
-            self.ID.Session: ForeignKey(pl.String, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")'),
-            self.ID.Account: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{AccountAPI.Table}"("{AccountAPI.ID.UID}")'),
-            self.ID.Order: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{OrderAPI.Table}"("{OrderAPI.ID.UID}")'),
-            self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
+            self.ID.Session: ForeignKey(pl.String, reference=SessionAPI.reference()),
+            self.ID.Account: ForeignKey(pl.Int64, reference=AccountAPI.reference()),
+            self.ID.Order: ForeignKey(pl.Int64, reference=OrderAPI.reference()),
+            self.ID.Security: ForeignKey(pl.Int64, reference=SecurityAPI.reference()),
             self.ID.Type: pl.String(),
             self.ID.Status: pl.String(),
             self.ID.Direction: pl.String(),
@@ -190,37 +189,28 @@ class PositionAPI(DatapointAPI):
         swap_pnl = coerce(swap_pnl)
         net_pnl = coerce(net_pnl)
 
-        if isinstance(session, SessionAPI): self._session_ = session
-        elif session is not MISSING and session is not None:
-            self._session_ = SessionAPI(UID=session, db=db, autoload=True)
-        if isinstance(account, AccountAPI): self._account_ = account
-        elif account is not MISSING and account is not None:
-            self._account_ = AccountAPI(UID=account, db=db, autoload=True)
-        if isinstance(order, OrderAPI): self._order_ = order
-        elif order is not MISSING and order is not None:
-            self._order_ = OrderAPI(UID=order, db=db, autoload=True)
-        if isinstance(security, SecurityAPI): self._security_ = security
-        elif security is not MISSING and security is not None:
-            self._security_ = SecurityAPI(UID=security, db=db, autoload=True)
+        self._session_ = self._relate_(session, SessionAPI, db=db, autoload=True)
+        self._account_ = self._relate_(account, AccountAPI, db=db, autoload=True)
+        self._order_ = self._relate_(order, OrderAPI, db=db, autoload=True)
+        self._security_ = self._relate_(security, SecurityAPI, db=db, autoload=True)
         self._type_ = PositionType.parse(type) if type is not MISSING else None
         self._status_ = PositionStatus.parse(status) if status is not MISSING else PositionStatus.Opened
         self._direction_ = Direction.parse(direction) if direction is not MISSING else None
-        if isinstance(entry_timestamp, TimestampAPI): self._entry_timestamp_ = entry_timestamp
-        elif entry_timestamp is not MISSING and entry_timestamp is not None:
-            self._entry_timestamp_ = TimestampAPI(DateTime=entry_timestamp)
-        ep = self._unwrap_price_(entry_price)
-        self._entry_price_ = self._make_price_(entry_price, reference=ep)
+        self._entry_timestamp_ = TimestampAPI.assign(None, entry_timestamp)
+        ep = PriceAPI.unwrap(entry_price)
+        contract = self._security_.Contract if self._security_ else None
+        self._entry_price_ = PriceAPI.make(entry_price, ep, contract)
         self._entry_balance_ = entry_balance if entry_balance is not MISSING else None
-        self._stop_loss_price_ = self._make_price_(stop_loss_price, reference=ep)
-        self._take_profit_price_ = self._make_price_(take_profit_price, reference=ep)
+        self._stop_loss_price_ = PriceAPI.make(stop_loss_price, ep, contract)
+        self._take_profit_price_ = PriceAPI.make(take_profit_price, ep, contract)
         eb = self._entry_balance_
         self._stop_loss_pnl_ = self._make_pnl_(stop_loss_pnl, reference=eb)
         self._take_profit_pnl_ = self._make_pnl_(take_profit_pnl, reference=eb)
-        self._max_equity_drawdown_price_ = self._make_price_(max_equity_drawdown_price, reference=ep)
-        self._max_equity_runup_price_ = self._make_price_(max_equity_runup_price, reference=ep)
+        self._max_equity_drawdown_price_ = PriceAPI.make(max_equity_drawdown_price, ep, contract)
+        self._max_equity_runup_price_ = PriceAPI.make(max_equity_runup_price, ep, contract)
         self._max_equity_drawdown_pnl_ = self._make_pnl_(max_equity_drawdown_pnl, reference=eb)
         self._max_equity_runup_pnl_ = self._make_pnl_(max_equity_runup_pnl, reference=eb)
-        self._exit_price_ = self._make_price_(exit_price, reference=ep)
+        self._exit_price_ = PriceAPI.make(exit_price, ep, contract)
         self._gross_pnl_ = self._make_pnl_(gross_pnl, reference=eb)
         self._commission_pnl_ = self._make_pnl_(commission_pnl, reference=eb)
         self._swap_pnl_ = self._make_pnl_(swap_pnl, reference=eb)
@@ -241,8 +231,7 @@ class PositionAPI(DatapointAPI):
         return self._session_
     @Session.setter
     def Session(self, val: Union[str, SessionAPI, None]) -> None:
-        if isinstance(val, SessionAPI): self._session_ = val
-        elif val is not None: self._session_ = SessionAPI(UID=val, db=self._db_, autoload=True)
+        if val is not None: self._session_ = self._relate_(val, SessionAPI, db=self._db_, autoload=True)
 
     @property
     @overridefield
@@ -250,8 +239,7 @@ class PositionAPI(DatapointAPI):
         return self._account_
     @Account.setter
     def Account(self, val: Union[int, AccountAPI, None]) -> None:
-        if isinstance(val, AccountAPI): self._account_ = val
-        elif val is not None: self._account_ = AccountAPI(UID=val, db=self._db_, autoload=True)
+        if val is not None: self._account_ = self._relate_(val, AccountAPI, db=self._db_, autoload=True)
 
     @property
     @overridefield
@@ -260,8 +248,7 @@ class PositionAPI(DatapointAPI):
     @Order.setter
     def Order(self, val: Union[int, OrderAPI, None]) -> None:
         from Library.Portfolio.Order import OrderAPI
-        if isinstance(val, OrderAPI): self._order_ = val
-        elif val is not None: self._order_ = OrderAPI(UID=val, db=self._db_, autoload=True)
+        if val is not None: self._order_ = self._relate_(val, OrderAPI, db=self._db_, autoload=True)
 
     @property
     @overridefield
@@ -269,8 +256,7 @@ class PositionAPI(DatapointAPI):
         return self._security_
     @Security.setter
     def Security(self, val: Union[int, SecurityAPI, None]) -> None:
-        if isinstance(val, SecurityAPI): self._security_ = val
-        elif val is not None: self._security_ = SecurityAPI(UID=val, db=self._db_, autoload=True)
+        if val is not None: self._security_ = self._relate_(val, SecurityAPI, db=self._db_, autoload=True)
         contract = self._security_.Contract if self._security_ else None
         for backing in (self._entry_price_, self._stop_loss_price_, self._take_profit_price_, self._max_equity_drawdown_price_, self._max_equity_runup_price_, self._exit_price_):
             if backing: backing.Contract = contract
@@ -305,10 +291,7 @@ class PositionAPI(DatapointAPI):
         return self._entry_timestamp_
     @EntryTimestamp.setter
     def EntryTimestamp(self, val: Union[datetime, TimestampAPI, None]) -> None:
-        if isinstance(val, TimestampAPI): self._entry_timestamp_ = val
-        elif val is not None:
-            if self._entry_timestamp_: self._entry_timestamp_.DateTime = val
-            else: self._entry_timestamp_ = TimestampAPI(DateTime=val)
+        self._entry_timestamp_ = TimestampAPI.assign(self._entry_timestamp_, val)
 
     @property
     @overridefield
@@ -316,14 +299,10 @@ class PositionAPI(DatapointAPI):
         return self._entry_price_
     @EntryPrice.setter
     def EntryPrice(self, val: Union[float, PriceAPI, None]) -> None:
-        price = val.Price if isinstance(val, PriceAPI) else val
+        price = PriceAPI.unwrap(val)
         if price is None: return
-        if self._entry_price_:
-            self._entry_price_.Price = price
-            self._entry_price_.Reference = price
-        else:
-            self._entry_price_ = PriceAPI(Price=price, Reference=price, Contract=self._security_.Contract if self._security_ else None)
-        for backing in (self._stop_loss_price_, self._take_profit_price_, self._max_equity_drawdown_price_, self._max_equity_runup_price_, self._exit_price_):
+        self._entry_price_ = PriceAPI.assign(self._entry_price_, price, price, self._security_.Contract if self._security_ else None)
+        for backing in (self._entry_price_, self._stop_loss_price_, self._take_profit_price_, self._max_equity_drawdown_price_, self._max_equity_runup_price_, self._exit_price_):
             if backing: backing.Reference = price
 
     @property
@@ -419,16 +398,12 @@ class PositionAPI(DatapointAPI):
     @property
     @overridefield
     def GrossPoints(self) -> Union[float, None]:
-        if self.GrossPnL and self.Volume and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
-            return self.GrossPnL.PnL / (self.Volume * self.Security.Contract.PointSize)
-        return 0.0
+        return self._per_unit_(self.GrossPnL, "PointSize")
 
     @property
     @overridefield
     def GrossPips(self) -> Union[float, None]:
-        if self.GrossPnL and self.Volume and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
-            return self.GrossPnL.PnL / (self.Volume * self.Security.Contract.PipSize)
-        return 0.0
+        return self._per_unit_(self.GrossPnL, "PipSize")
 
     @property
     @overridefield
@@ -441,16 +416,12 @@ class PositionAPI(DatapointAPI):
     @property
     @overridefield
     def CommissionPoints(self) -> Union[float, None]:
-        if self.CommissionPnL and self.Volume and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
-            return self.CommissionPnL.PnL / (self.Volume * self.Security.Contract.PointSize)
-        return 0.0
+        return self._per_unit_(self.CommissionPnL, "PointSize")
 
     @property
     @overridefield
     def CommissionPips(self) -> Union[float, None]:
-        if self.CommissionPnL and self.Volume and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
-            return self.CommissionPnL.PnL / (self.Volume * self.Security.Contract.PipSize)
-        return 0.0
+        return self._per_unit_(self.CommissionPnL, "PipSize")
 
     @property
     @overridefield
@@ -463,16 +434,12 @@ class PositionAPI(DatapointAPI):
     @property
     @overridefield
     def SwapPoints(self) -> Union[float, None]:
-        if self.SwapPnL and self.Volume and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
-            return self.SwapPnL.PnL / (self.Volume * self.Security.Contract.PointSize)
-        return 0.0
+        return self._per_unit_(self.SwapPnL, "PointSize")
 
     @property
     @overridefield
     def SwapPips(self) -> Union[float, None]:
-        if self.SwapPnL and self.Volume and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
-            return self.SwapPnL.PnL / (self.Volume * self.Security.Contract.PipSize)
-        return 0.0
+        return self._per_unit_(self.SwapPnL, "PipSize")
 
     @property
     @overridefield
@@ -485,16 +452,12 @@ class PositionAPI(DatapointAPI):
     @property
     @overridefield
     def NetPoints(self) -> Union[float, None]:
-        if self.NetPnL and self.Volume and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
-            return self.NetPnL.PnL / (self.Volume * self.Security.Contract.PointSize)
-        return 0.0
+        return self._per_unit_(self.NetPnL, "PointSize")
 
     @property
     @overridefield
     def NetPips(self) -> Union[float, None]:
-        if self.NetPnL and self.Volume and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
-            return self.NetPnL.PnL / (self.Volume * self.Security.Contract.PipSize)
-        return 0.0
+        return self._per_unit_(self.NetPnL, "PipSize")
 
     @property
     def IsLong(self) -> bool:
@@ -518,26 +481,12 @@ class PositionAPI(DatapointAPI):
     @property
     @overridefield
     def Points(self) -> Union[float, None]:
-        if self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
-            exit_price = getattr(self, "ExitPrice", None)
-            exit_price = exit_price.Price if exit_price else None
-            if exit_price is not None:
-                diff = exit_price - self.EntryPrice.Price
-                diff = diff if self.IsLong else -diff
-                return diff / self.Security.Contract.PointSize
-        return 0.0
+        return self._distance_(self.ExitPrice.Price if self.ExitPrice else None, "PointSize")
 
     @property
     @overridefield
     def Pips(self) -> Union[float, None]:
-        if self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
-            exit_price = getattr(self, "ExitPrice", None)
-            exit_price = exit_price.Price if exit_price else None
-            if exit_price is not None:
-                diff = exit_price - self.EntryPrice.Price
-                diff = diff if self.IsLong else -diff
-                return diff / self.Security.Contract.PipSize
-        return 0.0
+        return self._distance_(self.ExitPrice.Price if self.ExitPrice else None, "PipSize")
 
     @property
     @overridefield
@@ -592,11 +541,7 @@ class PositionAPI(DatapointAPI):
     @property
     @overridefield
     def MaxEquityDrawdownPoints(self) -> Union[float, None]:
-        if self.MaxEquityDrawdownPrice and self.MaxEquityDrawdownPrice.Price and self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
-            diff = self.MaxEquityDrawdownPrice.Price - self.EntryPrice.Price
-            diff = diff if self.IsLong else -diff
-            return diff / self.Security.Contract.PointSize
-        return 0.0
+        return self._distance_(self.MaxEquityDrawdownPrice.Price or None if self.MaxEquityDrawdownPrice else None, "PointSize")
 
     @property
     @overridefield
@@ -606,11 +551,7 @@ class PositionAPI(DatapointAPI):
     @property
     @overridefield
     def MaxEquityDrawdownPips(self) -> Union[float, None]:
-        if self.MaxEquityDrawdownPrice and self.MaxEquityDrawdownPrice.Price and self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
-            diff = self.MaxEquityDrawdownPrice.Price - self.EntryPrice.Price
-            diff = diff if self.IsLong else -diff
-            return diff / self.Security.Contract.PipSize
-        return 0.0
+        return self._distance_(self.MaxEquityDrawdownPrice.Price or None if self.MaxEquityDrawdownPrice else None, "PipSize")
 
     @property
     @overridefield
@@ -665,11 +606,7 @@ class PositionAPI(DatapointAPI):
     @property
     @overridefield
     def MaxEquityRunupPoints(self) -> Union[float, None]:
-        if self.MaxEquityRunupPrice and self.MaxEquityRunupPrice.Price and self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PointSize:
-            diff = self.MaxEquityRunupPrice.Price - self.EntryPrice.Price
-            diff = diff if self.IsLong else -diff
-            return diff / self.Security.Contract.PointSize
-        return 0.0
+        return self._distance_(self.MaxEquityRunupPrice.Price or None if self.MaxEquityRunupPrice else None, "PointSize")
 
     @property
     @overridefield
@@ -679,11 +616,7 @@ class PositionAPI(DatapointAPI):
     @property
     @overridefield
     def MaxEquityRunupPips(self) -> Union[float, None]:
-        if self.MaxEquityRunupPrice and self.MaxEquityRunupPrice.Price and self.EntryPrice and self.EntryPrice.Price and self.Security and self.Security.Contract and self.Security.Contract.PipSize:
-            diff = self.MaxEquityRunupPrice.Price - self.EntryPrice.Price
-            diff = diff if self.IsLong else -diff
-            return diff / self.Security.Contract.PipSize
-        return 0.0
+        return self._distance_(self.MaxEquityRunupPrice.Price or None if self.MaxEquityRunupPrice else None, "PipSize")
 
     @property
     @overridefield
@@ -728,39 +661,26 @@ class PositionAPI(DatapointAPI):
     @property
     @overridefield
     def RiskAdjustedReturn(self) -> Union[float, None]:
-        ret, dd = self.Return, self.MaxEquityDrawdownReturn
-        return ret / abs(dd) if ret is not None and dd and dd != 0 else 0.0
+        return self._risk_adjusted_(self.Return, self.MaxEquityDrawdownReturn)
 
     @property
     @overridefield
     def RiskAdjustedLogReturn(self) -> Union[float, None]:
-        ret, dd = self.LogReturn, self.MaxEquityDrawdownLogReturn
-        return ret / abs(dd) if ret is not None and dd and dd != 0 else 0.0
+        return self._risk_adjusted_(self.LogReturn, self.MaxEquityDrawdownLogReturn)
 
     @property
     @overridefield
     def RiskAdjustedPercentage(self) -> Union[float, None]:
-        ret, dd = self.Percentage, self.MaxEquityDrawdownPercentage
-        return ret / abs(dd) if ret is not None and dd and dd != 0 else 0.0
+        return self._risk_adjusted_(self.Percentage, self.MaxEquityDrawdownPercentage)
 
     @property
     @overridefield
     def RiskAdjustedLogPercentage(self) -> Union[float, None]:
-        ret, dd = self.LogPercentage, self.MaxEquityDrawdownLogPercentage
-        return ret / abs(dd) if ret is not None and dd and dd != 0 else 0.0
+        return self._risk_adjusted_(self.LogPercentage, self.MaxEquityDrawdownLogPercentage)
 
     @staticmethod
-    def _unwrap_price_(val: Union[float, PriceAPI, None]) -> Union[float, None]:
-        if isinstance(val, PriceAPI): return val.Price
-        return val if val is not MISSING else None
-
-    def _make_price_(self, val: Union[float, PriceAPI, None], reference: Union[float, None]) -> Union[PriceAPI, None]:
-        if isinstance(val, PriceAPI):
-            if val.Contract is None: val.Contract = self._security_.Contract if self._security_ else None
-            if val.Reference is None: val.Reference = reference
-            return val
-        if val is MISSING or val is None: return None
-        return PriceAPI(Price=val, Reference=reference, Contract=self._security_.Contract if self._security_ else None)
+    def _risk_adjusted_(ret: Union[float, None], dd: Union[float, None]) -> float:
+        return ret / abs(dd) if ret is not None and dd else 0.0
 
     @staticmethod
     def _make_pnl_(val: Union[float, PnLAPI, None], reference: Union[float, None]) -> Union[PnLAPI, None]:
@@ -770,14 +690,19 @@ class PositionAPI(DatapointAPI):
         if val is MISSING or val is None: return None
         return PnLAPI(PnL=val, Reference=reference)
 
+    def _per_unit_(self, pnl: Union[PnLAPI, None], unit: str) -> float:
+        size = getattr(self.Security.Contract, unit) if self.Security and self.Security.Contract else None
+        return pnl.PnL / (self.Volume * size) if pnl and self.Volume and size else 0.0
+
+    def _distance_(self, price: Union[float, None], unit: str) -> float:
+        size = getattr(self.Security.Contract, unit) if self.Security and self.Security.Contract else None
+        if price is None or not self.EntryPrice or not self.EntryPrice.Price or not size: return 0.0
+        diff = price - self.EntryPrice.Price
+        diff = diff if self.IsLong else -diff
+        return diff / size
+
     def _assign_price_(self, backing: Union[PriceAPI, None], val: Union[float, PriceAPI, None]) -> Union[PriceAPI, None]:
-        if isinstance(val, PriceAPI): return val
-        if val is None: return backing
-        if backing:
-            backing.Price = val
-            return backing
-        ref = self._entry_price_.Price if self._entry_price_ else val
-        return PriceAPI(Price=val, Reference=ref, Contract=self._security_.Contract if self._security_ else None)
+        return PriceAPI.assign(backing, val, self._entry_price_.Price if self._entry_price_ else val, self._security_.Contract if self._security_ else None)
 
     def _assign_pnl_(self, backing: Union[PnLAPI, None], val: Union[float, PnLAPI, None]) -> Union[PnLAPI, None]:
         if isinstance(val, PnLAPI): return val

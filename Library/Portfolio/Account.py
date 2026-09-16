@@ -10,7 +10,6 @@ from Library.Database.Datapoint import DatapointAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Database.Dataclass import overridefield, coerce
 from Library.Utility.Enumeration import EnumerationAPI
-from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Provider import ProviderAPI
 from Library.Utility.Typing import MISSING
 
@@ -69,8 +68,8 @@ class AccountAPI(DatapointAPI):
         from Library.Portfolio.Session import SessionAPI
         return {
             self.ID.UID: IdentityKey(pl.Int64),
-            self.ID.Session: ForeignKey(pl.String, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")', primary=True),
-            self.ID.Provider: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{ProviderAPI.Table}"("{ProviderAPI.ID.UID}")'),
+            self.ID.Session: ForeignKey(pl.String, reference=SessionAPI.reference(), primary=True),
+            self.ID.Provider: ForeignKey(pl.String, reference=ProviderAPI.reference()),
             self.ID.Number: pl.Int64(),
             self.ID.Timestamp: PrimaryKey(pl.Datetime),
             self.ID.Environment: pl.String(),
@@ -105,12 +104,8 @@ class AccountAPI(DatapointAPI):
         environment = coerce(environment)
         account_type = coerce(account_type)
         margin_mode = coerce(margin_mode)
-        if isinstance(session, SessionAPI): self._session_ = session
-        elif session is not MISSING and session is not None:
-            self._session_ = SessionAPI(UID=session, db=db, autoload=True)
-        if isinstance(provider, ProviderAPI): self._provider_ = provider
-        elif provider is not MISSING and provider is not None:
-            self._provider_ = ProviderAPI(UID=ProviderAPI.normalize(provider), db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        self._session_ = self._relate_(session, SessionAPI, db=db, autoload=True)
+        self._provider_ = self._relate_(provider, ProviderAPI, normalize=ProviderAPI.normalize, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
         self._environment_ = Environment.parse(environment) if environment is not MISSING else None
         self._account_type_ = AccountType.parse(account_type) if account_type is not MISSING else None
         self._margin_mode_ = MarginMode.parse(margin_mode) if margin_mode is not MISSING else None
@@ -131,8 +126,7 @@ class AccountAPI(DatapointAPI):
     @Session.setter
     def Session(self, val: Union[str, SessionAPI, None]) -> None:
         from Library.Portfolio.Session import SessionAPI
-        if isinstance(val, SessionAPI): self._session_ = val
-        elif val is not None: self._session_ = SessionAPI(UID=val, db=self._db_, autoload=True)
+        if val is not None: self._session_ = self._relate_(val, SessionAPI, db=self._db_, autoload=True)
 
     @property
     @overridefield
@@ -140,8 +134,7 @@ class AccountAPI(DatapointAPI):
         return self._provider_
     @Provider.setter
     def Provider(self, val: Union[str, ProviderAPI, None]) -> None:
-        if isinstance(val, ProviderAPI): self._provider_ = val
-        elif val is not None: self._provider_ = ProviderAPI(UID=ProviderAPI.normalize(val), db=self._db_, autoload=True)
+        if val is not None: self._provider_ = self._relate_(val, ProviderAPI, normalize=ProviderAPI.normalize, db=self._db_, autoload=True)
 
     @property
     @overridefield

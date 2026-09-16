@@ -6,12 +6,12 @@ from datetime import datetime
 from typing import Union, ClassVar, TYPE_CHECKING
 from dataclasses import dataclass, field, InitVar
 
+from Library.Utility.Datetime import utc_now
 from Library.Database.Dataframe import pl
 from Library.Database.Database import PrimaryKey, ForeignKey, DatabaseAPI
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Dataclass import overridefield, coerce
 from Library.Portfolio.Portfolio import PortfolioAPI
-from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Utility.Typing import MISSING
 
@@ -45,7 +45,7 @@ class SessionAPI(DatapointAPI):
             self.ID.UID: PrimaryKey(pl.String),
             self.ID.Type: pl.String(),
             self.ID.Strategy: pl.String(),
-            self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
+            self.ID.Security: ForeignKey(pl.Int64, reference=SecurityAPI.reference()),
             self.ID.StartTimestamp: pl.Datetime(),
             self.ID.StopTimestamp: pl.Datetime(),
             self.ID.InitialAccount: pl.Int64(),
@@ -70,20 +70,14 @@ class SessionAPI(DatapointAPI):
         initial_account = coerce(initial_account)
         final_account = coerce(final_account)
         self._type_ = SystemType.parse(type) if type is not MISSING and type is not None else None
-        if isinstance(security, SecurityAPI): self._security_ = security
-        elif security is not MISSING and security is not None:
-            self._security_ = SecurityAPI(UID=security, db=db, autoload=True)
-        if isinstance(initial_account, AccountAPI): self._initial_account_ = initial_account
-        elif initial_account is not MISSING and initial_account is not None:
-            self._initial_account_ = AccountAPI(UID=initial_account, db=db, autoload=False, autooverload=False)
-        if isinstance(final_account, AccountAPI): self._final_account_ = final_account
-        elif final_account is not MISSING and final_account is not None:
-            self._final_account_ = AccountAPI(UID=final_account, db=db, autoload=False, autooverload=False)
+        self._security_ = self._relate_(security, SecurityAPI, db=db, autoload=True)
+        self._initial_account_ = self._relate_(initial_account, AccountAPI, db=db, autoload=False, autooverload=False)
+        self._final_account_ = self._relate_(final_account, AccountAPI, db=db, autoload=False, autooverload=False)
         if self.UID is None:
             self.UID = self._generate_uid_(self._type_)
-        if self.StartTimestamp is None:
-            self.StartTimestamp = datetime.now()
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        if self.StartTimestamp is None:
+            self.StartTimestamp = utc_now()
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
         from Library.System.System import SystemType
@@ -107,8 +101,7 @@ class SessionAPI(DatapointAPI):
         return self._security_
     @Security.setter
     def Security(self, val: Union[int, SecurityAPI, None]) -> None:
-        if isinstance(val, SecurityAPI): self._security_ = val
-        elif val is not None: self._security_ = SecurityAPI(UID=val, db=self._db_, autoload=True)
+        if val is not None: self._security_ = self._relate_(val, SecurityAPI, db=self._db_, autoload=True)
 
     @property
     @overridefield
@@ -117,8 +110,7 @@ class SessionAPI(DatapointAPI):
     @InitialAccount.setter
     def InitialAccount(self, val: Union[int, AccountAPI, None]) -> None:
         from Library.Portfolio.Account import AccountAPI
-        if isinstance(val, AccountAPI): self._initial_account_ = val
-        elif val is not None: self._initial_account_ = AccountAPI(UID=val, db=self._db_, autoload=False, autooverload=False)
+        if val is not None: self._initial_account_ = self._relate_(val, AccountAPI, db=self._db_, autoload=False, autooverload=False)
 
     @property
     @overridefield
@@ -127,8 +119,7 @@ class SessionAPI(DatapointAPI):
     @FinalAccount.setter
     def FinalAccount(self, val: Union[int, AccountAPI, None]) -> None:
         from Library.Portfolio.Account import AccountAPI
-        if isinstance(val, AccountAPI): self._final_account_ = val
-        elif val is not None: self._final_account_ = AccountAPI(UID=val, db=self._db_, autoload=False, autooverload=False)
+        if val is not None: self._final_account_ = self._relate_(val, AccountAPI, db=self._db_, autoload=False, autooverload=False)
 
     @property
     def Duration(self) -> Union[float, None]:

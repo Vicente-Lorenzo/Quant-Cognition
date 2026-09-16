@@ -47,14 +47,14 @@ class BarAPI(DatapointAPI):
     @property
     def Structure(self) -> dict:
         return {
-            self.ID.Security: ForeignKey(pl.Int64, reference=f'"{SecurityAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")', primary=True),
-            self.ID.Timeframe: ForeignKey(pl.String, reference=f'"{TimeframeAPI.Schema}"."{TimeframeAPI.Table}"("{TimeframeAPI.ID.UID}")', primary=True),
+            self.ID.Security: ForeignKey(pl.Int64, reference=SecurityAPI.reference(), primary=True),
+            self.ID.Timeframe: ForeignKey(pl.String, reference=TimeframeAPI.reference(), primary=True),
             self.ID.Timestamp: PrimaryKey(pl.Datetime),
-            self.ID.GapTick: ForeignKey(pl.Int64, reference=f'"{TickAPI.Schema}"."{TickAPI.Table}"("{TickAPI.ID.UID}")'),
-            self.ID.OpenTick: ForeignKey(pl.Int64, reference=f'"{TickAPI.Schema}"."{TickAPI.Table}"("{TickAPI.ID.UID}")'),
-            self.ID.HighTick: ForeignKey(pl.Int64, reference=f'"{TickAPI.Schema}"."{TickAPI.Table}"("{TickAPI.ID.UID}")'),
-            self.ID.LowTick: ForeignKey(pl.Int64, reference=f'"{TickAPI.Schema}"."{TickAPI.Table}"("{TickAPI.ID.UID}")'),
-            self.ID.CloseTick: ForeignKey(pl.Int64, reference=f'"{TickAPI.Schema}"."{TickAPI.Table}"("{TickAPI.ID.UID}")'),
+            self.ID.GapTick: ForeignKey(pl.Int64, reference=TickAPI.reference()),
+            self.ID.OpenTick: ForeignKey(pl.Int64, reference=TickAPI.reference()),
+            self.ID.HighTick: ForeignKey(pl.Int64, reference=TickAPI.reference()),
+            self.ID.LowTick: ForeignKey(pl.Int64, reference=TickAPI.reference()),
+            self.ID.CloseTick: ForeignKey(pl.Int64, reference=TickAPI.reference()),
             self.ID.Volume: pl.Float64(),
             **super().Structure
         }
@@ -81,25 +81,14 @@ class BarAPI(DatapointAPI):
         high_tick = coerce(high_tick)
         low_tick = coerce(low_tick)
         close_tick = coerce(close_tick)
-        if isinstance(security, SecurityAPI): self._security_ = security
-        elif security is not MISSING and security is not None:
-            self._security_ = SecurityAPI(UID=security, db=db, autoload=autoload)
-        if isinstance(timeframe, TimeframeAPI): self._timeframe_ = timeframe
-        elif timeframe is not MISSING and timeframe is not None:
-            self._timeframe_ = TimeframeAPI(UID=timeframe, db=db, autoload=autoload)
-        if isinstance(timestamp, TimestampAPI): self._timestamp_ = timestamp
-        elif timestamp is not MISSING and timestamp is not None:
-            self._timestamp_ = TimestampAPI(DateTime=timestamp)
-        def _init_tick_(val: Union[int, TickAPI, None]) -> Union[TickAPI, None]:
-            if isinstance(val, TickAPI): return val
-            if val is not MISSING and val is not None:
-                return TickAPI(UID=val, db=db, autoload=autoload)
-            return None
-        self._gap_tick_ = _init_tick_(gap_tick)
-        self._open_tick_ = _init_tick_(open_tick)
-        self._high_tick_ = _init_tick_(high_tick)
-        self._low_tick_ = _init_tick_(low_tick)
-        self._close_tick_ = _init_tick_(close_tick)
+        self._security_ = self._relate_(security, SecurityAPI, db=db, autoload=autoload)
+        self._timeframe_ = self._relate_(timeframe, TimeframeAPI, db=db, autoload=autoload)
+        self._timestamp_ = TimestampAPI.assign(None, timestamp)
+        self._gap_tick_ = self._relate_(gap_tick, TickAPI, db=db, autoload=autoload)
+        self._open_tick_ = self._relate_(open_tick, TickAPI, db=db, autoload=autoload)
+        self._high_tick_ = self._relate_(high_tick, TickAPI, db=db, autoload=autoload)
+        self._low_tick_ = self._relate_(low_tick, TickAPI, db=db, autoload=autoload)
+        self._close_tick_ = self._relate_(close_tick, TickAPI, db=db, autoload=autoload)
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     def save(self, by: str = "Autosave") -> None:
@@ -113,8 +102,7 @@ class BarAPI(DatapointAPI):
         return self._security_
     @Security.setter
     def Security(self, val: Union[int, SecurityAPI, None]) -> None:
-        if isinstance(val, SecurityAPI): self._security_ = val
-        elif val is not None: self._security_ = SecurityAPI(UID=val, db=self._db_, autoload=self._autoload_)
+        if val is not None: self._security_ = self._relate_(val, SecurityAPI, db=self._db_, autoload=self._autoload_)
         for t in (self._gap_tick_, self._open_tick_, self._high_tick_, self._low_tick_, self._close_tick_):
             if t: t.Security = self._security_
 
@@ -124,8 +112,7 @@ class BarAPI(DatapointAPI):
         return self._timeframe_
     @Timeframe.setter
     def Timeframe(self, val: Union[str, TimeframeAPI, None]) -> None:
-        if isinstance(val, TimeframeAPI): self._timeframe_ = val
-        elif val is not None: self._timeframe_ = TimeframeAPI(UID=val, db=self._db_, autoload=self._autoload_)
+        if val is not None: self._timeframe_ = self._relate_(val, TimeframeAPI, db=self._db_, autoload=self._autoload_)
 
     @property
     @overridefield
@@ -133,10 +120,7 @@ class BarAPI(DatapointAPI):
         return self._timestamp_
     @Timestamp.setter
     def Timestamp(self, val: Union[datetime, TimestampAPI, None]) -> None:
-        if isinstance(val, TimestampAPI): self._timestamp_ = val
-        elif val is not None:
-            if self._timestamp_: self._timestamp_.DateTime = val
-            else: self._timestamp_ = TimestampAPI(DateTime=val)
+        self._timestamp_ = TimestampAPI.assign(self._timestamp_, val)
 
     @property
     @overridefield
@@ -144,8 +128,7 @@ class BarAPI(DatapointAPI):
         return self._gap_tick_
     @GapTick.setter
     def GapTick(self, val: Union[int, TickAPI, None]) -> None:
-        if isinstance(val, TickAPI): self._gap_tick_ = val
-        elif val is not None: self._gap_tick_ = TickAPI(UID=val, db=self._db_, autoload=self._autoload_)
+        if val is not None: self._gap_tick_ = self._relate_(val, TickAPI, db=self._db_, autoload=self._autoload_)
 
     @property
     @overridefield
@@ -153,8 +136,7 @@ class BarAPI(DatapointAPI):
         return self._open_tick_
     @OpenTick.setter
     def OpenTick(self, val: Union[int, TickAPI, None]) -> None:
-        if isinstance(val, TickAPI): self._open_tick_ = val
-        elif val is not None: self._open_tick_ = TickAPI(UID=val, db=self._db_, autoload=self._autoload_)
+        if val is not None: self._open_tick_ = self._relate_(val, TickAPI, db=self._db_, autoload=self._autoload_)
 
     @property
     @overridefield
@@ -162,8 +144,7 @@ class BarAPI(DatapointAPI):
         return self._high_tick_
     @HighTick.setter
     def HighTick(self, val: Union[int, TickAPI, None]) -> None:
-        if isinstance(val, TickAPI): self._high_tick_ = val
-        elif val is not None: self._high_tick_ = TickAPI(UID=val, db=self._db_, autoload=self._autoload_)
+        if val is not None: self._high_tick_ = self._relate_(val, TickAPI, db=self._db_, autoload=self._autoload_)
 
     @property
     @overridefield
@@ -171,8 +152,7 @@ class BarAPI(DatapointAPI):
         return self._low_tick_
     @LowTick.setter
     def LowTick(self, val: Union[int, TickAPI, None]) -> None:
-        if isinstance(val, TickAPI): self._low_tick_ = val
-        elif val is not None: self._low_tick_ = TickAPI(UID=val, db=self._db_, autoload=self._autoload_)
+        if val is not None: self._low_tick_ = self._relate_(val, TickAPI, db=self._db_, autoload=self._autoload_)
 
     @property
     @overridefield
@@ -180,8 +160,7 @@ class BarAPI(DatapointAPI):
         return self._close_tick_
     @CloseTick.setter
     def CloseTick(self, val: Union[int, TickAPI, None]) -> None:
-        if isinstance(val, TickAPI): self._close_tick_ = val
-        elif val is not None: self._close_tick_ = TickAPI(UID=val, db=self._db_, autoload=self._autoload_)
+        if val is not None: self._close_tick_ = self._relate_(val, TickAPI, db=self._db_, autoload=self._autoload_)
 
     @property
     def RangeTick(self) -> Union[PriceAPI, None]:

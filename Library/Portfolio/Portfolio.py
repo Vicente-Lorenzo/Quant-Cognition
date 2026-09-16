@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Union, ClassVar, TYPE_CHECKING
 
@@ -22,7 +21,6 @@ from Library.Statistic.Metric import (
     calculate_pnl_difference,
     calculate_pnl_return
 )
-from Library.Utility.Typing import MISSING
 
 if TYPE_CHECKING:
     from Library.Database.Database import DatabaseAPI
@@ -73,18 +71,6 @@ class PortfolioAPI(DatapointAPI):
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     @staticmethod
-    def load_accounts(data: Union[AccountAPI, Sequence[AccountAPI]]) -> None:
-        if isinstance(data, (list, tuple)):
-            for acc in data: acc.load()
-        else: data.load()
-
-    @staticmethod
-    def save_accounts(data: Union[AccountAPI, Sequence[AccountAPI]], by: str = "Autosave") -> None:
-        if isinstance(data, (list, tuple)):
-            for acc in data: acc.save(by=by)
-        else: data.save(by=by)
-
-    @staticmethod
     def pull_accounts(db: DatabaseAPI) -> pl.DataFrame:
         from Library.Portfolio.Account import AccountAPI
         sql = f'''
@@ -102,108 +88,14 @@ class PortfolioAPI(DatapointAPI):
         db.upsert(schema=AccountAPI.Schema, table=AccountAPI.Table, data=data, key=["UID"])
 
     @staticmethod
-    def load_orders(data: Union[OrderAPI, Sequence[OrderAPI]]) -> None:
-        if isinstance(data, (list, tuple)):
-            for ord in data: ord.load()
-        else: data.load()
-
-    @staticmethod
-    def save_orders(data: Union[OrderAPI, Sequence[OrderAPI]], by: str = "Autosave") -> None:
-        if isinstance(data, (list, tuple)):
-            for ord in data: ord.save(by=by)
-        else: data.save(by=by)
-
-    @staticmethod
-    def pull_orders(db: DatabaseAPI, start: Union[datetime, None] = None, stop: Union[datetime, None] = None) -> pl.DataFrame:
-        from Library.Portfolio.Order import OrderAPI
-        sql = f'''
-        SELECT o.*,
-               s."UID" AS "Security_UID", s."Provider" AS "Security_Provider", s."Category" AS "Security_Category", s."Ticker" AS "Security_Ticker", s."Contract" AS "Security_Contract",
-               c."UID" AS "Contract_UID", c."Ticker" AS "Contract_Ticker", c."Provider" AS "Contract_Provider", c."Type" AS "Contract_Type", c."Digits" AS "Contract_Digits", c."PointSize" AS "Contract_PointSize", c."PipSize" AS "Contract_PipSize", c."LotSize" AS "Contract_LotSize", c."VolumeMin" AS "Contract_VolumeMin", c."VolumeMax" AS "Contract_VolumeMax", c."VolumeStep" AS "Contract_VolumeStep", c."Commission" AS "Contract_Commission", c."CommissionMode" AS "Contract_CommissionMode", c."SwapLong" AS "Contract_SwapLong", c."SwapShort" AS "Contract_SwapShort", c."SwapMode" AS "Contract_SwapMode", c."SwapExtraDay" AS "Contract_SwapExtraDay", c."SwapSummerTime" AS "Contract_SwapSummerTime", c."SwapWinterTime" AS "Contract_SwapWinterTime", c."SwapPeriod" AS "Contract_SwapPeriod", c."Expiry" AS "Contract_Expiry",
-               p."UID" AS "Position_UID", p."Security" AS "Position_Security", p."PositionType" AS "Position_PositionType", p."Direction" AS "Position_TradeType", p."Volume" AS "Position_Volume", p."Quantity" AS "Position_Quantity", p."EntryTimestamp" AS "Position_EntryTimestamp", p."EntryPrice" AS "Position_EntryPrice", p."StopLossPrice" AS "Position_StopLossPrice", p."TakeProfitPrice" AS "Position_TakeProfitPrice", p."MaxEquityDrawdownPrice" AS "Position_MaxEquityDrawdownPrice", p."MaxEquityRunupPrice" AS "Position_MaxEquityRunupPrice", p."ExitPrice" AS "Position_ExitPrice", p."StopLossPnL" AS "Position_StopLossPnL", p."TakeProfitPnL" AS "Position_TakeProfitPnL", p."MaxEquityDrawdownPnL" AS "Position_MaxEquityDrawdownPnL", p."MaxEquityRunupPnL" AS "Position_MaxEquityRunupPnL", p."GrossPnL" AS "Position_GrossPnL", p."CommissionPnL" AS "Position_CommissionPnL", p."SwapPnL" AS "Position_SwapPnL", p."NetPnL" AS "Position_NetPnL", p."UsedMargin" AS "Position_UsedMargin", p."EntryBalance" AS "Position_EntryBalance", p."MidBalance" AS "Position_MidBalance"
-        FROM "{OrderAPI.Schema}"."{OrderAPI.Table}" o
-        LEFT JOIN "Universe"."Security" s ON o."Security" = s."UID"
-        LEFT JOIN "Universe"."Contract" c ON s."Contract" = c."UID"
-        LEFT JOIN "Portfolio"."Position" p ON o."Position" = p."UID"
-        '''
-        params = {}
-        if start and stop:
-            sql += f' WHERE o."{OrderAPI.ID.EntryTimestamp}" BETWEEN :start: AND :stop:'
-            params = {"start": start, "stop": stop}
-        df = db.executeone(QueryAPI(sql), **params, schema=OrderAPI.Schema, table=OrderAPI.Table).fetchall(legacy=False)
-        return df
-
-    @staticmethod
     def push_orders(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Portfolio.Order import OrderAPI
         db.upsert(schema=OrderAPI.Schema, table=OrderAPI.Table, data=data, key=["UID"])
 
     @staticmethod
-    def load_positions(data: Union[PositionAPI, Sequence[PositionAPI]]) -> None:
-        if isinstance(data, (list, tuple)):
-            for pos in data: pos.load()
-        else: data.load()
-
-    @staticmethod
-    def save_positions(data: Union[PositionAPI, Sequence[PositionAPI]], by: str = "Autosave") -> None:
-        if isinstance(data, (list, tuple)):
-            for pos in data: pos.save(by=by)
-        else: data.save(by=by)
-
-    @staticmethod
-    def pull_positions(db: DatabaseAPI, start: Union[datetime, None] = None, stop: Union[datetime, None] = None) -> pl.DataFrame:
-        from Library.Portfolio.Position import PositionAPI
-        sql = f'''
-        SELECT pos.*,
-               s."UID" AS "Security_UID", s."Provider" AS "Security_Provider", s."Category" AS "Security_Category", s."Ticker" AS "Security_Ticker", s."Contract" AS "Security_Contract",
-               c."UID" AS "Contract_UID", c."Ticker" AS "Contract_Ticker", c."Provider" AS "Contract_Provider", c."Type" AS "Contract_Type", c."Digits" AS "Contract_Digits", c."PointSize" AS "Contract_PointSize", c."PipSize" AS "Contract_PipSize", c."LotSize" AS "Contract_LotSize", c."VolumeMin" AS "Contract_VolumeMin", c."VolumeMax" AS "Contract_VolumeMax", c."VolumeStep" AS "Contract_VolumeStep", c."Commission" AS "Contract_Commission", c."CommissionMode" AS "Contract_CommissionMode", c."SwapLong" AS "Contract_SwapLong", c."SwapShort" AS "Contract_SwapShort", c."SwapMode" AS "Contract_SwapMode", c."SwapExtraDay" AS "Contract_SwapExtraDay", c."SwapSummerTime" AS "Contract_SwapSummerTime", c."SwapWinterTime" AS "Contract_SwapWinterTime", c."SwapPeriod" AS "Contract_SwapPeriod", c."Expiry" AS "Contract_Expiry"
-        FROM "{PositionAPI.Schema}"."{PositionAPI.Table}" pos
-        LEFT JOIN "Universe"."Security" s ON pos."Security" = s."UID"
-        LEFT JOIN "Universe"."Contract" c ON s."Contract" = c."UID"
-        '''
-        params = {}
-        if start and stop:
-            sql += f' WHERE pos."{PositionAPI.ID.EntryTimestamp}" BETWEEN :start: AND :stop:'
-            params = {"start": start, "stop": stop}
-        df = db.executeone(QueryAPI(sql), **params, schema=PositionAPI.Schema, table=PositionAPI.Table).fetchall(legacy=False)
-        return df
-
-    @staticmethod
     def push_positions(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Portfolio.Position import PositionAPI
         db.upsert(schema=PositionAPI.Schema, table=PositionAPI.Table, data=data, key=["UID"])
-
-    @staticmethod
-    def load_trades(data: Union[TradeAPI, Sequence[TradeAPI]]) -> None:
-        if isinstance(data, (list, tuple)):
-            for tr in data: tr.load()
-        else: data.load()
-
-    @staticmethod
-    def save_trades(data: Union[TradeAPI, Sequence[TradeAPI]], by: str = "Autosave") -> None:
-        if isinstance(data, (list, tuple)):
-            for tr in data: tr.save(by=by)
-        else: data.save(by=by)
-
-    @staticmethod
-    def pull_trades(db: DatabaseAPI, start: Union[datetime, None] = None, stop: Union[datetime, None] = None) -> pl.DataFrame:
-        from Library.Portfolio.Trade import TradeAPI
-        sql = f'''
-        SELECT t.*,
-               p."UID" AS "Position_UID", p."Security" AS "Position_Security", p."PositionType" AS "Position_PositionType", p."Direction" AS "Position_TradeType", p."Volume" AS "Position_Volume", p."Quantity" AS "Position_Quantity", p."EntryTimestamp" AS "Position_EntryTimestamp", p."EntryPrice" AS "Position_EntryPrice", p."StopLossPrice" AS "Position_StopLossPrice", p."TakeProfitPrice" AS "Position_TakeProfitPrice", p."MaxEquityDrawdownPrice" AS "Position_MaxEquityDrawdownPrice", p."MaxEquityRunupPrice" AS "Position_MaxEquityRunupPrice", p."ExitPrice" AS "Position_ExitPrice", p."StopLossPnL" AS "Position_StopLossPnL", p."TakeProfitPnL" AS "Position_TakeProfitPnL", p."MaxEquityDrawdownPnL" AS "Position_MaxEquityDrawdownPnL", p."MaxEquityRunupPnL" AS "Position_MaxEquityRunupPnL", p."GrossPnL" AS "Position_GrossPnL", p."CommissionPnL" AS "Position_CommissionPnL", p."SwapPnL" AS "Position_SwapPnL", p."NetPnL" AS "Position_NetPnL", p."UsedMargin" AS "Position_UsedMargin", p."EntryBalance" AS "Position_EntryBalance", p."MidBalance" AS "Position_MidBalance",
-               s."UID" AS "Security_UID", s."Provider" AS "Security_Provider", s."Category" AS "Security_Category", s."Ticker" AS "Security_Ticker", s."Contract" AS "Security_Contract",
-               c."UID" AS "Contract_UID", c."Ticker" AS "Contract_Ticker", c."Provider" AS "Contract_Provider", c."Type" AS "Contract_Type", c."Digits" AS "Contract_Digits", c."PointSize" AS "Contract_PointSize", c."PipSize" AS "Contract_PipSize", c."LotSize" AS "Contract_LotSize", c."VolumeMin" AS "Contract_VolumeMin", c."VolumeMax" AS "Contract_VolumeMax", c."VolumeStep" AS "Contract_VolumeStep", c."Commission" AS "Contract_Commission", c."CommissionMode" AS "Contract_CommissionMode", c."SwapLong" AS "Contract_SwapLong", c."SwapShort" AS "Contract_SwapShort", c."SwapMode" AS "Contract_SwapMode", c."SwapExtraDay" AS "Contract_SwapExtraDay", c."SwapSummerTime" AS "Contract_SwapSummerTime", c."SwapWinterTime" AS "Contract_SwapWinterTime", c."SwapPeriod" AS "Contract_SwapPeriod", c."Expiry" AS "Contract_Expiry"
-        FROM "{TradeAPI.Schema}"."{TradeAPI.Table}" t
-        LEFT JOIN "Portfolio"."Position" p ON t."Position" = p."UID"
-        LEFT JOIN "Universe"."Security" s ON p."Security" = s."UID"
-        LEFT JOIN "Universe"."Contract" c ON s."Contract" = c."UID"
-        '''
-        params = {}
-        if start and stop:
-            sql += f' WHERE t."{TradeAPI.ID.ExitTimestamp}" BETWEEN :start: AND :stop:'
-            params = {"start": start, "stop": stop}
-        df = db.executeone(QueryAPI(sql), **params, schema=TradeAPI.Schema, table=TradeAPI.Table).fetchall(legacy=False)
-        return df
 
     @staticmethod
     def push_trades(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
@@ -342,6 +234,17 @@ class PortfolioAPI(DatapointAPI):
             del self._orders_[order_uid]
 
     @staticmethod
+    def _extend_price_(backing: Union[PriceAPI, None], price: float, rising: bool, falling: bool) -> None:
+        if backing and ((falling and price < backing.Price) or (rising and price > backing.Price)): backing.Price = price
+
+    @staticmethod
+    def _extend_pnl_(backing: Union[PnLAPI, None], source: PnLAPI, pnl: float, rising: bool, falling: bool) -> None:
+        if backing and ((falling and pnl < backing.PnL) or (rising and pnl > backing.PnL)):
+            backing.PnL = pnl
+            backing.Reference = source.Reference
+            backing.Duration = source.Duration
+
+    @staticmethod
     def _inherit_position_state_(src: PositionAPI, dst: PositionAPI) -> None:
         from Library.Portfolio.Trade import TradeAPI
         if dst._type_ is None: setattr(dst, 'Type', src.Type)
@@ -416,21 +319,12 @@ class PortfolioAPI(DatapointAPI):
             if trade._position_ is None: trade._position_ = old_pos
             setattr(trade, 'EntryBalance', old_pos.EntryBalance)
             if trade.ExitPrice and trade.ExitPrice.Price is not None:
-                exit_price = trade.ExitPrice.Price
-                if trade._max_equity_drawdown_price_ and ((trade.IsLong and exit_price < trade._max_equity_drawdown_price_.Price) or (trade.IsShort and exit_price > trade._max_equity_drawdown_price_.Price)):
-                    trade._max_equity_drawdown_price_.Price = exit_price
-                if trade._max_equity_runup_price_ and ((trade.IsLong and exit_price > trade._max_equity_runup_price_.Price) or (trade.IsShort and exit_price < trade._max_equity_runup_price_.Price)):
-                    trade._max_equity_runup_price_.Price = exit_price
+                self._extend_price_(trade._max_equity_drawdown_price_, trade.ExitPrice.Price, trade.IsShort, trade.IsLong)
+                self._extend_price_(trade._max_equity_runup_price_, trade.ExitPrice.Price, trade.IsLong, trade.IsShort)
             net = trade.NetPnL.PnL if (trade.NetPnL and trade.NetPnL.PnL is not None) else 0.0
             if trade.NetPnL:
-                if trade._max_equity_drawdown_pnl_ and net < trade._max_equity_drawdown_pnl_.PnL:
-                    trade._max_equity_drawdown_pnl_.PnL = net
-                    trade._max_equity_drawdown_pnl_.Reference = trade.NetPnL.Reference
-                    trade._max_equity_drawdown_pnl_.Duration = trade.NetPnL.Duration
-                if trade._max_equity_runup_pnl_ and net > trade._max_equity_runup_pnl_.PnL:
-                    trade._max_equity_runup_pnl_.PnL = net
-                    trade._max_equity_runup_pnl_.Reference = trade.NetPnL.Reference
-                    trade._max_equity_runup_pnl_.Duration = trade.NetPnL.Duration
+                self._extend_pnl_(trade._max_equity_drawdown_pnl_, trade.NetPnL, net, False, True)
+                self._extend_pnl_(trade._max_equity_runup_pnl_, trade.NetPnL, net, True, False)
             base = old_pos.MidBalance if old_pos.MidBalance is not None else (old_pos.EntryBalance or 0.0)
             new_mid = base + net
             old_pos.MidBalance = new_mid
@@ -568,8 +462,8 @@ class PortfolioAPI(DatapointAPI):
     def Excursions(self) -> dict:
         count = self._excursion_count_ or 1
         return {
-            "max_drawdown": self._max_drawdown_, "mean_drawdown": self._drawdown_sum_ / count,
-            "max_runup": self._max_runup_, "mean_runup": self._runup_sum_ / count,
+            "max_drawdown": self._max_drawdown_, "mean_drawdown": self.MeanDrawdown,
+            "max_runup": self._max_runup_, "mean_runup": self.MeanRunup,
             "max_drawdown_value": self._max_drawdown_value_, "mean_drawdown_value": self._drawdown_value_sum_ / count,
             "max_runup_value": self._max_runup_value_, "mean_runup_value": self._runup_value_sum_ / count
         }
@@ -585,44 +479,39 @@ class PortfolioAPI(DatapointAPI):
 
     @property
     def LogReturn(self) -> Union[float, None]:
-        ret = self.Return
-        if ret is None: return None
-        return calculate_log_return(ret)
+        return calculate_log_return(self.Return)
 
     @property
     def Percentage(self) -> Union[float, None]:
-        ret = self.Return
-        if ret is None: return None
-        return calculate_percentage(ret)
+        return calculate_percentage(self.Return)
 
     @property
     def LogPercentage(self) -> Union[float, None]:
-        log_ret = self.LogReturn
-        if log_ret is None: return None
-        return calculate_log_percentage(log_ret)
+        return calculate_log_percentage(self.LogReturn)
 
     def _first_entry_(self) -> Union[datetime, None]:
         timestamps = [p.EntryTimestamp.DateTime for p in self._positions_.values() if p.EntryTimestamp]
         timestamps.extend(t.EntryTimestamp.DateTime for t in self._trades_ if t.EntryTimestamp)
         return min(timestamps) if timestamps else None
 
+    def _duration_(self) -> Union[float, None]:
+        first, last = self._first_entry_(), self._equity_stamp_
+        if not first or last is None: return None
+        return (last - first).total_seconds()
+
     @property
     def AnnualizedReturn(self) -> Union[float, None]:
         ret = self.Return
         if ret is None: return None
-        first, last = self._first_entry_(), self._equity_stamp_
-        if not first or last is None: return None
-        duration_sec = (last - first).total_seconds()
-        return calculate_annualized_return(ret, duration_sec)
+        duration = self._duration_()
+        return calculate_annualized_return(ret, duration) if duration is not None else None
 
     @property
     def AnnualizedLogReturn(self) -> Union[float, None]:
         log_ret = self.LogReturn
         if log_ret is None: return None
-        first, last = self._first_entry_(), self._equity_stamp_
-        if not first or last is None: return None
-        duration_sec = (last - first).total_seconds()
-        return calculate_annualized_log_return(log_ret, duration_sec)
+        duration = self._duration_()
+        return calculate_annualized_log_return(log_ret, duration) if duration is not None else None
 
     @property
     def AnnualizedPercentage(self) -> Union[float, None]:
@@ -632,20 +521,22 @@ class PortfolioAPI(DatapointAPI):
     def AnnualizedLogPercentage(self) -> Union[float, None]:
         return calculate_log_percentage(self.AnnualizedLogReturn)
 
+    @staticmethod
+    def _frame_(items) -> pl.DataFrame:
+        if not items: return pl.DataFrame()
+        return pl.DataFrame([item.dict() for item in items], strict=False)
+
     @property
     def Orders(self) -> pl.DataFrame:
-        if not self._orders_: return pl.DataFrame()
-        return pl.DataFrame([o.dict() for o in self._orders_.values()], strict=False)
+        return self._frame_(self._orders_.values())
 
     @property
     def Positions(self) -> pl.DataFrame:
-        if not self._positions_: return pl.DataFrame()
-        return pl.DataFrame([p.dict() for p in self._positions_.values()], strict=False)
+        return self._frame_(self._positions_.values())
 
     @property
     def Trades(self) -> pl.DataFrame:
-        if not self._trades_: return pl.DataFrame()
-        return pl.DataFrame([t.dict() for t in self._trades_], strict=False)
+        return self._frame_(self._trades_)
 
     @property
     def Deals(self) -> pl.DataFrame:

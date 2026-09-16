@@ -71,6 +71,17 @@ class SeriesAPI:
         end = self._data_.height - self._offset_ - shift + 1
         return pl.DataFrame() if start >= end or end <= 0 else self._data_.slice(start, end - start)
 
+    @staticmethod
+    def _tick_(row: dict, prefix: str) -> TickAPI:
+        from Library.Market.Tick import TickAPI
+        p = f"{prefix}." if prefix else ""
+        return TickAPI(UID=row.get(f"{p}UID", row.get("UID")), Timestamp=row.get(f"{p}Timestamp", row.get("Timestamp")), Security=row.get(f"{p}Security", row.get("Security")), Ask=row.get(f"{p}Ask", row.get("Ask")), Mid=row.get(f"{p}Mid", row.get("Mid")), Bid=row.get(f"{p}Bid", row.get("Bid")), AskBaseConversion=row.get(f"{p}AskBaseConversion", row.get("AskBaseConversion")), BidBaseConversion=row.get(f"{p}BidBaseConversion", row.get("BidBaseConversion")), AskQuoteConversion=row.get(f"{p}AskQuoteConversion", row.get("AskQuoteConversion")), BidQuoteConversion=row.get(f"{p}BidQuoteConversion", row.get("BidQuoteConversion")), Volume=row.get(f"{p}Volume", row.get("Volume")))
+
+    def _each_(self, other: Union[SeriesAPI, float, int], method, shift: int, dataframe: bool) -> Union[list[bool], pl.DataFrame]:
+        if not isinstance(other, SeriesAPI) or not other._multiple_: raise ValueError("Ambiguous comparison.")
+        r = {c._prefix_: method(c, o, shift) for c, o in zip(self._children_, other._children_)}
+        return pl.DataFrame(r) if dataframe else list(r.values())
+
     def last(self, shift: int = 0, dataframe: bool = False):
         if not self._multiple_:
             s = self.dataframe()
@@ -79,10 +90,7 @@ class SeriesAPI:
         df = self._slice_(shift, 1)
         if dataframe: return df
         if df.is_empty(): return None
-        r = df.to_dicts()[0]
-        p = f"{self._prefix_}." if self._prefix_ else ""
-        from Library.Market.Tick import TickAPI
-        return TickAPI(UID=r.get(f"{p}UID", r.get("UID")), Timestamp=r.get(f"{p}Timestamp", r.get("Timestamp")), Security=r.get(f"{p}Security", r.get("Security")), Ask=r.get(f"{p}Ask", r.get("Ask")), Mid=r.get(f"{p}Mid", r.get("Mid")), Bid=r.get(f"{p}Bid", r.get("Bid")), AskBaseConversion=r.get(f"{p}AskBaseConversion", r.get("AskBaseConversion")), BidBaseConversion=r.get(f"{p}BidBaseConversion", r.get("BidBaseConversion")), AskQuoteConversion=r.get(f"{p}AskQuoteConversion", r.get("AskQuoteConversion")), BidQuoteConversion=r.get(f"{p}BidQuoteConversion", r.get("BidQuoteConversion")), Volume=r.get(f"{p}Volume", r.get("Volume")))
+        return self._tick_(df.to_dicts()[0], self._prefix_)
 
     def tail(self, n: Union[int, None] = None, dataframe: bool = False):
         if not self._multiple_:
@@ -93,15 +101,10 @@ class SeriesAPI:
         df = self._slice_(0, n if n is not None else (self._data_.height if self._data_ is not None else 0))
         if dataframe: return df
         if df.is_empty(): return []
-        p = f"{self._prefix_}." if self._prefix_ else ""
-        from Library.Market.Tick import TickAPI
-        return [TickAPI(UID=r.get(f"{p}UID", r.get("UID")), Timestamp=r.get(f"{p}Timestamp", r.get("Timestamp")), Security=r.get(f"{p}Security", r.get("Security")), Ask=r.get(f"{p}Ask", r.get("Ask")), Mid=r.get(f"{p}Mid", r.get("Mid")), Bid=r.get(f"{p}Bid", r.get("Bid")), AskBaseConversion=r.get(f"{p}AskBaseConversion", r.get("AskBaseConversion")), BidBaseConversion=r.get(f"{p}BidBaseConversion", r.get("BidBaseConversion")), AskQuoteConversion=r.get(f"{p}AskQuoteConversion", r.get("AskQuoteConversion")), BidQuoteConversion=r.get(f"{p}BidQuoteConversion", r.get("BidQuoteConversion")), Volume=r.get(f"{p}Volume", r.get("Volume"))) for r in df.to_dicts()]
+        return [self._tick_(r, self._prefix_) for r in df.to_dicts()]
 
     def over(self, other: Union[SeriesAPI, float, int], shift: int = 0, dataframe: bool = False) -> Union[bool, list[bool], pl.DataFrame]:
-        if self._multiple_:
-            if not isinstance(other, SeriesAPI) or not other._multiple_: raise ValueError("Ambiguous comparison.")
-            r = {c._prefix_: c.over(o, shift) for c, o in zip(self._children_, other._children_)}
-            return pl.DataFrame(r) if dataframe else list(r.values())
+        if self._multiple_: return self._each_(other, SeriesAPI.over, shift, dataframe)
         lst = self.last(shift)
         if isinstance(other, SeriesAPI):
             if other._multiple_: raise ValueError("Ambiguous comparison.")
@@ -110,10 +113,7 @@ class SeriesAPI:
         return lst > other if lst is not None and other is not None else False
 
     def under(self, other: Union[SeriesAPI, float, int], shift: int = 0, dataframe: bool = False) -> Union[bool, list[bool], pl.DataFrame]:
-        if self._multiple_:
-            if not isinstance(other, SeriesAPI) or not other._multiple_: raise ValueError("Ambiguous comparison.")
-            r = {c._prefix_: c.under(o, shift) for c, o in zip(self._children_, other._children_)}
-            return pl.DataFrame(r) if dataframe else list(r.values())
+        if self._multiple_: return self._each_(other, SeriesAPI.under, shift, dataframe)
         lst = self.last(shift)
         if isinstance(other, SeriesAPI):
             if other._multiple_: raise ValueError("Ambiguous comparison.")
@@ -122,17 +122,11 @@ class SeriesAPI:
         return lst < other if lst is not None and other is not None else False
 
     def crossover(self, other: Union[SeriesAPI, float, int], shift: int = 0, dataframe: bool = False) -> Union[bool, list[bool], pl.DataFrame]:
-        if self._multiple_:
-            if not isinstance(other, SeriesAPI) or not other._multiple_: raise ValueError("Ambiguous comparison.")
-            r = {c._prefix_: c.crossover(o, shift) for c, o in zip(self._children_, other._children_)}
-            return pl.DataFrame(r) if dataframe else list(r.values())
+        if self._multiple_: return self._each_(other, SeriesAPI.crossover, shift, dataframe)
         return self.over(other, shift) and self.under(other, shift + 1)
 
     def crossunder(self, other: Union[SeriesAPI, float, int], shift: int = 0, dataframe: bool = False) -> Union[bool, list[bool], pl.DataFrame]:
-        if self._multiple_:
-            if not isinstance(other, SeriesAPI) or not other._multiple_: raise ValueError("Ambiguous comparison.")
-            r = {c._prefix_: c.crossunder(o, shift) for c, o in zip(self._children_, other._children_)}
-            return pl.DataFrame(r) if dataframe else list(r.values())
+        if self._multiple_: return self._each_(other, SeriesAPI.crossunder, shift, dataframe)
         return self.under(other, shift) and self.over(other, shift + 1)
 
     def __repr__(self) -> str:

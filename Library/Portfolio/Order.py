@@ -11,7 +11,6 @@ from Library.Utility.Enumeration import EnumerationAPI
 from Library.Portfolio.Position import PositionAPI
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Account import AccountAPI
-from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Universe.Contract import ContractAPI
 from Library.Market.Timestamp import TimestampAPI
@@ -102,10 +101,10 @@ class OrderAPI(DatapointAPI):
     def Structure(self) -> dict:
         return {
             self.ID.UID: PrimaryKey(pl.Int64),
-            self.ID.Session: ForeignKey(pl.String, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")'),
-            self.ID.Account: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{AccountAPI.Table}"("{AccountAPI.ID.UID}")'),
+            self.ID.Session: ForeignKey(pl.String, reference=SessionAPI.reference()),
+            self.ID.Account: ForeignKey(pl.Int64, reference=AccountAPI.reference()),
             self.ID.Position: pl.Int64(),
-            self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
+            self.ID.Security: ForeignKey(pl.Int64, reference=SecurityAPI.reference()),
             self.ID.Direction: pl.String(),
             self.ID.OrderType: pl.String(),
             self.ID.OrderStatus: pl.String(),
@@ -177,33 +176,25 @@ class OrderAPI(DatapointAPI):
         last_update_timestamp = coerce(last_update_timestamp)
         contract = coerce(contract)
 
-        if isinstance(session, SessionAPI): self._session_ = session
-        elif session is not MISSING and session is not None:
-            self._session_ = SessionAPI(UID=session, db=db, autoload=True)
-        if isinstance(account, AccountAPI): self._account_ = account
-        elif account is not MISSING and account is not None:
-            self._account_ = AccountAPI(UID=account, db=db, autoload=True)
-        if isinstance(position, PositionAPI): self._position_ = position
-        elif position is not MISSING and position is not None:
-            self._position_ = PositionAPI(UID=position, db=db, migrate=migrate, autosave=autosave, autoload=False, autooverload=False)
-        if isinstance(security, SecurityAPI): self._security_ = security
-        elif security is not MISSING and security is not None:
-            self._security_ = SecurityAPI(UID=security, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        self._session_ = self._relate_(session, SessionAPI, db=db, autoload=True)
+        self._account_ = self._relate_(account, AccountAPI, db=db, autoload=True)
+        self._position_ = self._relate_(position, PositionAPI, db=db, migrate=migrate, autosave=autosave, autoload=False, autooverload=False)
+        self._security_ = self._relate_(security, SecurityAPI, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
         self._direction_ = Direction.parse(direction) if direction is not MISSING else None
         self._order_type_ = OrderType.parse(order_type) if order_type is not MISSING else None
         self._order_status_ = OrderStatus.parse(order_status) if order_status is not MISSING else None
         self._time_in_force_ = TimeInForce.parse(time_in_force) if time_in_force is not MISSING else None
         if contract is not MISSING: self._contract_ = contract
-        ep = self._unwrap_price_(execution_price)
-        self._execution_price_ = self._make_price_(execution_price, reference=ep)
-        self._limit_price_ = self._make_price_(limit_price, reference=ep)
-        self._stop_price_ = self._make_price_(stop_price, reference=ep)
-        self._stop_loss_price_ = self._make_price_(stop_loss_price, reference=ep)
-        self._take_profit_price_ = self._make_price_(take_profit_price, reference=ep)
-        self._base_slippage_price_ = self._make_price_(base_slippage_price, reference=ep)
-        self._entry_timestamp_ = self._make_timestamp_(entry_timestamp)
-        self._expiration_timestamp_ = self._make_timestamp_(expiration_timestamp)
-        self._last_update_timestamp_ = self._make_timestamp_(last_update_timestamp)
+        ep = PriceAPI.unwrap(execution_price)
+        self._execution_price_ = PriceAPI.make(execution_price, ep, self._contract_)
+        self._limit_price_ = PriceAPI.make(limit_price, ep, self._contract_)
+        self._stop_price_ = PriceAPI.make(stop_price, ep, self._contract_)
+        self._stop_loss_price_ = PriceAPI.make(stop_loss_price, ep, self._contract_)
+        self._take_profit_price_ = PriceAPI.make(take_profit_price, ep, self._contract_)
+        self._base_slippage_price_ = PriceAPI.make(base_slippage_price, ep, self._contract_)
+        self._entry_timestamp_ = TimestampAPI.assign(None, entry_timestamp)
+        self._expiration_timestamp_ = TimestampAPI.assign(None, expiration_timestamp)
+        self._last_update_timestamp_ = TimestampAPI.assign(None, last_update_timestamp)
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
@@ -221,8 +212,7 @@ class OrderAPI(DatapointAPI):
         return self._session_
     @Session.setter
     def Session(self, val: Union[str, SessionAPI, None]) -> None:
-        if isinstance(val, SessionAPI): self._session_ = val
-        elif val is not None: self._session_ = SessionAPI(UID=val, db=self._db_, autoload=True)
+        if val is not None: self._session_ = self._relate_(val, SessionAPI, db=self._db_, autoload=True)
 
     @property
     @overridefield
@@ -230,8 +220,7 @@ class OrderAPI(DatapointAPI):
         return self._account_
     @Account.setter
     def Account(self, val: Union[int, AccountAPI, None]) -> None:
-        if isinstance(val, AccountAPI): self._account_ = val
-        elif val is not None: self._account_ = AccountAPI(UID=val, db=self._db_, autoload=True)
+        if val is not None: self._account_ = self._relate_(val, AccountAPI, db=self._db_, autoload=True)
 
     @property
     @overridefield
@@ -239,8 +228,7 @@ class OrderAPI(DatapointAPI):
         return self._position_
     @Position.setter
     def Position(self, val: Union[int, PositionAPI, None]) -> None:
-        if isinstance(val, PositionAPI): self._position_ = val
-        elif val is not None: self._position_ = PositionAPI(UID=val, db=self._db_, autoload=False, autooverload=False)
+        if val is not None: self._position_ = self._relate_(val, PositionAPI, db=self._db_, autoload=False, autooverload=False)
 
     @property
     @overridefield
@@ -248,8 +236,7 @@ class OrderAPI(DatapointAPI):
         return self._security_
     @Security.setter
     def Security(self, val: Union[int, SecurityAPI, None]) -> None:
-        if isinstance(val, SecurityAPI): self._security_ = val
-        elif val is not None: self._security_ = SecurityAPI(UID=val, db=self._db_, autoload=True)
+        if val is not None: self._security_ = self._relate_(val, SecurityAPI, db=self._db_, autoload=True)
         if self._security_ and self._security_.Contract:
             self.Contract = self._security_.Contract
 
@@ -291,14 +278,10 @@ class OrderAPI(DatapointAPI):
         return self._execution_price_
     @ExecutionPrice.setter
     def ExecutionPrice(self, val: Union[float, PriceAPI, None]) -> None:
-        price = val.Price if isinstance(val, PriceAPI) else val
+        price = PriceAPI.unwrap(val)
         if price is None: return
-        if self._execution_price_:
-            self._execution_price_.Price = price
-            self._execution_price_.Reference = price
-        else:
-            self._execution_price_ = PriceAPI(Price=price, Reference=price, Contract=self._contract_)
-        for backing in (self._limit_price_, self._stop_price_, self._stop_loss_price_, self._take_profit_price_, self._base_slippage_price_):
+        self._execution_price_ = PriceAPI.assign(self._execution_price_, price, price, self._contract_)
+        for backing in (self._execution_price_, self._limit_price_, self._stop_price_, self._stop_loss_price_, self._take_profit_price_, self._base_slippage_price_):
             if backing: backing.Reference = price
 
     @property
@@ -347,7 +330,7 @@ class OrderAPI(DatapointAPI):
         return self._entry_timestamp_
     @EntryTimestamp.setter
     def EntryTimestamp(self, val: Union[datetime, TimestampAPI, None]) -> None:
-        self._entry_timestamp_ = self._assign_timestamp_(self._entry_timestamp_, val)
+        self._entry_timestamp_ = TimestampAPI.assign(self._entry_timestamp_, val)
 
     @property
     @overridefield
@@ -355,7 +338,7 @@ class OrderAPI(DatapointAPI):
         return self._expiration_timestamp_
     @ExpirationTimestamp.setter
     def ExpirationTimestamp(self, val: Union[datetime, TimestampAPI, None]) -> None:
-        self._expiration_timestamp_ = self._assign_timestamp_(self._expiration_timestamp_, val)
+        self._expiration_timestamp_ = TimestampAPI.assign(self._expiration_timestamp_, val)
 
     @property
     @overridefield
@@ -363,7 +346,7 @@ class OrderAPI(DatapointAPI):
         return self._last_update_timestamp_
     @LastUpdateTimestamp.setter
     def LastUpdateTimestamp(self, val: Union[datetime, TimestampAPI, None]) -> None:
-        self._last_update_timestamp_ = self._assign_timestamp_(self._last_update_timestamp_, val)
+        self._last_update_timestamp_ = TimestampAPI.assign(self._last_update_timestamp_, val)
 
     @property
     @overridefield
@@ -413,39 +396,5 @@ class OrderAPI(DatapointAPI):
         if self.Volume is None or self.ExecutedVolume is None: return None
         return self.Volume - self.ExecutedVolume
 
-    @staticmethod
-    def _unwrap_price_(val: Union[float, PriceAPI, None]) -> Union[float, None]:
-        if isinstance(val, PriceAPI): return val.Price
-        return val if val is not MISSING else None
-
-    def _make_price_(self, val: Union[float, PriceAPI, None], reference: Union[float, None]) -> Union[PriceAPI, None]:
-        if isinstance(val, PriceAPI):
-            if val.Contract is None: val.Contract = self._contract_
-            if val.Reference is None: val.Reference = reference
-            return val
-        if val is MISSING or val is None: return None
-        return PriceAPI(Price=val, Reference=reference, Contract=self._contract_)
-
-    @staticmethod
-    def _make_timestamp_(val: Union[datetime, TimestampAPI, None]) -> Union[TimestampAPI, None]:
-        if isinstance(val, TimestampAPI): return val
-        if val is MISSING or val is None: return None
-        return TimestampAPI(DateTime=val)
-
     def _assign_price_(self, backing: Union[PriceAPI, None], val: Union[float, PriceAPI, None]) -> Union[PriceAPI, None]:
-        if isinstance(val, PriceAPI): return val
-        if val is None: return backing
-        if backing:
-            backing.Price = val
-            return backing
-        ref = self._execution_price_.Price if self._execution_price_ else val
-        return PriceAPI(Price=val, Reference=ref, Contract=self._contract_)
-
-    @staticmethod
-    def _assign_timestamp_(backing: Union[TimestampAPI, None], val: Union[datetime, TimestampAPI, None]) -> Union[TimestampAPI, None]:
-        if isinstance(val, TimestampAPI): return val
-        if val is None: return backing
-        if backing:
-            backing.DateTime = val
-            return backing
-        return TimestampAPI(DateTime=val)
+        return PriceAPI.assign(backing, val, self._execution_price_.Price if self._execution_price_ else val, self._contract_)

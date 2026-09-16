@@ -11,7 +11,6 @@ from Library.Portfolio.Order import OrderAPI
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.PnL import PnLAPI
-from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Market.Timestamp import TimestampAPI
 from Library.Market.Price import PriceAPI, Direction
@@ -36,11 +35,11 @@ class TradeAPI(PositionAPI):
     def Structure(self) -> dict:
         cols = {
             self.ID.UID: PrimaryKey(pl.Int64),
-            self.ID.Session: ForeignKey(pl.String, reference=f'"{PortfolioAPI.Schema}"."{SessionAPI.Table}"("{SessionAPI.ID.UID}")'),
-            self.ID.Account: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{AccountAPI.Table}"("{AccountAPI.ID.UID}")'),
-            self.ID.Order: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{OrderAPI.Table}"("{OrderAPI.ID.UID}")'),
-            self.ID.Position: ForeignKey(pl.Int64, reference=f'"{PortfolioAPI.Schema}"."{PositionAPI.Table}"("{PositionAPI.ID.UID}")'),
-            self.ID.Security: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{SecurityAPI.Table}"("{SecurityAPI.ID.UID}")'),
+            self.ID.Session: ForeignKey(pl.String, reference=SessionAPI.reference()),
+            self.ID.Account: ForeignKey(pl.Int64, reference=AccountAPI.reference()),
+            self.ID.Order: ForeignKey(pl.Int64, reference=OrderAPI.reference()),
+            self.ID.Position: ForeignKey(pl.Int64, reference=PositionAPI.reference()),
+            self.ID.Security: ForeignKey(pl.Int64, reference=SecurityAPI.reference()),
             self.ID.Type: pl.String(),
             self.ID.Status: pl.String(),
             self.ID.Direction: pl.String(),
@@ -106,12 +105,8 @@ class TradeAPI(PositionAPI):
         position = coerce(position)
         exit_timestamp = coerce(exit_timestamp)
         exit_balance = coerce(exit_balance)
-        if isinstance(position, PositionAPI): self._position_ = position
-        elif position is not MISSING and position is not None:
-            self._position_ = PositionAPI(UID=position, db=db, autoload=True)
-        if isinstance(exit_timestamp, TimestampAPI): self._exit_timestamp_ = exit_timestamp
-        elif exit_timestamp is not MISSING and exit_timestamp is not None:
-            self._exit_timestamp_ = TimestampAPI(DateTime=exit_timestamp)
+        self._position_ = self._relate_(position, PositionAPI, db=db, autoload=True)
+        self._exit_timestamp_ = TimestampAPI.assign(None, exit_timestamp)
         self._exit_balance_ = exit_balance if exit_balance is not MISSING else None
         super().__post_init__(db=db,
                               migrate=migrate,
@@ -148,8 +143,7 @@ class TradeAPI(PositionAPI):
         return self._position_
     @Position.setter
     def Position(self, val: Union[int, PositionAPI, None]) -> None:
-        if isinstance(val, PositionAPI): self._position_ = val
-        elif val is not None: self._position_ = PositionAPI(UID=val, db=self._db_, autoload=True)
+        if val is not None: self._position_ = self._relate_(val, PositionAPI, db=self._db_, autoload=True)
 
     @property
     @overridefield
@@ -157,10 +151,7 @@ class TradeAPI(PositionAPI):
         return self._exit_timestamp_
     @ExitTimestamp.setter
     def ExitTimestamp(self, val: Union[datetime, TimestampAPI, None]) -> None:
-        if isinstance(val, TimestampAPI): self._exit_timestamp_ = val
-        elif val is not None:
-            if self._exit_timestamp_: self._exit_timestamp_.DateTime = val
-            else: self._exit_timestamp_ = TimestampAPI(DateTime=val)
+        self._exit_timestamp_ = TimestampAPI.assign(self._exit_timestamp_, val)
 
     @property
     @overridefield
