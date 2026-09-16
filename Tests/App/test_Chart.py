@@ -90,3 +90,9 @@ def test_component_wraps_itself_when_an_anchor_is_given():
 def test_component_without_an_anchor_stays_bare():
     built = NetworkAPI(id={"name": "dag"}, nodes=_NODES_, edges=_EDGES_).build()
     assert built[0].className != "network-host"
+
+def test_a_prebuilt_graph_renders_the_same_figure():
+    graph = NetworkAPI.graph(_NODES_, _EDGES_)
+    assert NetworkAPI.render(_NODES_, _EDGES_, graph=graph).to_json() == NetworkAPI.render(_NODES_, _EDGES_).to_json()
+    assert NetworkAPI.order(_NODES_, _EDGES_, graph=graph) == NetworkAPI.order(_NODES_, _EDGES_)
+    assert NetworkAPI.span(_NODES_, _EDGES_, graph=graph) == NetworkAPI.span(_NODES_, _EDGES_)

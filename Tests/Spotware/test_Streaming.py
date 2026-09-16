@@ -1,3 +1,4 @@
+import threading
 from typing import Union
 import pytest
 import Library.Market
@@ -33,6 +34,23 @@ def _depth_event(symbol_id: int, new=None, deleted=None):
     for qid in (deleted or []):
         ev.deletedQuotes.append(qid)
     return ev
+def _within_(function, seconds: float = 5):
+    outcome = {}
+    def _run_():
+        try: outcome["result"] = function()
+        except Exception as error: outcome["error"] = error
+    worker = threading.Thread(target=_run_, daemon=True)
+    worker.start()
+    worker.join(timeout=seconds)
+    assert not worker.is_alive()
+    return outcome
+def _spots_(api, *events):
+    def fire(request, api):
+        for ev in events: api.push(ev)
+        return ProtoOASubscribeSpotsRes()
+    api._responses_.append(fire)
+    api._responses_.append(ProtoOAUnsubscribeSpotsRes())
+    return api._message_("ProtoOASubscribeSpotsReq", symbolId=[1]), api._message_("ProtoOAUnsubscribeSpotsReq", symbolId=[1])
 def test_ticks_dispatches_events(spotware):
     events = [
         _spot_event(1, bid=105000, ask=105002),
@@ -126,3 +144,27 @@ def test_ticks_ignores_unrelated_symbols(spotware):
     spotware.streaming.ticks(symbols=[1], callback=lambda d: received.append(d), frame=False, limit=1, timeout=5)
     assert len(received) == 1
     assert received[0]["Symbol"] == 1
+def test_ticks_raises_a_failing_callback_instead_of_hanging(spotware):
+    _spots_(spotware, _spot_event(1, bid=105000, ask=105002))
+    def _callback_(item): raise ValueError("boom")
+    outcome = _within_(lambda: spotware.streaming.ticks(symbols=1, callback=_callback_, limit=3))
+    assert isinstance(outcome.get("error"), ValueError)
+    assert type(spotware._sent_[-1]).__name__ == "ProtoOAUnsubscribeSpotsReq"
+def test_listen_raises_a_failing_decoder_instead_of_hanging(spotware):
+    subscribe, unsubscribe = _spots_(spotware, _spot_event(1, bid=105000, ask=105002))
+    def _decode_(payload): raise KeyError("decode")
+    outcome = _within_(lambda: spotware._listen_(subscribe, unsubscribe, _decode_, lambda item: None, limit=1))
+    assert isinstance(outcome.get("error"), KeyError)
+def test_listen_stops_decoding_once_the_limit_is_reached(spotware):
+    subscribe, unsubscribe = _spots_(spotware, *[_spot_event(1, bid=bid, ask=bid + 2) for bid in (105000, 105010, 105020)])
+    decoded = []
+    def _decode_(payload):
+        decoded.append(payload.bid)
+        return [payload]
+    assert spotware._listen_(subscribe, unsubscribe, _decode_, lambda item: None, limit=1, timeout=5) == 1
+    assert decoded == [105000]
+def test_listen_counts_items_until_the_limit_across_a_multi_item_message(spotware):
+    subscribe, unsubscribe = _spots_(spotware, _spot_event(1, bid=105000, ask=105002))
+    received = []
+    assert spotware._listen_(subscribe, unsubscribe, lambda payload: [1, 2, 3], received.append, limit=2, timeout=5) == 2
+    assert received == [1, 2]

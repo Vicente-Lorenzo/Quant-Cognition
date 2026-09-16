@@ -1,0 +1,101 @@
+FundamentalManagement: null
+MoneyManagement:
+  ATRScale:
+  - 1.5
+  RiskPercentage:
+  - 1.0
+PortfolioManagement:
+  PositionMode:
+  - Netting
+RiskManagement: null
+SentimentalManagement: null
+SignalManagement:
+  ActorLearningRate:
+  - 0.0001
+  ActorRegularization:
+  - 0.001
+  BatchSize:
+  - 64
+  CriticLearningRate:
+  - 0.001
+  DirectionalEntryThreshold:
+  - -0.0
+  - 0.0
+  DirectionalExitThreshold:
+  - -0.0
+  - 0.0
+  DiscountFactor:
+  - 0.998
+  GradientClip:
+  - 1.0
+  HiddenShape1:
+  - 64
+  HiddenShape2:
+  - 32
+  MemorySize:
+  - 1000000
+  NormalizeWindow:
+  - 200
+  ObservationWindow:
+  - 1
+  SoftUpdate:
+  - 0.001
+  VolumeEntryThreshold: null
+  VolumeExitThreshold: null
+  DecisionSchedule:
+  - D1
+  AccountFeatures:
+  - false
+  RebalanceThreshold:
+  - 0.2
+  Weights:
+  - Tests/Golden/Consistency/DDPG/Weights
+TechnicalManagement:
+  ATR:
+  - ATR
+  - 14
+  ER:
+  - ER
+  - 120
+  MAFast:
+  - SMA
+  - 24
+  MAMedium:
+  - SMA
+  - 120
+  MASlow:
+  - SMA
+  - 480
+  MOMFast:
+  - ROC
+  - 24
+  MOMMedium:
+  - ROC
+  - 120
+  MOMSlow:
+  - ROC
+  - 480
+  RVFast:
+  - RV
+  - 16
+  RVSlow:
+  - RV
+  - 480
+  MOMRegime:
+  - ROC
+  - 1440
+  MOMEpoch:
+  - ROC
+  - 2880
+  MARegime:
+  - SMA
+  - 1440
+  MAEpoch:
+  - SMA
+  - 2880
+  MACycle:
+  - SMA
+  - 4320
+  MAEra:
+  - SMA
+  - 5040

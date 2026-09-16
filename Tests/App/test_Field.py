@@ -73,11 +73,23 @@ def test_payload_skips_the_identity_and_unstored_entries():
     assert payload == {"Name": "Alpha", "Kind": "Manual", "MaxRetry": 2, "Waits": True}
 
 def test_missing_reports_nothing_when_satisfied():
-    assert FieldAPI.missing(_SPEC_, ("uid-1", "Alpha", "Manual", 0, True, False)) is None
+    assert FieldAPI.missing(_SPEC_, ("uid-1", "Alpha", "Manual", 0, True, False)) == []
 
 def test_missing_names_one_absent_field():
-    assert FieldAPI.missing(_SPEC_, ("uid-1", "", "Manual", 0, True, False)) == "Name"
+    assert FieldAPI.missing(_SPEC_, ("uid-1", "", "Manual", 0, True, False)) == ["Name"]
 
-def test_missing_joins_several_absent_fields():
+def test_missing_lists_several_absent_fields():
     spec = (FieldAPI(name="a", required=True), FieldAPI(name="b", required=True), FieldAPI(name="c", required=True))
-    assert FieldAPI.missing(spec, ("", "", "")) == "A, B and C"
+    assert FieldAPI.missing(spec, ("", "", "")) == ["A", "B", "C"]
+
+def test_choices_pair_each_value_with_itself():
+    assert FieldAPI.choices(["A", "B"]) == [{"label": "A", "value": "A"}, {"label": "B", "value": "B"}]
+
+def test_command_quotes_a_value_with_spaces():
+    spec = (FieldAPI(name="ticker"), FieldAPI(name="description"), FieldAPI(name="plot", control="switch"))
+    assert FieldAPI.command(spec, ("EURUSD", "two words", True), "Backtesting") == 'Backtesting --ticker EURUSD --description "two words" --plot'
+
+def test_parse_reads_a_command_back():
+    spec = (FieldAPI(name="ticker"), FieldAPI(name="description"), FieldAPI(name="plot", control="switch"))
+    command = FieldAPI.command(spec, ("EURUSD", "two words", True), "Backtesting")
+    assert FieldAPI.parse(spec, command) == {"Ticker": "EURUSD", "Description": "two words", "Plot": "Yes"}

@@ -1,4 +1,9 @@
+from datetime import datetime
+
+from Library.App.V2.Page.Settings import SettingsPageAPI
 from Library.Auth import RoleAPI
+from Library.Web.Core.Status import StatusAPI
+from Library.Web.Scheduler.Workflow import SchedulerWorkflowAPI
 
 _ACCESS_ = {"/trading": RoleAPI.Administrator, "/framework/database": RoleAPI.Moderator,
             "/framework": RoleAPI.Viewer, "/framework/hierarchy": RoleAPI.Viewer}
@@ -45,3 +50,20 @@ def test_the_root_launchpad_is_a_four_by_two_matrix(application):
 def test_section_launchpads_stay_automatic(application):
     for endpoint in ("/research/", "/strategy/", "/scheduler/", "/framework/"):
         assert application._pages_[endpoint]._matrix_() == {}, f"{endpoint} pins its grid"
+
+def test_settings_offer_a_display_zone_that_defaults_to_the_browser(application):
+    page = next(page for page in application._pages_.values() if isinstance(page, SettingsPageAPI))
+    dropdown = page._zone_()
+    assert dropdown.value == "Browser" and dropdown.persistence_type == "local"
+    assert [option["value"] for option in dropdown.options[:2]] == ["Browser", "UTC"]
+
+def test_workflow_zone_field_writes_the_zone_column():
+    field = SchedulerWorkflowAPI._FIELD_["zone"]
+    assert field.column == "Zone" and field.write("") is None
+    assert "Zone" in SchedulerWorkflowAPI._WORKFLOW_COLUMNS_
+
+def test_detail_stamps_carry_their_utc_value():
+    stamp = StatusAPI._stamp_(datetime(2026, 7, 1, 13, 0, 5))
+    assert stamp.children == "2026-07-01 13:00:05"
+    assert getattr(stamp, "data-utc") == "2026-07-01 13:00:05"
+    assert StatusAPI._stamp_(None) is None

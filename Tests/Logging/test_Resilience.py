@@ -10,6 +10,14 @@ def test_raising_lambda_never_propagates(recorder):
     def explode(): raise ValueError("message build failed")
     log.info(explode)
 
+def test_raising_lambda_never_propagates_through_failure(recorder):
+    recorder.set_level(VerboseLevel.Debug)
+    log = LoggingAPI("Raiser")
+    def explode(): raise ValueError("message build failed")
+    log.failure(explode)
+    log.failure(lambda: "still working")
+    assert len(recorder.matching("still working")) == 2
+
 def test_raising_lambda_does_not_stop_later_records(recorder):
     recorder.set_level(VerboseLevel.Debug)
     log = LoggingAPI("Raiser")

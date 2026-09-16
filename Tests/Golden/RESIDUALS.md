@@ -3,7 +3,7 @@
 > **Two halves, two engines. `Online/` and `Offline/` hold different things.**
 >
 > **`Online/`** is `Simulation` — `RealtimeAPI`, the Connector cBot launched from cTrader's Backtesting
-> tab with Python mirroring cTrader's stream. `Realtime.py:283-303` unpacks `gross_pnl`,
+> tab with Python mirroring cTrader's stream. `Realtime.py:277-302` unpacks `gross_pnl`,
 > `commission_pnl`, `swap_pnl` and `net_pnl` **from the wire**, so those figures are cTrader's own and
 > agreement on them is largely tautological. It gates the wire decode, the portfolio bookkeeping, the
 > trade-to-deal aggregation and `Library/Statistic` — and it found three real defects in exactly those
@@ -93,7 +93,7 @@ commission. The agreement is therefore to about a cent over 31.4 M units of volu
 
 The naive figure — 31.409 M × 45 × 2 sides — is 2 826.81, and **both** engines come in below it
 (2 814.63 and 2 815.90). cTrader quantises commission to the cent exactly as `truncate(x, 2)` at
-`Backtesting.py:581` does. The `truncate` call is faithful, not a defect. It is worth re-checking on
+`Backtesting.py:599` does. The `truncate` call is faithful, not a defect. It is worth re-checking on
 run 2, where minimum-volume trades make the quantisation proportionally largest.
 
 **Swap, -0.53.** Same cause as commission: cTrader carries the final position further.
@@ -165,7 +165,7 @@ zero in the two engines, moving it between the winning and losing counts. Not a 
 `1000 × 45/1e6 = 0.045`, which `truncate(x, 2)` makes 0.04, an 11% reduction, and the naive figure for
 the run would be 63.81. Ours is 56.76, which is exactly `709 × 2 × 0.04` plus the open position's
 0.04 opening side. cTrader reports 56.79 against `710 × 2 × 0.04 = 56.80`. **cTrader quantises to the
-cent identically.** `Backtesting.py:581` reproduces the platform and must not be changed.
+cent identically.** `Backtesting.py:599` reproduces the platform and must not be changed.
 
 **`Max Balance Drawdown (%)` is correct here.** 0.83% against cTrader's 0.82%, and correctly below the
 equity drawdown. Run 1 had it at 44.24% against 31.64% and *above* its own equity drawdown. The
@@ -407,6 +407,41 @@ auto-resolution runs, fees left on `Auto` so they resolve to `Accurate` against 
 | 4 USDJPY H1 EUR 1M | -3 313.99 | -3 415.62 | +101.63 | 3.0% |
 | 5 EURUSD D1 EUR 11y | **-1 981.27** | **-1 980.34** | **-0.93** | **0.05%** |
 
+## Re-baselined 2026-09-15 — the engine was reading Float32 prices
+
+**The table above was measured on corrupted inputs, and the `Offline/` exports now hold the corrected
+run.** `DataframeAPI.frame` ended with `shrink_dtype()` on every column, which silently downcast
+`Float64` to `Float32` and integers to `Int8`. Every database read goes through it, and the preload
+tape cache stored its intra-bar frames that way (`intra_H1.parquet`, `intra_M1.parquet`: every tick
+price and conversion `Float32`). Proven both ways: restoring the downcast reproduces the old exports
+byte for byte, and removing it plus a cache format bump (`BacktestingAPI._CACHE_FORMAT_`, so stale
+tapes are rebuilt instead of read) produces the new ones, which a warm rerun reproduces byte for byte.
+
+A pip size of `1e-05` became `9.99999974737875e-06`, which is why `Points` read `151.000003814571` for a
+151-point move. On USDJPY it went further: a price near 134.718 carries too few significant digits in
+`Float32` to resolve a 0.001 tick, so intra-bar targets were compared against the wrong price and
+exits moved — golden 4 now closes 1 017 trades, not 1 018.
+
+| Run | Offline net (Float32) | Offline net (Float64) | cTrader net | Δ before | Δ now |
+|---|---|---|---|---|---|
+| 1 EURUSD H1 EUR 10k | -2 815.54 | -2 814.49 | -2 916.93 | 101.39 | 102.44 |
+| 2 USDJPY H1 EUR 10k | -58.40 | **-62.10** | -62.34 | 3.94 | **0.24** |
+| 3 EURUSD H1 **USD** 10k | -2 299.58 | -2 293.90 | -3 173.42 | 873.84 | 879.52 |
+| 4 USDJPY H1 EUR 1M | -3 313.99 | **-3 402.28** | -3 415.62 | 101.63 | **13.34** |
+| 5 EURUSD D1 EUR 11y | -1 981.27 | -1 981.27 | -1 980.34 | -0.93 | -0.93 |
+
+**Both USDJPY runs moved toward cTrader, by 16× and 7.6×.** Runs 1 and 3 did not move materially:
+their gaps are the open position, the descend gate and the account-currency conversion diagnosed
+below, none of which a dtype touches. Run 5 is Daily and moves only in the fifth decimal
+(-1 981.271972 → -1 981.272019). The Δ columns are offline minus cTrader, so run 5's is negative where
+runs 1-4 are positive: it is the only run that lands below cTrader. The sections below were written
+against the `Float32` runs; their mechanisms stand, but any tick count or exit count they quote belongs
+to the old exports. The old exports are preserved in git at commit `578c9a5`.
+
+`Offline/Golden 1-5/Run.json` still carries `StartedAt` 2026-09-11: the manifests and `Parameters.yml`
+are from the original runs, while the five exports are from the 2026-09-15 rerun with identical
+parameters.
+
 **Run 5 is the result to read first.** Eleven years, 512 trades, swap the dominant cost, and the
 offline engine lands **0.93 EUR** from cTrader — 0.009% of the opening balance. Its components:
 gross -531.52 against -546.35, commission -235.98 against -235.12, swap **-1 213.78 against
@@ -452,7 +487,7 @@ and 134.718 plus the spread is 134.724 — exactly cTrader's exit. So cTrader st
 the intrabar high, the offline engine did not, and it rode the position to a profit four hours later.
 
 **The tick is in the tape.** This is not missing data. The stop comparison itself is correct —
-`Backtesting.py:795` tests a Sell stop against the **ask**. The fault is upstream, in the
+`Backtesting.py:799` tests a Sell stop against the **ask**. The fault is upstream, in the
 auto-resolution gate.
 
 `_intrabar_source_` (`Backtesting.py:1007`) only walks a bar's interior when
@@ -470,7 +505,7 @@ before that measurement — it is also the mechanism that makes auto-resolution 
 27.5% off, far worse than any other run, on the `account == quote` branch. Its volumes run 6.3% above
 the online half (32.926M against 30.967M) where run 4's match to 0.01%.
 
-`_conversions_` (`Backtesting.py:476`) reads `tick.BidBaseConversion` and `tick.BidQuoteConversion`
+`_conversions_` (`Backtesting.py:494`) reads `tick.BidBaseConversion` and `tick.BidQuoteConversion`
 **unconditionally**, falling back to a computed value only when they are null. Those stored columns are
 **EUR-denominated**. A USD account therefore reads EUR conversions and scales its P&L and its sizing by
 the wrong factor.

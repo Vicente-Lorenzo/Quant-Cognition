@@ -150,3 +150,37 @@ def test_lineage_is_one_directional():
 def test_provenance_names_the_kind_it_came_through(ladder):
     ladder.promote(TrendStrategyAPI, "Realtime", {"MoneyManagement": {"RiskPercentage": [9.9]}}, *RUNGS)
     assert "via Realtime" in ladder.provenance(TrendStrategyAPI, "Backtesting", *RUNGS)
+
+def test_a_pinned_file_overrides_the_defaults_key_by_key(ladder, tmp_path):
+    source = tmp_path / "Pinned.yml"
+    source.write_text("MoneyManagement:\n  RiskPercentage: [2.5]\n", encoding="utf-8")
+    parameters, trail = ladder.pin(TrendStrategyAPI, "Backtesting", source, tmp_path / "Run" / "Parameters.yml")
+    defaults = TrendStrategyAPI.defaults("Backtesting")
+    assert parameters.data["MoneyManagement"]["RiskPercentage"] == [2.5]
+    assert parameters.data["RiskManagement"] == defaults["RiskManagement"]
+    assert trail == [LadderAPI._ORIGIN_, str(source)]
+
+def test_a_pinned_parameter_never_writes_back_to_its_source(ladder, tmp_path):
+    source = tmp_path / "Pinned.yml"
+    source.write_text("MoneyManagement:\n  RiskPercentage: [2.5]\n", encoding="utf-8")
+    target = tmp_path / "Run" / "Parameters.yml"
+    target.parent.mkdir()
+    parameters, _ = ladder.pin(TrendStrategyAPI, "Backtesting", source, target)
+    parameters.MoneyManagement.RiskPercentage = [9.0]
+    assert "2.5" in source.read_text(encoding="utf-8") and target.is_file()
+
+def test_a_pinned_file_that_does_not_exist_fails_loudly(ladder, tmp_path):
+    with pytest.raises(Exception):
+        ladder.pin(TrendStrategyAPI, "Backtesting", tmp_path / "Absent.yml", tmp_path / "Parameters.yml")
+
+def test_a_pinned_file_keeps_its_own_key_order(ladder, tmp_path):
+    source = tmp_path / "Pinned.yml"
+    source.write_text("TechnicalManagement:\n  Zeta: [1]\n  Alpha: [2]\nMoneyManagement:\n  RiskPercentage: [2.5]\n", encoding="utf-8")
+    parameters, _ = ladder.pin(TrendStrategyAPI, "Backtesting", source, tmp_path / "Parameters.yml")
+    assert list(parameters.data)[:2] == ["TechnicalManagement", "MoneyManagement"]
+    assert list(parameters.data["TechnicalManagement"])[:2] == ["Zeta", "Alpha"]
+
+def test_arrange_follows_the_template_then_appends_the_rest():
+    arranged = LadderAPI.arrange({"a": 1, "b": {"x": 1, "y": 2}, "c": 3}, {"c": 0, "b": {"y": 0}})
+    assert list(arranged) == ["c", "b", "a"]
+    assert list(arranged["b"]) == ["y", "x"]

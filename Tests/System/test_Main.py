@@ -84,3 +84,47 @@ def test_snapshot_keeps_the_period_when_one_is_supplied(tmp_path):
     snapshot(tmp_path, _Args_(system="Backtesting", start="2023-01-01", stop="2024-01-01"), None, LoggingAPI())
     manifest = json.loads((tmp_path / "Run.json").read_text(encoding="utf-8"))
     assert manifest["Start"] == "2023-01-01" and manifest["Stop"] == "2024-01-01"
+
+@pytest.mark.parametrize("system", ["Backtesting", "Optimization", "Learning"])
+def test_every_offline_system_accepts_pinned_parameters(system, monkeypatch):
+    monkeypatch.setattr("sys.argv", ["Main.py", system, "--start", "2020-01-01", "--stop", "2021-01-01", "--parameters", "Pinned.yml"])
+    assert Main._parse_().parameters == "Pinned.yml"
+
+def test_realtime_systems_do_not_take_pinned_parameters(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["Main.py", "Simulation", "--parameters", "Pinned.yml"])
+    with pytest.raises(SystemExit):
+        Main._parse_()
+
+def test_parameters_default_to_the_ladder_when_nothing_is_pinned(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["Main.py", "Backtesting", "--start", "2020-01-01", "--stop", "2021-01-01"])
+    assert Main._parse_().parameters is Main.MISSING
+
+class _Ladder_:
+
+    def parameterize(self, strategy, kind, *rungs):
+        return "Ladder", ["Defaults"]
+
+    def pin(self, strategy, kind, source, target):
+        return ("Pinned", source, target), ["Defaults", source]
+
+def test_a_pinned_path_bypasses_the_ladder_and_targets_the_run_folder(tmp_path):
+    trails = {}
+    pinned = Main._parameters_(_Ladder_(), None, (), trails, tmp_path, "Backtesting", "Pinned.yml")
+    assert pinned == ("Pinned", "Pinned.yml", tmp_path / "Input" / "Parameters.yml")
+    assert trails["Backtesting"] == ["Defaults", "Pinned.yml"]
+    assert Main._parameters_(_Ladder_(), None, (), trails, tmp_path, "Optimization") == "Ladder"
+
+@pytest.mark.parametrize("system", ["Backtesting", "Optimization", "Learning"])
+@pytest.mark.parametrize("given", [[], ["--start", "2020-01-01"], ["--stop", "2021-01-01"]])
+def test_every_offline_system_requires_both_ends_of_the_period(system, given, monkeypatch):
+    monkeypatch.setattr("sys.argv", ["Main.py", system, *given])
+    with pytest.raises(SystemExit):
+        Main._parse_()
+
+def test_snapshot_records_a_command_that_splits_back_into_the_same_arguments(tmp_path, monkeypatch):
+    from Library.System.Main import _snapshot_ as snapshot
+    from Library.Utility.Runtime import split_arguments
+    arguments = ["Backtesting", "--description", "Golden with spaces", "--run", str(tmp_path / "Offline Golden 1")]
+    monkeypatch.setattr("sys.argv", ["Main.py", *arguments])
+    snapshot(tmp_path, _Args_(system="Backtesting"), None, LoggingAPI())
+    assert split_arguments(json.loads((tmp_path / "Run.json").read_text(encoding="utf-8"))["Command"]) == arguments

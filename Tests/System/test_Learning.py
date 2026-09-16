@@ -50,6 +50,10 @@ class _FakeStrategy_:
     Weights = None
     _ACTION_SHAPE_ = 1
 
+    @classmethod
+    def key(cls) -> str:
+        return cls.__name__
+
 class _Harness_(LearningAPI):
 
     WEIGHTS = None

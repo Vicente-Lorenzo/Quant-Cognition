@@ -21,7 +21,7 @@ corrected engine, and it replaces the first only if it is stronger.
 
 | Phase | Scope | Gate | Can start |
 |---|---|---|---|
-| **0** | **Safety net — regenerate the goldens** | a cTrader session | **now** |
+| **0** | Safety net — **complete 2026-09-17** (Online and Offline 1-5, DDPG consistency golden) | none | done |
 | **1** | Spotware module and data acquisition | broker API credentials | **now**, in parallel with 2 |
 | **2** | Database structure and TimescaleDB | Phase 0 complete | after 0 |
 | **3** | Backtesting engine accuracy | Phases 0 and 2 complete | after 2 |
@@ -35,14 +35,19 @@ corrected engine, and it replaces the first only if it is stronger.
 
 **Three rules bind the order.**
 
-1. **Nothing touches the engine until Phase 0 exists.** There is no regression gate today — `Reports/`
-   holds only `Plots/`, and `Research/DDPG-EURUSD-H1/verify_lock.py` section 3 fingerprints goldens
-   that are not on disk and never were in git.
+1. **Nothing touches the engine until Phase 0 exists.** It exists as of 2026-09-17 —
+   `Tests/Golden/Online` and `Tests/Golden/Offline` (runs 1-5 each) plus `Tests/Golden/Consistency/DDPG`,
+   in git. `pytest Tests/Golden --golden` replays the six offline-engine goldens byte for byte, each with
+   its own `Parameters.yml` pinned, and `verify_lock.py` section 3 fingerprints `Tests/Golden/`.
 2. **There is exactly one golden re-baseline, and it is item 3.9.** Both the v2 tick schema (2.6) and
    the sizing fixes (3.2, 3.3) change engine output deliberately. Re-baselining after each would cost
    two cTrader sessions and would hide which change moved which number. Phases 2 and 3 therefore run
    against the Phase 0 goldens as a *tripwire* — a break is expected at 2.6 and 3.2, and every break
-   must be explained before 3.9 accepts it.
+   must be explained before 3.9 accepts it. **Declared exception, 2026-09-15:** the offline half was
+   re-baselined once outside 3.9, when `shrink_dtype()` was removed from `DataframeAPI.frame` — every
+   database read and preload tape had been downcasting `Float64` prices to `Float32`. That corrected an
+   input, not engine logic; the pre-fix exports stay in commit `578c9a5`, and the before/after is in
+   `Tests/Golden/RESIDUALS.md`, "Re-baselined 2026-09-15".
 3. **Phase 4 retrains once, at the end.** Every engine change invalidates trained weights. Retraining
    between phases burns the longest-running job in the framework for a result the next phase throws
    away.
@@ -106,7 +111,7 @@ signals; `DDPG` has none of that machinery and gets its own golden at 0.2.
 
 - **The cTrader half** is the Connector cBot inside cTrader's own Backtesting tab, which is
   `Simulation`, which is `RealtimeAPI`. cTrader owns the account, the window and the feed, and
-  `Realtime.py:283-303` **unpacks gross, commission, swap and net from the wire** — they are cTrader's
+  `Realtime.py:277-302` **unpacks gross, commission, swap and net from the wire** — they are cTrader's
   numbers, stored verbatim. Only the user can run it, from the platform, never the terminal.
 - **The CLI half** is a standalone `Backtesting` run, which is `BacktestingAPI`, which computes its own
   fills and fees. It is CLI-only because there is no cTrader tab for it, and it is the engine every
@@ -119,8 +124,8 @@ or a fee, because those figures came from cTrader; agreement on them is tautolog
 `BacktestingAPI` change cannot move these files at all.** Deciding item 3.2 needs the CLI half for the
 same reason: in `Simulation` our sizer computes the volume and cTrader merely executes it.
 
-So the set below is entered twice: once in cTrader's Backtesting tab, once as CLI flags — and until the
-CLI half exists, Phase 3 has no gate.
+So the set below is entered twice: once in cTrader's Backtesting tab, once as CLI flags. Both halves now
+exist (0.3), and the CLI half is Phase 3's gate.
 
 | Table column | Where it goes in cTrader's Backtesting tab |
 |---|---|
@@ -199,7 +204,20 @@ the folders.** The previous set was lost precisely because it never entered git.
 **Done when:** five folders committed, the residual against cTrader written down per run, and
 `verify_lock.py` updated to fingerprint them and passing all three sections.
 
-### 0.2 The DDPG golden
+### 0.2 The DDPG golden — done 2026-09-17
+
+`Tests/Golden/Consistency/DDPG` holds `Run.json`, the pinned `Parameters.yml`, the champion's weights
+copied under `Weights/` (actor sha256 `ffcbbf6c3e62d719`, so the golden survives `Research/` being
+removed) and the five exports. It runs through the product CLI (`Backtesting --parameters ...`) under the
+thesis conditions — tick spread, 3.5 points commission, swap-free, netting, D1 decisions, rebalance 0.20
+— and reproduces the published replay exactly: realized 3 344.09 plus the open position's 57.46 is
+**+34.02 %** of 10 000, equity drawdown 23.45 %. Two reruns are byte-identical.
+
+**Found on the way — the indicator key order is an input to the model.**
+`DDPGStrategyAPI._observation_features_` walks `TechnicalManagement` in dict order, so reordering the YAML
+permutes the network's inputs without an error: the same weights gave +34.02 % in the harness order,
++31.46 % with the ladder's defaults-first order and −46.19 % with sorted keys. `LadderAPI.pin` now keeps
+a pinned file's order and `Parameter._save_` no longer sorts keys; the durable fix is item 4.8.
 
 **No cTrader session — we generate this one ourselves.**
 
@@ -226,9 +244,12 @@ and `Contract.json` freezing the terms. Three defects fixed to get there — the
 writing a Polars `Series` repr, `Run.json` never written on `Simulation` because `_snapshot_` read
 `args.start`, and `wt.exe` collapsing quotes so a multi-word `--description` killed the run.
 
-**The `BacktestingAPI` half is not started, and nothing in Phase 3 has a gate until it is.** Run the
-`Backtesting` subcommand on the same five configurations, pinned to `Contract.json` rather than `Auto`,
-because contract terms are a mutating input — `Universe.Contract` is overwritten by every cBot run
+**The `BacktestingAPI` half is done too:** `Tests/Golden/Offline/Golden 1-5`, the `Backtesting`
+subcommand on the same five configurations, run 2026-09-11 and re-baselined 2026-09-15 after the
+`Float32` fix (rule 2's declared exception), with the residual per run in `RESIDUALS.md`'s offline
+section. Of its done-when, only deciding item 3.2 remains. It ran with fees on `Auto` against a
+`Universe.Contract` row first verified equal to `Contract.json`, because contract terms are a mutating
+input — `Universe.Contract` is overwritten by every cBot run
 (`UpdatedBy` reads `Autosave`), swap feeds balance, balance feeds `Risk` sizing at 1%, so a drifted
 swap rate moves every volume and every number downstream, not just `SwapPnL`.
 
@@ -382,7 +403,7 @@ not.
 
 **Offline half done 2026-09-15; the live half waits on the Open API application (1.4 gate).**
 `Tests/Spotware` runs in the default suite, 77 passed and none skipped. The module went from 1 624 to
-1 037 lines in a final pass that removed every re-implementation it carried:
+1 033 lines in a final pass that removed every re-implementation it carried:
 
 - **Wire enums come from the vendor's own protobuf descriptors**, not hand-written maps. `_code_`
   encodes a wire name, a framework member (`TimeInForce.GoodTillCancel`) or an integer; `_named_`
@@ -436,7 +457,7 @@ None of it had a production caller. `ResultAPI` duplicated Polars plus `Datafram
 the section vocabulary was a second set of column names beside `TickAPI.ID`; the symbol-to-`Security`
 map was in-memory where it has to be persisted Universe data; `ProviderAPI` collided with
 `Library/Universe/Provider.py`; and `_listen_` was shadowed by `RemoteAPI._listen_` in Bloomberg. What
-survived is the Spotware drift repair — columnar frames and the canonical keys `Symbol · Timeframe ·
+survived is the Spotware drift repair — columnar frames and the canonical keys `Symbol · Ticker · Timeframe ·
 Timestamp · Ask · Bid · Open · High · Low · Close · Volume · Quote · Size · Action`.
 
 ### 1.4 Continuous live capture
@@ -718,7 +739,7 @@ Three consequences to plan for:
    `_build_intra_arrays_` holds these as numpy arrays per intra level, so it is real memory on an M1
    tape.
 3. **A wide but mechanical rename.** `_build_intra_arrays_` reads `frame["HighTick.Ask"]`,
-   `Backtesting.py:252` constructs `GapTick=...`, `_should_descend_` reads `bar.HighTick`. All become
+   `Backtesting.py:239` constructs `GapTick=...`, `_should_descend_` reads `bar.HighTick`. All become
    `HighPoint.BidTick.*`. It touches every price path, so it lands **with** this item, not before or
    after.
 
@@ -905,7 +926,7 @@ comparison against cTrader. Fix this before anything else in the phase.**
 `_intrabar_source_` (`Backtesting.py:1007`) walks a bar's interior only when
 `_should_descend_(bids, asks)` passes; otherwise the bar is **skipped whole** and none of its ticks are
 examined. The gate decides from the bar's four OHLC bid and ask values plus a spread pad
-(`_should_descend_`, line 955). When a bar's stored high ask under-represents the true maximum ask
+(`_should_descend_`, line 958). When a bar's stored high ask under-represents the true maximum ask
 inside it, an armed stop the tape *could* have triggered is never checked.
 
 **The failing case, with data.** Offline run 2, trade 236: Sell USDJPY entered 2023-05-10 14:00:00.217
@@ -1075,7 +1096,7 @@ source, not a bolt-on.
 `PositionMode.Hedging` is a stated goal and is **unproven, not merely untested** — everything to date ran
 `PositionMode.Netting`. Treat it as new work with its own validation, not as a flag to flip.
 
-### 3.6 The `net.csv` concat drops `Position` and silently disables aggregation
+### 3.6 The `net.csv` concat drops `Position` and silently disables aggregation — done 2026-09-11
 
 **Explained 2026-09-10, both halves, one mechanism. The plus-one is correct; the Aggregated column is not.**
 
@@ -1114,7 +1135,7 @@ against 696 deals plus one open position, and rows identical between Individual 
 from 85 of 85 to 21 of 85. Four tests in `Tests/Portfolio/test_Statistic.py`; suite 1371 passed.
 
 
-### 3.6.1 `initial_balance` is the closing balance, so every balance-relative percentage is wrong
+### 3.6.1 `initial_balance` is the closing balance, so every balance-relative percentage is wrong — done 2026-09-11
 
 **Root cause found 2026-09-10, one line.**
 
@@ -1171,7 +1192,7 @@ Fix: value the open position at the final tick of the window, charge its closing
 swap on open positions rather than only at close. **Ship with 3.9** — it moves `positions.csv` and the
 `net.csv` totals deliberately.
 
-### 3.6.3 Holding time collapses to `stop - entry` when a position is open
+### 3.6.3 Holding time collapses to `stop - entry` when a position is open — done 2026-09-11
 
 `calculate_holding_times` is correct — called directly on golden 1's `trades.csv` it returns max 3.67
 days, avg 0.20, matching a manual computation. `net.csv` for the same run reports **max 360.71, avg
@@ -1210,9 +1231,9 @@ what the profile actually says, not by guess:
 more often.
 
 **The preload disk cache is over-keyed, and it is the same mistake `window` already taught.**
-`_cache_signature_` (`Backtesting.py:324`) hashes `(security, start, stop, timeframe, auto, resolution)`
+`_cache_signature_` (`Backtesting.py:313`) hashes `(security, start, stop, timeframe, auto, resolution)`
 — but the **tick tape does not depend on `auto` or `resolution`**. Reading `_load_frames_`: `auto` and
-`resolution=Tick` pull byte-identical tick columns (lines 295-306); only the intra-bar frames differ
+`resolution=Tick` pull byte-identical tick columns (lines 279-294); only the intra-bar frames differ
 (the `auto` branch pulls H1 and M1, an explicit finer resolution pulls one level, tick pulls none).
 
 So changing resolution on an otherwise identical run discards a valid tick tape and re-pulls it from
@@ -1259,7 +1280,7 @@ choosing.
 **The gap that makes a golden perishable.** A run's folder records the command (`Run.json`) and the
 resolved strategy parameters (`Input/Parameters.yml`), but **not the contract** — and the contract is
 an input, not a constant. `Universe.Contract` carries `SwapLong`/`SwapShort` as *current* broker
-values, and `Realtime.py:218-223` rewrites the row from the wire on every online run (`UpdatedBy` reads
+values, and `Realtime.py:213-218` rewrites the row from the wire on every online run (`UpdatedBy` reads
 `Autosave`). So the terms a golden ran under are gone the moment the next cBot starts.
 
 It is not confined to `SwapPnL`. Sizing is a percentage of balance, swap feeds balance, so a drifted
@@ -1289,10 +1310,16 @@ re-baseline is meant to end.
 Mitigated, not fixed. Bounded risk in practice because runs are process-per-run, but it is a real
 correctness hole in any in-process sequence.
 
-### 3.8 Report folder seconds collision
+### 3.8 Report folder seconds collision — done for run folders
 
 Two exports in the same second overwrite each other. Needs a uniqueness suffix. Trivial; ship with the
 above.
+
+**Closed, noted 2026-09-16.** `Main` mints every run its own `inspect_temporary(RUNS, uuid4().hex)`
+folder unless `--run` names one, so bare `--export`/`--plot`/`--profile` land in that run's `Output/`
+and cannot meet another run's. An export given an explicit path still gets a stamped folder, and
+`SystemAPI._export_` appends ` (2)`, ` (3)`… when it already exists. The one case left is `--plot PATH`
+for the same ticker and strategy twice in one second, whose stamped file name has no suffix.
 
 ### 3.9 Re-baseline the goldens against cTrader
 
@@ -1304,6 +1331,11 @@ By this point 2.6, 3.2 and 3.3 have each moved engine output deliberately. Every
 
 This is a **versioned** change — the old goldens stay in git history as the pre-fix reference. Never
 absorb a re-baseline into an ordinary refactor.
+
+**One declared exception so far, 2026-09-15:** the offline exports were re-baselined when the `Float32`
+downcast was removed from `DataframeAPI.frame` (see rule 2 under "Order of work"). It was its own
+change, measured before and after, with the pre-fix exports kept in commit `578c9a5`; it does not
+replace this item, which still re-baselines both halves against cTrader.
 
 ---
 
@@ -1421,6 +1453,16 @@ reproducible. Compare against `Research/CAMPAIGN-7PAIR.md` pair by pair and writ
 Then decide, on evidence, whether iteration two replaces iteration one. If the corrected engine produces
 weaker numbers, that is a finding worth stating, not a result worth hiding.
 
+### 4.8 Record the observation order with the weights
+
+A DDPG model's input vector is ordered by the `TechnicalManagement` keys of whatever parameter file loads
+it (measured 2026-09-17: +34.02 %, +31.46 % and −46.19 % from one set of weights under three key orders).
+Nothing detects a mismatch — the shapes agree, only the meaning of each input changes. **Write the
+feature order into the manifest saved beside the weights at training time, and refuse to load weights
+whose recorded order differs from the order the strategy would build.** Do it before 4.7 retrains, so
+every new model carries its order; the champion's order is the one `Tests/Golden/Consistency/DDPG`
+pins.
+
 **Three claims iteration one could not make. Items 4.1 through 4.4 exist to earn them.**
 
 1. **It was not walk-forward and not continuous.** The invocation was `--training 0 --validation 12
@@ -1509,6 +1551,9 @@ Once 2.8 is verified end to end.
 - An ordinal pane with very few points does not fill the width — a three-fold generalization chart leaves
   space at the right edge. Lightweight clamps bar spacing and setting it explicitly is overridden.
   Cosmetic and legible.
+- `net.csv`'s "Net Return (%)" is `exp(Σ per-trade log return) − 1`, each trade compounded against its own
+  entry balance — not account return. On the DDPG golden it reads 38.29 % where the account made
+  34.02 %. Rename it or add an account-return row; the thesis figures come from equity, not this row.
 - Multi-tab `Open` depends on the browser, not the code. Browsers permit one popup per gesture. The button
   opens the first in place, attempts the rest, and reports how many were blocked. No code-only fix.
 
@@ -1552,9 +1597,9 @@ Zero callers outside the package `__init__`. Delete, or keep deliberately as a l
 `smartlink`, `symlink`, `hardlink`; `Utility/Typing.py` `findvariable` and `getvariable`; `Utility/HTML.py`
 entirely.
 
-`Portfolio.py` all 16 `load_`, `save_`, `pull_` and `push_` statics for accounts, orders, positions and
-trades — about 150 lines including a 25-column Contract JOIN repeated three times — plus
-`calculate_statistics`, `BuyOrders` and `SellOrders`; `Portfolio/Statistic.py`
+`Portfolio.py` the five statics that remain of the original 16 (recounted 2026-09-16): `pull_accounts`
+and `push_accounts`, `push_orders`, `push_positions`, `push_trades` — about 30 lines, the Contract JOIN
+gone — plus `calculate_statistics`, `BuyOrders` and `SellOrders`; `Portfolio/Statistic.py`
 `generate_realized_report` and `generate_unrealized_report`; `Market.py` `load_ticks`, `save_ticks`,
 `count_ticks`, `load_bars`, `save_bars`; `Universe.py` all 12 `save_` and `load_` plus `pull_timeframes`.
 
@@ -1611,22 +1656,27 @@ first.
   `Service`, `Bloomberg.Streaming` and `Remote`. `Dataclass.py` `tuple`, `list`, `dict` and `json` forward
   seven kwargs explicitly. In `Auth`, Cloudflare `_verify_` and OIDC `authenticate` share the JWKS and
   `jwt.decode` block, which is a `_claims_()`.
-- Two near-identical `TrayAPI` classes in `Scheduler/Tray.py` and `Web/Service/Tray.py`; `Runner.load` and
+- ~~Two near-identical `TrayAPI` classes in `Scheduler/Tray.py` and `Web/Service/Tray.py`~~ **Done** —
+  both now subclass `Library/Utility/Tray.py` `TrayAPI`. `Runner.load` and
   `SchedulerAPI._task_` both build a detached `TaskAPI`, which is a `TaskAPI.fetch(db, uid)`;
   `Logging.File.FileAPI` and `Utility.File.FileAPI` share a name, so consider renaming the sink
   `FileSinkAPI`.
-- `Sources/Robots/.../Logging.cs` private constants are lower-case; `Tests/Strategy/test_Strategy.py`
+- ~~`Sources/Robots/.../Logging.cs` private constants are lower-case~~ **Done in 1.0.1** — all six are
+  `_UPPER_`. `Tests/Strategy/test_Strategy.py`
   imports `MagicMock` inside six tests and `test_Workspace.py` imports `json` inside three; comments appear
   in seven test files, and the `test_Sizing.py` derivations could move into the assertions;
   `Tests/Benchmark/IPC.py` is a benchmark script living under `Tests/`.
 
 ### 6.7 Blocked
 
-- **Dataframe dtype preservation and an FK-aware `reorder`.** `reorder` must become FK-aware before the
+- ~~**Dataframe dtype preservation and an FK-aware `reorder`.** `reorder` must become FK-aware before the
   per-fetch `shrink_dtype` can go, which would remove the latent Float64-to-Float32 price downcast.
   Do **not** "fix" this by making `diff` or `migrate` order-sensitive: migrate's rebuild path uses rename,
   recreate and INSERT-SELECT, which does not re-point inbound foreign keys, so an order-aware migrate would
-  break FK-referenced tables such as Scheduler to Auth.User on boot.
+  break FK-referenced tables such as Scheduler to Auth.User on boot.~~ **Obsolete — closed 2026-09-15.**
+  `shrink_dtype()` was removed from `DataframeAPI.frame` outright and no longer exists in `Library`; it
+  never depended on `reorder`. The FK hazard was closed separately: `diff` is order-aware through
+  `disordered()`, and `migrate` re-points inbound foreign keys with `realign()`.
 - **`Setup/Install.py` and `Setup/Task.py` both define `provision()`** — different modules, different jobs,
   no collision today. Rename one if it ever confuses.
 - ~~C# warnings: two `CA1416`, three `CS0618` deprecated order APIs.~~ **Stale — closed 2026-09-10.**
@@ -1847,7 +1897,7 @@ greeks, and a multi-leg strategy backtests across at least one expiry cycle with
 
 - **Performance.** Warm NNFX H1 year about 1.5 s; D1 ten years about 3.2 s; H1 ten years about 25 s.
   Learning frozen-tape replay about 3.12x a pass. Cold preload 12 to 15 minutes per ten-year dense-tick
-  window, cached at `~/.cache/cAlgo/preload`.
+  window, cached at `inspect_cached("Preload")`.
 - **Dead ends, do not retry.** A numpy ring buffer for `SeriesAPI`; mypyc and Cython; a drain thread for
   the console and file sinks.
 - **Logging cost.** Suppressed record 128 ns, emitted 1188 ns, timestamp 234 ns — down from 271, 4961 and

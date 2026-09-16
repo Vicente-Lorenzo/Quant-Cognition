@@ -1,11 +1,15 @@
+import sys
 import time
 
 import pytest
 
-from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone
 
+from Library.Utility.Datetime import utc_now, utc_to_local
 from Library.Auth import UserAPI
 from Library.Scheduler import WorkflowAPI, TaskAPI, DependencyAPI, CycleAPI, RunAPI, TaskType, Kind, RunStatus, RunEvent, ExecutorAPI, CoordinatorAPI, ManagerAPI, SchedulerAPI
+from Library.Scheduler.Main import _fields_, _parse_
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Database.Query import QueryAPI
 from Library.Scheduler.Runner import load
@@ -21,7 +25,7 @@ def persist(obj):
     obj._db_ = None
 
 def opened(uid, wid, status="Running", kind="Scheduled", started=None):
-    persist(CycleAPI(UID=uid, WID=wid, Kind=kind, Status=status, StartedAt=started or datetime.now()))
+    persist(CycleAPI(UID=uid, WID=wid, Kind=kind, Status=status, StartedAt=started or utc_now()))
 
 def runs_of(*tids):
     tokens = ", ".join(f":t{index}:" for index in range(len(tids)))
@@ -195,6 +199,84 @@ def test_fits():
     assert CoordinatorAPI.fits(None, "0 10 * * *")
     assert CoordinatorAPI.fits("0 8 * * *", None)
 
+def test_fits_accepts_a_zone():
+    assert CoordinatorAPI.fits("0 8 * * *", "0 10 * * *", zone="Asia/Tokyo")
+    assert not CoordinatorAPI.fits("0 8 * * *", "0 10 * * 3", zone="Asia/Tokyo")
+
+def test_due_evaluates_the_cron_in_the_workflow_zone():
+    last = datetime(2026, 7, 1, 13, 0, 1)
+    assert not SchedulerAPI._due_("0 9 * * *", last, datetime(2026, 7, 2, 12, 59), "America/New_York")
+    assert SchedulerAPI._due_("0 9 * * *", last, datetime(2026, 7, 2, 13, 0), "America/New_York")
+
+def test_timely_gates_member_tasks_in_the_workflow_zone():
+    opened = datetime(2026, 1, 15, 14)
+    assert not SchedulerAPI._timely_("30 9 * * *", opened, datetime(2026, 1, 15, 14, 29), "America/New_York")
+    assert SchedulerAPI._timely_("30 9 * * *", opened, datetime(2026, 1, 15, 14, 30), "America/New_York")
+
+def test_reaping_waits_one_lease_after_the_daemon_was_suspended():
+    sched = SchedulerAPI(database=DATABASE)
+    slept = datetime(2026, 9, 16, 9, 53)
+    assert not sched._suspended_(slept)
+    assert not sched._suspended_(slept + timedelta(seconds=5))
+    woke = slept + timedelta(hours=6)
+    assert sched._suspended_(woke)
+    assert sched._suspended_(woke + timedelta(seconds=30))
+    assert not sched._suspended_(woke + timedelta(seconds=SchedulerAPI._LEASE_ + 1))
+
+def test_a_long_polling_interval_is_not_mistaken_for_a_suspension():
+    sched = SchedulerAPI(database=DATABASE, interval=90)
+    tick = datetime(2026, 9, 16, 9, 53)
+    assert not any(sched._suspended_(tick + timedelta(seconds=100 * step)) for step in range(10))
+    assert sched._suspended_(tick + timedelta(seconds=900 + 90 + SchedulerAPI._LEASE_ + 1))
+
+def test_manager_rejects_an_unknown_zone():
+    with pytest.raises(ValueError, match="Unknown time zone"):
+        ManagerAPI._zoned_("Mars/Olympus")
+    for zone in (None, "", "Europe/London"): ManagerAPI._zoned_(zone)
+
+def test_cli_carries_the_workflow_zone(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["Scheduler", "workflow", "update", "--uid", "wf-zone", "--zone", "Asia/Tokyo"])
+    assert _fields_(_parse_(), WorkflowAPI) == {"UID": "wf-zone", "Zone": "Asia/Tokyo"}
+    monkeypatch.setattr(sys, "argv", ["Scheduler", "workflow", "create", "--uid", "wf-zone", "--name", "Zone", "--owner", "owner"])
+    assert _fields_(_parse_(), WorkflowAPI)["Zone"] is None
+
+def _repeated_(zone):
+    for minute in range(15, 36 * 60, 15):
+        moment = datetime(2026, 10, 24, 12, tzinfo=timezone.utc) + timedelta(minutes=minute)
+        before, after = (moment - timedelta(minutes=15)).astimezone(zone).utcoffset(), moment.astimezone(zone).utcoffset()
+        if after < before: return moment.replace(tzinfo=None), before - after
+    return None
+
+def _fired_(schedule, zone, start, hours):
+    last, fired = None, []
+    for minute in range(0, hours * 60, 5):
+        tick = start + timedelta(minutes=minute, seconds=5)
+        if not SchedulerAPI._due_(schedule, last, tick, zone): continue
+        last = SchedulerAPI._previous_(schedule, tick, zone)
+        fired.append(last)
+    return fired
+
+@pytest.mark.parametrize("zone", ["Europe/London", None])
+def test_due_does_not_refire_after_a_cycle_inside_a_repeated_hour(zone):
+    repeated = _repeated_(ZoneInfo(zone) if zone else None)
+    if repeated is None: pytest.skip("Zone repeats no hour around 2026-10-25")
+    transition, width = repeated
+    wall = utc_to_local(transition + width / 2, zone)
+    schedule, last = f"{wall.minute} {wall.hour} * * *", transition + width / 6
+    assert not any(SchedulerAPI._due_(schedule, last, last + timedelta(minutes=minute), zone) for minute in range(1, 12 * 60))
+    assert SchedulerAPI._due_(schedule, last, transition + width + timedelta(days=1), zone)
+
+@pytest.mark.parametrize("zone", ["Europe/London", None])
+def test_a_daily_schedule_fires_once_per_local_day_across_both_transitions(zone):
+    for start in (datetime(2026, 10, 24, 12), datetime(2026, 3, 28, 12)):
+        fired = _fired_("30 1 * * *", zone, start, 48)
+        assert len(fired) == 3 and fired == sorted(set(fired))
+        assert len({utc_to_local(moment, zone).date() for moment in fired}) == 3
+
+def test_a_daily_schedule_follows_london_across_both_transitions():
+    assert _fired_("30 1 * * *", "Europe/London", datetime(2026, 10, 24, 12), 48) == [datetime(2026, 10, 24, 0, 30), datetime(2026, 10, 25, 0, 30), datetime(2026, 10, 26, 1, 30)]
+    assert _fired_("30 1 * * *", "Europe/London", datetime(2026, 3, 28, 12), 48) == [datetime(2026, 3, 28, 1, 30), datetime(2026, 3, 29, 1, 30), datetime(2026, 3, 30, 0, 30)]
+
 def test_cycle_detection_on_link(scheduler):
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         WorkflowAPI(UID="wf-cyc", Name="Cyc", Owner="owner", Enabled=True, db=conn).save(by="Test")
@@ -226,15 +308,15 @@ def test_gate_accept_reject(scheduler):
     assert statuses["gate-done"][0] == "Success"
 
 def test_reaper_marks_terminal(scheduler):
-    stale = datetime.now() - timedelta(minutes=10)
+    stale = utc_now() - timedelta(minutes=10)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         TaskAPI(UID="r-fail", Name="RFail", Owner="owner", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, RequiresReview=False, db=conn).save(by="Test")
         TaskAPI(UID="r-review", Name="RReview", Owner="owner", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, RequiresReview=True, db=conn).save(by="Test")
         RunAPI(UID="orphan-fail", TID="r-fail", Status="Running", Retry=0, StartedAt=stale, Heartbeat=stale, db=conn).save(by="Test")
         RunAPI(UID="orphan-review", TID="r-review", Status="Running", Retry=0, StartedAt=stale, Heartbeat=stale, db=conn).save(by="Test")
-        RunAPI(UID="orphan-fresh", TID="r-fail", Status="Running", Retry=0, StartedAt=datetime.now(), Heartbeat=datetime.now(), db=conn).save(by="Test")
+        RunAPI(UID="orphan-fresh", TID="r-fail", Status="Running", Retry=0, StartedAt=utc_now(), Heartbeat=utc_now(), db=conn).save(by="Test")
     with PostgresDatabaseAPI(database=DATABASE) as conn:
-        SchedulerAPI(database=DATABASE)._reap_(conn, datetime.now())
+        SchedulerAPI(database=DATABASE)._reap_(conn, utc_now())
         rows = conn.select(schema="Scheduler", table="Run", condition='"UID" IN (:a:, :b:, :c:)', parameters={"a": "orphan-fail", "b": "orphan-review", "c": "orphan-fresh"}, legacy=False).to_dicts()
     statuses = {row["UID"]: row["Status"] for row in rows}
     assert statuses["orphan-fail"] == RunStatus.Failure.name
@@ -242,12 +324,12 @@ def test_reaper_marks_terminal(scheduler):
     assert statuses["orphan-fresh"] == RunStatus.Running.name
 
 def test_reaper_retries_before_terminal(scheduler):
-    stale = datetime.now() - timedelta(minutes=10)
+    stale = utc_now() - timedelta(minutes=10)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         TaskAPI(UID="r-retry", Name="RRetry", Owner="owner", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, MaxRetry=2, RetryDelay=600, db=conn).save(by="Test")
         RunAPI(UID="orphan-retry", TID="r-retry", Status="Running", Retry=0, StartedAt=stale, Heartbeat=stale, db=conn).save(by="Test")
     with PostgresDatabaseAPI(database=DATABASE) as conn:
-        SchedulerAPI(database=DATABASE)._reap_(conn, datetime.now())
+        SchedulerAPI(database=DATABASE)._reap_(conn, utc_now())
         row = conn.select(schema="Scheduler", table="Run", condition='"UID" = :uid:', parameters={"uid": "orphan-retry"}, legacy=False).row(0, named=True)
     assert row["Status"] == RunStatus.Retrying.name
 
@@ -268,7 +350,7 @@ def test_retry_dispatch(scheduler, tmp_path):
     persist(task)
     ExecutorAPI(database=DATABASE).run(task, retry=0)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
-        SyncSchedulerAPI(database=DATABASE)._retry_(conn, datetime.now(), 8)
+        SyncSchedulerAPI(database=DATABASE)._retry_(conn, utc_now(), 8)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         rows = conn.select(schema="Scheduler", table="Run", condition='"TID" = :tid:', parameters={"tid": "task-redispatch"}, legacy=False).to_dicts()
     assert sorted(row["Retry"] for row in rows) == [0, 1]
@@ -344,7 +426,7 @@ def test_scheduleless_workflow_is_manual_only(scheduler):
     workflow = {"UID": "wf-idle", "Name": "Idle", "Schedule": None, "Kind": None, "Waits": None}
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-idle"]
-        sched._advance_(conn, workflow, members, [], datetime.now(), 8)
+        sched._advance_(conn, workflow, members, [], utc_now(), 8)
     assert sched.spawned == []
 
 def test_manager_task_crud(scheduler, tmp_path):
@@ -430,8 +512,8 @@ def test_manager_skip_and_cancel(scheduler):
     reviewed = manager.skip("sk-gated", failure=True)
     assert reviewed.Status == RunStatus.Reviewing.name
     with PostgresDatabaseAPI(database=DATABASE) as conn:
-        RunAPI(UID="cancel-run", TID="sk-a", CID="sk-cycle", Status="Running", Retry=0, StartedAt=datetime.now(), Heartbeat=datetime.now(), db=conn).save(by="Test")
-        RunAPI(UID="cancel-bad", TID="sk-a", CID="sk-cycle", Status="Running", Retry=0, StartedAt=datetime.now(), Heartbeat=datetime.now(), db=conn).save(by="Test")
+        RunAPI(UID="cancel-run", TID="sk-a", CID="sk-cycle", Status="Running", Retry=0, StartedAt=utc_now(), Heartbeat=utc_now(), db=conn).save(by="Test")
+        RunAPI(UID="cancel-bad", TID="sk-a", CID="sk-cycle", Status="Running", Retry=0, StartedAt=utc_now(), Heartbeat=utc_now(), db=conn).save(by="Test")
     assert manager.cancel("cancel-run", by="owner") is True
     assert manager.run("cancel-run")["Status"] == RunStatus.Success.name
     assert manager.run("cancel-run")["Kind"] == Kind.Manual.name
@@ -478,9 +560,9 @@ def test_service_workflow_resident_cycle(scheduler):
     manager = ManagerAPI(database=DATABASE)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-resident"]
-        sched._advance_(conn, workflow, members, [], datetime.now(), 8)
+        sched._advance_(conn, workflow, members, [], utc_now(), 8)
         first = manager.cycles(workflow="wf-resident")
-        sched._advance_(conn, workflow, members, [], datetime.now(), 8)
+        sched._advance_(conn, workflow, members, [], utc_now(), 8)
         second = manager.cycles(workflow="wf-resident")
     assert sched.spawned == []
     assert len(first) == 1 and first[0]["Status"] == RunStatus.Running.name and first[0]["Kind"] == Kind.Service.name
@@ -517,8 +599,8 @@ def test_service_supervises_and_pauses(scheduler):
     suspended = RecordingSchedulerAPI(database=DATABASE)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in active._tasks_(conn) if task["WID"] == "wf-svc2"]
-        active._service_(conn, members, set(), datetime.now())
-        suspended._service_(conn, members, {"wf-svc2"}, datetime.now())
+        active._service_(conn, members, set(), utc_now())
+        suspended._service_(conn, members, {"wf-svc2"}, utc_now())
     assert ("svc2-server", None) in active.spawned
     assert "svc2-update" not in [tid for tid, _ in active.spawned]
     assert suspended.spawned == []
@@ -535,12 +617,12 @@ def test_service_suspension_closes_the_run_as_success(scheduler):
         WorkflowAPI(UID="wf-susp", Name="Susp", Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
         TaskAPI(UID="susp-update", Name="Update", Owner="owner", WID="wf-susp", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
         TaskAPI(UID="susp-tunnel", Name="Tunnel", Owner="owner", WID="wf-susp", Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, db=conn).save(by="Test")
-        RunAPI(UID="susp-run", TID="susp-tunnel", Status="Running", Retry=0, PID=4242, StartedAt=datetime.now(), Heartbeat=datetime.now(), db=conn).save(by="Test")
+        RunAPI(UID="susp-run", TID="susp-tunnel", Status="Running", Retry=0, PID=4242, StartedAt=utc_now(), Heartbeat=utc_now(), db=conn).save(by="Test")
     sched = RecordingSchedulerAPI(database=DATABASE)
     sched._services_["susp-tunnel"] = _Resident_()
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-susp"]
-        sched._service_(conn, members, {"wf-susp"}, datetime.now())
+        sched._service_(conn, members, {"wf-susp"}, utc_now())
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         run = RunAPI(UID="susp-run", db=conn, autoload=True)
     assert run.Status == RunStatus.Success.name
@@ -550,11 +632,11 @@ def test_service_suspension_closes_the_run_as_success(scheduler):
 def test_service_crash_is_not_laundered_into_success(scheduler):
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         TaskAPI(UID="susp-crash", Name="Crashed", Owner="owner", Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, RetryDelay=0, db=conn).save(by="Test")
-        RunAPI(UID="susp-crash-run", TID="susp-crash", Status="Running", Retry=0, StartedAt=datetime.now(), Heartbeat=datetime.now(), db=conn).save(by="Test")
+        RunAPI(UID="susp-crash-run", TID="susp-crash", Status="Running", Retry=0, StartedAt=utc_now(), Heartbeat=utc_now(), db=conn).save(by="Test")
     sched = RecordingSchedulerAPI(database=DATABASE)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["UID"] == "susp-crash"]
-        sched._service_(conn, members, set(), datetime.now())
+        sched._service_(conn, members, set(), utc_now())
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         run = RunAPI(UID="susp-crash-run", db=conn, autoload=True)
     assert run.Status == RunStatus.Running.name
@@ -565,7 +647,7 @@ def test_service_crash_cap(scheduler):
     sched = RecordingSchedulerAPI(database=DATABASE)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["UID"] == "svc-flaky"]
-        now = datetime.now()
+        now = utc_now()
         sched._service_(conn, members, set(), now)
         sched._service_(conn, members, set(), now)
         sched._service_(conn, members, set(), now)
@@ -586,14 +668,14 @@ def test_boot_launch_fires_once(scheduler):
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-boot"]
         edges = CoordinatorAPI.edges(conn, "wf-boot")
-        sched._advance_(conn, workflow, members, edges, datetime.now(), 8)
-        sched._advance_(conn, workflow, members, edges, datetime.now(), 8)
+        sched._advance_(conn, workflow, members, edges, utc_now(), 8)
+        sched._advance_(conn, workflow, members, edges, utc_now(), 8)
     assert [tid for tid, _ in sched.spawned] == ["boot-update"]
     assert sched.spawned[0][1] != "boot-old"
     assert sched._launch_ == set()
 
 def test_service_orders_after_maintenance(scheduler):
-    early = datetime.now() - timedelta(minutes=5)
+    early = utc_now() - timedelta(minutes=5)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         WorkflowAPI(UID="wf-ord", Name="Ord", Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
         TaskAPI(UID="ord-update", Name="Update", Owner="owner", WID="wf-ord", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
@@ -605,13 +687,13 @@ def test_service_orders_after_maintenance(scheduler):
     sched = RecordingSchedulerAPI(database=DATABASE, concurrency=8)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-ord"]
-        sched._service_(conn, members, set(), datetime.now())
+        sched._service_(conn, members, set(), utc_now())
         assert sched.spawned == []
-        RunAPI(UID="ord-fresh", TID="ord-update", Status="Success", StartedAt=datetime.now(), db=conn).save(by="Test")
-        sched._service_(conn, members, set(), datetime.now())
+        RunAPI(UID="ord-fresh", TID="ord-update", Status="Success", StartedAt=utc_now(), db=conn).save(by="Test")
+        sched._service_(conn, members, set(), utc_now())
         assert [tid for tid, _ in sched.spawned] == ["ord-tunnel"]
         sched._services_["ord-tunnel"] = FakeHandle()
-        sched._service_(conn, members, set(), datetime.now())
+        sched._service_(conn, members, set(), utc_now())
     assert [tid for tid, _ in sched.spawned] == ["ord-tunnel", "ord-server"]
 
 def test_notify_wakes_listener(scheduler):
@@ -632,7 +714,7 @@ class FakeHandle:
         return None
 
 def test_advance_time_gate(scheduler):
-    early = datetime.now() - timedelta(minutes=5)
+    early = utc_now() - timedelta(minutes=5)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         WorkflowAPI(UID="wf-gatetime", Name="GateTime", Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
         TaskAPI(UID="gt-a", Name="A", Owner="owner", WID="wf-gatetime", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
@@ -648,11 +730,11 @@ def test_advance_time_gate(scheduler):
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-gatetime"]
         edges = CoordinatorAPI.edges(conn, "wf-gatetime")
-        sched._advance_(conn, workflow, members, edges, datetime.now(), 8)
+        sched._advance_(conn, workflow, members, edges, utc_now(), 8)
     assert sched.spawned == [("gt-b", "wr-gt")]
 
 def test_advance_waits_false_fires_at_time(scheduler):
-    early = datetime.now() - timedelta(minutes=5)
+    early = utc_now() - timedelta(minutes=5)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         WorkflowAPI(UID="wf-nowait", Name="NoWait", Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
         TaskAPI(UID="nw-a", Name="A", Owner="owner", WID="wf-nowait", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
@@ -666,11 +748,11 @@ def test_advance_waits_false_fires_at_time(scheduler):
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-nowait"]
         edges = CoordinatorAPI.edges(conn, "wf-nowait")
-        sched._advance_(conn, workflow, members, edges, datetime.now(), 8)
+        sched._advance_(conn, workflow, members, edges, utc_now(), 8)
     assert ("nw-b", "wr-nw") in sched.spawned
 
 def test_advance_tolerates_governs_after_failure(scheduler):
-    early = datetime.now() - timedelta(minutes=5)
+    early = utc_now() - timedelta(minutes=5)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         WorkflowAPI(UID="wf-anyres", Name="AnyRes", Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
         TaskAPI(UID="ar-a", Name="A", Owner="owner", WID="wf-anyres", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
@@ -686,11 +768,11 @@ def test_advance_tolerates_governs_after_failure(scheduler):
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-anyres"]
         edges = CoordinatorAPI.edges(conn, "wf-anyres")
-        sched._advance_(conn, workflow, members, edges, datetime.now(), 8)
+        sched._advance_(conn, workflow, members, edges, utc_now(), 8)
     assert sched.spawned == [("ar-b", "wr-ar")]
 
 def test_advance_latest_attempt_governs(scheduler):
-    early = datetime.now() - timedelta(minutes=5)
+    early = utc_now() - timedelta(minutes=5)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         WorkflowAPI(UID="wf-attempt", Name="Attempt", Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
         TaskAPI(UID="att-a", Name="A", Owner="owner", WID="wf-attempt", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", MaxRetry=1, Enabled=True, db=conn).save(by="Test")
@@ -699,13 +781,13 @@ def test_advance_latest_attempt_governs(scheduler):
     opened("wr-att", "wf-attempt", started=early)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         RunAPI(UID="att-run-1", TID="att-a", CID="wr-att", Status="Retrying", Retry=0, StartedAt=early, db=conn).save(by="Test")
-        RunAPI(UID="att-run-2", TID="att-a", CID="wr-att", Status="Success", Retry=1, StartedAt=datetime.now(), db=conn).save(by="Test")
+        RunAPI(UID="att-run-2", TID="att-a", CID="wr-att", Status="Success", Retry=1, StartedAt=utc_now(), db=conn).save(by="Test")
     sched = RecordingSchedulerAPI(database=DATABASE, concurrency=8)
     workflow = {"UID": "wf-attempt", "Name": "Attempt", "Schedule": "0 0 1 1 *", "Kind": None, "Waits": None}
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-attempt"]
         edges = CoordinatorAPI.edges(conn, "wf-attempt")
-        sched._advance_(conn, workflow, members, edges, datetime.now(), 8)
+        sched._advance_(conn, workflow, members, edges, utc_now(), 8)
     assert sched.spawned == [("att-b", "wr-att")]
 
 def test_create_defaults(scheduler):
@@ -731,28 +813,28 @@ def test_create_defaults(scheduler):
     manager.delete_workflow("def-scheduled")
 
 def test_latest(scheduler):
-    early = datetime.now() - timedelta(minutes=5)
+    early = utc_now() - timedelta(minutes=5)
     manager = ManagerAPI(database=DATABASE)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         TaskAPI(UID="lat-a", Name="A", Owner="owner", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
         RunAPI(UID="lat-run-1", TID="lat-a", Status="Failure", StartedAt=early, db=conn).save(by="Test")
-        RunAPI(UID="lat-run-2", TID="lat-a", Status="Success", StartedAt=datetime.now(), db=conn).save(by="Test")
+        RunAPI(UID="lat-run-2", TID="lat-a", Status="Success", StartedAt=utc_now(), db=conn).save(by="Test")
     latest = manager.latest()
     assert latest["lat-a"] == "Success"
 
 def test_workflow_reset_on_overrun(scheduler):
-    early = datetime.now() - timedelta(minutes=5)
+    early = utc_now() - timedelta(minutes=5)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         WorkflowAPI(UID="wf-reset", Name="Reset", Owner="owner", Schedule="* * * * *", Waits=False, Enabled=True, db=conn).save(by="Test")
         TaskAPI(UID="rs-a", Name="A", Owner="owner", WID="wf-reset", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
     opened("wr-rs", "wf-reset", started=early)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
-        RunAPI(UID="rs-run-a", TID="rs-a", CID="wr-rs", Status="Running", Retry=0, StartedAt=early, Heartbeat=datetime.now(), db=conn).save(by="Test")
+        RunAPI(UID="rs-run-a", TID="rs-a", CID="wr-rs", Status="Running", Retry=0, StartedAt=early, Heartbeat=utc_now(), db=conn).save(by="Test")
     sched = RecordingSchedulerAPI(database=DATABASE, concurrency=8)
     workflow = {"UID": "wf-reset", "Name": "Reset", "Schedule": "* * * * *", "Kind": None, "Waits": False}
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-reset"]
-        sched._advance_(conn, workflow, members, [], datetime.now(), 8)
+        sched._advance_(conn, workflow, members, [], utc_now(), 8)
     manager = ManagerAPI(database=DATABASE)
     assert manager.run("rs-run-a")["Status"] == RunStatus.Failure.name
     assert manager.cycle("wr-rs")["Status"] == RunStatus.Failure.name
@@ -767,12 +849,12 @@ def test_advance_skips_service_roots(scheduler):
     workflow = {"UID": "wf-svcroot", "Name": "SvcRoot", "Schedule": "0 0 1 1 *", "Kind": None, "Waits": None}
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-svcroot"]
-        sched._advance_(conn, workflow, members, [], datetime.now(), 8)
+        sched._advance_(conn, workflow, members, [], utc_now(), 8)
     tids = [tid for tid, _ in sched.spawned]
     assert "root-update" in tids and "root-server" not in tids
 
 def test_advance_skips_downstream_services(scheduler):
-    early = datetime.now() - timedelta(minutes=5)
+    early = utc_now() - timedelta(minutes=5)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         WorkflowAPI(UID="wf-svc", Name="Svc", Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
         TaskAPI(UID="svc-update", Name="Update", Owner="owner", WID="wf-svc", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
@@ -786,6 +868,52 @@ def test_advance_skips_downstream_services(scheduler):
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-svc"]
         edges = CoordinatorAPI.edges(conn, "wf-svc")
-        sched._advance_(conn, workflow, members, edges, datetime.now(), 8)
+        sched._advance_(conn, workflow, members, edges, utc_now(), 8)
     assert "svc-server" in CoordinatorAPI.eligible(["svc-update", "svc-server"], edges, {"svc-update": "Success"})
     assert "svc-server" not in [tid for tid, _ in sched.spawned]
+
+def test_latest_ignores_runs_that_never_started(scheduler):
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        TaskAPI(UID="unstarted", Name="Unstarted", Owner="owner", Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, db=conn).save(by="Test")
+        RunAPI(UID="unstarted-live", TID="unstarted", Status="Running", Retry=0, StartedAt=utc_now(), Heartbeat=utc_now(), db=conn).save(by="Test")
+        RunAPI(UID="unstarted-stale", TID="unstarted", Status="Failure", Retry=0, db=conn).save(by="Test")
+    manager, sched = ManagerAPI(database=DATABASE), SchedulerAPI(database=DATABASE)
+    assert manager.latest()["unstarted"] == "Running"
+    assert manager.runs(task="unstarted")[0]["UID"] == "unstarted-live"
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        assert sched._latest_(conn, "unstarted")["UID"] == "unstarted-live"
+        sched._suspend_(conn, "unstarted", utc_now())
+    assert manager.run("unstarted-live")["Status"] == RunStatus.Success.name
+
+def _fold_(uid, started):
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        WorkflowAPI(UID=uid, Name="Fold", Owner="owner", Schedule="30 1 * * *", Zone="Europe/London", Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID=f"{uid}-a", Name="A", Owner="owner", WID=uid, Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
+    opened(f"{uid}-cycle", uid, status="Success", started=started)
+    return {"UID": uid, "Name": "Fold", "Schedule": "30 1 * * *", "Zone": "Europe/London", "Kind": None, "Waits": None}
+
+def test_advance_opens_no_cycle_after_one_inside_a_repeated_hour(scheduler):
+    workflow = _fold_("wf-fold", datetime(2026, 10, 25, 1, 10))
+    sched = RecordingSchedulerAPI(database=DATABASE, concurrency=8)
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-fold"]
+        for now in (datetime(2026, 10, 25, 1, 11), datetime(2026, 10, 25, 1, 31), datetime(2026, 10, 25, 23, 59)): sched._advance_(conn, workflow, members, [], now, 8)
+        assert sched.spawned == []
+        sched._advance_(conn, workflow, members, [], datetime(2026, 10, 26, 1, 31), 8)
+        cycle = sched._cycle_(conn, "wf-fold")
+    assert cycle["StartedAt"] == datetime(2026, 10, 26, 1, 30)
+    assert sched.spawned == [("wf-fold-a", cycle["UID"])]
+
+def test_advance_never_opens_a_cycle_before_the_latest_one(scheduler):
+    workflow = _fold_("wf-wake", datetime(2026, 10, 24, 0, 30))
+    sched = RecordingSchedulerAPI(database=DATABASE, concurrency=8)
+    woke = datetime(2026, 10, 25, 1, 2)
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-wake"]
+        sched._advance_(conn, workflow, members, [], woke, 8)
+        cycle = sched._cycle_(conn, "wf-wake")
+        sched._record_(conn, cycle, RunStatus.Success.name, woke, "Test")
+        for now in (datetime(2026, 10, 25, 1, 3), datetime(2026, 10, 25, 1, 40), datetime(2026, 10, 25, 12)): sched._advance_(conn, workflow, members, [], now, 8)
+    assert cycle["StartedAt"] == woke
+    assert len(ManagerAPI(database=DATABASE).cycles(workflow="wf-wake")) == 2
+    assert sched.spawned == [("wf-wake-a", cycle["UID"])]

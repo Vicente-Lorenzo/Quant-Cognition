@@ -24,7 +24,7 @@ def test_task_artifacts_exist_and_are_runnable():
             source = ROOT / task["path"]
             assert source.is_file()
             text = source.read_text(encoding="utf-8")
-            assert "def main(" in text and "__main__" in text
+            assert 'if __name__ == "__main__":' in text
 
 @pytest.fixture(scope="module")
 def prepared():

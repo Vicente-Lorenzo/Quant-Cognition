@@ -1,0 +1,23 @@
+{
+  "System": "Backtesting",
+  "Strategy": "DDPG",
+  "Provider": "Spotware",
+  "Ticker": "EURUSD",
+  "Timeframe": "Hour",
+  "Start": "2015-01-01",
+  "Stop": "2026-01-01",
+  "StartedAt": "2026-09-16T23:14:54.952423",
+  "Command": "Backtesting --strategy DDPG --provider Spotware --ticker EURUSD --timeframe Hour --resolution H1 --parameters Tests/Golden/Consistency/DDPG/Parameters.yml --start 2015-01-01 --stop 2026-01-01 --account-asset EUR --account-balance 10000 --account-leverage 30 --spread-type Accurate --commission-type Points --commission-value 3.5 --swap-type Points --swap-buy 0 --swap-sell 0 --console Warning --file Warning --storage Warning --export --run C:/Users/Admin/AppData/Local/Temp/claude/C--Users-Admin-OneDrive-Documents-cAlgo/b6c97c91-cdce-43f7-bf53-d690abbbfab7/scratchpad/ddpg_run_c",
+  "Parameters": {
+    "Backtesting": [
+      "Defaults",
+      "Tests\\Golden\\Consistency\\DDPG\\Parameters.yml"
+    ]
+  },
+  "Scope": [
+    "Spotware(cTrader)",
+    "Forex(Major)",
+    "EURUSD",
+    "H1"
+  ]
+}

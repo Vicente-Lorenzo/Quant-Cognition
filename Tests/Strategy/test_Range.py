@@ -1,6 +1,6 @@
 import pytest
 
-from Library.Utility.Range import RangeAPI
+from Library.Strategy.Range import RangeAPI
 
 def test_sequence_is_inclusive_and_keeps_integers():
     assert RangeAPI.sequence(5, 20, 5) == [5, 10, 15, 20]

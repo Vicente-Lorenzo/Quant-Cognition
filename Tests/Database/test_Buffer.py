@@ -1,6 +1,6 @@
+import time
 import atexit
 import threading
-from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 from Library.Database import BufferAPI
 
@@ -95,7 +95,7 @@ def test_empty_false_when_batch_reached():
 
 def test_empty_false_when_interval_elapsed():
     buf, _ = _make_buffer_(batch=100, interval=0.001)
-    buf._last_flush_ = datetime.now() - timedelta(seconds=1)
+    buf._last_flush_ = time.monotonic() - 1
     buf.add(_RecA_(1))
     assert buf.Empty is False
 

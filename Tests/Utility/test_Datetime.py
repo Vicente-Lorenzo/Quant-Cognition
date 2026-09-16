@@ -1,8 +1,8 @@
 import pytest
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
-from Library.Utility.Datetime import EPOCH, MICROSECOND, MILLISECOND, datetime_to_epoch, epoch_to_datetime, is_summer_time, is_winter_time, parse_datetime
+from Library.Utility.Datetime import EPOCH, MICROSECOND, MILLISECOND, datetime_to_epoch, epoch_to_datetime, is_summer_time, is_winter_time, local_to_utc, parse_datetime, utc_to_local, zones
 
 def test_parse_datetime_formats():
     assert parse_datetime("2023-01-01") == datetime(2023, 1, 1)
@@ -50,3 +50,46 @@ def test_is_winter_time_is_complement():
 def test_is_summer_time_unsupported_region():
     with pytest.raises(ValueError):
         is_summer_time(datetime(2023, 7, 1), "ZZ")
+
+def test_zone_conversions_follow_each_zones_daylight_saving():
+    assert local_to_utc(datetime(2026, 7, 1, 9), "America/New_York") == datetime(2026, 7, 1, 13)
+    assert local_to_utc(datetime(2026, 1, 15, 9), "America/New_York") == datetime(2026, 1, 15, 14)
+    assert utc_to_local(datetime(2026, 7, 1, 13), "America/New_York") == datetime(2026, 7, 1, 9)
+    assert utc_to_local(datetime(2026, 7, 1, 23, 30), "Europe/London") == datetime(2026, 7, 2, 0, 30)
+
+def test_an_empty_zone_means_the_system_zone():
+    moment = datetime(2026, 7, 1, 4)
+    assert local_to_utc(moment, "") == local_to_utc(moment, None) == local_to_utc(moment)
+    assert utc_to_local(moment, "") == utc_to_local(moment)
+
+def test_zones_are_sorted_and_carry_utc():
+    names = zones()
+    assert "UTC" in names and "America/New_York" in names
+    assert list(names) == sorted(names)
+
+def test_zones_offer_only_names_a_browser_accepts():
+    names = zones()
+    assert "Factory" not in names
+    assert all(part[:1].isupper() for name in names for part in name.split("/"))
+
+def _repeated_(zone):
+    for minute in range(15, 36 * 60, 15):
+        moment = datetime(2026, 10, 24, 12, tzinfo=timezone.utc) + timedelta(minutes=minute)
+        before, after = (moment - timedelta(minutes=15)).astimezone(zone).utcoffset(), moment.astimezone(zone).utcoffset()
+        if after < before: return moment.replace(tzinfo=None), before - after
+    return None
+
+def test_utc_to_local_marks_the_second_pass_of_a_repeated_hour():
+    first, second = datetime(2026, 10, 25, 0, 30), datetime(2026, 10, 25, 1, 30)
+    assert utc_to_local(first, "Europe/London") == utc_to_local(second, "Europe/London") == datetime(2026, 10, 25, 1, 30)
+    assert (utc_to_local(first, "Europe/London").fold, utc_to_local(second, "Europe/London").fold) == (0, 1)
+    assert local_to_utc(utc_to_local(second, "Europe/London"), "Europe/London") == second
+
+def test_utc_to_local_marks_the_second_pass_in_the_system_zone():
+    repeated = _repeated_(None)
+    if repeated is None: pytest.skip("System zone repeats no hour around 2026-10-25")
+    transition, width = repeated
+    first, second = transition - width / 2, transition + width / 2
+    assert utc_to_local(first) == utc_to_local(second)
+    assert (utc_to_local(first).fold, utc_to_local(second).fold) == (0, 1)
+    assert (local_to_utc(utc_to_local(first)), local_to_utc(utc_to_local(second))) == (first, second)

@@ -21,3 +21,17 @@ def test_page_table_helper_builds_a_navigable_sheet():
 def test_page_sheet_helper_delegates_to_the_spec():
     sheet = TableAPI.sheet("Rows", ["UID", "Name"], _ROWS_, markdown=("Name",))
     assert sheet.columns[1].markdown is True
+
+def test_selected_reads_a_grid_state():
+    assert TableAPI.selected({"selected": ["a", "b"]}) == ["a", "b"]
+    assert TableAPI.selected({"rows": []}) == []
+
+def test_selected_wraps_a_single_key_and_copies_a_list():
+    assert TableAPI.selected("a") == ["a"]
+    assert TableAPI.selected(("a", "b")) == ["a", "b"]
+    assert TableAPI.selected(None) == []
+
+def test_workspace_takes_a_title_and_editable_columns():
+    payload = TableAPI.workspace("Rows", ["UID", "Name"], _ROWS_, title="Grid", editable=("Name",)).payload()
+    assert payload["title"] == "Grid"
+    assert [column.get("editable", False) for column in payload["sheets"][0]["columns"]] == [False, True]

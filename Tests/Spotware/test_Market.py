@@ -3,8 +3,11 @@ from datetime import datetime, timezone
 import Library.Market
 import Library.Portfolio
 from ctrader_open_api.messages.OpenApiMessages_pb2 import (
+    ProtoOADepthEvent,
     ProtoOAGetTrendbarsRes,
-    ProtoOAGetTickDataRes
+    ProtoOAGetTickDataRes,
+    ProtoOASubscribeDepthQuotesRes,
+    ProtoOAUnsubscribeDepthQuotesRes
 )
 def test_period_resolves_wire_and_framework_timeframes(spotware):
     assert spotware.market._period_("M1") == 1
@@ -87,7 +90,8 @@ def test_ticks_accumulates_deltas(spotware):
         quote="BID"
     )
     assert len(df) == 3
-    assert df.columns == ["Timestamp", "Bid"]
+    assert df.columns == ["Symbol", "Timestamp", "Bid"]
+    assert df["Symbol"].to_list() == [1, 1, 1]
     prices = df.sort("Timestamp")["Bid"].to_list()
     assert prices[0] == pytest.approx(1.05)
     assert prices[1] == pytest.approx(1.05005)
@@ -115,3 +119,27 @@ def test_ticks_empty_response(spotware):
         stop=datetime(2020, 1, 2, tzinfo=timezone.utc)
     )
     assert len(df) == 0
+    assert df.columns == ["Symbol", "Timestamp", "Bid"]
+def test_ticks_carries_the_symbol_like_bars_and_streaming(spotware):
+    res = ProtoOAGetTickDataRes()
+    t = res.tickData.add(); t.timestamp = 1577836800000; t.tick = 105002
+    res.hasMore = False
+    spotware._responses_.append(res)
+    df = spotware.market.ticks(symbol=7, start=datetime(2020, 1, 1, tzinfo=timezone.utc), stop=datetime(2020, 1, 2, tzinfo=timezone.utc), quote="ASK")
+    assert df.columns == ["Symbol", "Timestamp", "Ask"]
+    assert df["Symbol"][0] == 7
+    assert df["Ask"][0] == pytest.approx(1.05002)
+def test_depth_book_ignores_updates_after_the_limit(spotware):
+    def _event_(qid, bid):
+        ev = ProtoOADepthEvent(ctidTraderAccountId=123, symbolId=1)
+        q = ev.newQuotes.add(); q.id = qid; q.size = 100; q.bid = bid
+        return ev
+    def fire(request, api):
+        api.push(_event_(100, 105000))
+        api.push(_event_(200, 105010))
+        return ProtoOASubscribeDepthQuotesRes()
+    spotware._responses_.append(fire)
+    spotware._responses_.append(ProtoOAUnsubscribeDepthQuotesRes())
+    df = spotware.market.depth(symbol=1, timeout=5)
+    assert df["Quote"].to_list() == [100]
+    assert df["Bid"][0] == pytest.approx(1.05)

@@ -2,7 +2,7 @@ import yaml
 
 import pytest
 
-from Library.Utility.Parameter import Parameter, format_slots, numbered, parse_slots
+from Library.Utility.Parameter import Parameter
 
 @pytest.fixture
 def document(tmp_path):
@@ -52,27 +52,7 @@ def test_mapping_helpers_expose_the_underlying_data(document):
     assert sorted(parameter.values()) == [1, 2]
     assert dict(parameter.items()) == {"A": 1, "B": 2}
 
-def test_slots_render_with_the_house_separator():
-    assert format_slots([["SMA", "EMA"], [10, 20]]) == "SMA|EMA · 10|20"
-
-def test_slots_round_trip_to_an_equivalent_space():
-    assert parse_slots(format_slots([["SMA", "EMA"], [10, 20]])) == [["SMA", "EMA"], [10, 20]]
-    assert parse_slots(format_slots(["ATR", 14])) == ["ATR", 14]
-
-def test_a_semicolon_is_accepted_because_the_separator_is_not_on_a_keyboard():
-    assert parse_slots("SMA|EMA ; 10|20") == parse_slots("SMA|EMA · 10|20")
-
-def test_a_single_option_slot_collapses_to_a_scalar():
-    assert parse_slots("SMA · Auto") == ["SMA", "Auto"]
-
-def test_an_empty_slot_text_is_no_slots():
-    assert parse_slots("   ") == []
-
-def test_numbers_decode_and_text_survives():
-    assert parse_slots("ATR · 14 · 0.5 · Signal") == ["ATR", 14, 0.5, "Signal"]
-
-def test_numbered_recognizes_a_staged_body():
-    assert numbered({"1": {}, "2-3": {}}) is True
-    assert numbered({"Baseline": []}) is False
-    assert numbered({}) is False
-    assert numbered(None) is False
+def test_saving_keeps_the_key_order_because_order_can_be_load_bearing(document):
+    parameter = Parameter({"TechnicalManagement": {"Zeta": [1], "Alpha": [2]}}, document)
+    parameter.TechnicalManagement.Zeta = [3]
+    assert list(yaml.safe_load(document.read_text(encoding="utf-8"))["TechnicalManagement"]) == ["Zeta", "Alpha"]

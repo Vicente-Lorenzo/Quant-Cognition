@@ -5,7 +5,7 @@ import Library.Portfolio
 from Library.Portfolio.Order import OrderStatus, TimeInForce
 from Library.Spotware import SpotwareAPI, UniverseAPI, MarketAPI, StreamingAPI, PortfolioAPI
 from ctrader_open_api.messages.OpenApiCommonMessages_pb2 import ProtoMessage
-from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOAOrder, ProtoOAOrderType, ProtoOAQuoteType, ProtoOATimeInForce, ProtoOATrader
+from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOAOrder, ProtoOAOrderType, ProtoOAQuoteType, ProtoOATimeInForce, ProtoOATradeSide, ProtoOATrader
 from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOAApplicationAuthRes,
     ProtoOAAccountAuthRes,
@@ -86,6 +86,16 @@ def test_code_resolves_wire_names_framework_members_and_integers():
     assert SpotwareAPI._code_(ProtoOATimeInForce, TimeInForce.GoodTillCancel) == 2
     with pytest.raises(ValueError, match="Not a member"):
         SpotwareAPI._code_(ProtoOAQuoteType, "Mid")
+def test_code_refuses_a_bool_instead_of_sending_it_as_a_member():
+    with pytest.raises(ValueError, match="Not a member"):
+        SpotwareAPI._code_(ProtoOATradeSide, True)
+    with pytest.raises(ValueError, match="Not a member"):
+        SpotwareAPI._code_(ProtoOATradeSide, False)
+def test_optional_decodes_only_when_a_decoder_is_supplied():
+    trader = ProtoOATrader(moneyDigits=3)
+    assert SpotwareAPI._optional_(trader, "moneyDigits") == 3
+    assert SpotwareAPI._optional_(trader, "moneyDigits", lambda digits: digits * 2) == 6
+    assert SpotwareAPI._optional_(ProtoOATrader(), "moneyDigits", lambda digits: digits * 2) is None
 def test_named_strips_the_shared_prefix_and_matches_framework_enums():
     order = ProtoOAOrder(orderType=5, orderStatus=5)
     assert SpotwareAPI._named_(order, "orderType") == "MarketRange"

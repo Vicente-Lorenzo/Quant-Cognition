@@ -136,20 +136,41 @@ def test_simulation_mode_drops_portfolio_records():
     system = _make_system_(market=(100, 60.0, 1, 64), portfolio=(0, 0.0, 8, 64))
     assert system._portfolio_.add is system._portfolio_._noop_
 
-def test_warmup_routes_bar_to_market_buffer(realtime_system):
+def test_warmup_leaves_buffering_to_the_bar_receiver(realtime_system):
     realtime_system._db_ = None
     realtime_system._indicator_window_ = lambda: 999
     realtime_system._market_.add = MagicMock()
-    g, o, h, l, c = MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
     bar = MagicMock()
-    bar.GapTick, bar.OpenTick, bar.HighTick, bar.LowTick, bar.CloseTick = g, o, h, l, c
     update = MagicMock(); update.Bar = bar
     engine = realtime_system.system_management()
     initialization = engine.state(name="Initialization")
     transition = next(t for t in initialization._transitions_ if t is not None and getattr(t, "Action", None) and t.Action.__name__ == "warmup")
     transition.perform(update)
-    assert [call.args[0] for call in realtime_system._market_.add.call_args_list] == [g, o, h, l, c, bar]
+    realtime_system._market_.add.assert_not_called()
     assert realtime_system._sync_buffer_ == [bar]
+
+def test_warmup_reuses_the_database_frame_at_execution(realtime_system, monkeypatch):
+    from datetime import datetime, timedelta
+    from Library.Database.Dataframe import pl
+    from Library.Market.Market import MarketAPI
+    stamps = [datetime(2024, 1, 1) + timedelta(hours=hour) for hour in range(3)]
+    pulls = []
+    monkeypatch.setattr(MarketAPI, "pull_bars", staticmethod(lambda *args, **kwargs: (pulls.append(kwargs), pl.DataFrame({"Timestamp": stamps[:2]}))[1]))
+    realtime_system._indicator_window_ = lambda: 2
+    realtime_system._security_.UID = 1
+    realtime_system._timeframe_.Seconds = 3600
+    bar = MagicMock()
+    bar.Timestamp.DateTime = stamps[2]
+    bar.dict.return_value = {"Timestamp": stamps[2]}
+    engine = realtime_system.system_management()
+    initialization = engine.state(name="Initialization")
+    warmup = next(t for t in initialization._transitions_ if t is not None and getattr(t, "Action", None) and t.Action.__name__ == "warmup")
+    execute = next(t for t in initialization._transitions_ if t is not None and getattr(t, "Action", None) and t.Action.__name__ == "execute")
+    warmup.perform(MagicMock(Bar=bar))
+    update = MagicMock()
+    execute.perform(update)
+    assert len(pulls) == 1
+    assert update.Market.init_data.call_args.args[0]["Timestamp"].to_list() == stamps
 
 def test_warmup_emits_execution_when_window_reached(realtime_system):
     realtime_system._db_ = None

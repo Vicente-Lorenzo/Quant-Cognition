@@ -3,10 +3,10 @@ import re
 import pytest
 
 import Library.App.V2 as V2
-from Library.System.Space import AUTOMATIC
-from Library.Utility.Parameter import SEPARATOR
+from Library.System.Space import SpaceAPI
+from Library.Strategy.Range import RangeAPI
+from Library.Strategy.Syntax import SyntaxAPI
 from Library.Utility.Path import inspect_module
-from Library.Utility.Range import RangeAPI
 
 _GRID_ = inspect_module(V2.__file__) / "Assets" / "Scripts" / "Grid.js"
 
@@ -20,13 +20,13 @@ def _literal_(pattern: str) -> str:
     return found.group(1)
 
 def test_range_grammar_matches_the_engine():
-    assert _literal_(r"var RANGE = /(.*)/;") == RangeAPI._PATTERN_.pattern
+    assert _literal_(r"var RANGE = /(.*)/;") == RangeAPI.PATTERN.pattern
 
 def test_separator_matches_the_engine():
-    assert _literal_(r'var SEPARATOR = "(.*)";') == SEPARATOR
+    assert _literal_(r'var SEPARATOR = "(.*)";') == SyntaxAPI.SEPARATOR
 
 def test_auto_marker_matches_the_engine():
-    assert _literal_(r'var MODES = \["([^"]*)"') == AUTOMATIC
+    assert _literal_(r'var MODES = \["([^"]*)"') == SpaceAPI.AUTOMATIC
 
 def test_declared_modes_are_the_three_editor_kinds():
-    assert re.findall(r'"([^"]*)"', _literal_(r"var MODES = \[(.*)\];")) == [AUTOMATIC, "Range", "List"]
+    assert re.findall(r'"([^"]*)"', _literal_(r"var MODES = \[(.*)\];")) == [SpaceAPI.AUTOMATIC, "Range", "List"]

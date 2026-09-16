@@ -3,6 +3,7 @@ import threading
 
 import pytest
 
+from Library.Utility.Typing import MISSING
 from Library.Logging import LoggingAPI, StorageAPI, VerboseLevel
 
 class FakeRecordAPI:
@@ -18,6 +19,11 @@ class FakeRecordAPI:
 
     def save(self, *args, **kwargs):
         self.saves += 1
+
+    def stop(self, content, *, records, dropped, truncated, by="Autosave", stopped=MISSING):
+        self.Content, self.Records, self.Dropped, self.Truncated = content, records, dropped, truncated
+        if stopped: self.StoppedAt = stopped
+        self.save(by=by)
 
 @pytest.fixture
 def storage():
@@ -88,6 +94,7 @@ def test_records_are_accumulated_and_flushed(storage):
     time.sleep(0.3)
     assert storage.Records == 10
     assert record.Content.count("\n") == 10
+    assert record.StoppedAt is None
 
 def test_flush_is_batched_not_per_record(storage):
     storage.set_level(VerboseLevel.Warning)
