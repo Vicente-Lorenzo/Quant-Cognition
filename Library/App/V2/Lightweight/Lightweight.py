@@ -21,6 +21,8 @@ class LightweightAPI(ComponentAPI):
     edition: dict = MISSING
     height: str = MISSING
 
+    PAYLOAD = "lightweight-payload"
+
     _FILL_ = "fill"
 
     def __post_init__(self):
@@ -47,7 +49,7 @@ class LightweightAPI(ComponentAPI):
 
     def build(self) -> list[Component]:
         carrier = {"id": self.carrier} if self.carrier is not MISSING else {}
-        elements = [html.Script(self.encode(), type="application/json", className="lightweight-payload", **carrier),
+        elements = [html.Script(self.encode(), type="application/json", className=self.PAYLOAD, **carrier),
                     html.Div(className="lightweight-body")]
         hidden = [StorageAPI(id=self.selection, data=None)] if self.selection is not MISSING else []
         if self.edition is not MISSING: hidden.append(StorageAPI(id=self.edition, data=None))

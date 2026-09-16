@@ -1,4 +1,3 @@
-import uuid
 import dash
 from dash.exceptions import PreventUpdate
 
@@ -40,12 +39,18 @@ class TableAPI(RefreshAPI, PageAPI):
     def sheet(name: str, columns: list, rows: list, key: str = "UID", markdown=(), editable=()) -> SheetAPI:
         return SheetAPI.frame(name, columns, rows, key, markdown=markdown, editable=editable)
 
+    @staticmethod
+    def selected(state) -> list:
+        if isinstance(state, dict): return list(state.get("selected") or [])
+        if isinstance(state, str): return [state]
+        return list(state or [])
+
     @classmethod
     def workspace(cls, name: str, columns: list, rows: list, *, key: str = "UID", markdown=(), base: str = None,
-                  selection: dict = None, edition: dict = None) -> WorkspaceAPI:
+                  selection: dict = None, edition: dict = None, title: str = None, editable=()) -> WorkspaceAPI:
         return WorkspaceAPI(
-            title=name,
-            sheets=[cls.sheet(name, columns, rows, key, markdown=markdown, editable=() if edition is None else columns)],
+            title=title or name,
+            sheets=[cls.sheet(name, columns, rows, key, markdown=markdown, editable=editable)],
             outbound=selection,
             edition=edition,
             navigation={"base": base, "key": key} if base else None
@@ -87,15 +92,21 @@ class TableAPI(RefreshAPI, PageAPI):
     def _remove_(self, keys: list) -> None:
         raise NotImplementedError
 
-    def _workspace_(self) -> WorkspaceAPI:
-        sheet = self.sheet(self._SHEET_, self._columns_(), self._rows_(), self._ROW_KEY_, markdown=self._markdown_columns_(), editable=self._editable_columns_())
+    def _workspace_(self, columns: list = None, rows: list = None) -> WorkspaceAPI:
+        columns = self._columns_() if columns is None else columns
+        rows = self._rows_() if rows is None else rows
         base = self._detail_base_() if self._NAVIGABLE_ else None
-        return WorkspaceAPI(
-            title=self.button or self._SHEET_,
-            sheets=[sheet],
-            outbound=self.STATE_STORE_ID,
+        return self.workspace(
+            self._SHEET_,
+            columns,
+            rows,
+            key=self._ROW_KEY_,
+            markdown=self._markdown_columns_(),
+            base=base,
+            selection=self.STATE_STORE_ID,
             edition=self.EDIT_STORE_ID if self._EDITABLE_ else None,
-            navigation={"base": base, "key": self._ROW_KEY_} if base else None
+            title=self.button or self._SHEET_,
+            editable=self._editable_columns_()
         )
 
     def _insert_button_(self) -> ButtonAPI:
@@ -168,11 +179,7 @@ class TableAPI(RefreshAPI, PageAPI):
     )
     def _edit_(self, edit):
         if not self._EDITABLE_ or not edit or edit.get("uid") is None: raise PreventUpdate
-        try:
-            self._write_(edit["uid"], edit["column"], edit["value"])
-        except Exception as error:
-            self.app.notify.error(str(error), header="Update Failed")
-            return dash.no_update, uuid.uuid4().hex
+        if not self._trial_(lambda: self._write_(edit["uid"], edit["column"], edit["value"]), "Update Failed"): return dash.no_update, self.token()
         self.app.notify.success(f"Updated {edit['column']}", header="Saved")
         return self._fingerprint_() or dash.no_update, dash.no_update
 
@@ -182,13 +189,9 @@ class TableAPI(RefreshAPI, PageAPI):
         on_click=InjectionType.Hidden,
     )
     def _insert_(self, clicks):
-        try:
-            self._append_()
-        except Exception as error:
-            self.app.notify.error(str(error), header="Insert Failed")
-            return dash.no_update
+        if not self._trial_(self._append_, "Insert Failed"): return dash.no_update
         self.app.notify.success("Row inserted", header="Saved")
-        return uuid.uuid4().hex
+        return self.token()
 
     @serverside_callback(
         Output(RefreshAPI.RELOAD_STORE_ID, "data"),
@@ -197,14 +200,7 @@ class TableAPI(RefreshAPI, PageAPI):
         on_click=InjectionType.Hidden,
     )
     def _delete_(self, clicks, state):
-        keys = list((state or {}).get("selected") or [])
-        if not keys:
-            self.app.notify.warning("Select rows to delete", header="No Selection")
-            return dash.no_update
-        try:
-            self._remove_(keys)
-        except Exception as error:
-            self.app.notify.error(str(error), header="Delete Failed")
-            return dash.no_update
+        keys = self._selection_(state, "Select rows to delete")
+        if not keys or not self._trial_(lambda: self._remove_(keys), "Delete Failed"): return dash.no_update
         self.app.notify.success(f"Deleted {len(keys)} row(s)", header="Done")
-        return uuid.uuid4().hex
+        return self.token()

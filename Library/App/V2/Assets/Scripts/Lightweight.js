@@ -561,6 +561,10 @@
                     var definition = current.columns[column];
                     if (definition.align) cell.style.textAlign = definition.align;
                     if (definition.markdown) cell.innerHTML = record.cells[column];
+                    else if (window.AppZone && window.AppZone.pattern.test(record.cells[column])) {
+                        cell.setAttribute("data-utc", record.cells[column]);
+                        cell.textContent = window.AppZone.format(record.cells[column]);
+                    }
                     else cell.textContent = record.cells[column];
                     if (!definition.markdown && cell.textContent) cell.title = cell.textContent;
                     if (definition.editable && edition) {

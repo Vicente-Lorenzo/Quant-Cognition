@@ -13,6 +13,11 @@ from Library.Utility.Typing import MISSING
 def prop(name: str | None = None, default: Any = MISSING):
     return field(default=default, metadata={"prop": name})
 
+def tooltip(target: dict, text: str, placement: str = MISSING) -> Component:
+    kwargs = {"target": target, "delay": {"show": 500, "hide": 100}}
+    if placement is not MISSING: kwargs["placement"] = placement
+    return dbc.Tooltip(text, **kwargs)
+
 @dataclass(kw_only=True)
 class ComponentAPI(ABC):
 
@@ -70,9 +75,7 @@ class ComponentAPI(ABC):
 
     def _tooltip_(self) -> list[Component]:
         if self.tooltip is MISSING or not self.id: return []
-        kwargs = {"target": self.id, "delay": {"show": 400, "hide": 100}}
-        if self.placement is not MISSING: kwargs["placement"] = self.placement
-        return [dbc.Tooltip(self.tooltip, **kwargs)]
+        return [tooltip(self.id, self.tooltip, self.placement)]
 
     def serialize(self, elements: list[Component] = None, hidden: list[Component] = None) -> list[Component]:
         return [*(elements or []), *(hidden or []), *self._tooltip_()]

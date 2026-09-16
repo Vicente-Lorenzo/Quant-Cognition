@@ -5,8 +5,11 @@ from Library.App.V2.Core.Identity import GlobalAPI
 from Library.App.V2.Core.Callback import ComponentID, Output, Input, State, InjectionType, clientside_callback
 from Library.App.V2.Component.Component import ButtonAPI, ContainerAPI, IconAPI, TextAPI
 from Library.App.V2.Page.Page import PageAPI
+from Library.Utility.Datetime import zones
 
 class SettingsPageAPI(PageAPI):
+
+    _BROWSER_ = "Browser"
 
     SETTINGS_TABS_ID: ComponentID | dict = ComponentID()
     SETTINGS_MEMORY_EDITOR_ID: ComponentID | dict = ComponentID()
@@ -43,7 +46,13 @@ class SettingsPageAPI(PageAPI):
             TextAPI(text="Appearance", classname="panel-title", builder=html.H5),
             TextAPI(text="Cycle between light · dark · system themes · Your choice is remembered on this device", classname="settings-note", builder=html.P),
             ContainerAPI(fluid=True, classname="settings-row", elements=[TextAPI(text="Theme", classname="settings-label"), theme]),
+            TextAPI(text="Timestamps are stored in UTC and shown in this zone on this device · Browser follows the device clock", classname="settings-note", builder=html.P),
+            html.Div([html.Span("Time zone", className="settings-label"), self._zone_()], className="settings-row"),
         ])
+
+    def _zone_(self) -> dcc.Dropdown:
+        options = [{"label": "Browser (this device)", "value": self._BROWSER_}, {"label": "UTC", "value": "UTC"}, *({"label": zone, "value": zone} for zone in zones() if zone != "UTC")]
+        return dcc.Dropdown(id=self.app.GLOBAL_SETTINGS_ZONE_ID, options=options, value=self._BROWSER_, clearable=False, searchable=True, persistence=True, persistence_type="local", className="settings-control settings-zone")
 
     def _security_(self) -> ContainerAPI:
         auth = ButtonAPI(id=self.app.GLOBAL_SETTINGS_AUTH_ID, background="primary", classname="settings-control", label=[IconAPI(id=self.app.GLOBAL_SETTINGS_AUTH_ICON_ID, icon="bi bi-box-arrow-in-right"), TextAPI(id=self.app.GLOBAL_SETTINGS_AUTH_LABEL_ID, text="Sign In")])
@@ -63,8 +72,8 @@ class SettingsPageAPI(PageAPI):
         ])
 
     def _editor_(self, name: str, hint: str, editor: dict, save: dict, clean: dict) -> ContainerAPI:
-        save_button = ButtonAPI(id=save, background="primary", classname="settings-control", label=[IconAPI(icon="bi bi-save"), TextAPI(text="Save")])
-        clean_button = ButtonAPI(id=clean, background="danger", classname="settings-control", label=[IconAPI(icon="bi bi-eraser-fill"), TextAPI(text="Clean")])
+        save_button = ButtonAPI(id=save, background="primary", classname="settings-control", label=self._icon_("bi bi-save", "Save"))
+        clean_button = ButtonAPI(id=clean, background="danger", classname="settings-control", label=self._icon_("bi bi-eraser-fill", "Clean"))
         return ContainerAPI(fluid=True, classname="settings-editor", elements=[
             ContainerAPI(fluid=True, classname="settings-row", elements=[TextAPI(text=name, classname="settings-label"), ContainerAPI(fluid=True, classname="settings-controls", elements=[save_button, clean_button])]),
             TextAPI(text=hint, classname="settings-hint", builder=html.P),

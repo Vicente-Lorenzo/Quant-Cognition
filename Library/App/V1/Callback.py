@@ -90,11 +90,11 @@ class InjectionType(Enum):
     Prepend = 2
     Append = 3
     @classmethod
-    def coerce(cls, value, default: InjectionType = Hidden) -> Self:
+    def coerce(cls, value, default: InjectionType = None) -> Self:
         if isinstance(value, cls):
             return value
         if value is True:
-            return default
+            return default or cls.Hidden
         return cls.Disabled
 
 def inject_callback_args(mode: InjectionType, injected_args: Union[list, tuple], original_args: Union[list, tuple]):

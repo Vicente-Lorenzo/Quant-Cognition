@@ -7,7 +7,7 @@ import dash_bootstrap_components as dbc
 
 from Library.App.V2.Core.Callback import Output, Input, State, InjectionType, clientside_callback
 from Library.App.V2.Core.Identity import GlobalAPI
-from Library.App.V2.Component.Component import Component, ButtonAPI, IconAPI, LoadingAPI, ModalAPI, StorageAPI, TextAPI
+from Library.App.V2.Component.Component import Component, ButtonAPI, IconAPI, LoadingAPI, ModalAPI, StorageAPI, TextAPI, tooltip
 from Library.App.V2.Core.Layout import DefaultLayoutAPI
 from Library.App.V2.Session import TriggerAPI
 
@@ -100,6 +100,8 @@ class ShellAPI(GlobalAPI):
         hidden.extend(StorageAPI(id=self.GLOBAL_EMAIL_STORAGE_ID, persistence="memory").build())
         hidden.extend(StorageAPI(id=self.GLOBAL_MOTTO_ASYNC_ID, persistence="memory").build())
         hidden.extend(StorageAPI(id=self.GLOBAL_THEME_STORAGE_ID, persistence="local").build())
+        hidden.extend(StorageAPI(id=self.GLOBAL_ZONE_STORAGE_ID, persistence="local").build())
+        hidden.extend(StorageAPI(id=self.GLOBAL_ZONE_ACTIVE_ID, persistence="memory").build())
         hidden.extend(StorageAPI(id=self.GLOBAL_USER_STORAGE_ID, persistence="session").build())
         return html.Div(hidden, className="app-hidden")
 
@@ -126,7 +128,7 @@ class ShellAPI(GlobalAPI):
 
     @staticmethod
     def _tip_(target: dict, text: str, placement: str = "bottom") -> Component:
-        return dbc.Tooltip(text, target=target, delay={"show": 500, "hide": 100}, placement=placement)
+        return tooltip(target, text, placement)
 
     def _init_navigation_(self) -> None:
         for endpoint, page in self._pages_.items():

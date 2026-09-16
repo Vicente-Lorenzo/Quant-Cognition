@@ -1,10 +1,10 @@
-import shlex
 from typing import Any, Callable
 from dataclasses import dataclass, field
 
 from Library.App.V2.Core.Callback import ComponentID
 from Library.App.V2.Component.Component import Component, InputAPI, SelectAPI, SwitchAPI, TextareaAPI
 from Library.Utility.Enumeration import EnumerationAPI
+from Library.Utility.Runtime import join_arguments, split_arguments
 
 class ControlType(EnumerationAPI):
 
@@ -89,14 +89,14 @@ class FieldAPI:
     def command(fields, values, *leading) -> str:
         parts = list(leading)
         for entry, value in zip(fields, values): parts += entry.argument(value)
-        return " ".join(part if " " not in part else f'"{part}"' for part in parts)
+        return join_arguments(parts)
 
     @staticmethod
     def parse(fields, arguments) -> dict:
         flags = {entry.flag: entry for entry in fields}
-        parsed, tokens, index = {}, shlex.split(arguments or "", posix=False), 0
+        parsed, tokens, index = {}, split_arguments(arguments), 0
         while index < len(tokens):
-            entry = flags.get(tokens[index].strip('"'))
+            entry = flags.get(tokens[index])
             if entry is None:
                 index += 1
                 continue
@@ -104,7 +104,7 @@ class FieldAPI:
                 parsed[entry.label or entry.name] = "Yes"
                 index += 1
                 continue
-            value = tokens[index + 1].strip('"') if index + 1 < len(tokens) else ""
+            value = tokens[index + 1] if index + 1 < len(tokens) else ""
             parsed[entry.label or entry.name] = "" if value in flags else value
             index += 2 if value not in flags else 1
         return parsed
@@ -118,7 +118,9 @@ class FieldAPI:
         return {entry.column: entry.write(value) for entry, value in zip(fields, values) if entry.stored and not entry.identity}
 
     @staticmethod
-    def missing(fields, values) -> str | None:
-        absent = [entry.label for entry, value in zip(fields, values) if entry.required and not value]
-        if not absent: return None
-        return absent[0] if len(absent) == 1 else f"{', '.join(absent[:-1])} and {absent[-1]}"
+    def choices(values) -> list[dict]:
+        return [{"label": value, "value": value} for value in values]
+
+    @staticmethod
+    def missing(fields, values) -> list:
+        return [entry.label for entry, value in zip(fields, values) if entry.required and not value]

@@ -213,6 +213,8 @@ class AppAPI(ShellAPI, RouterAPI):
         self.GLOBAL_THEME_STORAGE_ID = self.register(type="storage", name="theme")
         self.GLOBAL_THEME_TOGGLE_ID = self.register(type="menuitem", name="theme")
         self.GLOBAL_THEME_ICON_ID = self.register(type="icon", name="theme")
+        self.GLOBAL_ZONE_STORAGE_ID = self.register(type="storage", name="zone")
+        self.GLOBAL_ZONE_ACTIVE_ID = self.register(type="storage", name="zone_active")
         self.GLOBAL_USER_STORAGE_ID = self.register(type="storage", name="user")
         self.GLOBAL_MENU_ID = self.register(type="menu", name="account")
         self.GLOBAL_ACCOUNT_ICON_ID = self.register(type="icon", name="account")
@@ -225,6 +227,7 @@ class AppAPI(ShellAPI, RouterAPI):
         self.GLOBAL_SETTINGS_THEME_ID = self.register(type="button", name="settings_theme")
         self.GLOBAL_SETTINGS_THEME_ICON_ID = self.register(type="icon", name="settings_theme")
         self.GLOBAL_SETTINGS_THEME_LABEL_ID = self.register(type="text", name="settings_theme")
+        self.GLOBAL_SETTINGS_ZONE_ID = self.register(type="dropdown", name="settings_zone")
         self.GLOBAL_SETTINGS_AUTH_ID = self.register(type="button", name="settings_auth")
         self.GLOBAL_SETTINGS_AUTH_ICON_ID = self.register(type="icon", name="settings_auth")
         self.GLOBAL_SETTINGS_AUTH_LABEL_ID = self.register(type="text", name="settings_auth")
@@ -420,6 +423,21 @@ class AppAPI(ShellAPI, RouterAPI):
         return self.asset("Callbacks/Theme.js", url=False)
 
     @clientside_callback(
+        Output(GlobalAPI.GLOBAL_ZONE_STORAGE_ID, "data"),
+        Input(GlobalAPI.GLOBAL_SETTINGS_ZONE_ID, "value")
+    )
+    def _global_async_settings_zone_callback_(self):
+        return self.asset("Callbacks/ZoneSelect.js", url=False)
+
+    @clientside_callback(
+        Output(GlobalAPI.GLOBAL_ZONE_ACTIVE_ID, "data"),
+        Input(GlobalAPI.GLOBAL_ZONE_STORAGE_ID, "data"),
+        on_init=InjectionType.Hidden
+    )
+    def _global_async_zone_apply_callback_(self):
+        return self.asset("Callbacks/ZoneApply.js", url=False)
+
+    @clientside_callback(
         Output(GlobalAPI.GLOBAL_SETTINGS_THEME_ICON_ID, "className"),
         Output(GlobalAPI.GLOBAL_SETTINGS_THEME_LABEL_ID, "children"),
         Input(GlobalAPI.GLOBAL_THEME_STORAGE_ID, "data"),
@@ -520,16 +538,18 @@ class AppAPI(ShellAPI, RouterAPI):
 
     def _required_(self, page: PageAPI | None):
         from Library.Auth import RoleAPI
-        app_access = RoleAPI.parse(self._access_) if self._access_ is not None else RoleAPI.Public
-        page_access = RoleAPI.parse(getattr(page, "access", None)) if page is not None else RoleAPI.Public
-        app_access = app_access if isinstance(app_access, RoleAPI) else RoleAPI.Public
-        page_access = page_access if isinstance(page_access, RoleAPI) else RoleAPI.Public
+        app_access = RoleAPI.coerce(self._access_)
+        page_access = RoleAPI.coerce(getattr(page, "access", None))
         return app_access if app_access.value >= page_access.value else page_access
 
     def _private_(self) -> bool:
         from Library.Auth import RoleAPI
-        access = RoleAPI.parse(self._access_) if self._access_ is not None else RoleAPI.Public
-        return isinstance(access, RoleAPI) and access.value > RoleAPI.Public.value
+        return RoleAPI.coerce(self._access_).value > RoleAPI.Public.value
+
+    @staticmethod
+    def actor() -> str | None:
+        from flask_login import current_user
+        return getattr(current_user, "Username", None) or getattr(current_user, "Name", None)
 
     def authenticate(self, username: str | None, password: str | None) -> str | None:
         if self._auth_ is None: return username or None

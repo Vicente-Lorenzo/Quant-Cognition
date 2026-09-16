@@ -99,9 +99,9 @@ class InjectionType(Enum):
     Append = 3
 
     @classmethod
-    def coerce(cls, value, default: InjectionType = Hidden) -> Self:
+    def coerce(cls, value, default: InjectionType = None) -> Self:
         if isinstance(value, cls): return value
-        if value is True: return default
+        if value is True: return default or cls.Hidden
         return cls.Disabled
 
 def _layout_(specs: list[dict], original_args: list | tuple) -> tuple[list, dict]:

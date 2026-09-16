@@ -69,8 +69,8 @@ class NetworkAPI(PlotlyAPI):
         return graph
 
     @classmethod
-    def span(cls, nodes: list, edges: list) -> int:
-        graph = cls.graph(nodes, edges) if nodes else None
+    def span(cls, nodes: list, edges: list, graph=MISSING) -> int:
+        if graph is MISSING: graph = cls.graph(nodes, edges) if nodes else None
         if graph is None: return len(nodes)
         layers = {}
         for node in graph.nodes(): layers.setdefault(graph.nodes[node]["layer"], 0)
@@ -78,17 +78,17 @@ class NetworkAPI(PlotlyAPI):
         return max(layers.values(), default=0)
 
     @classmethod
-    def order(cls, nodes: list, edges: list) -> list:
-        graph = cls.graph(nodes, edges) if nodes else None
+    def order(cls, nodes: list, edges: list, graph=MISSING) -> list:
+        if graph is MISSING: graph = cls.graph(nodes, edges) if nodes else None
         if graph is None: return [node["uid"] for node in nodes]
         return sorted(graph.nodes(), key=lambda node: (graph.nodes[node]["layer"], node))
 
     @classmethod
-    def render(cls, nodes: list, edges: list, tint: str = "#868993", fallback: str = "#565a66", placeholder: str = "No nodes"):
+    def render(cls, nodes: list, edges: list, tint: str = "#868993", fallback: str = "#565a66", placeholder: str = "No nodes", graph=MISSING):
         import networkx as nx
         import plotly.graph_objects as go
         if not nodes: return cls.blank(placeholder, tint)
-        graph = cls.graph(nodes, edges)
+        if graph is MISSING: graph = cls.graph(nodes, edges)
         if graph is None: return cls.blank("Dependency cycle detected", tint)
         position = nx.multipartite_layout(graph, subset_key="layer")
         ordered = list(graph.nodes())
@@ -150,11 +150,21 @@ class MatplotlibAPI(ImageAPI):
         return super().arguments()
 
 @dataclass(kw_only=True)
-class BokehAPI(IframeAPI):
-
-    classname: str = "bokeh"
+class _EmbedAPI_(IframeAPI):
 
     figure: Any = MISSING
+
+    def generate(self) -> str:
+        return ""
+
+    def arguments(self) -> dict:
+        if self.srcdoc is MISSING: self.srcdoc = self.generate()
+        return super().arguments()
+
+@dataclass(kw_only=True)
+class BokehAPI(_EmbedAPI_):
+
+    classname: str = "bokeh"
 
     def generate(self) -> str:
         if self.figure is MISSING: return ""
@@ -162,16 +172,10 @@ class BokehAPI(IframeAPI):
         from bokeh.resources import CDN
         return file_html(self.figure, CDN, "Bokeh Plot")
 
-    def arguments(self) -> dict:
-        if self.srcdoc is MISSING: self.srcdoc = self.generate()
-        return super().arguments()
-
 @dataclass(kw_only=True)
-class AltairAPI(IframeAPI):
+class AltairAPI(_EmbedAPI_):
 
     classname: str = "altair"
-
-    figure: Any = MISSING
 
     def generate(self) -> str:
         if self.figure is MISSING: return ""
@@ -179,26 +183,16 @@ class AltairAPI(IframeAPI):
         style = "<style>html, body, #vis { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }</style>"
         return html.replace("<head>", f"<head>\n{style}") if "<head>" in html else f"{style}\n{html}"
 
-    def arguments(self) -> dict:
-        if self.srcdoc is MISSING: self.srcdoc = self.generate()
-        return super().arguments()
-
 @dataclass(kw_only=True)
-class PanelAPI(IframeAPI):
+class PanelAPI(_EmbedAPI_):
 
     classname: str = "panel"
-
-    figure: Any = MISSING
 
     def generate(self) -> str:
         if self.figure is MISSING: return ""
         buf = io.StringIO()
         self.figure.save(buf)
         return buf.getvalue()
-
-    def arguments(self) -> dict:
-        if self.srcdoc is MISSING: self.srcdoc = self.generate()
-        return super().arguments()
 
 @dataclass(kw_only=True)
 class HoloviewsAPI(ComponentAPI):
