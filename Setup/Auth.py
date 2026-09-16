@@ -11,7 +11,7 @@ from Library.Auth.Office import OfficeAPI
 from Library.Auth.User import UserAPI
 from Library.Database import PostgresDatabaseAPI
 from Library.Logging import LoggingAPI
-from Setup.Task import migrate
+from Setup.Task import attempt, migrate
 
 ADMIN = "vicente.aser.lorenzo@gmail.com"
 
@@ -25,18 +25,15 @@ def seed_admin(auth, *, username=ADMIN, email=ADMIN, name="Vicente Lorenzo", pas
     auth.create(username=username, email=email, name=name, password=secret, role=RoleAPI.Administrator, provider="Local")
     return secret
 
+def install_auth(database="Quant"):
+    with PostgresDatabaseAPI(database=database) as db:
+        setup_auth(db)
+    secret = seed_admin(AuthAPI(database=database))
+    return f"Schema + 3 Tables · {f'Admin Created · Password {secret}' if secret is not None else 'Admin Present'}"
+
 def main(database="Quant"):
     with LoggingAPI() as log:
-        try:
-            with PostgresDatabaseAPI(database=database) as db:
-                setup_auth(db)
-            secret = seed_admin(AuthAPI(database=database))
-            detail = f"Admin Created · Password {secret}" if secret is not None else "Admin Present"
-            log.info(lambda: f"Auth Setup: Completed · Schema + 3 Tables · {detail}")
-            return 0
-        except Exception as error:
-            log.exception(lambda: f"Auth Setup: Failed · Due to {error}")
-            return 1
+        return attempt(log, "Auth", lambda: install_auth(database))
 
 if __name__ == "__main__":
     raise SystemExit(main())

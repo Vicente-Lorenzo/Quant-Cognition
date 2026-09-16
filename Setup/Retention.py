@@ -10,10 +10,11 @@ from Library.Logging.File import FileAPI
 from Library.Scheduler.Executor import ExecutorAPI
 from Library.System.System import SystemAPI
 from Library.Utility.File import PruneAPI
+from Library.Utility.Memory import memory_to_string
 from Library.Utility.Path import inspect_cached, inspect_temporary
 from Library.Utility.Profiler import PROFILES
 
-_DAYS_: int = 30
+_DAYS_: int = PruneAPI.DAYS
 
 def temporaries() -> tuple:
     root = inspect_temporary()
@@ -36,7 +37,7 @@ def main(database: str = "Quant", days: int = _DAYS_) -> int:
     with LoggingAPI() as log:
         try:
             removed, reclaimed = prune_files(days=days)
-            log.info(lambda: f"Retention Files: Completed · {removed} Files · {reclaimed / 1048576:.1f} MB · {days} Days")
+            log.info(lambda: f"Retention Files: Completed · {removed} Files · {memory_to_string(reclaimed)} · {days} Days")
         except Exception as error:
             log.exception(lambda: f"Retention Files: Failed · Due to {error}")
             return 1

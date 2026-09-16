@@ -2,11 +2,14 @@ import os
 import sys
 import subprocess
 from pathlib import Path
+from typing import Callable, Union
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from Library.Logging import LoggingAPI
 from Library.Utility.Path import traceback_root
+from Library.Utility.Runtime import windowless
+from Setup.Task import attempt
 
 def find_manifest() -> Path:
     return traceback_root() / "Quant.yml"
@@ -23,22 +26,20 @@ def find_managers() -> list:
     found += ["mamba", "conda"]
     return list(dict.fromkeys(name for name in found if name))
 
-def update_environment():
+def run_manager(arguments: list, accept: Union[Callable, None] = None, **kwargs) -> subprocess.CompletedProcess:
     environment = {**os.environ, "MAMBA_ROOT_PREFIX": str(find_root())}
     for manager in find_managers():
-        try: return subprocess.run([manager, "env", "update", "--name", "Quant", "--file", str(find_manifest()), "--prune"], check=True, env=environment, stdout=sys.stdout, stderr=sys.stderr, creationflags=subprocess.CREATE_NO_WINDOW)
+        try: result = subprocess.run([manager, *arguments], env=environment, **windowless(), **kwargs)
         except FileNotFoundError: continue
+        if accept is None or accept(result): return result
     raise FileNotFoundError("Mamba or Conda executable not found")
+
+def update_environment():
+    return run_manager(["env", "update", "--name", "Quant", "--file", str(find_manifest()), "--prune"], check=True, stdout=sys.stdout, stderr=sys.stderr)
 
 def main():
     with LoggingAPI() as log:
-        try:
-            update_environment()
-            log.info(lambda: f"Environment Setup: Completed · {find_manifest().name}")
-            return 0
-        except Exception as error:
-            log.exception(lambda: f"Environment Setup: Failed · Due to {error}")
-            return 1
+        return attempt(log, "Environment", update_environment, detail=find_manifest().name)
 
 if __name__ == "__main__":
     raise SystemExit(main())

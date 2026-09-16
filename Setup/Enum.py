@@ -5,6 +5,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from Library.Logging import LoggingAPI
 from Library.Utility.Path import traceback_root
+from Setup.Task import attempt
 
 OUTPUT_PATH = traceback_root() / "Sources" / "Robots" / "Connector" / "Connector" / "Enum.cs"
 
@@ -33,13 +34,7 @@ def write_all() -> Path:
 
 def main(database="Quant"):
     with LoggingAPI() as log:
-        try:
-            path = write_all()
-            log.info(lambda: f"Enums Setup: Completed · {path.name}")
-            return 0
-        except Exception as error:
-            log.exception(lambda: f"Enums Setup: Failed · Due to {error}")
-            return 1
+        return attempt(log, "Enums", lambda: write_all().name)
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -6,7 +6,7 @@ sys.path.insert(0, str(ROOT))
 
 def main():
     try:
-        from Library.Scheduler.Tray import TrayAPI, main as serve
+        from Library.Scheduler.Tray import TrayAPI
     except ImportError:
         import os
         import subprocess
@@ -18,7 +18,7 @@ def main():
             **{"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
         ).returncode
     if sys.stdout is None or sys.stderr is None: TrayAPI.redirect(TrayAPI._LOG_)
-    return serve()
+    return TrayAPI.serve()
 
 if __name__ == "__main__":
     raise SystemExit(main())

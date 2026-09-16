@@ -1,6 +1,4 @@
 import sys
-import uuid
-import socket
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -12,11 +10,12 @@ from Library.Scheduler.Dependency import DependencyAPI
 from Library.Scheduler.Cycle import CycleAPI
 from Library.Scheduler.Run import RunAPI
 from Library.Scheduler.Scheduler import SchedulerAPI
-from Library.Database import PostgresDatabaseAPI, QueryAPI
+from Library.Database import QueryAPI
 from Library.Logging import LoggingAPI
+from Library.Utility.IO import read_text
 from Setup.Auth import setup_auth
 from Setup.Logging import setup_logging
-from Setup.Task import migrate
+from Setup.Task import migrate, provision
 
 def setup_notify(db):
     schema, channel = WorkflowAPI.Schema, SchedulerAPI.Channel
@@ -45,26 +44,11 @@ def migrate_runs(db):
     for row in pending.iter_rows(named=True):
         source = Path(row["Log"])
         if not source.is_file(): continue
-        try: content = source.read_text(encoding="utf-8", errors="replace")
+        try: content = read_text(source, safe=False, errors="replace")
         except OSError: continue
-        record = LogAPI(
-            UID=uuid.uuid4().hex,
-            Source=row["TID"],
-            Level=row["Status"],
-            Host=socket.gethostname(),
-            User=None,
-            Process=None,
-            Path=str(source),
-            Content=content,
-            Records=content.count("\n"),
-            Dropped=0,
-            Truncated=False,
-            StartedAt=row["StartedAt"],
-            StoppedAt=row["StoppedAt"],
-            db=db
-        )
-        record.save(by="Migration")
-        db.execute(QueryAPI(f'UPDATE {db._target_(schema, table)} SET "LID" = :lid: WHERE "UID" = :uid:'), [{"lid": record.UID, "uid": row["UID"]}])
+        record = LogAPI.start(db, source=row["TID"], level=row["Status"], path=source, started=row["StartedAt"], by="Migration")
+        record.stop(content, records=content.count("\n"), dropped=0, truncated=False, by="Migration", stopped=row["StoppedAt"])
+        db.update(schema=schema, table=table, data={"LID": record.UID}, condition='"UID" = :uid:', parameters={"uid": row["UID"]})
         migrated += 1
     db.commit()
     return migrated
@@ -77,17 +61,13 @@ def setup_scheduler(db):
     setup_notify(db)
     migrate_runs(db)
 
+def setup_all(db):
+    setup_auth(db)
+    setup_scheduler(db)
+
 def main(database="Quant"):
     with LoggingAPI() as log:
-        try:
-            with PostgresDatabaseAPI(database=database) as db:
-                setup_auth(db)
-                setup_scheduler(db)
-            log.info(lambda: "Scheduler Setup: Completed · Schema + 4 Tables")
-            return 0
-        except Exception as error:
-            log.exception(lambda: f"Scheduler Setup: Failed · Due to {error}")
-            return 1
+        return provision(log, "Scheduler", setup_all, database=database, detail="Schema + 4 Tables")
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -1,7 +1,6 @@
 import re
 import sys
 import json
-import os
 import subprocess
 import urllib.request
 from pathlib import Path
@@ -9,8 +8,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from Library.Logging import LoggingAPI
+from Library.Utility.IO import read_text
 from Library.Utility.Path import traceback_root
-from Library.Utility.Runtime import windowless
 
 _TIMEOUT_: int = 10
 _SOLVE_: int = 600
@@ -19,8 +18,7 @@ _ASSETS_: dict = {
 }
 
 def find_pinned(path: Path) -> str:
-    if not path.is_file(): return ""
-    found = re.search(r"v(\d+\.\d+\.\d+)", path.read_text(encoding="utf-8", errors="replace")[:400])
+    found = re.search(r"v(\d+\.\d+\.\d+)", read_text(path, errors="replace")[:400])
     return found.group(1) if found else ""
 
 def find_latest(package: str, timeout: int = _TIMEOUT_) -> str:
@@ -37,34 +35,27 @@ def find_assets(root: Path = None, assets: dict = None) -> list:
         findings.append({"name": package, "pinned": pinned, "latest": latest, "reason": reason})
     return findings
 
+def _report_(raw: subprocess.CompletedProcess) -> dict | None:
+    body = (raw.stdout or "").strip()
+    if not body.startswith("{"): return None
+    try: return json.loads(body)
+    except json.JSONDecodeError: return None
+
 def plan(root: Path = None, timeout: int = _SOLVE_) -> tuple:
-    from Setup.Environment import find_managers, find_manifest, find_root
+    from Setup.Environment import find_manifest, run_manager
     root = root if root is not None else traceback_root()
-    environment = {**os.environ, "MAMBA_ROOT_PREFIX": str(find_root())}
-    for manager in find_managers():
-        try:
-            raw = subprocess.run([manager, "env", "update", "--name", "Quant", "--file", str(find_manifest()),
-                                  "--prune", "--dry-run", "--json"],
-                                 capture_output=True, text=True, timeout=timeout, env=environment,
-                                 **windowless())
-        except FileNotFoundError:
-            continue
-        except subprocess.TimeoutExpired:
-            return [], f"Solve exceeded {timeout}s"
-        body = (raw.stdout or "").strip()
-        if not body.startswith("{"): continue
-        try: report = json.loads(body)
-        except json.JSONDecodeError: continue
-        actions = report.get("actions") or {}
-        linked = {entry["name"]: entry.get("version", "") for entry in actions.get("LINK", []) if entry.get("name")}
-        unlinked = {entry["name"]: entry.get("version", "") for entry in actions.get("UNLINK", []) if entry.get("name")}
-        changes = []
-        for name in sorted(set(linked) | set(unlinked)):
-            before, after = unlinked.get(name), linked.get(name)
-            if before == after: continue
-            changes.append({"name": name, "before": before, "after": after})
-        return changes, None
-    return [], "No environment manager found"
+    try: raw = run_manager(["env", "update", "--name", "Quant", "--file", str(find_manifest()), "--prune", "--dry-run", "--json"], accept=_report_, capture_output=True, text=True, timeout=timeout)
+    except FileNotFoundError: return [], "No environment manager found"
+    except subprocess.TimeoutExpired: return [], f"Solve exceeded {timeout}s"
+    actions = _report_(raw).get("actions") or {}
+    linked = {entry["name"]: entry.get("version", "") for entry in actions.get("LINK", []) if entry.get("name")}
+    unlinked = {entry["name"]: entry.get("version", "") for entry in actions.get("UNLINK", []) if entry.get("name")}
+    changes = []
+    for name in sorted(set(linked) | set(unlinked)):
+        before, after = unlinked.get(name), linked.get(name)
+        if before == after: continue
+        changes.append({"name": name, "before": before, "after": after})
+    return changes, None
 
 def main() -> int:
     with LoggingAPI() as log:

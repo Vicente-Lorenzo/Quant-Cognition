@@ -1,9 +1,9 @@
 import sys
 from pathlib import Path
-from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from Library.Utility.Datetime import utc_now
 from Library.Database.Dataframe import pl
 from Library.Logging import LoggingAPI
 from Setup.Task import migrate, provision
@@ -18,7 +18,7 @@ from Library.Universe.Provider import Provider, Platform, ProviderAPI
 BY = "Population"
 
 def _stamp_(df: pl.DataFrame) -> pl.DataFrame:
-    return df.with_columns(pl.lit(BY).alias("UpdatedBy"), pl.lit(datetime.now()).alias("UpdatedAt"))
+    return df.with_columns(pl.lit(BY).alias("UpdatedBy"), pl.lit(utc_now()).alias("UpdatedAt"))
 
 def populate_universe(db):
     migrate(db, CategoryAPI, ProviderAPI, TickerAPI, ContractAPI, SecurityAPI, TimeframeAPI)
