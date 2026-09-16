@@ -79,6 +79,7 @@ class ExerciseType(EnumerationAPI):
 class ContractAPI(UniverseAPI):
 
     Table: ClassVar[str] = "Contract"
+    Enums: ClassVar[dict] = {"Type": ContractType, "CommissionMode": CommissionMode, "SwapMode": SwapMode, "SwapExtraDay": Weekday, "Variant": VariantType, "Payoff": PayoffType, "Exercise": ExerciseType}
 
     UID: Union[int, None] = None
     Ticker: InitVar[Union[str, TickerAPI, None]] = field(default=MISSING)
@@ -113,8 +114,8 @@ class ContractAPI(UniverseAPI):
     def Structure(self) -> dict:
         return {
             self.ID.UID: IdentityKey(pl.Int64),
-            self.ID.Ticker: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{TickerAPI.Table}"("{TickerAPI.ID.UID}") ON DELETE CASCADE', primary=True),
-            self.ID.Provider: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{ProviderAPI.Table}"("{ProviderAPI.ID.UID}") ON DELETE CASCADE', primary=True),
+            self.ID.Ticker: ForeignKey(pl.String, reference=TickerAPI.reference("ON DELETE CASCADE"), primary=True),
+            self.ID.Provider: ForeignKey(pl.String, reference=ProviderAPI.reference("ON DELETE CASCADE"), primary=True),
             self.ID.Type: PrimaryKey(pl.String),
             self.ID.Digits: pl.Int32(),
             self.ID.PointSize: pl.Float64(),
@@ -150,18 +151,10 @@ class ContractAPI(UniverseAPI):
                       provider: Union[str, ProviderAPI, None]) -> None:
         ticker = coerce(ticker)
         provider = coerce(provider)
-        if isinstance(ticker, TickerAPI): self._ticker_ = ticker
-        elif ticker is not MISSING and ticker is not None:
-            self._ticker_ = TickerAPI(UID=TickerAPI.normalize(ticker), db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
-        if isinstance(provider, ProviderAPI): self._provider_ = provider
-        elif provider is not MISSING and provider is not None:
-            self._provider_ = ProviderAPI(UID=ProviderAPI.normalize(provider), db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        self._ticker_ = self._relate_(ticker, TickerAPI, normalize=TickerAPI.normalize, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        self._provider_ = self._relate_(provider, ProviderAPI, normalize=ProviderAPI.normalize, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
         if self.Type is None and self._ticker_ is not None and self._ticker_.UID:
             self.Type = TickerAPI.detect(self._ticker_.UID)
-        self.Type = ContractType.parse(self.Type)
-        self.CommissionMode = CommissionMode.parse(self.CommissionMode)
-        self.SwapMode = SwapMode.parse(self.SwapMode)
-        self.SwapExtraDay = Weekday.parse(self.SwapExtraDay)
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
@@ -174,13 +167,7 @@ class ContractAPI(UniverseAPI):
                 overload=overload
             )
         if row:
-            self.Type = ContractType.parse(self.Type)
-            self.CommissionMode = CommissionMode.parse(self.CommissionMode)
-            self.SwapMode = SwapMode.parse(self.SwapMode)
-            self.SwapExtraDay = Weekday.parse(self.SwapExtraDay)
-            self.Variant = VariantType.parse(self.Variant)
-            self.Payoff = PayoffType.parse(self.Payoff)
-            self.Exercise = ExerciseType.parse(self.Exercise)
+            for name, enumeration in self.Enums.items(): setattr(self, name, enumeration.parse(getattr(self, name)))
         return row
 
     def save(self, by: str = "Autosave") -> None:
@@ -195,8 +182,7 @@ class ContractAPI(UniverseAPI):
         return self._ticker_
     @Ticker.setter
     def Ticker(self, val: Union[str, TickerAPI, None]) -> None:
-        if isinstance(val, TickerAPI): self._ticker_ = val
-        elif val is not None: self._ticker_ = TickerAPI(UID=TickerAPI.normalize(val), db=self._db_, autoload=True)
+        if val is not None: self._ticker_ = self._relate_(val, TickerAPI, normalize=TickerAPI.normalize, db=self._db_, autoload=True)
 
     @property
     @overridefield
@@ -204,8 +190,7 @@ class ContractAPI(UniverseAPI):
         return self._provider_
     @Provider.setter
     def Provider(self, val: Union[str, ProviderAPI, None]) -> None:
-        if isinstance(val, ProviderAPI): self._provider_ = val
-        elif val is not None: self._provider_ = ProviderAPI(UID=ProviderAPI.normalize(val), db=self._db_, autoload=True)
+        if val is not None: self._provider_ = self._relate_(val, ProviderAPI, normalize=ProviderAPI.normalize, db=self._db_, autoload=True)
 
     @property
     def IsSpot(self) -> bool:

@@ -47,7 +47,7 @@ class TickerAPI(UniverseAPI):
     def Structure(self) -> dict:
         return {
             self.ID.UID: PrimaryKey(pl.String),
-            self.ID.Category: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{CategoryAPI.Table}"("{CategoryAPI.ID.UID}")'),
+            self.ID.Category: ForeignKey(pl.String, reference=CategoryAPI.reference()),
             self.ID.BaseAsset: pl.String(),
             self.ID.BaseName: pl.String(),
             self.ID.QuoteAsset: pl.String(),
@@ -84,9 +84,7 @@ class TickerAPI(UniverseAPI):
                       category: Union[str, CategoryAPI, None]) -> None:
         if self.UID: self.UID = self.normalize(self.UID)
         category = coerce(category)
-        if isinstance(category, CategoryAPI): self._category_ = category
-        elif category is not MISSING and category is not None:
-            self._category_ = CategoryAPI(UID=category, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        self._category_ = self._relate_(category, CategoryAPI, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
     @property
@@ -96,8 +94,7 @@ class TickerAPI(UniverseAPI):
 
     @Category.setter
     def Category(self, val: Union[str, CategoryAPI, None]) -> None:
-        if isinstance(val, CategoryAPI): self._category_ = val
-        elif val is not None: self._category_ = CategoryAPI(UID=val, db=self._db_, autoload=True)
+        if val is not None: self._category_ = self._relate_(val, CategoryAPI, db=self._db_, autoload=True)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
         condition, parameters = None, None

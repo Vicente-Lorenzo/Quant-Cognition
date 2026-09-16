@@ -36,10 +36,10 @@ class SecurityAPI(UniverseAPI):
     def Structure(self) -> dict:
         return {
             self.ID.UID: IdentityKey(pl.Int64),
-            self.ID.Provider: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{ProviderAPI.Table}"("{ProviderAPI.ID.UID}") ON DELETE CASCADE', primary=True),
-            self.ID.Category: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{CategoryAPI.Table}"("{CategoryAPI.ID.UID}")', primary=True),
-            self.ID.Ticker: ForeignKey(pl.String, reference=f'"{UniverseAPI.Schema}"."{TickerAPI.Table}"("{TickerAPI.ID.UID}") ON DELETE CASCADE', primary=True),
-            self.ID.Contract: ForeignKey(pl.Int64, reference=f'"{UniverseAPI.Schema}"."{ContractAPI.Table}"("{ContractAPI.ID.UID}")', primary=True),
+            self.ID.Provider: ForeignKey(pl.String, reference=ProviderAPI.reference("ON DELETE CASCADE"), primary=True),
+            self.ID.Category: ForeignKey(pl.String, reference=CategoryAPI.reference(), primary=True),
+            self.ID.Ticker: ForeignKey(pl.String, reference=TickerAPI.reference("ON DELETE CASCADE"), primary=True),
+            self.ID.Contract: ForeignKey(pl.Int64, reference=ContractAPI.reference(), primary=True),
             **super().Structure
         }
 
@@ -57,17 +57,10 @@ class SecurityAPI(UniverseAPI):
         category = coerce(category)
         ticker = coerce(ticker)
         contract = coerce(contract)
-        if isinstance(provider, ProviderAPI): self._provider_ = provider
-        elif provider is not MISSING and provider is not None:
-            self._provider_ = ProviderAPI(UID=ProviderAPI.normalize(provider), db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
-        if isinstance(ticker, TickerAPI): self._ticker_ = ticker
-        elif ticker is not MISSING and ticker is not None:
-            self._ticker_ = TickerAPI(UID=TickerAPI.normalize(ticker), db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
-        if isinstance(category, CategoryAPI): self._category_ = category
-        elif category is not MISSING and category is not None:
-            self._category_ = CategoryAPI(UID=category, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
-        elif self._ticker_ and self._ticker_.Category:
-            self._category_ = self._ticker_.Category
+        self._provider_ = self._relate_(provider, ProviderAPI, normalize=ProviderAPI.normalize, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        self._ticker_ = self._relate_(ticker, TickerAPI, normalize=TickerAPI.normalize, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        self._category_ = self._relate_(category, CategoryAPI, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        if self._category_ is None and self._ticker_: self._category_ = self._ticker_.Category
         if isinstance(contract, ContractAPI): self._contract_ = contract
         elif contract is not MISSING and contract is not None:
             if isinstance(contract, int):
@@ -83,16 +76,11 @@ class SecurityAPI(UniverseAPI):
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
         row = super()._pull_(overload=overload)
-        if not row and self.UID is None and self._ticker_ and self._provider_:
-            clauses = ['"Provider" = :provider:', '"Ticker" = :ticker:']
-            params = {"provider": self._provider_.UID, "ticker": self._ticker_.UID}
-            if self._category_:
-                clauses.append('"Category" = :category:')
-                params["category"] = self._category_.UID
-            if self._contract_ and self._contract_.UID is not None:
-                clauses.append('"Contract" = :contract:')
-                params["contract"] = self._contract_.UID
-            row = self._fetch_(condition=" AND ".join(clauses), parameters=params, overload=overload)
+        if not row and self._db_ is not None and self.UID is None and self._ticker_ and self._provider_:
+            category = self._category_.UID if self._category_ else MISSING
+            contract = self._contract_.UID if self._contract_ and self._contract_.UID is not None else MISSING
+            condition, parameters = self._db_.where(Provider=self._provider_.UID, Ticker=self._ticker_.UID, Category=category, Contract=contract)
+            row = self._fetch_(condition=condition, parameters=parameters, overload=overload)
         return row
 
     def save(self, by: str = "Autosave") -> None:
@@ -109,8 +97,7 @@ class SecurityAPI(UniverseAPI):
         return self._provider_
     @Provider.setter
     def Provider(self, val: Union[str, ProviderAPI, None]) -> None:
-        if isinstance(val, ProviderAPI): self._provider_ = val
-        elif val is not None: self._provider_ = ProviderAPI(UID=ProviderAPI.normalize(val), db=self._db_, autoload=True)
+        if val is not None: self._provider_ = self._relate_(val, ProviderAPI, normalize=ProviderAPI.normalize, db=self._db_, autoload=True)
 
     @property
     @overridefield
@@ -118,8 +105,7 @@ class SecurityAPI(UniverseAPI):
         return self._category_
     @Category.setter
     def Category(self, val: Union[str, CategoryAPI, None]) -> None:
-        if isinstance(val, CategoryAPI): self._category_ = val
-        elif val is not None: self._category_ = CategoryAPI(UID=val, db=self._db_, autoload=True)
+        if val is not None: self._category_ = self._relate_(val, CategoryAPI, db=self._db_, autoload=True)
 
     @property
     @overridefield
@@ -127,8 +113,7 @@ class SecurityAPI(UniverseAPI):
         return self._ticker_
     @Ticker.setter
     def Ticker(self, val: Union[str, TickerAPI, None]) -> None:
-        if isinstance(val, TickerAPI): self._ticker_ = val
-        elif val is not None: self._ticker_ = TickerAPI(UID=TickerAPI.normalize(val), db=self._db_, autoload=True)
+        if val is not None: self._ticker_ = self._relate_(val, TickerAPI, normalize=TickerAPI.normalize, db=self._db_, autoload=True)
 
     @property
     @overridefield
