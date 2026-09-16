@@ -64,6 +64,10 @@ class LadderAPI:
         sections, trail = self.resolve(strategy, kind, *rungs)
         return Parameter(sections, self.override(kind, *rungs)), trail
 
+    def pin(self, strategy: type[StrategyAPI], kind: str, source: Union[str, Path], target: Union[str, Path]) -> tuple[Parameter, list]:
+        source = Path(source)
+        return Parameter(self.merge(strategy.defaults(kind), read_yaml(source, safe=False)), Path(target)), [self._ORIGIN_, str(source)]
+
     def sources(self, strategy: type[StrategyAPI], kind: str, *rungs: str) -> dict:
         found = {}
         for scope in self.scopes(*rungs):
