@@ -1,0 +1,21 @@
+{
+  "Account": false,
+  "Momentum": [
+    "MOMFast",
+    "MOMMedium",
+    "MOMSlow",
+    "MOMRegime",
+    "MOMEpoch"
+  ],
+  "Overlap": [
+    "MAFast",
+    "MAMedium",
+    "MASlow",
+    "MARegime",
+    "MAEpoch",
+    "MACycle",
+    "MAEra"
+  ],
+  "Shape": 38,
+  "Window": 1
+}

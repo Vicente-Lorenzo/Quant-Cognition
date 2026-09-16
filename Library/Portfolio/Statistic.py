@@ -24,6 +24,7 @@ from Library.Statistic.Metric import (
     calculate_sharpe,
     calculate_sortino,
     calculate_sterling,
+    calculate_years,
     daily_series,
     equity_curve_ratios,
     equity_excursion,
@@ -321,14 +322,11 @@ def calculate_min_avg_max(nr_items: int, df: pl.DataFrame, column: str) -> tuple
 def calculate_sum(df: pl.DataFrame, column: str) -> float:
     return df[column].sum() if not df.is_empty() and column in df.columns else 0.0
 
-def calculate_return(df: pl.DataFrame) -> tuple[float, float]:
-    log_ret = str(PositionAPI.ID.LogReturn)
-    if df.is_empty() or log_ret not in df.columns: return 0.0, 0.0
-    exp_log = df[log_ret].mean()
-    tot_log = df[log_ret].sum()
-    exp_ret_pct = (math.exp(exp_log) - 1.0) * 100.0 if exp_log else 0.0
-    tot_ret_pct = (math.exp(tot_log) - 1.0) * 100.0 if tot_log else 0.0
-    return exp_ret_pct, tot_ret_pct
+def calculate_return(initial_balance: float, df: pl.DataFrame) -> tuple[float, float]:
+    net_pnl = str(PositionAPI.ID.NetPnL)
+    if not initial_balance or df.is_empty() or net_pnl not in df.columns: return 0.0, 0.0
+    tot_ret_pct = calculate_sum(df, net_pnl) / initial_balance * 100.0
+    return calculate_average(tot_ret_pct, calculate_total(df)), tot_ret_pct
 
 def calculate_volatility(df: pl.DataFrame, upside: bool = False, downside: bool = False) -> float:
     log_ret = str(PositionAPI.ID.LogReturn)
@@ -406,21 +404,22 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
     loss_pnl = calculate_sum(loss_df, net_pnl)
     total_pnl = calculate_sum(df, net_pnl)
 
-    exp_win_ret_pct, win_ret_pct = calculate_return(win_df)
+    exp_win_ret_pct, win_ret_pct = calculate_return(initial_balance, win_df)
     win_vol_pct = calculate_volatility(win_df)
-    exp_loss_ret_pct, loss_ret_pct = calculate_return(loss_df)
+    exp_loss_ret_pct, loss_ret_pct = calculate_return(initial_balance, loss_df)
     loss_vol_pct = calculate_volatility(loss_df)
-    exp_net_ret_pct, net_ret_pct = calculate_return(df)
+    exp_net_ret_pct, net_ret_pct = calculate_return(initial_balance, df)
     net_vol_pct = calculate_volatility(df)
 
     up_vol_pct = calculate_volatility(df, upside=True)
     down_vol_pct = calculate_volatility(df, downside=True)
 
     duration_seconds = calculate_duration_seconds(start, stop)
+    years = calculate_years(start, stop)
 
-    win_ret_annualized_pct = calculate_annualized_return(win_ret_pct, duration_seconds, pct=True)
+    win_ret_annualized_pct = win_ret_pct / years if years else 0.0
     win_vol_annualized_pct = calculate_annualized_volatility(win_vol_pct, win_n, duration_seconds, pct=True)
-    loss_ret_annualized_pct = calculate_annualized_return(loss_ret_pct, duration_seconds, pct=True)
+    loss_ret_annualized_pct = loss_ret_pct / years if years else 0.0
     loss_vol_annualized_pct = calculate_annualized_volatility(loss_vol_pct, loss_n, duration_seconds, pct=True)
     net_ret_annualized_pct = calculate_annualized_return(net_ret_pct, duration_seconds, pct=True)
     up_vol_annualized_pct = calculate_annualized_volatility(up_vol_pct, total_n, duration_seconds, pct=True)

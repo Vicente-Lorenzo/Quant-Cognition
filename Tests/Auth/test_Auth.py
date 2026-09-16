@@ -3,7 +3,7 @@ import pytest
 from Library.Auth import AuthAPI, RoleAPI, PasswordAPI, UserAPI, IdentityAPI, AnonymousAPI
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Database.Query import QueryAPI
-from Setup.Auth import setup_auth
+from Script.Setup.Auth import setup_auth
 
 DATABASE = "Tests"
 

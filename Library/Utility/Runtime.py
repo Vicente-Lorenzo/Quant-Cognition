@@ -128,10 +128,10 @@ def find_frame_class(frame) -> Union[str, None]:
         if not prefix.endswith("<locals>"): return prefix.rsplit(".", 1)[-1]
     return find_frame_module(frame)
 
-def find_frame_package(frame, *, package: str = "Library") -> Union[str, None]:
+def find_frame_package(frame, *, package: Union[str, tuple] = ("Library", "Script")) -> Union[str, None]:
     if frame is None: return None
     parts = [part for part in frame.f_globals.get("__name__", "").split(".") if part]
-    if len(parts) >= 2: return parts[1] if parts[0] == package else parts[0]
+    if len(parts) >= 2: return parts[1] if parts[0] in ((package,) if isinstance(package, str) else package) else parts[0]
     origin = frame.f_globals.get("__file__")
     if not origin: return None
     return Path(origin).resolve().parent.name or None
@@ -148,7 +148,7 @@ def find_caller_module(*, depth: int = 0, skip: Union[str, None] = None) -> Unio
 def find_caller_class(*, depth: int = 0, skip: Union[str, None] = None) -> Union[str, None]:
     return find_frame_class(find_caller_frame(depth=depth + 1, skip=skip))
 
-def find_caller_package(*, depth: int = 0, skip: Union[str, None] = None, package: str = "Library") -> Union[str, None]:
+def find_caller_package(*, depth: int = 0, skip: Union[str, None] = None, package: Union[str, tuple] = ("Library", "Script")) -> Union[str, None]:
     return find_frame_package(find_caller_frame(depth=depth + 1, skip=skip), package=package)
 
 def find_host() -> str:

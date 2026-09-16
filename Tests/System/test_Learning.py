@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from Library.Database.Dataframe import pl
 from Library.Model.Split import SplitAPI
+from Library.Strategy.Hybrid.DDPG import DDPGStrategyAPI
 from Library.Utility.Parameter import Parameter
 from Library.Statistic.Label import (
     CALMARRATIO,
@@ -21,7 +22,7 @@ from Library.Strategy.Strategy import Threshold
 from Library.System.Learning import LearningAPI
 from Library.System.System import SystemAPI
 from Library.Universe.Contract import CommissionType, SpreadType, SwapType
-from Library.Utility.IO import mkdir, read_json
+from Library.Utility.IO import mkdir, read_json, write_json
 from Library.Utility.Typing import MISSING
 
 class _FakeAgent_:
@@ -38,6 +39,8 @@ class _FakeAgent_:
 
     def load(self):
         type(self).loads += 1
+
+_LAYOUT_ = {"Account": False, "Momentum": ["MOMFast"], "Overlap": ["MAFast"], "Shape": 22, "Window": 1}
 
 class _FakeStrategy_:
 
@@ -75,13 +78,17 @@ class _Harness_(LearningAPI):
         agent = self._strategy_.Agent if self._strategy_.Agent is not None else _FakeAgent_()
         exposure = getattr(self, "_exposure_script_", None)
         longs, shorts = exposure.pop(0) if exposure and not training else (1000000.0, 1000000.0)
-        self.strategy = SimpleNamespace(_agent_=agent, _observation_=SimpleNamespace(shape=lambda: 23), _sizing_mode_=SimpleNamespace(name="Percentage"), _risk_percentage_=1.0, _atr_scale_=1.5, DirectionalEntryThreshold=Threshold(-0.4, 0.4), DirectionalExitThreshold=Threshold(-0.1, 0.1), _long_bars_=longs, _short_bars_=shorts)
+        self.strategy = SimpleNamespace(_agent_=agent, save=lambda: _persist_(agent), load=agent.load, _observation_=SimpleNamespace(shape=lambda: 23), _sizing_mode_=SimpleNamespace(name="Percentage"), _risk_percentage_=1.0, _atr_scale_=1.5, DirectionalEntryThreshold=Threshold(-0.4, 0.4), DirectionalExitThreshold=Threshold(-0.1, 0.1), _long_bars_=longs, _short_bars_=shorts)
         self.portfolio = SimpleNamespace(Equity=10000.0, InitialBalance=10000.0)
         return self._script_.pop(0) if self._script_ else 0.0
 
     def _trades_(self):
         script = getattr(self, "_trades_script_", None)
         return script.pop(0) if script else 1000000.0
+
+def _persist_(agent: _FakeAgent_) -> None:
+    agent.save()
+    write_json(Path(_FakeStrategy_.Weights) / DDPGStrategyAPI.LAYOUT, _LAYOUT_, safe=False)
 
 def _reset_(weights: Path) -> None:
     _FakeAgent_.instances = 0
@@ -119,12 +126,14 @@ def test_export_copies_promoted_weights_without_seed_and_fold_dirs(tmp_path):
     harness._parameters_ = Parameter({}, tmp_path / "Learning.yml")
     mkdir(tmp_path / "DDPG")
     (tmp_path / "DDPG" / "actor").write_text("w")
+    write_json(tmp_path / DDPGStrategyAPI.LAYOUT, _LAYOUT_, safe=False)
     mkdir(tmp_path / "Seed 42")
     mkdir(tmp_path / "Fold 1")
     LearningAPI._export_weights_(harness)
     exports = list(tmp_path.glob("_FakeStrategy_ *"))
     assert len(exports) == 1
     assert (exports[0] / "DDPG" / "actor").read_text() == "w"
+    assert read_json(exports[0] / DDPGStrategyAPI.LAYOUT) == _LAYOUT_
     assert not (exports[0] / "Seed 42").exists() and not (exports[0] / "Fold 1").exists()
 
 def test_report_export_hook_is_not_shadowed():
@@ -139,6 +148,27 @@ def test_fold_archive_copies_model_weights(tmp_path):
     LearningAPI._archive_(seed_dir, 4)
     assert (seed_dir / "Fold 4" / "DDPG" / "actor").read_text() == "w"
     assert not (seed_dir / "Fold 4" / "Fold 3").exists()
+
+def test_fold_archive_and_revival_carry_the_observation_layout(tmp_path):
+    mkdir(tmp_path / "DDPG")
+    (tmp_path / "DDPG" / "actor").write_text("w")
+    write_json(tmp_path / DDPGStrategyAPI.LAYOUT, _LAYOUT_, safe=False)
+    LearningAPI._archive_(tmp_path, 2)
+    assert read_json(tmp_path / "Fold 2" / DDPGStrategyAPI.LAYOUT) == _LAYOUT_
+    (tmp_path / "DDPG" / "actor").write_text("x")
+    write_json(tmp_path / DDPGStrategyAPI.LAYOUT, {"Momentum": []}, safe=False)
+    assert LearningAPI._revive_(tmp_path, "Fold 2")
+    assert (tmp_path / "DDPG" / "actor").read_text() == "w" and read_json(tmp_path / DDPGStrategyAPI.LAYOUT) == _LAYOUT_
+
+def test_learning_saves_the_layout_beside_every_seed_and_fold(tmp_path):
+    _reset_(tmp_path)
+    harness = _make_(episodes=1, training=12, validation=6, testing=0, rolling=True, seed=42, seeds=2)
+    folds, _ = SplitAPI.walk_forward_folds(harness._range_start_, harness._range_stop_, 12, 6, 0, True)
+    harness._script_ = [0.01, 0.02] * len(folds) * 2
+    harness.run()
+    for seed in (42, 43):
+        assert read_json(tmp_path / f"Seed {seed}" / DDPGStrategyAPI.LAYOUT) == _LAYOUT_
+        assert all(read_json(tmp_path / f"Seed {seed}" / f"Fold {index}" / DDPGStrategyAPI.LAYOUT) == _LAYOUT_ for index in range(1, len(folds) + 1))
 
 def test_walk_forward_single_window():
     folds, test = SplitAPI.walk_forward_folds(datetime(2020, 1, 1), datetime(2024, 1, 1), 0, 0, 0, False)

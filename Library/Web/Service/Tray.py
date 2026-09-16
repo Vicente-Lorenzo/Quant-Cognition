@@ -8,7 +8,7 @@ from Library.Logging.File import FileAPI
 from Library.Utility.Typing import MISSING
 from Library.Utility.Runtime import open_browser
 from Library.Utility.Tray import TrayAPI as BaseTrayAPI
-from Library.Web.Service.Serve import build, main as headless
+from Library.Web.App import WebAppAPI
 
 class TrayAPI(BaseTrayAPI):
 
@@ -43,7 +43,7 @@ class TrayAPI(BaseTrayAPI):
         self._update_()
 
     def _start_(self) -> None:
-        app = build()
+        app = WebAppAPI.build()
         if self._debug_: app.app.enable_dev_tools(debug=True)
         self._server_ = create_server(app.app.server, host=app._host_, port=app._port_, threads=8, ident=self._NAME_)
         self._thread_ = threading.Thread(target=self._server_.run, name="Server", daemon=True)
@@ -54,11 +54,3 @@ class TrayAPI(BaseTrayAPI):
         try: self._server_.close()
         except Exception: pass
         self._log_.info(lambda: "Server Shutdown: Halted")
-
-    @classmethod
-    def serve(cls) -> None:
-        cls.redirect(cls._LOG_)
-        cls.main(LoggingAPI(), headless)
-
-if __name__ == "__main__":
-    TrayAPI.serve()

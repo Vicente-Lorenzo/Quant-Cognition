@@ -1,4 +1,5 @@
 from flask import g, request
+from typing_extensions import Self
 
 from Library.App.V2 import AppAPI, LinkAPI, PageAPI
 from Library.Auth import AuthAPI, RoleAPI
@@ -51,6 +52,10 @@ class WebAppAPI(AppAPI):
         ArtifactAPI.shared().install(self.app.server)
         self._scoped_(self.app.server, self.Database)
 
+    @classmethod
+    def build(cls, **overrides) -> Self:
+        return cls(**{"name": "Quant Cognition", "title": "Quant Cognition", "team": "Vicente Lorenzo", "contact": "vicente.aser.lorenzo@gmail.com", "host": "127.0.0.1", "port": 8050, **overrides})
+
     @staticmethod
     def _scoped_(server, database: str) -> None:
         @server.before_request
@@ -102,6 +107,3 @@ class WebAppAPI(AppAPI):
             LinkAPI(name="cTrader", url="https://app.ctrader.com", icon="bi bi-graph-up-arrow", description="Open the cTrader web trading platform"),
             LinkAPI(name="TradingView", url="https://www.tradingview.com/chart", icon="bi bi-bar-chart-line", description="Open TradingView charts in a new tab"),
         ]
-
-if __name__ == "__main__":
-    WebAppAPI(name="Quant Cognition", title="Quant Cognition", team="Vicente Lorenzo", contact="vicente.aser.lorenzo@gmail.com", debug=True).run()

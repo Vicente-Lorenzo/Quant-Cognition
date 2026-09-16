@@ -28,7 +28,7 @@ from Library.System.Backtesting import BacktestingAPI, DatasetAPI
 from Library.System.Selection import ElectionMode, FitnessType, SelectionMode, elect, select
 from Library.Universe.Contract import CommissionType, SpreadType, SwapType
 from Library.Utility.Datetime import utc_now, STAMP
-from Library.Utility.IO import copy_tree, mkdir, remove, write_json
+from Library.Utility.IO import copy, copy_tree, mkdir, remove, write_json
 from Library.Utility.Parameter import Parameter
 from Library.Utility.Progress import ProgressAPI
 from Library.Utility.Profiler import timer
@@ -241,6 +241,7 @@ class LearningAPI(BacktestingAPI):
         mkdir(target)
         for item in directory.iterdir():
             if item.is_dir() and not item.name.startswith(cls._RESERVED_): copy_tree(target / item.name, item, safe=False)
+        if (directory / DDPGStrategyAPI.LAYOUT).is_file(): copy(target / DDPGStrategyAPI.LAYOUT, directory / DDPGStrategyAPI.LAYOUT, safe=False)
         return target
 
     @classmethod
@@ -251,7 +252,9 @@ class LearningAPI(BacktestingAPI):
     def _revive_(cls, directory: Path, label: str) -> bool:
         source = directory / label
         if not source.is_dir(): return False
-        for item in source.iterdir(): copy_tree(directory / item.name, item, safe=False)
+        for item in source.iterdir():
+            if item.is_dir(): copy_tree(directory / item.name, item, safe=False)
+            else: copy(directory / item.name, item, safe=False)
         return True
 
     def _promote_(self, source: Path) -> None:
@@ -366,7 +369,7 @@ class LearningAPI(BacktestingAPI):
         fold_returns = []
         for index, (train_window, validation_window) in enumerate(folds, start=1):
             if self._continuous_ and self._strategy_.Agent is not None:
-                self._strategy_.Agent.load()
+                self.strategy.load()
             else:
                 self._strategy_.Agent = None
             best_validation = None
@@ -390,7 +393,7 @@ class LearningAPI(BacktestingAPI):
                 improved = best_validation is None or (selection > best_validation if ascending else selection < best_validation)
                 if not online:
                     attempts.append((episode, selection, self._net_return_(), self._tracked_(), train_metric))
-                    self.strategy._agent_.save()
+                    self.strategy.save()
                     self._stash_(directory, f"Episode {episode}")
                 if (eligible and not best_eligible) or (eligible == best_eligible and improved):
                     best_validation = selection
@@ -398,11 +401,11 @@ class LearningAPI(BacktestingAPI):
                     best_curve = self._tracked_()
                     best_train = train_metric
                     best_eligible = eligible
-                    if online: self.strategy._agent_.save()
+                    if online: self.strategy.save()
                     stale = 0
                 else:
                     stale += 1
-                if self._final_: self.strategy._agent_.save()
+                if self._final_: self.strategy.save()
                 self._record_(Fold=index, Seed=seed, Episode=episode, Train=train_metric, Validation=selection, Return=self._net_return_(), Longs=longs, Shorts=shorts, Eligible=eligible)
                 self._log_.info(lambda s=seed, i=index, e=episode, t=train_metric, v=selection: f"Episode Learning: Completed · Seed {s} · Fold {i} · {e}/{self._episodes_} · Train {t:+.4f} · Selection {v:+.4f}")
                 if self._patience_ and stale >= self._patience_:
@@ -432,7 +435,7 @@ class LearningAPI(BacktestingAPI):
         test_metric = None
         test_return = None
         if test is not None:
-            if self._strategy_.Agent is not None: self._strategy_.Agent.load()
+            if self._strategy_.Agent is not None: self.strategy.load()
             test_metric = self._pass_(test[0], test[1], False)
             test_return = self._net_return_()
         metric = test_metric if test_metric is not None else (sum(fold_metrics) / len(fold_metrics) if fold_metrics else None)

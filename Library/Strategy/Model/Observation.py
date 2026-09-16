@@ -40,6 +40,9 @@ class ObservationAPI(ABC):
     def shape(self) -> int:
         return self._window_ * self._frame_size_()
 
+    def layout(self) -> dict:
+        return {"Shape": self.shape(), "Window": self._window_}
+
     def _reset_state_(self) -> None:
         pass
 

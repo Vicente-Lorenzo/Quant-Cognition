@@ -17,6 +17,7 @@ from Library.Strategy.Model.Normalizer import NormalizerAPI
 from Library.Strategy.Model.Observation import ObservationAPI
 from Library.Strategy.Model.Reward import RewardAPI, RewardType
 from Library.Strategy.Strategy import StrategyAPI
+from Library.Utility.IO import read_json, write_json
 from Library.Utility.Math import EPSILON
 from Library.Utility.Path import inspect_persistent
 
@@ -237,6 +238,9 @@ class DDPGObservationAPI(ObservationAPI):
         self._indicator_features_(update, features)
         return features
 
+    def layout(self) -> dict:
+        return {"Account": self._account_state_, "Momentum": list(self._momentum_features_), "Overlap": list(self._overlap_features_), **super().layout()}
+
 class DDPGStrategyAPI(StrategyAPI):
 
     Defaults: ClassVar[dict] = {
@@ -335,6 +339,8 @@ class DDPGStrategyAPI(StrategyAPI):
     TrainFrequency: int = 1
     GradientSteps: int = 1
 
+    LAYOUT: str = "Observation.json"
+
     _ACTION_SHAPE_: int = 1
     _EXPOSURE_REFERENCE_: float = 100.0
     _DEFAULT_WEIGHTS_: Path = inspect_persistent("Models")
@@ -366,7 +372,7 @@ class DDPGStrategyAPI(StrategyAPI):
         self._reward_ = RewardAPI(kind=self.Reward, scale=float(self.SignalManagement.first("RewardScale", self.RewardScale)), clip=float(self.SignalManagement.first("RewardClip", self.RewardClip)))
         self._agent_: AgentAPI = self.Agent if self.Agent is not None else self._create_agent_((self._observation_.shape(),), self._ACTION_SHAPE_)
         if self.Agent is None and not self.Training and (self.Weights is not None or self._configured_weights_ is not None):
-            self._agent_.load()
+            self.load()
         self._clear_()
 
     def _observation_features_(self) -> tuple:
@@ -403,6 +409,34 @@ class DDPGStrategyAPI(StrategyAPI):
         if self.Weights is not None: return self.Weights
         if self._configured_weights_ is not None: return Path(self._configured_weights_)
         return self._DEFAULT_WEIGHTS_
+
+    def _layout_(self) -> Path:
+        return self._weights_path_() / self.LAYOUT
+
+    @staticmethod
+    def _render_(value: Any) -> str:
+        return f"[{' '.join(map(str, value))}]" if isinstance(value, list) else str(value)
+
+    def _record_(self) -> None:
+        write_json(self._layout_(), self._observation_.layout(), safe=False)
+
+    def _verify_(self) -> None:
+        path, built = self._layout_(), self._observation_.layout()
+        if not path.is_file():
+            self._log_.warning(lambda: f"Weights Load: Unverified · No observation layout recorded · {path.parent}")
+            return
+        recorded = read_json(path, safe=False)
+        if recorded == built: return
+        differences = " · ".join(f"{key} Recorded {self._render_(recorded.get(key))} · Built {self._render_(built.get(key))}" for key in sorted(recorded.keys() | built.keys()) if recorded.get(key) != built.get(key))
+        raise ValueError(f"Observation layout differs from the one the weights were trained with · {path} · {differences}")
+
+    def save(self) -> None:
+        self._agent_.save()
+        self._record_()
+
+    def load(self) -> None:
+        self._verify_()
+        self._agent_.load()
 
     def _reference_volume_(self, update: BarUpdateAPI) -> float:
         atr = update.Technical.ATR.Result.last()

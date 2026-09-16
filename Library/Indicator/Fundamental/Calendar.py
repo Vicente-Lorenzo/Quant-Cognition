@@ -2,18 +2,16 @@ from __future__ import annotations
 
 import json
 import time
-import argparse
 import urllib.request
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from typing import ClassVar, TYPE_CHECKING
 
 from Library.Logging import LoggingAPI
-from Library.Logging import VerboseLevel
 from Library.Database.Dataframe import pl
 from Library.Database.Database import PrimaryKey
 from Library.Database.Datapoint import DatapointAPI
-from Library.Utility.Datetime import parse_datetime, timestamp_to_datetime, utc_now
+from Library.Utility.Datetime import timestamp_to_datetime, utc_now
 
 if TYPE_CHECKING:
     from Library.Database.Database import DatabaseAPI
@@ -196,30 +194,3 @@ class CalendarAPI(DatapointAPI):
             week += timedelta(days=7)
             if week <= stop: time.sleep(delay)
         return total
-
-    @classmethod
-    def main(cls) -> int:
-        from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
-        parser = argparse.ArgumentParser(prog="Calendar")
-        parser.add_argument("--database", default="Quant", choices=["Quant", "Tests"])
-        parser.add_argument("--start", default=None)
-        parser.add_argument("--stop", default=None)
-        parser.add_argument("--delay", type=float, default=3.0)
-        args = parser.parse_args()
-        with LoggingAPI() as log:
-            log.console.set_level(VerboseLevel.Info)
-            log.file.set_level(VerboseLevel.Debug)
-            try:
-                now = utc_now()
-                start = parse_datetime(args.start) if args.start else now - timedelta(days=6)
-                stop = parse_datetime(args.stop) if args.stop else now
-                with PostgresDatabaseAPI(database=args.database) as db:
-                    total = CalendarAPI.download(db, start, stop, by="Backfill" if args.start or args.stop else "Daily", delay=args.delay)
-                log.info(lambda: f"Calendar Download: Completed ({total} Events · {start:%Y-%m-%d} · {stop:%Y-%m-%d})")
-                return 0
-            except Exception as error:
-                log.exception(lambda: f"Calendar Download: Failed · Due to {error}")
-                return 1
-
-if __name__ == "__main__":
-    raise SystemExit(CalendarAPI.main())

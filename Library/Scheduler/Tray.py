@@ -7,7 +7,7 @@ from Library.Logging.File import FileAPI
 from Library.Utility.Path import traceback_root
 from Library.Utility.Runtime import windowless
 from Library.Utility.Tray import TrayAPI as BaseTrayAPI
-from Library.Scheduler.Serve import build
+from Library.Scheduler.Scheduler import SchedulerAPI
 
 class TrayAPI(BaseTrayAPI):
 
@@ -26,7 +26,7 @@ class TrayAPI(BaseTrayAPI):
         draw.line((32, 32, 40, 37), fill=(13, 110, 253, 255), width=4)
 
     def _start_(self) -> None:
-        self._scheduler_ = build()
+        self._scheduler_ = SchedulerAPI()
         self._thread_ = threading.Thread(target=self._scheduler_.start, name="Scheduler", daemon=True)
         self._thread_.start()
 
@@ -35,10 +35,3 @@ class TrayAPI(BaseTrayAPI):
 
     def _relaunch_(self) -> None:
         subprocess.Popen([sys.executable, str(self._LAUNCHER_)], cwd=str(traceback_root()), **windowless())
-
-    @classmethod
-    def serve(cls) -> None:
-        cls.main(LoggingAPI(), lambda: build().start())
-
-if __name__ == "__main__":
-    TrayAPI.serve()

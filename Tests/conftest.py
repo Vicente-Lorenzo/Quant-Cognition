@@ -12,7 +12,7 @@ from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Universe.Universe import UniverseAPI
 from Library.Market.Market import MarketAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
-from Setup.Enum import OUTPUT_PATH
+from Script.Setup.Enum import OUTPUT_PATH
 
 def pytest_addoption(parser):
     parser.addoption("--golden", action="store_true", default=False, help="Replay every golden under Tests/Golden against the Quant database")

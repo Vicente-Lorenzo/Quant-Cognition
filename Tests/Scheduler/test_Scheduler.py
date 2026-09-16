@@ -13,8 +13,8 @@ from Library.Scheduler.Main import _fields_, _parse_
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Database.Query import QueryAPI
 from Library.Scheduler.Runner import load
-from Setup.Auth import setup_auth
-from Setup.Scheduler import setup_scheduler
+from Script.Setup.Auth import setup_auth
+from Script.Setup.Scheduler import setup_scheduler
 
 DATABASE = "Tests"
 

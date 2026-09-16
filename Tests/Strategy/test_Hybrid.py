@@ -1,8 +1,11 @@
 import math
+import pytest
+
 from datetime import datetime
 from types import SimpleNamespace
 
 from Library.Database.Dataframe import np
+from Library.Logging import LoggingAPI
 from Library.Market.Price import Direction
 from Library.Engine import MachineAPI
 from Library.Utility.Parameter import Parameter
@@ -11,6 +14,7 @@ from Library.Strategy.Hybrid.DDPG import DDPGStrategyAPI
 from Library.Strategy.Rule.NNFX import NNFXStrategyAPI
 from Library.Strategy.Model.Reward import RewardType
 from Library.Strategy.Strategy import StrategyType
+from Library.Utility.IO import read_json
 
 class _FakeAgent_:
 
@@ -19,6 +23,8 @@ class _FakeAgent_:
         self.transitions = []
         self.learned = 0
         self.resets = 0
+        self.saved = 0
+        self.loaded = 0
 
     def decide(self, state, explore=True):
         return self._action_
@@ -32,6 +38,12 @@ class _FakeAgent_:
     def reset(self):
         self.resets += 1
 
+    def save(self):
+        self.saved += 1
+
+    def load(self):
+        self.loaded += 1
+
 class _FakeDDPG_(DDPGStrategyAPI):
 
     def _create_agent_(self, observation_shape, action_shape):
@@ -39,6 +51,14 @@ class _FakeDDPG_(DDPGStrategyAPI):
 
 def _technical_():
     return Parameter({"ATR": ["ATR", 14], "RVFast": ["RV", 16], "RVSlow": ["RV", 63], "MOMFast": ["ROC", 5], "MOMMedium": ["ROC", 21], "MOMSlow": ["ROC", 63]}, ".")
+
+def _reordered_():
+    return Parameter({"ATR": ["ATR", 14], "RVFast": ["RV", 16], "RVSlow": ["RV", 63], "MOMSlow": ["ROC", 63], "MOMMedium": ["ROC", 21], "MOMFast": ["ROC", 5]}, ".")
+
+def _captured_(monkeypatch):
+    messages = []
+    monkeypatch.setattr(LoggingAPI, "warning", lambda self, content, *args: messages.append(content() if callable(content) else content))
+    return messages
 
 def _indicator_(value):
     return SimpleNamespace(Result=SimpleNamespace(last=lambda: value))
@@ -68,7 +88,7 @@ def _update_(buys=None, sells=None, close=1.11, atr=0.01, equity=10000.0):
     )
     return SimpleNamespace(Bar=bar, Technical=technical, Portfolio=portfolio)
 
-def _strategy_(risk=1.0, atr_scale=1.5, entry=None, exit=None, action=0.0, training=False, neutralize=False):
+def _strategy_(risk=1.0, atr_scale=1.5, entry=None, exit=None, action=0.0, training=False, neutralize=False, technical=None):
     _FakeDDPG_.Fake = action
     _FakeDDPG_.Agent = None
     _FakeDDPG_.Training = training
@@ -76,7 +96,7 @@ def _strategy_(risk=1.0, atr_scale=1.5, entry=None, exit=None, action=0.0, train
     _FakeDDPG_.RewardScale = 1.0
     money = Parameter({"RiskPercentage": [risk], "ATRScale": [atr_scale]}, ".")
     signal = Parameter({"DirectionalEntryThreshold": list(entry) if entry else None, "DirectionalExitThreshold": list(exit) if exit else None, "ObservationWindow": [1], "NormalizeWindow": [200], "NeutralizeReward": [neutralize]}, ".")
-    return _FakeDDPG_(money_management=money, risk_management=None, signal_management=signal, technical_management=_technical_(), fundamental_management=Parameter({}, "."), sentimental_management=Parameter({}, "."), portfolio_management=Parameter({}, "."))
+    return _FakeDDPG_(money_management=money, risk_management=None, signal_management=signal, technical_management=technical if technical is not None else _technical_(), fundamental_management=Parameter({}, "."), sentimental_management=Parameter({}, "."), portfolio_management=Parameter({}, "."))
 
 def test_strategy_type_registers_four_strategies():
     assert StrategyType.Download.value == 1
@@ -231,3 +251,31 @@ def test_ddpg_builds_agent_and_regularization_is_parameter_driven():
     assert isinstance(ddpg._agent_, DDPGAgentAPI)
     assert ddpg._agent_.actor_regularization == 0.0 and rddpg._agent_.actor_regularization == 0.01
     assert ddpg._observation_.shape() == 30
+
+def test_saving_records_the_observation_layout_beside_the_weights(tmp_path, monkeypatch):
+    monkeypatch.setattr(_FakeDDPG_, "Weights", tmp_path)
+    strategy = _strategy_(training=True)
+    strategy.save()
+    assert strategy._agent_.saved == 1 and strategy._agent_.loaded == 0
+    assert read_json(tmp_path / DDPGStrategyAPI.LAYOUT) == {"Account": True, "Momentum": ["MOMFast", "MOMMedium", "MOMSlow"], "Overlap": [], "Shape": 30, "Window": 1}
+
+def test_loading_with_the_recorded_layout_is_silent(tmp_path, monkeypatch):
+    messages = _captured_(monkeypatch)
+    monkeypatch.setattr(_FakeDDPG_, "Weights", tmp_path)
+    _strategy_(training=True).save()
+    strategy = _strategy_()
+    assert strategy._agent_.loaded == 1 and messages == []
+
+def test_loading_with_a_reordered_technical_management_refuses(tmp_path, monkeypatch):
+    monkeypatch.setattr(_FakeDDPG_, "Weights", tmp_path)
+    _strategy_(training=True).save()
+    with pytest.raises(ValueError) as refusal:
+        _strategy_(technical=_reordered_())
+    assert "Momentum Recorded [MOMFast MOMMedium MOMSlow] · Built [MOMSlow MOMMedium MOMFast]" in str(refusal.value)
+
+def test_loading_legacy_weights_warns_and_still_loads(tmp_path, monkeypatch):
+    messages = _captured_(monkeypatch)
+    monkeypatch.setattr(_FakeDDPG_, "Weights", tmp_path)
+    strategy = _strategy_()
+    assert strategy._agent_.loaded == 1
+    assert messages == [f"Weights Load: Unverified · No observation layout recorded · {tmp_path}"]

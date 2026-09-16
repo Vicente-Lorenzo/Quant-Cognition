@@ -4,7 +4,7 @@ from Library.Scheduler import WorkflowAPI, TaskAPI, DependencyAPI, CycleAPI, Run
 from Library.Auth import UserAPI
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Utility.Path import traceback_root
-from Setup.Install import bootstrap, register, WORKFLOWS
+from Script.Install import bootstrap, register, WORKFLOWS
 
 DATABASE = "Tests"
 ROOT = traceback_root()

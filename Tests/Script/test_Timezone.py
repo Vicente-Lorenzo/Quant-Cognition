@@ -2,7 +2,7 @@ import pytest
 
 from datetime import datetime
 
-import Setup.Timezone as Timezone
+import Script.Setup.Timezone as Timezone
 from Library.Database.Query import QueryAPI
 from Library.Utility.IO import read_json, write_json
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI

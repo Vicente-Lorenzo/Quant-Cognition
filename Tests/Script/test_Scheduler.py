@@ -2,7 +2,7 @@ from datetime import datetime
 
 from Library.Database.Dataframe import pl
 from Library.Logging.Log import LogAPI
-from Setup.Scheduler import migrate_runs
+from Script.Setup.Scheduler import migrate_runs
 
 class _RecordAPI_:
 

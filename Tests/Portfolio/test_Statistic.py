@@ -4,17 +4,31 @@ from types import SimpleNamespace
 from Library.Database.Dataframe import pl
 from Library.Statistic.Label import (
     CALMARRATIO,
+    EXPECTEDLOSINGRETURNPERC,
+    EXPECTEDNETRETURNPERC,
+    EXPECTEDWINNINGRETURNPERC,
+    LOSINGRETURNANNPERC,
+    LOSINGRETURNPERC,
     MAXBALANCEDRAWDOWNPERC,
     MAXHOLDINGTIME,
+    NET_BUY_AGGREGATED,
+    NET_BUY_INDIVIDUAL,
+    NET_SELL_AGGREGATED,
+    NET_SELL_INDIVIDUAL,
     NET_TOTAL_AGGREGATED,
     NET_TOTAL_INDIVIDUAL,
+    NETRETURNANNPERC,
+    NETRETURNPERC,
     SHARPERATIO,
     SORTINORATIO,
     STATISTICS_METRICS_LABEL,
     STERLINGRATIO,
-    TOTALTRADESVALUE
+    TOTALTRADESVALUE,
+    WINNINGRETURNANNPERC,
+    WINNINGRETURNPERC
 )
 from Library.Statistic.Metric import (
+    calculate_annualized_return,
     calculate_annualized_volatility,
     calculate_calmar,
     calculate_sortino,
@@ -23,6 +37,7 @@ from Library.Statistic.Metric import (
 from Library.Portfolio.Statistic import (
     _aligned_positions_,
     calculate_drawdown,
+    calculate_return,
     calculate_volatility,
     generate_net_report
 )
@@ -100,6 +115,7 @@ def test_net_report_overrides_total_ratios_with_bar_curve():
     assert abs(_cell_(SORTINORATIO) - 4.0) < 1e-9
     assert abs(_cell_(SHARPERATIO) - 2.0 / 3.0) < 1e-9
     assert abs(_cell_(STERLINGRATIO) - 9.0) < 1e-9
+
 def _frames_():
     trades = pl.DataFrame({
         str(TradeAPI.ID.UID): [1, 2],
@@ -150,3 +166,52 @@ def test_holding_time_measures_entry_to_exit_with_a_position_open():
     report = generate_net_report(positions, trades, SimpleNamespace(Balance=10000.0), date(2023, 1, 1), date(2023, 2, 1))
     maximum = report.filter(pl.col(STATISTICS_METRICS_LABEL) == MAXHOLDINGTIME)[NET_TOTAL_INDIVIDUAL].item()
     assert maximum < 30.0
+
+def _returns_(start: date, stop: date):
+    trades, positions = _frames_()
+    report = generate_net_report(positions, trades, SimpleNamespace(Balance=10030.0), start, stop, [10000.0, 10035.0])
+    def _cell_(label, column): return report.filter(pl.col(STATISTICS_METRICS_LABEL) == label)[column].item()
+    return _cell_
+
+def test_net_return_is_the_account_return_on_the_opening_balance():
+    cell = _returns_(date(2023, 1, 1), date(2023, 2, 1))
+    for buy, sell, total in ((NET_BUY_INDIVIDUAL, NET_SELL_INDIVIDUAL, NET_TOTAL_INDIVIDUAL), (NET_BUY_AGGREGATED, NET_SELL_AGGREGATED, NET_TOTAL_AGGREGATED)):
+        assert abs(cell(NETRETURNPERC, buy) - 0.30) < 1e-9
+        assert abs(cell(NETRETURNPERC, sell) - 0.05) < 1e-9
+        assert abs(cell(NETRETURNPERC, total) - 0.35) < 1e-9
+        assert abs(cell(NETRETURNPERC, buy) + cell(NETRETURNPERC, sell) - cell(NETRETURNPERC, total)) < 1e-9
+
+def test_winning_and_losing_returns_sum_to_the_net_return():
+    cell = _returns_(date(2023, 1, 1), date(2023, 2, 1))
+    for column in (NET_BUY_INDIVIDUAL, NET_SELL_INDIVIDUAL, NET_TOTAL_INDIVIDUAL, NET_BUY_AGGREGATED, NET_SELL_AGGREGATED, NET_TOTAL_AGGREGATED):
+        assert abs(cell(WINNINGRETURNPERC, column) + cell(LOSINGRETURNPERC, column) - cell(NETRETURNPERC, column)) < 1e-9
+    assert abs(cell(WINNINGRETURNPERC, NET_TOTAL_INDIVIDUAL) - 0.55) < 1e-9
+    assert abs(cell(LOSINGRETURNPERC, NET_TOTAL_INDIVIDUAL) + 0.20) < 1e-9
+
+def test_expected_returns_are_the_mean_trade_on_the_opening_balance():
+    cell = _returns_(date(2023, 1, 1), date(2023, 2, 1))
+    assert abs(cell(EXPECTEDNETRETURNPERC, NET_TOTAL_INDIVIDUAL) - 0.35 / 3) < 1e-9
+    assert abs(cell(EXPECTEDNETRETURNPERC, NET_TOTAL_AGGREGATED) - 0.35 / 2) < 1e-9
+    assert abs(cell(EXPECTEDWINNINGRETURNPERC, NET_TOTAL_INDIVIDUAL) - 0.55 / 2) < 1e-9
+    assert abs(cell(EXPECTEDLOSINGRETURNPERC, NET_TOTAL_INDIVIDUAL) + 0.20) < 1e-9
+
+def test_net_return_annualized_compounds_the_account_return():
+    start, stop = date(2023, 1, 1), date(2025, 1, 1)
+    cell = _returns_(start, stop)
+    years = (stop - start).days / 365.0
+    assert abs(cell(NETRETURNANNPERC, NET_TOTAL_AGGREGATED) - (1.0035 ** (1.0 / years) - 1.0) * 100.0) < 1e-9
+    assert abs(cell(NETRETURNANNPERC, NET_TOTAL_INDIVIDUAL) - cell(NETRETURNANNPERC, NET_TOTAL_AGGREGATED)) < 1e-12
+    assert abs(cell(WINNINGRETURNANNPERC, NET_TOTAL_INDIVIDUAL) - 0.55 / years) < 1e-9
+    assert abs(cell(LOSINGRETURNANNPERC, NET_TOTAL_INDIVIDUAL) + 0.20 / years) < 1e-9
+
+def test_return_needs_an_opening_balance():
+    df = pl.DataFrame({PNL: [50.0, -20.0]})
+    assert calculate_return(0.0, df) == (0.0, 0.0)
+    assert calculate_return(None, df) == (0.0, 0.0)
+    assert calculate_return(1000.0, df) == (1.5, 3.0)
+
+def test_annualized_return_floors_a_loss_beyond_the_balance():
+    two_years = 2 * 365 * 86400.0
+    assert calculate_annualized_return(-150.0, two_years, pct=True) == -100.0
+    assert calculate_annualized_return(-100.0, two_years, pct=True) == -100.0
+    assert abs(calculate_annualized_return(21.0, two_years, pct=True) - 10.0) < 1e-9

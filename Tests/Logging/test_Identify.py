@@ -98,7 +98,8 @@ def test_logger_records_carry_the_derived_identity(recorder):
     ("Library.System.Realtime", "System"),
     ("Library.Scheduler.Executor", "Scheduler"),
     ("Library.App.V2.Page", "App"),
-    ("Setup.Universe", "Setup"),
+    ("Script.Setup.Universe", "Setup"),
+    ("Script.Environment.Retention", "Environment"),
     ("Tests.Logging.test_Identify", "Tests"),
     ("__main__", None),
     ("", None)])
@@ -107,7 +108,7 @@ def test_frame_package_resolution(module, expected):
 
 @pytest.mark.parametrize("module,expected", [
     ("Library.System.Realtime", "Realtime"),
-    ("Setup.Universe", "Universe"),
+    ("Script.Setup.Universe", "Universe"),
     ("Solo", "Solo")])
 def test_frame_module_resolution(module, expected):
     assert find_frame_module(types.SimpleNamespace(f_globals={"__name__": module})) == expected
@@ -122,8 +123,8 @@ def test_frame_helpers_tolerate_a_missing_frame():
     assert find_frame_package(None) is None
 
 def test_frame_package_falls_back_to_the_parent_folder_when_main():
-    frame = types.SimpleNamespace(f_globals={"__name__": "__main__", "__file__": str(Path("Setup") / "Retention.py")})
-    assert find_frame_package(frame) == "Setup"
+    frame = types.SimpleNamespace(f_globals={"__name__": "__main__", "__file__": str(Path("Script") / "Environment" / "Retention.py")})
+    assert find_frame_package(frame) == "Environment"
 
 def test_frame_package_fallback_covers_direct_script_execution():
     frame = types.SimpleNamespace(f_globals={"__name__": "__main__", "__file__": str(Path("Library") / "System" / "Realtime.py")})

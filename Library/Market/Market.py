@@ -20,7 +20,6 @@ class MarketAPI(DatapointAPI):
 
     Schema: ClassVar[str] = "Market"
     Table: ClassVar[str] = "Market"
-    HORIZON: ClassVar[datetime] = datetime(2014, 1, 1)
 
     mode: PriceMode = field(default=PriceMode.Bid, repr=False)
     _offset_: int = field(default=1, init=False)

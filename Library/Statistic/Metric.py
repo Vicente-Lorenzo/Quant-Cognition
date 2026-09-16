@@ -78,7 +78,7 @@ def calculate_drawdowns(values: list) -> tuple[float, float]:
 def calculate_annualized_return(ret: float, duration_seconds: float, trading_days: int = 365, pct: bool = False) -> float:
     if not ret or not duration_seconds or duration_seconds <= 0.0: return 0.0
     ret = ret / 100.0 if pct else ret
-    value = ((1.0 + ret) ** ((trading_days * 86400.0) / duration_seconds)) - 1.0
+    value = ((1.0 + ret) ** ((trading_days * 86400.0) / duration_seconds)) - 1.0 if ret > -1.0 else -1.0
     return calculate_percentage(value) if pct else value
 
 def calculate_annualized_log_return(log_ret: float, duration_seconds: float, trading_days: int = 365) -> float:

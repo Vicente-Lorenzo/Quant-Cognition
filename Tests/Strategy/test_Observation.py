@@ -52,6 +52,11 @@ def test_shape_essential_and_with_moving_averages():
     assert _encoder_(overlap_features=("MASlow", "MAMedium", "MAFast")).shape() == 36
     assert _encoder_(momentum_features=("MOMFast",)).shape() == 28
 
+def test_layout_records_the_feature_order_and_composition():
+    assert _encoder_().layout() == {"Account": True, "Momentum": ["MOMFast", "MOMMedium", "MOMSlow"], "Overlap": [], "Shape": 30, "Window": 1}
+    stacked = DDPGObservationAPI(action=_action_(), momentum_features=("MOMSlow", "MOMFast"), overlap_features=("MASlow", "MAFast"), normalize_window=200, window=3, account=False)
+    assert stacked.layout() == {"Account": False, "Momentum": ["MOMSlow", "MOMFast"], "Overlap": ["MASlow", "MAFast"], "Shape": 3 * (8 + 1 + 6 + 4 + 2 + 4), "Window": 3}
+
 def test_encode_shape_and_dtype():
     observation = _encoder_(action=_action_()).encode(_update_())
     assert observation.shape == (30,)
