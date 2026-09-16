@@ -4,11 +4,11 @@ import dash
 from dash import html
 from dash.exceptions import PreventUpdate
 
-from Library.App.V2 import GlobalAPI, FieldAPI, CrumbAPI, RefreshAPI, TableAPI, ComponentID, Output, Input, State, InjectionType, serverside_callback, clientside_callback, SwitchAPI, ButtonAPI, StorageAPI
+from Library.App.V2 import GlobalAPI, FieldAPI, RefreshAPI, TableAPI, ComponentID, Output, Input, State, InjectionType, serverside_callback, clientside_callback, SwitchAPI, ButtonAPI, StorageAPI
 from Library.Scheduler import TaskAPI, TaskType, Kind
 from Library.Utility.Path import traceback_root
-from Library.Web.Scheduler.Base import SchedulerBaseAPI, SchedulerSelectionAPI, SchedulerDetailAPI
-from Library.Web.Scheduler.Entity import SchedulerEntityAPI
+from Library.Web.Scheduler.Base import SchedulerBaseAPI, SchedulerGridDetailAPI
+from Library.Web.Scheduler.Entity import SchedulerEntityAPI, SchedulerEntityPageAPI
 
 class SchedulerTaskAPI(SchedulerEntityAPI):
 
@@ -18,9 +18,9 @@ class SchedulerTaskAPI(SchedulerEntityAPI):
     _FIELDS_ = (
         FieldAPI(name="uid", label="UID", identity=True, placeholder="unique-task-id", help="Unique identifier of the task · immutable once created"),
         FieldAPI(name="name", required=True, help="Human-readable display name shown across the app"),
-        FieldAPI(name="owner", required=True, default=lambda page: page._current_owner_(), help="Account responsible for the task · used for auditing"),
-        FieldAPI(name="type", control="select", group="kind", default=TaskAPI.Defaults["Type"], options=[{"label": member.name, "value": member.name} for member in TaskType], help="Artifact interpreter · Batch runs a Windows batch file · Shell runs a shell command · Python runs a Python script"),
-        FieldAPI(name="kind", control="select", group="kind", default=TaskAPI.Defaults["Kind"], options=[{"label": member.name, "value": member.name} for member in Kind], help="Execution style · Manual runs only on demand · Scheduled runs to completion when triggered · Service is kept always-on and respawned if it dies"),
+        FieldAPI(name="owner", required=True, default=lambda page: page.app.actor(), help="Account responsible for the task · used for auditing"),
+        FieldAPI(name="type", control="select", group="kind", default=TaskAPI.Defaults["Type"], options=FieldAPI.choices(TaskType.names()), help="Artifact interpreter · Batch runs a Windows batch file · Shell runs a shell command · Python runs a Python script"),
+        FieldAPI(name="kind", control="select", group="kind", default=TaskAPI.Defaults["Kind"], options=FieldAPI.choices(Kind.names()), help="Execution style · Manual runs only on demand · Scheduled runs to completion when triggered · Service is kept always-on and respawned if it dies"),
         FieldAPI(name="path", required=True, placeholder="Script/Example.py", wrapper="scheduler-path-row", suffix=lambda page: page._browse_(), help="Artifact the runner executes · stored absolute unless Relative is on"),
         FieldAPI(name="schedule", label="Schedule (cron)", column="Schedule", placeholder="0 22 * * 1-5", wrapper="scheduler-cron-row", suffix=lambda page: [page._cron_(page.F_CRON)], help="Cron expression · inside a workflow it is the earliest-start gate within each cycle · standalone it triggers the task directly"),
         FieldAPI(name="workflow", column="WID", control="select", default="", decode=lambda row: row.get("WID") or "", help="Optional membership · the task then runs inside the workflow cycles honoring its dependencies"),
@@ -35,7 +35,6 @@ class SchedulerTaskAPI(SchedulerEntityAPI):
     )
     _FIELD_ = FieldAPI.index(_FIELDS_)
 
-    F_CRON: ComponentID | dict = ComponentID()
     F_BROWSE: ComponentID | dict = ComponentID()
     F_UPLOAD: ComponentID | dict = ComponentID()
     SKIP_BTN: ComponentID | dict = ComponentID()
@@ -43,7 +42,6 @@ class SchedulerTaskAPI(SchedulerEntityAPI):
 
     def _task_ids_(self) -> None:
         self._field_ids_()
-        self.F_CRON = self.register(type="link", name="cron")
         self.F_BROWSE = self.register(type="button", name="browse")
         self.F_UPLOAD = self.register(type="upload", name="browse")
         self.SKIP_BTN = self.register(type="button", name="skip")
@@ -52,15 +50,8 @@ class SchedulerTaskAPI(SchedulerEntityAPI):
     def _fetch_(self, uid):
         return self._manager_.task(uid)
 
-    def _lineage_(self, uid: str) -> list:
-        task = self._manager_.task(uid) or {}
-        workflow = self._manager_.workflow(task.get("WID")) if task.get("WID") else None
-        trail = [CrumbAPI(label="Workflow", href="/scheduler/workflow")]
-        if workflow: trail.append(CrumbAPI(label=self._label_(workflow, task["WID"]), href=f"/scheduler/workflow/{task['WID']}"))
-        return trail + [CrumbAPI(label="Task", href="/scheduler/task")]
-
-    def _crumb_(self, uid: str) -> str:
-        return self._label_(self._manager_.task(uid), uid)
+    def _lineage_(self, row: dict | None) -> list:
+        return self._task_trail_(row)
 
     def _intervention_buttons_(self) -> list:
         return [
@@ -98,14 +89,7 @@ class SchedulerTaskAPI(SchedulerEntityAPI):
         on_enter=InjectionType.Hidden,
     )
     def _options_(self):
-        return [{"label": "(none)", "value": ""}] + [{"label": workflow["UID"], "value": workflow["UID"]} for workflow in self._manager_.workflows()]
-
-    @clientside_callback(
-        Output(F_CRON, "href"),
-        Input(_FIELD_["schedule"].id, "value"),
-    )
-    def _cron_link_(self):
-        return self.app.asset("Callbacks/Cron.js", url=False)
+        return [{"label": "(none)", "value": ""}] + FieldAPI.choices([workflow["UID"] for workflow in self._manager_.workflows()])
 
     @serverside_callback(
         Output(_FIELD_["path"].id, "value"),
@@ -148,35 +132,9 @@ class SchedulerTaskAPI(SchedulerEntityAPI):
     def _skip_(self, clicks, target, failure):
         return self._intervene_("task", "skip", target, failure, "No selected task is skippable · a workflow member needs an open cycle")
 
-    @serverside_callback(
-        *SchedulerEntityAPI._outputs_(_FIELDS_),
-        Input(SchedulerEntityAPI.INSERT_BTN, "n_clicks"),
-        on_click=InjectionType.Hidden,
-    )
-    def _new_(self, clicks):
-        return self._blank_()
+    _new_, _edit_, _save_ = SchedulerEntityAPI.entity_callbacks(_FIELDS_)
 
-    @serverside_callback(
-        *SchedulerEntityAPI._outputs_(_FIELDS_),
-        Input(SchedulerEntityAPI.EDIT_BTN, "n_clicks"),
-        State(SchedulerBaseAPI.TARGET_STORE_ID, "data"),
-        on_click=InjectionType.Hidden,
-    )
-    def _edit_(self, clicks, target):
-        return self._populate_(target)
-
-    @serverside_callback(
-        Output(SchedulerEntityAPI.MODAL_ID, "is_open"),
-        Output(RefreshAPI.RELOAD_STORE_ID, "data"),
-        Input(SchedulerEntityAPI.SAVE_BTN, "n_clicks"),
-        State(SchedulerEntityAPI.MODE_STORE_ID, "data"),
-        *SchedulerEntityAPI._states_(_FIELDS_),
-        on_click=InjectionType.Hidden,
-    )
-    def _save_(self, clicks, mode, *values):
-        return self._submit_(mode, values)
-
-class SchedulerTaskPageAPI(SchedulerTaskAPI, SchedulerSelectionAPI, TableAPI):
+class SchedulerTaskPageAPI(SchedulerTaskAPI, SchedulerEntityPageAPI, TableAPI):
 
     def __init__(self, *, app) -> None:
         super().__init__(app=app, path="/scheduler/task", button="Task", icon="bi bi-list-check", description="Create, schedule and monitor tasks")
@@ -189,9 +147,6 @@ class SchedulerTaskPageAPI(SchedulerTaskAPI, SchedulerSelectionAPI, TableAPI):
     def _columns_(self) -> list:
         return self._TASK_COLUMNS_
 
-    def _detail_base_(self):
-        return self.anchor
-
     def _rows_(self) -> list:
         latest = self._manager_.latest()
         return [self._task_row_(task, latest.get(task.get("UID"))) for task in self._manager_.tasks()]
@@ -202,15 +157,7 @@ class SchedulerTaskPageAPI(SchedulerTaskAPI, SchedulerSelectionAPI, TableAPI):
     def _actions_(self) -> list:
         return self._lifecycle_buttons_() + self._intervention_buttons_()
 
-    def _extras_(self) -> list:
-        return [self._legend_(), self._modal_(), StorageAPI(id=self.MODE_STORE_ID, data={}), StorageAPI(id=self.TARGET_STORE_ID, data=None)]
-
-class SchedulerTaskDetailPageAPI(SchedulerTaskAPI, SchedulerDetailAPI):
-
-    SUB_TABLE_ID: ComponentID | dict = ComponentID()
-    SUB_CARRIER_ID: ComponentID | dict = ComponentID()
-    SUB_STATE_STORE_ID: ComponentID | dict = ComponentID()
-    SUB_OPEN_BTN: ComponentID | dict = ComponentID()
+class SchedulerTaskDetailPageAPI(SchedulerTaskAPI, SchedulerGridDetailAPI):
 
     def __init__(self, *, app) -> None:
         super().__init__(app=app, path="/scheduler/task/:uid", button="Task", icon="bi bi-list-check", parametric=True)
@@ -219,18 +166,15 @@ class SchedulerTaskDetailPageAPI(SchedulerTaskAPI, SchedulerDetailAPI):
         self._entity_ids_()
         self._task_ids_()
         self._detail_ids_()
-        self.SUB_TABLE_ID = self.register(type="grid", name="runs")
-        self.SUB_CARRIER_ID = self.register(type="script", name="runs-payload")
-        self.SUB_STATE_STORE_ID = self.register(type="store", name="runs-state")
-        self.SUB_OPEN_BTN = self.register(type="button", name="run-open")
+        self._grid_ids_("runs", "run")
 
     def content(self) -> list:
         return [
             html.Div(id=self.BREADCRUMB_ID),
-            self._toolbar_([self._refresh_button_()] + self._lifecycle_buttons_(insert=False) + self._intervention_buttons_()),
+            self.toolbar([self._refresh_button_()] + self._lifecycle_buttons_(insert=False) + self._intervention_buttons_()),
             html.Div(id=self.FIELDS_ID),
             *self._grid_(self.SUB_TABLE_ID, self.SUB_CARRIER_ID, "Runs", self._TASK_RUN_COLUMNS_, "/scheduler/run", self.SUB_STATE_STORE_ID, height="40vh"),
-            self._toolbar_([ButtonAPI(id=self.SUB_OPEN_BTN, label=self._icon_("bi bi-box-arrow-up-right", "Open Run"), background="secondary", tooltip="Open the selected runs · one opens here · several open in new tabs")], "table-bar"),
+            self.toolbar([ButtonAPI(id=self.SUB_OPEN_BTN, label=self._icon_("bi bi-box-arrow-up-right", "Open Run"), background="secondary", tooltip="Open the selected runs · one opens here · several open in new tabs")], "table-bar"),
             self._legend_(),
             self._modal_(),
             StorageAPI(id=self.MODE_STORE_ID, data={}),
@@ -241,7 +185,7 @@ class SchedulerTaskDetailPageAPI(SchedulerTaskAPI, SchedulerDetailAPI):
         Output(SchedulerBaseAPI.BREADCRUMB_ID, "children"),
         Output(SchedulerBaseAPI.TARGET_STORE_ID, "data"),
         Output(SchedulerBaseAPI.FIELDS_ID, "children"),
-        Output(SUB_CARRIER_ID, "children"),
+        Output(SchedulerGridDetailAPI.SUB_CARRIER_ID, "children"),
         Input(RefreshAPI.RELOAD_STORE_ID, "data"),
         State(GlobalAPI.GLOBAL_LOCATION_ID, "pathname"),
     )
@@ -250,16 +194,7 @@ class SchedulerTaskDetailPageAPI(SchedulerTaskAPI, SchedulerDetailAPI):
         if uid is None: raise PreventUpdate
         task = self._manager_.task(uid)
         if task is None:
-            return self._breadcrumb_(uid), [uid], self._details_([("Status", "Task not found")]), self._payload_("Runs", self._TASK_RUN_COLUMNS_, [], "/scheduler/run", self.SUB_STATE_STORE_ID).encode()
+            return self._breadcrumb_(uid, None), [uid], self._details_([("Status", "Task not found")]), self._payload_("Runs", self._TASK_RUN_COLUMNS_, [], "/scheduler/run", self.SUB_STATE_STORE_ID).encode()
         pairs = self._pairs_(task, self._FIELDS_, [("Enabled", task.get("Enabled"))])
         runs = [self._run_row_(run) for run in self._manager_.runs(task=uid, limit=50)]
-        return self._breadcrumb_(uid), [uid], self._details_(pairs), self._payload_("Runs", self._TASK_RUN_COLUMNS_, runs, "/scheduler/run", self.SUB_STATE_STORE_ID).encode()
-
-    @clientside_callback(
-        Output(GlobalAPI.GLOBAL_LOCATION_ID, "pathname"),
-        Input(SUB_OPEN_BTN, "n_clicks"),
-        State(SUB_STATE_STORE_ID, "data"),
-        on_click=InjectionType.Hidden,
-    )
-    def _subopen_(self):
-        return self.app.asset("Callbacks/Open.js", url=False)
+        return self._breadcrumb_(uid, task), [uid], self._details_(pairs), self._payload_("Runs", self._TASK_RUN_COLUMNS_, runs, "/scheduler/run", self.SUB_STATE_STORE_ID).encode()

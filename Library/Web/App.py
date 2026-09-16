@@ -3,8 +3,9 @@ from flask import g, request
 from Library.App.V2 import AppAPI, LinkAPI, PageAPI
 from Library.Auth import AuthAPI, RoleAPI
 from Library.Database import PostgresDatabaseAPI
+from Library.Utility.IO import read_text
 from Library.Utility.Path import traceback_root
-from Library.Web.Core import ARTIFACTS
+from Library.Web.Core import ArtifactAPI
 from Library.Web.Launchpad import WebLaunchpadPageAPI
 from Library.Web.Trading import TradingPageAPI
 from Library.Web.Framework import (
@@ -41,13 +42,14 @@ class WebAppAPI(AppAPI):
 
     Launchpad = WebLaunchpadPageAPI
 
+    Database = "Quant"
+
     _MOTTOS_ = traceback_root() / "MOTTOS.md"
-    _DATABASE_ = "Quant"
 
     def __init__(self, *, motto: str | list = None, auth: AuthAPI | None = None, access: RoleAPI = RoleAPI.Viewer, **kwargs) -> None:
-        super().__init__(motto=motto if motto is not None else self._mottos_(), auth=auth if auth is not None else AuthAPI(), access=access, **kwargs)
-        ARTIFACTS.install(self.app.server)
-        self._scoped_(self.app.server, self._DATABASE_)
+        super().__init__(motto=motto if motto is not None else self._mottos_(), auth=auth if auth is not None else AuthAPI(database=self.Database), access=access, **kwargs)
+        ArtifactAPI.shared().install(self.app.server)
+        self._scoped_(self.app.server, self.Database)
 
     @staticmethod
     def _scoped_(server, database: str) -> None:
@@ -65,11 +67,7 @@ class WebAppAPI(AppAPI):
 
     @classmethod
     def _mottos_(cls) -> list:
-        try:
-            lines = cls._MOTTOS_.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            return []
-        return [line[2:].strip() for line in lines if line.startswith("- ") and line[2:].strip()]
+        return [line[2:].strip() for line in read_text(cls._MOTTOS_).splitlines() if line.startswith("- ") and line[2:].strip()]
 
     def _page_(self, page: PageAPI, access: RoleAPI) -> None:
         page.access = access

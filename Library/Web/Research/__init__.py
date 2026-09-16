@@ -1,16 +1,6 @@
 from Library.Web.Research.Launch import (
-    MARKET,
-    BACKTESTING,
-    OPTIMIZATION,
-    LEARNING,
-    OUTPUT,
-    SYSTEM,
-    SYSTEMS,
-    TASKS,
-    EVERY,
-    merge,
-    LaunchAPI,
-    launch_callbacks
+    LaunchFieldsAPI,
+    LaunchAPI
 )
 from Library.Web.Research.Result import (
     ResultBaseAPI,
@@ -29,18 +19,8 @@ from Library.Web.Research.Research import (
 )
 
 __all__ = [
-    "MARKET",
-    "BACKTESTING",
-    "OPTIMIZATION",
-    "LEARNING",
-    "OUTPUT",
-    "SYSTEM",
-    "SYSTEMS",
-    "TASKS",
-    "EVERY",
-    "merge",
+    "LaunchFieldsAPI",
     "LaunchAPI",
-    "launch_callbacks",
     "ResultBaseAPI",
     "ResultsPageAPI",
     "LaunchedResultsPageAPI",

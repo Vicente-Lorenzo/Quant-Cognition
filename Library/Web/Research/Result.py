@@ -1,11 +1,9 @@
 import re
-import uuid
 import json
 import yaml
 from datetime import datetime
 
 import dash
-import dash_bootstrap_components as dbc
 from dash import dcc, html
 from dash.exceptions import PreventUpdate
 
@@ -58,7 +56,6 @@ from Library.Statistic import (
 )
 from Library.App.V2 import (
     AppAPI,
-    PageAPI,
     RefreshAPI,
     TableAPI,
     FieldAPI,
@@ -71,33 +68,34 @@ from Library.App.V2 import (
     InjectionType,
     serverside_callback,
     clientside_callback,
+    modal_callbacks,
     ButtonAPI,
-    IconAPI,
     TextAPI,
     CrumbAPI,
     BreadcrumbAPI,
     StorageAPI,
     ModalAPI,
+    WorkspaceAPI,
+    LightweightAPI,
     LightweightChartAPI,
     LightweightTableAPI
 )
 
-from Library.Scheduler import ManagerAPI, RetentionLevel
+from Library.Scheduler import RetentionLevel
 from Library.Strategy.Ladder import LadderAPI
-from Library.Web.Research.Launch import LaunchAPI
-from Library.Web.Core.Catalog import CATALOG
-from Library.Web.Core.Artifact import ARTIFACTS, ArtifactAPI
-from Library.Web.Core.Status import StatusAPI
+from Library.Utility.IO import read_json, read_text
+from Library.Utility.Typing import MISSING
+from Library.System.System import SystemAPI
+from Library.Web.Research.Launch import LaunchAPI, LaunchFieldsAPI
+from Library.Strategy.Catalog import CatalogAPI
+from Library.Web.Core.Artifact import ArtifactAPI
+from Library.Web.Core.Managed import ManagedPageAPI
 
-class ResultBaseAPI(StatusAPI, PageAPI):
+class ResultBaseAPI(ManagedPageAPI):
 
-    _ARTIFACTS_: ArtifactAPI = ARTIFACTS
+    _ARTIFACTS_: ArtifactAPI = ArtifactAPI.shared()
     _FAMILY_ = "Result"
     _TASK_ = None
-
-    def __init__(self, *, app, **kwargs) -> None:
-        super().__init__(app=app, **kwargs)
-        self._manager_ = ManagerAPI(database="Quant")
 
     def _runs_(self, limit: int = 100) -> list:
         if not self._TASK_: return []
@@ -109,9 +107,6 @@ class ResultBaseAPI(StatusAPI, PageAPI):
 
     def _produced_(self, run: dict) -> list:
         return self._ARTIFACTS_.produced(run.get("UID"))
-
-    def _fingerprint_(self):
-        return self._manager_.fingerprint("Scheduler", "Run")
 
     @staticmethod
     def _weight_(size: int) -> str:
@@ -134,10 +129,9 @@ class ResultsPageAPI(SegmentAPI, ResultBaseAPI, TableAPI):
         ChoiceAPI(value=RetentionLevel.Favorite.name, label="Favorite", icon="bi bi-star-fill", state="★", tooltip="Keep these runs and mark them important"),
     )
 
-    _MARKS_ = {RetentionLevel.Persistent.name: "✔", RetentionLevel.Favorite.name: "★"}
+    _MARKS_ = {choice.value: choice.state for choice in _CHOICES_ if choice.state}
 
     _COLUMNS_ = ["Status", "UID", "Retention", "StartedAt", "StoppedAt", "Duration", "Artifacts"]
-    _MARKDOWN_COLUMNS_ = {"Status"}
     _ROW_KEY_ = "UID"
     _SHEET_ = "Runs"
     _POLL_ = 5000
@@ -150,24 +144,17 @@ class ResultsPageAPI(SegmentAPI, ResultBaseAPI, TableAPI):
         self.COMPARE_BTN = self.register(type="button", name="compare")
         self._segment_ids_()
 
-    def _columns_(self) -> list:
-        extra = []
-        for run in self._runs_():
-            for name in FieldAPI.parse(self._LAUNCH_, run.get("Arguments")):
-                if name not in extra: extra.append(name)
-        return self._COLUMNS_ + extra
+    def _row_(self, run: dict, produced: list) -> dict | None:
+        return {"Status": self._led_(run.get("Status")), "UID": run.get("UID"),
+                "Retention": self._MARKS_.get(run.get("Retention"), ""), "StartedAt": run.get("StartedAt"),
+                "StoppedAt": run.get("StoppedAt"), "Duration": self._elapsed_(run.get("Duration")),
+                "Artifacts": len(produced), **FieldAPI.parse(self._LAUNCH_, run.get("Arguments"))}
 
-    def _markdown_columns_(self) -> set:
-        return self._MARKDOWN_COLUMNS_
-
-    def _rows_(self) -> list:
-        rows = []
-        for run in self._runs_():
-            rows.append({"Status": self._led_(run.get("Status")), "UID": run.get("UID"),
-                         "Retention": self._MARKS_.get(run.get("Retention"), ""), "StartedAt": self._stamp_(run.get("StartedAt")),
-                         "StoppedAt": self._stamp_(run.get("StoppedAt")), "Duration": self._elapsed_(run.get("Duration")),
-                         "Artifacts": len(self._produced_(run)), **FieldAPI.parse(self._LAUNCH_, run.get("Arguments"))})
-        return rows
+    def _workspace_(self, columns: list = MISSING, rows: list = MISSING) -> WorkspaceAPI:
+        runs = self._runs_() if columns is MISSING or rows is MISSING else []
+        if columns is MISSING: columns = self._COLUMNS_ + list(dict.fromkeys(name for run in runs for name in FieldAPI.parse(self._LAUNCH_, run.get("Arguments"))))
+        if rows is MISSING: rows = [row for row in (self._row_(run, self._produced_(run)) for run in runs) if row is not None]
+        return super()._workspace_(columns, rows)
 
     def _detail_base_(self):
         return self._ANCHOR_ or self.anchor
@@ -185,14 +172,9 @@ class ResultsPageAPI(SegmentAPI, ResultBaseAPI, TableAPI):
         return [self._legend_()]
 
     def _mark_(self, state, level: RetentionLevel):
-        keys = list((state or {}).get("selected") or [])
-        if not keys:
-            self.app.notify.warning("Select runs first", header="No Selection")
-            return dash.no_update
-        marked = sum(1 for uid in keys if self._manager_.retain(uid, level=level))
-        if not marked: return dash.no_update
-        self.app.notify.success(f"{marked} run(s) marked {level.name}", header="Done")
-        return uuid.uuid4().hex
+        keys = self._selection_(state, "Select runs first")
+        if not keys: return dash.no_update
+        return self._tally_(keys, lambda uid: self._manager_.retain(uid, level=level), f"run(s) marked {level.name}")
 
     @clientside_callback(
         Output(CANCEL_BTN, "disabled"),
@@ -226,16 +208,9 @@ class ResultsPageAPI(SegmentAPI, ResultBaseAPI, TableAPI):
         on_click=InjectionType.Hidden,
     )
     def _cancel_(self, clicks, state):
-        keys = list((state or {}).get("selected") or [])
-        if not keys:
-            self.app.notify.warning("Select a live run first", header="No Selection")
-            return dash.no_update
-        stopped = sum(1 for uid in keys if self._manager_.cancel(uid, by=self._auditor_()))
-        if not stopped:
-            self.app.notify.warning("No selected run is live", header="No Action")
-            return dash.no_update
-        self.app.notify.success(f"{stopped} run(s) canceled", header="Done")
-        return uuid.uuid4().hex
+        keys = self._selection_(state, "Select a live run first")
+        if not keys: return dash.no_update
+        return self._tally_(keys, lambda uid: self._manager_.cancel(uid, by=self.app.actor()), "run(s) canceled", "No selected run is live")
 
     @serverside_callback(
         Output(TEMPORARY_SEGMENT, "disabled"),
@@ -262,11 +237,6 @@ class ResultsPageAPI(SegmentAPI, ResultBaseAPI, TableAPI):
         choice = self._segment_choice_(dash.ctx.triggered_id)
         if choice is None: raise PreventUpdate
         return self._mark_(state, RetentionLevel.parse(choice))
-
-    @staticmethod
-    def _auditor_():
-        from flask_login import current_user
-        return getattr(current_user, "Username", None) or getattr(current_user, "Name", None)
 
 class LaunchedResultsPageAPI(LaunchAPI, ResultsPageAPI):
 
@@ -302,6 +272,7 @@ class ResultPageAPI(ResultBaseAPI, RefreshAPI):
     _JOINER_ = "+"
     _CANVAS_ = "fill"
     _LAUNCH_: tuple = ()
+    _LABEL_ = (FieldAPI.index(LaunchFieldsAPI.MARKET)["ticker"], FieldAPI.index(LaunchFieldsAPI.MARKET)["timeframe"])
     _SUMMARY_ = (
         ("Activity", ((TOTALTRADESVALUE, "Trades"), ("Buy Trades", "Buy"), ("Sell Trades", "Sell"),
                       (WINNINGRATEPERC, "Win Rate (%)"), (LOSINGRATEPERC, "Loss Rate (%)"),
@@ -356,19 +327,10 @@ class ResultPageAPI(ResultBaseAPI, RefreshAPI):
         self.PROMOTE_DISCARD_BTN = self.register(type="button", name="promote-discard")
 
     def capture(self, pathname: str) -> tuple:
-        if not pathname or self.parent is None: return [], "overview"
-        endpoint = self.app.anchorize(path=pathname, relative=False)
-        prefix = self.parent.anchor
-        if not endpoint.startswith(prefix + "/"): return [], "overview"
-        parts = [part for part in endpoint[len(prefix) + 1:].split("/") if part]
+        parts = self.segments(pathname)
         if not parts: return [], "overview"
         view = parts[1] if len(parts) > 1 and parts[1] in {key for key, _, _ in self._VIEWS_} else "overview"
         return [uid for uid in parts[0].split(self._JOINER_) if uid], view
-
-    def _details_(self, pairs) -> html.Div:
-        rows = [html.Div([html.Span(label, className="scheduler-detail-key"), html.Span(value, className="scheduler-detail-val")], className="scheduler-detail-row")
-                for label, value in pairs if value not in (None, "")]
-        return html.Div(rows, className="scheduler-detail")
 
     def _views_(self, uid: str, current: str) -> html.Div:
         base = f"{self.parent.anchor}/{uid}"
@@ -379,10 +341,19 @@ class ResultPageAPI(ResultBaseAPI, RefreshAPI):
                 background="secondary",
                 active=key == current,
                 classname="app-segment-choice",
-                label=[IconAPI(icon=icon), TextAPI(text=label)]
+                label=self._icon_(icon, label)
             )
             buttons.extend(link.build())
         return html.Div(buttons, className="app-segment")
+
+    def _trail_(self, label: str, target: str, view: str) -> list:
+        crumbs = [CrumbAPI(label=self.parent.button, href=self.parent.anchor), CrumbAPI(label=label, href=f"{self.parent.anchor}/{target}" if view != "overview" else None)]
+        if view != "overview": crumbs.append(CrumbAPI(label=next(caption for key, caption, _ in self._VIEWS_ if key == view)))
+        return BreadcrumbAPI(trail=crumbs).build()
+
+    def _canvas_view_(self, view: str, payload) -> list:
+        if view == "charts": return LightweightChartAPI(id=self.CHART_ID, workspace="result", payload=payload, height=self._CANVAS_).build()
+        return LightweightTableAPI(id=self.SHEET_ID, workspace="result", payload=payload, height=self._CANVAS_).build()
 
     def _metrics_(self, document: dict) -> dict:
         metrics = tabulate(document, "Net", NET_TOTAL_INDIVIDUAL)
@@ -433,54 +404,58 @@ class ResultPageAPI(ResultBaseAPI, RefreshAPI):
                          html.Div(self._summary_(produced), className="result-main")], className="result-overview")
 
     def _payload_(self, produced: list):
-        result = next((entry for entry in produced if entry["Path"].is_file() and entry["Path"].name == "Result.json"), None)
-        if result is not None:
-            try: return result["Path"].read_text(encoding="utf-8")
-            except OSError: return None
+        result = next((entry for entry in produced if entry["Path"].is_file() and entry["Path"].name == SystemAPI.RESULT), None)
+        if result is not None: return read_text(result["Path"]) or None
         artifact = next((entry for entry in produced if entry["Path"].is_file() and entry["Path"].suffix == ".html"), None)
         if artifact is None: return None
-        try: document = artifact["Path"].read_text(encoding="utf-8")
-        except OSError: return None
-        opening = document.find('class="lightweight-payload">')
+        document = read_text(artifact["Path"])
+        marker = f'class="{LightweightAPI.PAYLOAD}">'
+        opening = document.find(marker)
         if opening == -1: return None
-        opening += len('class="lightweight-payload">')
+        opening += len(marker)
         closing = document.find("</script>", opening)
         return document[opening:closing] if closing != -1 else None
 
-    _BREADTH_ = (("Timeframe", 4), ("Ticker", 3), ("Category", 2), ("Provider", 1), ("Everywhere", 0))
-    _PROMOTABLE_ = "Parameters.yml"
+    _BREADTH_ = tuple((rung, depth) for depth, rung in reversed(tuple(enumerate(LadderAPI.RUNGS, 1)))) + (("Everywhere", 0),)
 
     def _manifest_(self, uid: str) -> dict:
         folder = self._ARTIFACTS_._folder_(uid)
         if folder is None: return {}
-        try: return json.loads((folder / "Run.json").read_text(encoding="utf-8"))
-        except (OSError, ValueError): return {}
+        return read_json(folder / SystemAPI.MANIFEST)
 
     def _promotable_(self, uid: str):
         folder = self._ARTIFACTS_._folder_(uid)
         if folder is None: return None
-        candidate = folder / "Output" / self._PROMOTABLE_
+        candidate = folder / SystemAPI.OUTPUT / SystemAPI.PARAMETERS
         return candidate if candidate.is_file() else None
 
     def _promote_modal_(self) -> ModalAPI:
-        kinds = [{"label": kind, "value": kind} for kind in ("Realtime", "Backtesting", "Optimization", "Learning")]
+        kinds = FieldAPI.choices(("Realtime", "Backtesting", "Optimization", "Learning"))
         breadth = [{"label": label, "value": str(depth)} for label, depth in self._BREADTH_]
-        body = [html.Div([html.Div([dbc.Label("Apply To")], className="app-field-label"),
-                          dcc.Dropdown(id=self.PROMOTE_SCOPE_ID, options=breadth, value=str(self._BREADTH_[0][1]), clearable=False)], className="app-field"),
-                html.Div([html.Div([dbc.Label("Applies As")], className="app-field-label"),
-                          dcc.Dropdown(id=self.PROMOTE_KIND_ID, options=kinds, value="Backtesting", clearable=False)], className="app-field")]
-        return ModalAPI(id=self.PROMOTE_MODAL_ID, size="md", centered=True, open=False,
-                        header=[html.Span("Promote Parameters", className="modal-title")],
-                        body=body,
-                        footer=[*ButtonAPI(id=self.PROMOTE_DISCARD_BTN, label=self._icon_("bi bi-x-lg", "Cancel", tint="danger"), background="secondary", tooltip="Close without promoting").build(),
-                                *ButtonAPI(id=self.PROMOTE_APPLY_BTN, label=self._icon_("bi bi-arrow-up-circle", "Promote", tint="success"), background="secondary", tooltip="Write these parameters as the override").build()])
+        body = [
+            self._field_("Apply To", dcc.Dropdown(id=self.PROMOTE_SCOPE_ID, options=breadth, value=str(self._BREADTH_[0][1]), clearable=False)),
+            self._field_("Applies As", dcc.Dropdown(id=self.PROMOTE_KIND_ID, options=kinds, value="Backtesting", clearable=False))
+        ]
+        footer = [
+            *ButtonAPI(id=self.PROMOTE_DISCARD_BTN, label=self._icon_("bi bi-x-lg", "Cancel", tint="danger"), background="secondary", tooltip="Close without promoting").build(),
+            *ButtonAPI(id=self.PROMOTE_APPLY_BTN, label=self._icon_("bi bi-arrow-up-circle", "Promote", tint="success"), background="secondary", tooltip="Write these parameters as the override").build()
+        ]
+        return ModalAPI(
+            id=self.PROMOTE_MODAL_ID,
+            size="md",
+            centered=True,
+            open=False,
+            header=[html.Span("Promote Parameters", className="modal-title")],
+            body=body,
+            footer=footer
+        )
 
     def _promote_(self, uid: str, depth: int, kind: str) -> str:
         source = self._promotable_(uid)
         if source is None: return "This run produced no parameters to promote"
         manifest = self._manifest_(uid)
         rungs = tuple(manifest.get("Scope") or ())
-        strategy = CATALOG.get(manifest.get("Strategy"))
+        strategy = CatalogAPI.CATALOG.get(manifest.get("Strategy"))
         if strategy is None: return f"Unknown strategy {manifest.get('Strategy')!r}"
         if depth and len(rungs) < depth: return "This run did not record a scope that deep"
         try: sections = yaml.safe_load(source.read_text(encoding="utf-8")) or {}
@@ -523,9 +498,7 @@ class ResultPageAPI(ResultBaseAPI, RefreshAPI):
         if len(uids) > 1: return self._contrast_(uids, view)
         uid = uids[0]
         run = self._manager_.run(uid)
-        crumbs = [CrumbAPI(label=self.parent.button, href=self.parent.anchor), CrumbAPI(label=uid, href=f"{self.parent.anchor}/{uid}" if view != "overview" else None)]
-        if view != "overview": crumbs.append(CrumbAPI(label=next(label for key, label, _ in self._VIEWS_ if key == view)))
-        trail = BreadcrumbAPI(trail=crumbs).build()
+        trail = self._trail_(uid, uid, view)
         if run is None:
             return trail, [], self._details_([("Status", "Run not found")]), []
         produced = self._produced_(run)
@@ -540,15 +513,11 @@ class ResultPageAPI(ResultBaseAPI, RefreshAPI):
         payload = self._payload_(produced)
         if payload is None:
             return trail, tabs, [], [TextAPI(text="This run produced no plot artifact · re-run it with --plot", classname="status-line", builder=html.P)]
-        if view == "charts":
-            return trail, tabs, [], LightweightChartAPI(id=self.CHART_ID, workspace="result", payload=payload, height=self._CANVAS_).build()
-        return trail, tabs, [], LightweightTableAPI(id=self.SHEET_ID, workspace="result", payload=payload, height=self._CANVAS_).build()
+        return trail, tabs, [], self._canvas_view_(view, payload)
 
-    @staticmethod
-    def _label_(run: dict, uid: str) -> str:
-        tokens = (run.get("Arguments") or "").split()
-        parts = [tokens[index + 1] for index, token in enumerate(tokens[:-1]) if token in ("--ticker", "--timeframe")]
-        return " ".join([*parts, uid[:6]])
+    @classmethod
+    def _label_(cls, run: dict, uid: str) -> str:
+        return " ".join([*FieldAPI.parse(cls._LABEL_, run.get("Arguments")).values(), uid[:6]])
 
     def _rivalry_(self, labels: list, records: list) -> list:
         def card(source, label):
@@ -556,36 +525,31 @@ class ResultPageAPI(ResultBaseAPI, RefreshAPI):
             if all(value in (None, "") for _, value in values): return None
             return html.Div([html.Span(label, className="result-card-key"),
                              *[html.Span([html.Span(name, className="result-rival-name"),
-                                          html.Span(value if value not in (None, "") else "\u2014", className="result-rival-val" + self._tone_(label, value))],
+                                          html.Span(value if value not in (None, "") else "—", className="result-rival-val" + self._tone_(label, value))],
                                          className="result-rival") for name, value in values]], className="result-card")
         return self._panel_(card, wide=True)
 
     def _contrast_(self, uids: list, view: str) -> tuple:
         joined = self._JOINER_.join(uids)
-        crumbs = [CrumbAPI(label=self.parent.button, href=self.parent.anchor),
-                  CrumbAPI(label=f"Compare \u00b7 {len(uids)} Runs", href=f"{self.parent.anchor}/{joined}" if view != "overview" else None)]
-        if view != "overview": crumbs.append(CrumbAPI(label=next(label for key, label, _ in self._VIEWS_ if key == view)))
-        trail = BreadcrumbAPI(trail=crumbs).build()
+        trail = self._trail_(f"Compare · {len(uids)} Runs", joined, view)
         tabs = self._views_(joined, view)
         entries, pairs = [], []
         for uid in uids:
             run = self._manager_.run(uid)
             if run is None: pairs.append((uid, "Run not found")); continue
-            pairs.append((self._label_(run, uid), self._stamp_(run.get("StartedAt"))))
+            label = self._label_(run, uid)
+            pairs.append((label, self._stamp_(run.get("StartedAt"))))
             payload = self._payload_(self._produced_(run))
-            if payload is not None: entries.append((self._label_(run, uid), json.loads(payload)))
+            if payload is not None: entries.append((label, json.loads(payload)))
         details = self._details_(pairs)
         if len(entries) < 2:
-            return trail, tabs, details, [TextAPI(text="Fewer than two of the selected runs produced a plot artifact \u00b7 re-run them with --plot", classname="status-line", builder=html.P)]
+            return trail, tabs, details, [TextAPI(text="Fewer than two of the selected runs produced a plot artifact · re-run them with --plot", classname="status-line", builder=html.P)]
         if view == "overview":
             labels = [name for name, _ in entries]
             records = [self._metrics_(document) for _, document in entries]
             return trail, tabs, html.Div([html.Div(details, className="result-side"),
                                           html.Div(self._rivalry_(labels, records), className="result-main")], className="result-overview"), []
-        space = compare(entries).encode()
-        if view == "charts":
-            return trail, tabs, [], LightweightChartAPI(id=self.CHART_ID, workspace="result", payload=space, height=self._CANVAS_).build()
-        return trail, tabs, [], LightweightTableAPI(id=self.SHEET_ID, workspace="result", payload=space, height=self._CANVAS_).build()
+        return trail, tabs, [], self._canvas_view_(view, compare(entries).encode())
 
     @clientside_callback(
         Output(SINK_STORE_ID, "data"),
@@ -605,25 +569,9 @@ class ResultPageAPI(ResultBaseAPI, RefreshAPI):
 
     def _artifacts_(self, produced: list) -> list:
         if not produced: return [TextAPI(text="This run produced no artifacts yet", classname="status-line", builder=html.P)]
-        return [html.Div([html.Div([html.Span(f"{entry['Kind']} · {entry['Name']}", className="scheduler-detail-key"),
-                                    html.Span(self._weight_(entry["Size"]), className="scheduler-detail-val")],
-                                   className="scheduler-detail-row") for entry in produced], className="scheduler-detail")]
+        return [self._details_([(f"{entry['Kind']} · {entry['Name']}", self._weight_(entry["Size"])) for entry in produced])]
 
-    @serverside_callback(
-        Output(PROMOTE_MODAL_ID, "is_open"),
-        Input(PROMOTE_BTN, "n_clicks"),
-        on_click=InjectionType.Hidden,
-    )
-    def _open_promote_(self, clicks):
-        return True
-
-    @serverside_callback(
-        Output(PROMOTE_MODAL_ID, "is_open"),
-        Input(PROMOTE_DISCARD_BTN, "n_clicks"),
-        on_click=InjectionType.Hidden,
-    )
-    def _close_promote_(self, clicks):
-        return False
+    _open_promote_, _close_promote_ = modal_callbacks(PROMOTE_MODAL_ID, PROMOTE_BTN, PROMOTE_DISCARD_BTN)
 
     @serverside_callback(
         Output(PROMOTE_MODAL_ID, "is_open"),

@@ -1,6 +1,6 @@
 import json
 import re
-import uuid
+from typing import Callable
 from dataclasses import dataclass
 
 from dash import dcc, html
@@ -18,20 +18,18 @@ from Library.App.V2 import (
     SectionPageAPI,
     State,
     StorageAPI,
-    serverside_callback
+    serverside_callback,
+    modal_callbacks
 )
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Database.Query import QueryAPI
 from Library.Strategy.Ladder import LadderAPI
-from Library.Web.Core.Catalog import STRATEGIES, DEFAULT, resolve
-from Library.System.Space import SECTIONS
+from Library.Strategy.Catalog import CatalogAPI
+from Library.System.Space import SpaceAPI
 from Library.Strategy.Strategy import StrategyAPI
 from Library.Universe.Timeframe import TimeframeAPI
-from Library.Utility.Parameter import format_slots, format_value, numbered, parse_slots, parse_value
-
-_WORDS_ = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
-_RANGE_ = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*(?:\.\.|-)\s*(-?\d+(?:\.\d+)?)\s*(?::\s*(\d+(?:\.\d+)?)\s*)?$")
-_SEPARATOR_ = " · "
+from Library.Strategy.Range import RangeAPI
+from Library.Strategy.Syntax import SyntaxAPI
 
 @dataclass(frozen=True)
 class GridColumnAPI:
@@ -42,16 +40,17 @@ class GridColumnAPI:
     column: str
     label: str
 
-KINDS = ("Realtime", "Backtesting", "Learning", "Optimization")
-SEARCHED = "Optimization"
-
 class StrategyBaseAPI(RefreshAPI, PageAPI):
+
+    KINDS = ("Realtime", "Backtesting", "Learning", "Optimization")
+    SEARCHED = "Optimization"
 
     _DEFAULT_ = ("Spotware(cTrader)", "EURUSD", "H1")
     _POLL_ = 0
     _SCOPES_ = True
     _STRATEGIES_ = False
     _MARKERS_ = {"here": "cell-here", "parent": "cell-parent", "default": "cell-default"}
+    _WORDS_ = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
     def __init__(self, *, app, **kwargs) -> None:
         super().__init__(app=app, **kwargs)
@@ -94,10 +93,9 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
     def _ladder_(self) -> LadderAPI:
         return LadderAPI()
 
-    @staticmethod
-    def _universe_() -> tuple:
+    def _universe_(self) -> tuple:
         try:
-            with PostgresDatabaseAPI(database="Quant") as db:
+            with PostgresDatabaseAPI(database=self.app.Database) as db:
                 frame = db.executeone(QueryAPI('''
                     SELECT DISTINCT p."UID" AS provider, c."UID" AS category, t."UID" AS ticker
                     FROM "Universe"."Security" s
@@ -135,22 +133,22 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
         if not text: return ["—"]
         if not searched: return [text]
         nodes = []
-        for index, slot in enumerate(text.split(_SEPARATOR_)):
+        for index, slot in enumerate(text.split(SyntaxAPI.SEPARATOR)):
             if index: nodes.append(html.Span("·", className="grid-slot-sep"))
             stripped = slot.strip()
-            if stripped.casefold() == "auto":
-                nodes.append(html.Span("Auto", className="grid-pill grid-pill-auto")); continue
-            found = _RANGE_.match(stripped)
+            if stripped.casefold() == SpaceAPI.AUTOMATIC.casefold():
+                nodes.append(html.Span(SpaceAPI.AUTOMATIC, className="grid-pill grid-pill-auto")); continue
+            found = RangeAPI.PATTERN.match(stripped)
             if found:
                 step = f" · {found.group(3)}" if found.group(3) else ""
                 nodes.append(html.Span(f"{found.group(1)} → {found.group(2)}{step}", className="grid-pill grid-pill-range")); continue
-            for option in (part for part in stripped.split("|") if part):
+            for option in (part for part in stripped.split(SyntaxAPI.ALTERNATIVE) if part):
                 nodes.append(html.Span(option, className="grid-pill"))
         return nodes or ["—"]
 
-    @staticmethod
-    def _worded_(text: str) -> str:
-        return _WORDS_.sub(" ", text) if text else text
+    @classmethod
+    def _worded_(cls, text: str) -> str:
+        return cls._WORDS_.sub(" ", text) if text else text
 
     @staticmethod
     def _label_(scope: tuple) -> str:
@@ -159,7 +157,7 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
     @staticmethod
     def _entries_(body, searched: bool) -> list:
         if not isinstance(body, dict): return [(None, None)]
-        if searched and numbered(body):
+        if searched and SyntaxAPI.numbered(body):
             return [(str(stage), name) for stage, parameters in body.items()
                     for name in (parameters if isinstance(parameters, dict) else {})]
         return [(None, name) for name in body]
@@ -173,7 +171,7 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
         return body.get(name)
 
     def _cell_(self, value, origin, scope: tuple, kind: str, searched: bool) -> dict:
-        shown = format_slots(value) if searched else format_value(value)
+        shown = SyntaxAPI.format_slots(value) if searched else SyntaxAPI.format_value(value)
         if origin is None: return {"value": shown, "origin": "default", "hint": "Strategy definition"}
         where, ancestor = origin
         if tuple(where) == tuple(scope) and ancestor == kind:
@@ -182,38 +180,52 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
         return {"value": shown, "origin": "parent",
                 "hint": f"Inherited from {'/'.join(where) or 'Everywhere'}{via}"}
 
-    def _model_(self, strategy: type[StrategyAPI], scopes: list) -> dict:
-        ladder, model = self._ladder_(), {}
-        for kind in KINDS:
-            searched = kind == SEARCHED
-            resolved = {scope: ladder.resolve(strategy, kind, *scope)[0] for scope in scopes}
-            sources = {scope: ladder.sources(strategy, kind, *scope) for scope in scopes}
-            sections = {}
-            for scope in scopes:
-                for section, body in (resolved[scope] or {}).items():
+    @staticmethod
+    def _origin_(sources: dict, section: str, name):
+        return sources.get((section, name)) or sources.get((section, None))
+
+    @staticmethod
+    def _gather_(ladder: LadderAPI, keys: list, kind: str, locate: Callable) -> tuple[dict, dict]:
+        resolved, sources = {}, {}
+        for key in keys:
+            strategy, scope = locate(key)
+            resolved[key] = ladder.resolve(strategy, kind, *scope)[0]
+            sources[key] = ladder.sources(strategy, kind, *scope)
+        return resolved, sources
+
+    def _collect_(self, ladder: LadderAPI, keys: list, locate: Callable) -> dict:
+        model = {}
+        for kind in self.KINDS:
+            searched, sections = kind == self.SEARCHED, {}
+            resolved, sources = self._gather_(ladder, keys, kind, locate)
+            for key in keys:
+                for section, body in (resolved[key] or {}).items():
                     for stage, name in self._entries_(body, searched):
                         sections.setdefault(section, {}).setdefault((stage, name), {})
             for section, entries in sections.items():
                 for (stage, name), cells in entries.items():
-                    for scope in scopes:
-                        value = self._pick_((resolved[scope] or {}).get(section), stage, name)
-                        origin = sources[scope].get((section, name)) or sources[scope].get((section, None))
-                        cells[scope] = self._cell_(value, origin, scope, kind, searched)
+                    for key in keys:
+                        value = self._pick_((resolved[key] or {}).get(section), stage, name)
+                        cells[key] = self._cell_(value, self._origin_(sources[key], section, name), locate(key)[1], kind, searched)
             if sections: model[kind] = sections
+        return model
+
+    def _model_(self, strategy: type[StrategyAPI], scopes: list) -> dict:
+        ladder = self._ladder_()
+        model = self._collect_(ladder, scopes, lambda scope: (strategy, scope))
         self._settable_(ladder, strategy, scopes, model)
         return model
 
     def _settable_(self, ladder: LadderAPI, strategy: type[StrategyAPI], scopes: list, model: dict) -> None:
         declared = {}
-        for kind in KINDS:
-            if kind == SEARCHED: continue
+        for kind in self.KINDS:
+            if kind == self.SEARCHED: continue
             for section, entries in model.get(kind, {}).items():
                 for _, name in entries:
                     if name: declared.setdefault(section, set()).add(name)
         if not declared: return
-        resolved = {scope: ladder.resolve(strategy, SEARCHED, *scope)[0] for scope in scopes}
-        sources = {scope: ladder.sources(strategy, SEARCHED, *scope) for scope in scopes}
-        sections = model.setdefault(SEARCHED, {})
+        resolved, sources = self._gather_(ladder, scopes, self.SEARCHED, lambda scope: (strategy, scope))
+        sections = model.setdefault(self.SEARCHED, {})
         for section, names in declared.items():
             entries = sections.setdefault(section, {})
             present = {name for _, name in entries if name}
@@ -223,44 +235,75 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
                 cells = entries.setdefault((None, name), {})
                 for scope in scopes:
                     value = self._pick_((resolved[scope] or {}).get(section), None, name)
-                    origin = sources[scope].get((section, name)) or sources[scope].get((section, None))
-                    cells[scope] = self._cell_(value, origin, scope, SEARCHED, True)
+                    cells[scope] = self._cell_(value, self._origin_(sources[scope], section, name), scope, self.SEARCHED, True)
 
     @staticmethod
     def _ordered_(sections) -> list:
-        return sorted(sections, key=lambda name: (SECTIONS.index(name) if name in SECTIONS else len(SECTIONS), name))
+        return sorted(sections, key=lambda name: (SpaceAPI.SECTIONS.index(name) if name in SpaceAPI.SECTIONS else len(SpaceAPI.SECTIONS), name))
+
+    @staticmethod
+    def _head_(columns: list, width: str) -> html.Div:
+        head = [html.Div("Parameter", className="grid-corner")]
+        for label, column in columns:
+            head.append(html.Div(
+                [html.Span(label, className="grid-scope-name"), html.Span("×", className="grid-scope-fold")],
+                className="grid-scope",
+                **{"data-fold": "column", "data-column": column}
+            ))
+        return html.Div(head, className="grid-head", style={"gridTemplateColumns": width})
+
+    @staticmethod
+    def _row_(cells: list, width: str) -> html.Div:
+        return html.Div(cells, className="grid-row", style={"gridTemplateColumns": width})
+
+    def _section_(self, section: str, unset: bool) -> html.Div:
+        return html.Div(
+            [html.Span("▾", className="grid-chevron"), html.Span(self._worded_(section)), html.Span("not set", className="grid-section-empty") if unset else None],
+            className="grid-section" + (" grid-section-unset" if unset else ""),
+            **{"data-fold": "section"}
+        )
+
+    def _name_(self, section: str, stage, name, differs: bool) -> html.Div:
+        label = self._worded_(name) if name else self._worded_(section)
+        if stage is not None: label = f"{stage} · {self._worded_(name)}"
+        return html.Div([html.Span(label, className="grid-name"), html.Span("⚠", className="grid-differs") if differs else None], className="grid-label")
+
+    @staticmethod
+    def _control_(label: str, id: dict, options: list, value, multi: bool) -> html.Div:
+        return html.Div([html.Label(label, className="grid-control-label"), dcc.Dropdown(id=id, options=options, value=value, multi=multi, clearable=multi)], className="grid-control")
+
+    @staticmethod
+    def _grouped_(pending: dict) -> dict:
+        grouped = {}
+        for token, value in pending.items():
+            key, scope, kind, section, stage, name = token.split("|", 5)
+            grouped.setdefault((key, tuple(scope.split("/")), kind), []).append((section, stage, name, value))
+        return grouped
 
     def _slot_(self, cell: dict, scope: tuple, strategy: str, kind: str, section: str, stage, name,
                differs: bool, column: str) -> html.Div:
         return html.Div([html.Span(className=f"grid-dot {self._MARKERS_[cell['origin']]}"),
-                         html.Span(self._painted_(cell["value"], kind == SEARCHED), className="grid-value")],
+                         html.Span(self._painted_(cell["value"], kind == self.SEARCHED), className="grid-value")],
                         className="grid-cell" + (" grid-cell-differs" if differs else ""), title=cell["hint"],
                         **{"data-strategy": strategy, "data-scope": "/".join(scope), "data-kind": kind,
                            "data-section": section, "data-stage": stage or "", "data-name": name or "",
                            "data-value": cell["value"] or "", "data-column": column})
 
     def _band_(self, kind: str, sections: dict, columns: list, width: str) -> html.Div:
-        rows, total, differing, searched = [], 0, 0, kind == SEARCHED
+        rows, total, differing, searched = [], 0, 0, kind == self.SEARCHED
         for section in self._ordered_(sections):
             entries = sorted(sections[section].items(), key=lambda item: (item[0][0] or "", item[0][1] or ""))
             unset = len(entries) == 1 and entries[0][0] == (None, None)
-            rows.append(html.Div([html.Span("▾", className="grid-chevron"), html.Span(self._worded_(section)),
-                                  html.Span("not set", className="grid-section-empty") if unset else None],
-                                 className="grid-section" + (" grid-section-unset" if unset else ""),
-                                 **{"data-fold": "section"}))
+            rows.append(self._section_(section, unset))
             if unset: continue
             for (stage, name), cells in entries:
                 total += 1
                 differs = len({cells[column.key]["value"] for column in columns}) > 1
                 if differs: differing += 1
-                label = self._worded_(name) if name else self._worded_(section)
-                if stage is not None: label = f"{stage} · {self._worded_(name)}"
-                cursor = [html.Div([html.Span(label, className="grid-name"),
-                                    html.Span("⚠", className="grid-differs") if differs else None],
-                                   className="grid-label")]
+                cursor = [self._name_(section, stage, name, differs)]
                 for column in columns:
                     cursor.append(self._slot_(cells[column.key], column.scope, column.strategy, kind, section, stage, name, differs, column.column))
-                rows.append(html.Div(cursor, className="grid-row", style={"gridTemplateColumns": width}))
+                rows.append(self._row_(cursor, width))
         summary = f"{total} parameters" + (f" · {differing} differ" if differing else "") if total else "not set"
         header = html.Div([html.Span("▾", className="grid-chevron"),
                            html.Span(kind, className="grid-band-name"),
@@ -270,28 +313,11 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
                         className="grid-band" + ("" if total else " grid-band-unset"))
 
     def _across_(self, keys: list, scope: tuple) -> dict:
-        ladder, model = self._ladder_(), {}
-        for kind in KINDS:
-            searched = kind == SEARCHED
-            resolved = {key: ladder.resolve(resolve(key), kind, *scope)[0] for key in keys}
-            sources = {key: ladder.sources(resolve(key), kind, *scope) for key in keys}
-            sections = {}
-            for key in keys:
-                for section, body in (resolved[key] or {}).items():
-                    for stage, name in self._entries_(body, searched):
-                        sections.setdefault(section, {}).setdefault((stage, name), {})
-            for section, entries in sections.items():
-                for (stage, name), cells in entries.items():
-                    for key in keys:
-                        value = self._pick_((resolved[key] or {}).get(section), stage, name)
-                        origin = sources[key].get((section, name)) or sources[key].get((section, None))
-                        cells[key] = self._cell_(value, origin, scope, kind, searched)
-            if sections: model[kind] = sections
-        return model
+        return self._collect_(self._ladder_(), keys, lambda key: (CatalogAPI.resolve(key), scope))
 
     def _pivot_(self, model: dict, scope: tuple) -> dict:
         sections = {}
-        for kind in KINDS:
+        for kind in self.KINDS:
             for section, entries in model.get(kind, {}).items():
                 for (stage, name), cells in entries.items():
                     if cells.get(scope) is None: continue
@@ -300,48 +326,31 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
 
     def _single_(self, model: dict, scope: tuple, strategy: str) -> list:
         sections = self._pivot_(model, scope)
-        width = f"minmax(240px, 1.3fr) repeat({len(KINDS)}, minmax(170px, 1fr))"
-        head = [html.Div("Parameter", className="grid-corner")]
-        for kind in KINDS:
-            head.append(html.Div([html.Span(kind, className="grid-scope-name"),
-                                  html.Span("×", className="grid-scope-fold")],
-                                 className="grid-scope", **{"data-fold": "column", "data-column": kind}))
+        width = f"minmax(240px, 1.3fr) repeat({len(self.KINDS)}, minmax(170px, 1fr))"
         rows = []
         for section in self._ordered_(sections):
             entries = sorted(sections[section].items(), key=lambda item: (item[0][0] or "", item[0][1] or ""))
             live = [(key, cells) for key, cells in entries if key != (None, None)]
-            rows.append(html.Div([html.Span("▾", className="grid-chevron"), html.Span(self._worded_(section)),
-                                  html.Span("not set", className="grid-section-empty") if not live else None],
-                                 className="grid-section" + ("" if live else " grid-section-unset"),
-                                 **{"data-fold": "section"}))
+            rows.append(self._section_(section, not live))
             for (stage, name), by_kind in live:
-                shown = {cell["value"] for kind, cell in by_kind.items() if kind != SEARCHED and cell["value"]}
+                shown = {cell["value"] for kind, cell in by_kind.items() if kind != self.SEARCHED and cell["value"]}
                 differs = len(shown) > 1
-                label = self._worded_(name) if name else self._worded_(section)
-                if stage is not None: label = f"{stage} · {self._worded_(name)}"
-                cursor = [html.Div([html.Span(label, className="grid-name"),
-                                    html.Span("⚠", className="grid-differs") if differs else None],
-                                   className="grid-label")]
-                for kind in KINDS:
+                cursor = [self._name_(section, stage, name, differs)]
+                for kind in self.KINDS:
                     cell = by_kind.get(kind)
                     if cell is None:
                         cursor.append(html.Div([html.Span("", className="grid-value")], className="grid-cell grid-cell-void", **{"data-column": kind}))
                         continue
-                    cursor.append(self._slot_(cell, scope, strategy, kind, section, stage, name, differs and kind != SEARCHED, kind))
-                rows.append(html.Div(cursor, className="grid-row", style={"gridTemplateColumns": width}))
-        blocks = [html.Div(head, className="grid-head", style={"gridTemplateColumns": width}),
+                    cursor.append(self._slot_(cell, scope, strategy, kind, section, stage, name, differs and kind != self.SEARCHED, kind))
+                rows.append(self._row_(cursor, width))
+        blocks = [self._head_([(kind, kind) for kind in self.KINDS], width),
                   html.Div(rows, className="grid-band-body")]
         return [html.Div(blocks, className="grid")]
 
     def _columns_(self, model: dict, columns: list) -> list:
         width = f"minmax(220px, 1.3fr) repeat({len(columns)}, minmax(150px, 1fr))"
-        head = [html.Div("Parameter", className="grid-corner")]
-        for column in columns:
-            head.append(html.Div([html.Span(column.label, className="grid-scope-name"),
-                                  html.Span("×", className="grid-scope-fold")],
-                                 className="grid-scope", **{"data-fold": "column", "data-column": column.column}))
-        blocks = [html.Div(head, className="grid-head", style={"gridTemplateColumns": width})]
-        for kind in KINDS:
+        blocks = [self._head_([(column.label, column.column) for column in columns], width)]
+        for kind in self.KINDS:
             blocks.append(self._band_(kind, model.get(kind) or {}, columns, width))
         return [html.Div(blocks, className="grid")]
 
@@ -353,7 +362,7 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
             if not model: return [html.P("No strategy declares parameters here", className="status-line")]
             return self._columns_(model, [GridColumnAPI(key=key, scope=scopes[0], strategy=key, column=key, label=key)
                                           for key in keys])
-        strategy, chosen = resolve(keys[0]), keys[0]
+        strategy, chosen = CatalogAPI.resolve(keys[0]), keys[0]
         model = self._model_(strategy, scopes)
         if not model:
             return [html.P(f"{strategy.key()} declares no parameters", className="status-line")]
@@ -369,20 +378,10 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
             if not self._SCOPES_: return chosen
             return [chosen] if chosen is not None else []
         return html.Div([
-            html.Div([html.Label("Strategy", className="grid-control-label"),
-                      dcc.Dropdown(
-                          id=self.STRATEGY_ID,
-                          options=[entry.key() for entry in STRATEGIES],
-                          value=[DEFAULT.key()] if self._STRATEGIES_ else DEFAULT.key(),
-                          multi=self._STRATEGIES_,
-                          clearable=self._STRATEGIES_
-                      )], className="grid-control"),
-            html.Div([html.Label("Provider", className="grid-control-label"),
-                      dcc.Dropdown(id=self.PROVIDER_ID, options=providers, value=preset(providers, self._DEFAULT_[0]), multi=self._SCOPES_, clearable=self._SCOPES_)], className="grid-control"),
-            html.Div([html.Label("Ticker", className="grid-control-label"),
-                      dcc.Dropdown(id=self.TICKER_ID, options=tickers, value=preset(tickers, self._DEFAULT_[1]), multi=self._SCOPES_, clearable=self._SCOPES_)], className="grid-control"),
-            html.Div([html.Label("Timeframe", className="grid-control-label"),
-                      dcc.Dropdown(id=self.TIMEFRAME_ID, options=timeframes, value=preset(timeframes, self._DEFAULT_[2]), multi=self._SCOPES_, clearable=self._SCOPES_)], className="grid-control"),
+            self._control_("Strategy", self.STRATEGY_ID, [entry.key() for entry in CatalogAPI.STRATEGIES], [CatalogAPI.DEFAULT.key()] if self._STRATEGIES_ else CatalogAPI.DEFAULT.key(), self._STRATEGIES_),
+            self._control_("Provider", self.PROVIDER_ID, providers, preset(providers, self._DEFAULT_[0]), self._SCOPES_),
+            self._control_("Ticker", self.TICKER_ID, tickers, preset(tickers, self._DEFAULT_[1]), self._SCOPES_),
+            self._control_("Timeframe", self.TIMEFRAME_ID, timeframes, preset(timeframes, self._DEFAULT_[2]), self._SCOPES_),
         ], className="grid-controls")
 
     def _buttons_(self, apply, revert, status: bool) -> html.Div:
@@ -413,15 +412,12 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
         ]
 
     def _write_(self, pending: dict) -> int:
-        ladder, grouped = self._ladder_(), {}
-        for token, value in pending.items():
-            key, scope, kind, section, stage, name = token.split("|", 5)
-            grouped.setdefault((key, tuple(scope.split("/")), kind), []).append((section, stage, name, value))
+        ladder, grouped = self._ladder_(), self._grouped_(pending)
         for (key, scope, kind), edits in grouped.items():
-            strategy = resolve(key)
+            strategy = CatalogAPI.resolve(key)
             sections = ladder.sparse(strategy, kind, *scope)
             for section, stage, name, value in edits:
-                settled = parse_slots(value) if kind == SEARCHED else parse_value(value)
+                settled = SyntaxAPI.parse_slots(value) if kind == self.SEARCHED else SyntaxAPI.parse_value(value)
                 if stage: sections.setdefault(section, {}).setdefault(stage, {})[name] = settled
                 elif name: sections.setdefault(section, {})[name] = settled
                 else: sections[section] = settled
@@ -442,20 +438,17 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
         return self._grid_(self._listed_(strategy), scopes)
 
     def _diff_(self, pending: dict) -> tuple:
-        ladder, grouped, total = self._ladder_(), {}, 0
-        for token, value in pending.items():
-            key, scope, kind, section, stage, name = token.split("|", 5)
-            grouped.setdefault((key, tuple(scope.split("/")), kind), []).append((section, stage, name, value))
+        ladder, grouped, total = self._ladder_(), self._grouped_(pending), 0
         blocks = []
         for (key, scope, kind), edits in sorted(grouped.items(), key=lambda item: (item[0][0], item[0][1], item[0][2])):
-            strategy = resolve(key)
+            strategy = CatalogAPI.resolve(key)
             resolved = ladder.resolve(strategy, kind, *scope)[0]
             own = ladder.sparse(strategy, kind, *scope)
             path = ladder.override(kind, *scope)
             lines = []
             for section, stage, name, value in sorted(edits):
                 before = self._pick_(resolved.get(section), stage or None, name or None)
-                shown = format_slots(before) if kind == SEARCHED else format_value(before)
+                shown = SyntaxAPI.format_slots(before) if kind == self.SEARCHED else SyntaxAPI.format_value(before)
                 settled = (own.get(section) or {})
                 fresh = name not in settled if not stage else name not in (settled.get(stage) or {})
                 label = f"{section}.{name}" if name else section
@@ -507,16 +500,9 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
         if not pending: raise PreventUpdate
         written = self._write_(pending)
         self.app.notify.success(f"{written} scope file(s) written", header="Applied")
-        return False, f"Applied · {written} file(s)", {}, uuid.uuid4().hex
+        return False, f"Applied · {written} file(s)", {}, self.token()
 
-    @serverside_callback(
-        Output(DIFF_MODAL_ID, "is_open"),
-        Input(CANCEL_BTN, "n_clicks"),
-        on_click=InjectionType.Hidden,
-    )
-    def _dismiss_(self, clicks):
-        if not clicks: raise PreventUpdate
-        return False
+    (_dismiss_,) = modal_callbacks(DIFF_MODAL_ID, closer=CANCEL_BTN)
 
     @serverside_callback(
         Output(EDIT_STORE_ID, "data"),
@@ -528,7 +514,7 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
     def _discard_(self, clicks, footer):
         if not (clicks or footer): raise PreventUpdate
         self.app.notify.info("Pending edits discarded", header="Discarded")
-        return {}, uuid.uuid4().hex
+        return {}, self.token()
 
 class StrategyPageAPI(SectionPageAPI):
 

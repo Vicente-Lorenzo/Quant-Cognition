@@ -1,5 +1,4 @@
 import re
-import uuid
 
 import dash
 from dash import html, dcc
@@ -7,19 +6,15 @@ from dash.exceptions import PreventUpdate
 
 from Library.App.V2 import GlobalAPI, CrumbAPI, RefreshAPI, TableAPI, ComponentID, Output, Input, State, InjectionType, serverside_callback, clientside_callback, SwitchAPI, ButtonAPI, StorageAPI
 from Library.Auth import RoleAPI
+from Library.Utility.Memory import memory_to_string
 from Library.Web.Scheduler.Base import SchedulerBaseAPI, SchedulerSelectionAPI, SchedulerDetailAPI
 
 class SchedulerRunAPI(SchedulerBaseAPI):
 
-    def _lineage_(self, uid: str) -> list:
-        run = self._manager_.run(uid) or {}
-        task = self._manager_.task(run.get("TID")) if run.get("TID") else None
-        trail = [CrumbAPI(label="Workflow", href="/scheduler/workflow")]
-        if task and task.get("WID"):
-            workflow = self._manager_.workflow(task["WID"])
-            if workflow: trail.append(CrumbAPI(label=self._label_(workflow, task["WID"]), href=f"/scheduler/workflow/{task['WID']}"))
-        trail.append(CrumbAPI(label="Task", href="/scheduler/task"))
-        if task: trail.append(CrumbAPI(label=self._label_(task, run["TID"]), href=f"/scheduler/task/{run['TID']}"))
+    def _lineage_(self, row: dict | None) -> list:
+        task = self._manager_.task(row["TID"]) if row and row.get("TID") else None
+        trail = self._task_trail_(task)
+        if task: trail.append(CrumbAPI(label=self._label_(task, row["TID"]), href=f"/scheduler/task/{row['TID']}"))
         return trail + [CrumbAPI(label="Run", href="/scheduler/run")]
 
     APPROVE_BTN: ComponentID | dict = ComponentID()
@@ -47,17 +42,10 @@ class SchedulerRunAPI(SchedulerBaseAPI):
         if not current_user.grants(RoleAPI.Moderator):
             self.app.notify.error("Moderator role required to resolve runs", header="Forbidden")
             return dash.no_update
-        uids = [uids] if isinstance(uids, str) else list(uids or [])
-        if not uids:
-            self.app.notify.warning("Select a run first", header="No Selection")
-            return dash.no_update
-        by = self._current_owner_()
-        resolved = 0
-        for uid in uids:
-            if (self._manager_.approve(uid, by) if verb == "approve" else self._manager_.reject(uid, by)): resolved += 1
-        if resolved: self.app.notify.success(f"Run '{uids[0]}' {verb}d" if resolved == 1 else f"{resolved} runs {verb}d", header="Done")
-        else: self.app.notify.warning("No selected run is awaiting approval or review", header="No Action")
-        return uuid.uuid4().hex if resolved else dash.no_update
+        uids = self._selection_(uids, "Select a run first")
+        if not uids: return dash.no_update
+        by, action = self.app.actor(), self._manager_.approve if verb == "approve" else self._manager_.reject
+        return self._tally_(uids, lambda uid: action(uid, by), f"run(s) {verb}d", "No selected run is awaiting approval or review")
 
     @clientside_callback(
         Output(APPROVE_BTN, "disabled"),
@@ -109,14 +97,8 @@ class SchedulerRunPageAPI(SchedulerRunAPI, SchedulerSelectionAPI, TableAPI):
     def _columns_(self) -> list:
         return self._RUN_COLUMNS_
 
-    def _detail_base_(self):
-        return self.anchor
-
     def _rows_(self) -> list:
         return [self._run_row_(run) for run in self._manager_.runs(limit=50)]
-
-    def _fingerprint_(self):
-        return self._manager_.fingerprint("Scheduler", "Run")
 
     def _actions_(self) -> list:
         return self._resolve_buttons_()
@@ -139,7 +121,7 @@ class SchedulerRunDetailPageAPI(SchedulerRunAPI, SchedulerDetailAPI):
     def content(self) -> list:
         return [
             html.Div(id=self.BREADCRUMB_ID),
-            self._toolbar_([self._refresh_button_()] + self._resolve_buttons_()),
+            self.toolbar([self._refresh_button_()] + self._resolve_buttons_()),
             html.Div(id=self.FIELDS_ID),
             html.Div("Log", className="scheduler-subtitle"),
             html.Div(id=self.LOG_ID),
@@ -201,9 +183,9 @@ class SchedulerRunDetailPageAPI(SchedulerRunAPI, SchedulerDetailAPI):
         if uid is None: raise PreventUpdate
         run = self._manager_.run(uid)
         if run is None:
-            return self._breadcrumb_(uid), [uid], self._details_([("Status", "Run not found")]), "(no log)"
+            return self._breadcrumb_(uid, None), [uid], self._details_([("Status", "Run not found")]), "(no log)"
         task = dcc.Link(run.get("TID"), href=f"/scheduler/task/{run.get('TID')}", className="scheduler-crumb") if run.get("TID") else None
-        memory = f"{run.get('Memory') / 1048576:.1f} MB" if isinstance(run.get("Memory"), (int, float)) else None
+        memory = memory_to_string(run.get("Memory")) if isinstance(run.get("Memory"), (int, float)) else None
         duration = f"{run.get('Duration'):.2f} s" if isinstance(run.get("Duration"), (int, float)) else None
         pairs = [("Status", self._led_dot_(run.get("Status"))), ("Task", task), ("Kind", run.get("Kind")), ("Retry", run.get("Retry")), ("Exit Code", run.get("ExitCode")), ("Duration", duration), ("Memory", memory), ("PID", run.get("PID")), ("Started", self._stamp_(run.get("StartedAt"))), ("Stopped", self._stamp_(run.get("StoppedAt"))), ("Auditor", run.get("Auditor")), ("Cycle", run.get("CID"))]
-        return self._breadcrumb_(uid), [uid], self._details_(pairs), html.Pre(self._paint_(self._tail_(run.get("Log"))), className="scheduler-log")
+        return self._breadcrumb_(uid, run), [uid], self._details_(pairs), html.Pre(self._paint_(self._tail_(run.get("Log"))), className="scheduler-log")

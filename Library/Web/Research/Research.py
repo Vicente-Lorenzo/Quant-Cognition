@@ -1,14 +1,18 @@
 from dash import html
 
 from Library.App.V2 import SectionPageAPI
-from Library.Web.Research.Launch import EVERY, SYSTEMS, TASKS, launch_callbacks
+from Library.Web.Research.Launch import LaunchAPI, LaunchFieldsAPI
 from Library.Web.Research.Result import ResultPageAPI, ResultsPageAPI, LaunchedResultsPageAPI
-
-RESEARCH = ("Research.Backtesting", "Research.Optimization", "Research.Learning")
 
 class ResearchBaseAPI:
 
+    RESEARCH = ("Research.Backtesting", "Research.Optimization", "Research.Learning")
+
     _ANCHOR_ = "/research"
+
+    @staticmethod
+    def _research_(run: dict) -> str:
+        return str(run.get("TID") or "").split(".")[-1]
 
 class ResearchPageAPI(ResearchBaseAPI, SectionPageAPI):
 
@@ -20,10 +24,10 @@ class ResearchPageAPI(ResearchBaseAPI, SectionPageAPI):
 class ResearchRunPageAPI(ResearchBaseAPI, LaunchedResultsPageAPI):
 
     _FAMILY_ = "Research"
-    _TASK_ = RESEARCH
-    _TASKS_ = TASKS
-    _SYSTEMS_ = SYSTEMS
-    _LAUNCH_ = EVERY
+    _TASK_ = ResearchBaseAPI.RESEARCH
+    _TASKS_ = LaunchFieldsAPI.TASKS
+    _SYSTEMS_ = LaunchFieldsAPI.SYSTEMS
+    _LAUNCH_ = LaunchFieldsAPI.EVERY
     _COLUMNS_ = ["Status", "UID", "Research", "Retention", "StartedAt", "StoppedAt", "Duration", "Progress", "Artifacts"]
 
     def __init__(self, *, app) -> None:
@@ -35,12 +39,8 @@ class ResearchRunPageAPI(ResearchBaseAPI, LaunchedResultsPageAPI):
         button.tooltip = "Configure and dispatch a backtest, optimization or learning run"
         return button
 
-    def _rows_(self) -> list:
-        rows = super()._rows_()
-        for row, run in zip(rows, self._runs_()):
-            row["Research"] = str(run.get("TID") or "").split(".")[-1]
-            row["Progress"] = self._percentage_(run)
-        return rows
+    def _row_(self, run: dict, produced: list) -> dict | None:
+        return {**super()._row_(run, produced), "Research": self._research_(run), "Progress": self._percentage_(run)}
 
     @staticmethod
     def _percentage_(run: dict) -> str:
@@ -48,12 +48,12 @@ class ResearchRunPageAPI(ResearchBaseAPI, LaunchedResultsPageAPI):
         if fraction is None: return ""
         return f"{float(fraction) * 100.0:.0f}%"
 
-    _open_launch_, _close_launch_, _submit_launch_ = launch_callbacks(_LAUNCH_)
+    _open_launch_, _close_launch_, _submit_launch_ = LaunchAPI.launch_callbacks(_LAUNCH_)
 
 class ResearchResultPageAPI(ResearchBaseAPI, ResultPageAPI):
 
     _FAMILY_ = "Result"
-    _LAUNCH_ = EVERY
+    _LAUNCH_ = LaunchFieldsAPI.EVERY
 
     def __init__(self, *, app) -> None:
         super().__init__(app=app, path="/research/:uid", button="Result", icon="bi bi-clipboard-data", parametric=True)
@@ -61,12 +61,12 @@ class ResearchResultPageAPI(ResearchBaseAPI, ResultPageAPI):
 class ResearchComparisonPageAPI(ResearchBaseAPI, ResultsPageAPI):
 
     _FAMILY_ = "Research"
-    _TASK_ = RESEARCH
-    _LAUNCH_ = EVERY
+    _TASK_ = ResearchBaseAPI.RESEARCH
+    _LAUNCH_ = LaunchFieldsAPI.EVERY
     _COLUMNS_ = ["Status", "UID", "Research", "StartedAt", "Duration", "Artifacts"]
 
     def __init__(self, *, app) -> None:
-        super().__init__(app=app, path="/research/comparison", button="Comparison", icon="bi bi-bar-chart-steps", description="Overlay two or more runs \u2014 growth curves and metrics side by side")
+        super().__init__(app=app, path="/research/comparison", button="Comparison", icon="bi bi-bar-chart-steps", description="Overlay two or more runs — growth curves and metrics side by side")
 
     def _actions_(self) -> list:
         return [self._compare_button_()]
@@ -77,17 +77,14 @@ class ResearchComparisonPageAPI(ResearchBaseAPI, ResultsPageAPI):
         button.tooltip = "Overlay the growth curves and metrics of the selected runs"
         return button
 
-    def _comparable_(self, run: dict) -> bool:
-        return any(item.get("Kind") == "Plot" for item in self._produced_(run))
+    @staticmethod
+    def _comparable_(produced: list) -> bool:
+        return any(item.get("Kind") == "Plot" for item in produced)
 
-    def _rows_(self) -> list:
-        keep = []
-        for row, run in zip(super()._rows_(), self._runs_()):
-            if not self._comparable_(run): continue
-            row["Research"] = str(run.get("TID") or "").split(".")[-1]
-            keep.append(row)
-        return keep
+    def _row_(self, run: dict, produced: list) -> dict | None:
+        if not self._comparable_(produced): return None
+        return {**super()._row_(run, produced), "Research": self._research_(run)}
 
     def _extras_(self) -> list:
-        return [html.P("Only runs that stored a plot can be overlaid \u2014 a run without one has no curve to draw",
+        return [html.P("Only runs that stored a plot can be overlaid — a run without one has no curve to draw",
                        className="status-line"), *super()._extras_()]

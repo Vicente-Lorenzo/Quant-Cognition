@@ -1,11 +1,9 @@
-import uuid
-
 import dash
 from dash import html
 from dash.exceptions import PreventUpdate
 
-from Library.App.V2 import FieldAPI, RefreshAPI, TableAPI, ComponentID, Output, Input, State, InjectionType, serverside_callback, clientside_callback, ButtonAPI, ModalAPI, ChoiceAPI, SegmentAPI
-from Library.Web.Scheduler.Base import SchedulerBaseAPI
+from Library.App.V2 import FieldAPI, RefreshAPI, TableAPI, ComponentID, Output, Input, State, InjectionType, serverside_callback, clientside_callback, modal_callbacks, ButtonAPI, ModalAPI, ChoiceAPI, SegmentAPI, StorageAPI
+from Library.Web.Scheduler.Base import SchedulerBaseAPI, SchedulerSelectionAPI
 
 class SchedulerEntityAPI(SegmentAPI, SchedulerBaseAPI):
 
@@ -19,6 +17,7 @@ class SchedulerEntityAPI(SegmentAPI, SchedulerBaseAPI):
     _FIELD_: dict = {}
 
     F_SCHEDULE: ComponentID | dict = ComponentID()
+    F_CRON: ComponentID | dict = ComponentID()
     MODE_STORE_ID: ComponentID | dict = ComponentID()
     MODAL_ID: ComponentID | dict = ComponentID()
     MODAL_TITLE_ID: ComponentID | dict = ComponentID()
@@ -45,6 +44,7 @@ class SchedulerEntityAPI(SegmentAPI, SchedulerBaseAPI):
         self.DISCARD_BTN = self.register(type="button", name="discard")
         self.SAVE_BTN = self.register(type="button", name="save")
         self.F_UNSCHEDULE = self.register(type="button", name="unschedule")
+        self.F_CRON = self.register(type="link", name="cron")
 
     def _lifecycle_buttons_(self, insert: bool = True) -> list:
         entity = self._entity_
@@ -70,25 +70,8 @@ class SchedulerEntityAPI(SegmentAPI, SchedulerBaseAPI):
     def _field_ids_(self) -> None:
         for entry in self._FIELDS_: setattr(self, entry.attribute, self.register(type="field", name=entry.name))
 
-    def _block_(self, entry: FieldAPI):
-        if entry.switched: return self._switch_(entry.bind(self), entry.label, entry.initial(self), entry.help)
-        control = entry.build(self)
-        if entry.suffix: control = [html.Div([*control, *entry.suffix(self)], className=entry.wrapper)]
-        return self._field_(entry.label, control, help=entry.help)
-
-    def _form_(self) -> list:
-        body, row, current = [], [], None
-        for entry in self._FIELDS_:
-            if not entry.rendered: continue
-            block = self._block_(entry)
-            if entry.group and entry.group == current:
-                row.append(block)
-                continue
-            if row: body.append(html.Div(row, className="app-field-row"))
-            row, current = ([block], entry.group) if entry.group else ([], None)
-            if not entry.group: body.append(block)
-        if row: body.append(html.Div(row, className="app-field-row"))
-        return body
+    def _crumb_(self, uid: str, row: dict | None) -> str:
+        return self._label_(row, uid)
 
     def _modal_(self) -> ModalAPI:
         entity = self._entity_.capitalize()
@@ -99,7 +82,7 @@ class SchedulerEntityAPI(SegmentAPI, SchedulerBaseAPI):
             scrollable=True,
             open=False,
             header=[html.Span(f"Insert {entity}", id=self.MODAL_TITLE_ID, className="modal-title")],
-            body=self._form_(),
+            body=self._form_(self._FIELDS_),
             footer=self._footer_()
         )
 
@@ -107,7 +90,7 @@ class SchedulerEntityAPI(SegmentAPI, SchedulerBaseAPI):
         return (True, {"mode": "create", "uid": None}, f"Insert {self._entity_.capitalize()}",
                 *[entry.initial(self) for entry in self._FIELDS_], False)
 
-    def _populate_(self, target) -> tuple:
+    def _prefill_(self, target) -> tuple:
         uid = target[0] if target and len(target) == 1 else None
         row = self._fetch_(uid) if uid else None
         if row is None:
@@ -118,24 +101,22 @@ class SchedulerEntityAPI(SegmentAPI, SchedulerBaseAPI):
 
     def _submit_(self, mode, values) -> tuple:
         entity = self._entity_.capitalize()
-        missing = FieldAPI.missing(self._FIELDS_, values)
-        if missing:
-            self.app.notify.error(f"{missing} {'is' if ' ' not in missing else 'are'} required", header=f"Invalid {entity}")
+        requirement = FieldAPI.requirement(self._FIELDS_, values)
+        if requirement:
+            self.app.notify.error(requirement, header=f"Invalid {entity}")
             return dash.no_update, dash.no_update
         identity = next(value for entry, value in zip(self._FIELDS_, values) if entry.identity)
         update = bool(mode and mode.get("mode") == "update")
         if not update and not identity:
             self.app.notify.error("UID is required", header=f"Invalid {entity}")
             return dash.no_update, dash.no_update
-        try:
+        def save():
             fields = FieldAPI.payload(self._FIELDS_, values)
             if update: getattr(self._manager_, f"update_{self._entity_}")(mode["uid"], **fields)
             else: getattr(self._manager_, f"create_{self._entity_}")(UID=identity, Enabled=True, **fields)
-        except Exception as error:
-            self.app.notify.error(str(error), header="Save Failed")
-            return dash.no_update, dash.no_update
+        if not self._trial_(save, "Save Failed"): return dash.no_update, dash.no_update
         self.app.notify.success(f"{entity} '{mode['uid'] if update else identity}' {'updated' if update else 'created'}", header="Saved")
-        return False, uuid.uuid4().hex
+        return False, RefreshAPI.token()
 
     def _cron_(self, link: dict) -> html.Div:
         return html.Div([
@@ -149,13 +130,7 @@ class SchedulerEntityAPI(SegmentAPI, SchedulerBaseAPI):
             *ButtonAPI(id=self.SAVE_BTN, label=self._icon_("bi bi-check-lg", "Apply", tint="success"), background="secondary", tooltip=f"Save the {self._entity_}").build(),
         ]
 
-    @serverside_callback(
-        Output(MODAL_ID, "is_open"),
-        Input(DISCARD_BTN, "n_clicks"),
-        on_click=InjectionType.Hidden,
-    )
-    def _discard_(self, clicks):
-        return False
+    (_discard_,) = modal_callbacks(MODAL_ID, closer=DISCARD_BTN)
 
     @clientside_callback(
         Output(F_SCHEDULE, "value"),
@@ -164,6 +139,13 @@ class SchedulerEntityAPI(SegmentAPI, SchedulerBaseAPI):
     )
     def _unschedule_(self):
         return self.app.asset("Callbacks/Blank.js", url=False)
+
+    @clientside_callback(
+        Output(F_CRON, "href"),
+        Input(F_SCHEDULE, "value"),
+    )
+    def _cron_link_(self):
+        return self.app.asset("Callbacks/Cron.js", url=False)
 
     @clientside_callback(
         Output(EDIT_BTN, "disabled"),
@@ -215,3 +197,37 @@ class SchedulerEntityAPI(SegmentAPI, SchedulerBaseAPI):
     )
     def _delete_(self, clicks, target):
         return self._apply_(self._entity_, "delete", target)
+
+    @staticmethod
+    def entity_callbacks(fields: tuple) -> tuple:
+        @serverside_callback(
+            *SchedulerEntityAPI._outputs_(fields),
+            Input(SchedulerEntityAPI.INSERT_BTN, "n_clicks"),
+            on_click=InjectionType.Hidden,
+        )
+        def _new_(self, clicks):
+            return self._blank_()
+        @serverside_callback(
+            *SchedulerEntityAPI._outputs_(fields),
+            Input(SchedulerEntityAPI.EDIT_BTN, "n_clicks"),
+            State(SchedulerBaseAPI.TARGET_STORE_ID, "data"),
+            on_click=InjectionType.Hidden,
+        )
+        def _edit_(self, clicks, target):
+            return self._prefill_(target)
+        @serverside_callback(
+            Output(SchedulerEntityAPI.MODAL_ID, "is_open"),
+            Output(RefreshAPI.RELOAD_STORE_ID, "data"),
+            Input(SchedulerEntityAPI.SAVE_BTN, "n_clicks"),
+            State(SchedulerEntityAPI.MODE_STORE_ID, "data"),
+            *SchedulerEntityAPI._states_(fields),
+            on_click=InjectionType.Hidden,
+        )
+        def _save_(self, clicks, mode, *values):
+            return self._submit_(mode, values)
+        return _new_, _edit_, _save_
+
+class SchedulerEntityPageAPI(SchedulerSelectionAPI):
+
+    def _extras_(self) -> list:
+        return [self._legend_(), self._modal_(), StorageAPI(id=self.MODE_STORE_ID, data={}), StorageAPI(id=self.TARGET_STORE_ID, data=None)]

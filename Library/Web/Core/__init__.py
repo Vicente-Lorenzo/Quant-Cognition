@@ -1,21 +1,9 @@
 from Library.Web.Core.Status import StatusAPI
-from Library.Web.Core.Catalog import (
-    STRATEGIES,
-    CATALOG,
-    DEFAULT,
-    resolve
-)
-from Library.Web.Core.Artifact import (
-    ArtifactAPI,
-    ARTIFACTS
-)
+from Library.Web.Core.Artifact import ArtifactAPI
+from Library.Web.Core.Managed import ManagedPageAPI
 
 __all__ = [
     "StatusAPI",
-    "STRATEGIES",
-    "CATALOG",
-    "DEFAULT",
-    "resolve",
     "ArtifactAPI",
-    "ARTIFACTS"
+    "ManagedPageAPI"
 ]

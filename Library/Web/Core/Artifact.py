@@ -1,16 +1,19 @@
 import re
 import flask
+import functools
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
+from typing_extensions import Self
 
 from Library.Scheduler.Executor import ExecutorAPI
+from Library.System.System import SystemAPI
+from Library.Utility.Datetime import STAMP, string_to_datetime
+from Library.Utility.File import PruneAPI
+from Library.Utility.Profiler import PROFILE
 
 @dataclass(kw_only=True)
 class ArtifactAPI:
 
-    runs: Path = None
-    kept: Path = None
     route: str = "/_artifact"
 
     _STAMP_ = re.compile(r"^(\d{4}-\d{2}-\d{2}[ _]\d{2}-\d{2}-\d{2})\s*(.*)$")
@@ -19,33 +22,26 @@ class ArtifactAPI:
     def _parse_(cls, name: str) -> tuple:
         match = cls._STAMP_.match(name)
         if not match: return None, name
-        stamp = datetime.strptime(match.group(1).replace("_", " "), "%Y-%m-%d %H-%M-%S")
+        stamp = string_to_datetime(match.group(1).replace("_", " "), STAMP)
         return stamp, match.group(2).strip() or name
-
-    @staticmethod
-    def _weigh_(path: Path) -> int:
-        if not path.is_dir(): return path.stat().st_size
-        return sum(entry.stat().st_size for entry in path.rglob("*") if entry.is_file())
 
     @staticmethod
     def _kind_(path: Path) -> str:
         if path.is_dir(): return "Export"
-        if path.name == "Result.json": return "Result"
+        if path.name == SystemAPI.RESULT: return "Result"
         if path.suffix == ".html": return "Plot"
-        return "Profile" if path.suffix in (".prof", ".pstats") else "File"
+        return "Profile" if path.suffix in (".prof", PROFILE) else "File"
 
-    def _folder_(self, run: str) -> Path | None:
+    @staticmethod
+    def _folder_(run: str) -> Path | None:
         if not run: return None
-        for root in (self.kept, self.runs):
-            if root is None: continue
-            folder = Path(root) / str(run)
-            if folder.is_dir(): return folder
-        return None
+        folder = ExecutorAPI.settle(run)
+        return folder if folder.is_dir() else None
 
     def produced(self, run: str) -> list[dict]:
         folder = self._folder_(run)
         if folder is None: return []
-        output = folder / "Output"
+        output = folder / SystemAPI.OUTPUT
         source = output if output.is_dir() else folder
         rows = []
         for path in sorted(source.iterdir()):
@@ -54,7 +50,7 @@ class ArtifactAPI:
             stamp, label = self._parse_(path.name if path.is_dir() else path.stem)
             leaf = path.relative_to(folder).as_posix()
             rows.append({"UID": f"{kind}:{run}/{leaf}", "Kind": kind, "Name": label,
-                         "Stamp": stamp, "Size": self._weigh_(path), "Path": path})
+                         "Stamp": stamp, "Size": PruneAPI.weight(path), "Path": path})
         return rows
 
     @staticmethod
@@ -85,4 +81,7 @@ class ArtifactAPI:
             return flask.send_file(path, mimetype="text/html" if path.suffix == ".html" else None)
         server.add_url_rule(f"{self.route}/<path:uid>", endpoint=f"artifact_{id(self)}", view_func=_view_)
 
-ARTIFACTS = ArtifactAPI(runs=Path(ExecutorAPI.Runs), kept=Path(ExecutorAPI.Kept))
+    @classmethod
+    @functools.cache
+    def shared(cls) -> Self:
+        return cls()

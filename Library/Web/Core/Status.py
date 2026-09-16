@@ -2,14 +2,18 @@ from datetime import datetime
 
 from dash import html
 
+from Library.Scheduler import RunStatus
+
 class StatusAPI:
 
-    _STATUS_COLOR_ = {"Success": "#2f9e44", "Failure": "#ef5350", "Running": "#2962ff", "Waiting": "#868993",
-                      "Approving": "#ffb300", "Reviewing": "#ff7043", "Retrying": "#ab47bc"}
-    _UNRUN_COLOR_ = "#565a66"
-    _NEUTRAL_ = "#868993"
-    _LEGEND_ = [("Success", "success"), ("Running", "running"), ("Waiting", "waiting"), ("Approving", "approving"),
-                ("Reviewing", "reviewing"), ("Retrying", "retrying"), ("Failure", "failure"), ("No run", "none")]
+    _STATUS_COLOR_ = {RunStatus.Success.name: "#2f9e44", RunStatus.Failure.name: "#ef5350", RunStatus.Running.name: "#2962ff", RunStatus.Waiting.name: "#868993",
+                      RunStatus.Approving.name: "#ffb300", RunStatus.Reviewing.name: "#ff7043", RunStatus.Retrying.name: "#ab47bc"}
+    _LEGEND_ = [(RunStatus.Success.name, "success"), (RunStatus.Running.name, "running"), (RunStatus.Waiting.name, "waiting"), (RunStatus.Approving.name, "approving"),
+                (RunStatus.Reviewing.name, "reviewing"), (RunStatus.Retrying.name, "retrying"), (RunStatus.Failure.name, "failure"), ("No run", "none")]
+
+    @classmethod
+    def _key_(cls, status) -> str | None:
+        return status if status in cls._STATUS_COLOR_ else None
 
     @classmethod
     def _legend_(cls) -> html.Div:
@@ -17,18 +21,19 @@ class StatusAPI:
 
     @classmethod
     def _led_(cls, status) -> str:
-        key = status if status in cls._STATUS_COLOR_ else None
+        key = cls._key_(status)
         return f'<span class="led-tag"><span class="led led-{key.lower() if key else "none"}"></span>{key or "—"}</span>'
 
     @classmethod
     def _led_dot_(cls, status):
-        key = status if status in cls._STATUS_COLOR_ else None
+        key = cls._key_(status)
         return html.Span([html.Span(className=f"led led-{key.lower() if key else 'none'}"), key or "—"], className="led-tag")
 
     @staticmethod
     def _stamp_(value):
-        if isinstance(value, datetime): return value.isoformat(sep=" ", timespec="seconds")
-        return value
+        if not isinstance(value, datetime): return value
+        text = value.isoformat(sep=" ", timespec="seconds")
+        return html.Span(text, **{"data-utc": text})
 
     @staticmethod
     def _elapsed_(value) -> str:
