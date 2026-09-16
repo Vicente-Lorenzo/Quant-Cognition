@@ -17,7 +17,8 @@ from Library.Database.Database import DatabaseAPI
 from Library.Database.Dataframe import np, pl
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Engine import MachineAPI
-from Library.Indicator.Indicator import IndicatorAPI
+from Library.Logging import LoggingAPI, VerboseLevel
+from Library.Model.Split import SplitAPI
 from Library.Statistic.Composition import analysis, searchspace
 from Library.Statistic.Label import (
     NET_TOTAL_AGGREGATED,
@@ -28,32 +29,21 @@ from Library.Market.Market import MarketAPI
 from Library.Market.Price import Direction, PriceAPI
 from Library.Market.Tick import TickAPI
 from Library.Portfolio.Account import AccountAPI, AccountType, Environment, MarginMode
-from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.Position import PositionAPI, PositionMode, PositionType
 from Library.Portfolio.Trade import TradeAPI
-from Library.Protocol.Action import (
-    ActionAPI,
-    ActionID,
-    OpenBuyPositionActionAPI,
-    OpenSellPositionActionAPI,
-    ModifyBuyPositionStopLossActionAPI,
-    ModifySellPositionStopLossActionAPI,
-    ModifyBuyPositionTakeProfitActionAPI,
-    ModifySellPositionTakeProfitActionAPI
-)
+from Library.Protocol.Action import ActionAPI, ActionID, OpenBuyPositionActionAPI, OpenSellPositionActionAPI
 from Library.Protocol.Update import UpdateID, BarUpdateAPI, CompleteUpdateAPI, InitUpdateAPI
 from Library.Universe.Contract import CommissionMode, CommissionType, SpreadType, SwapMode, SwapType
-from Library.Universe.Provider import ProviderAPI
 from Library.Universe.Security import SecurityAPI
-from Library.Universe.Ticker import TickerAPI
 from Library.Universe.Timeframe import TimeframeAPI
 from Library.Utility.Datetime import MICROSECOND, Weekday, datetime_to_epoch, epoch_to_datetime, is_summer_time, parse_datetime
 from Library.Utility.IO import mkdir, read_json, write_json
-from Library.Utility.Math import equals, truncate
+from Library.Utility.Math import EPSILON, equals, truncate
 from Library.Utility.Path import inspect_cached
 from Library.Utility.Progress import ProgressAPI
 from Library.Utility.Profiler import Timer, timer
 from Library.Utility.Typing import MISSING, Missing
+from Library.System.Selection import ElectionMode, FitnessType, SelectionMode
 from Library.System.System import SystemAPI
 
 if TYPE_CHECKING:
@@ -76,8 +66,8 @@ class DatasetAPI:
 
 class BacktestingAPI(SystemAPI):
 
-    _EPSILON_: float = 1e-9
     _CACHE_DIR_: Path = inspect_cached("Preload")
+    _CACHE_FORMAT_ = 2
     _CONVERSION_COLUMNS_: tuple = (TickAPI.ID.AskBaseConversion, TickAPI.ID.BidBaseConversion, TickAPI.ID.AskQuoteConversion, TickAPI.ID.BidQuoteConversion)
 
     _PRELOAD_CACHE_: dict = {}
@@ -169,10 +159,7 @@ class BacktestingAPI(SystemAPI):
         self._stack_ = stack
         try:
             self._db_ = stack.enter_context(PostgresDatabaseAPI(database="Quant"))
-            self.strategy = self._strategy_(money_management=self._parameters_.MoneyManagement, risk_management=self._parameters_.RiskManagement, signal_management=self._parameters_.SignalManagement, technical_management=self._parameters_.TechnicalManagement, fundamental_management=self._parameters_.FundamentalManagement, sentimental_management=self._parameters_.SentimentalManagement, portfolio_management=self._parameters_.PortfolioManagement)
-            self.market = MarketAPI()
-            self.indicator = IndicatorAPI(technical=self._parameters_.TechnicalManagement, fundamental=self._parameters_.FundamentalManagement, sentimental=self._parameters_.SentimentalManagement)
-            self.portfolio = PortfolioAPI()
+            self._assemble_()
             self._netting_ = self._position_mode_() == PositionMode.Netting
             self._contract_ = self._security_.Contract
             self._digits_ = int(self._contract_.Digits) if getattr(self._contract_, "Digits", None) else 5
@@ -297,9 +284,9 @@ class BacktestingAPI(SystemAPI):
                 columns += [str(column) for column in self._CONVERSION_COLUMNS_]
             tick_frame = MarketAPI.pull_ticks(self._db_, self._security_.UID, start, stop, columns=columns)
             if tick_frame.height:
-                tick_ts = tick_frame["Timestamp"].dt.epoch("us").to_numpy()
-                tick_ask = tick_frame["Ask"].to_numpy()
-                tick_bid = tick_frame["Bid"].to_numpy()
+                tick_ts = tick_frame[str(TickAPI.ID.Timestamp)].dt.epoch("us").to_numpy()
+                tick_ask = tick_frame[str(TickAPI.ID.Ask)].to_numpy()
+                tick_bid = tick_frame[str(TickAPI.ID.Bid)].to_numpy()
             else:
                 tick_ts, tick_ask, tick_bid = np.empty(0, dtype="int64"), np.empty(0, dtype="float64"), np.empty(0, dtype="float64")
             if self._needs_conversion_ and tick_frame.height:
@@ -320,8 +307,12 @@ class BacktestingAPI(SystemAPI):
                 intra_levels.append(self._resolution_.UID)
         return tick_ts, tick_ask, tick_bid, tick_conversions, intra_levels, intra_bars
 
+    def _scope_(self) -> tuple:
+        return self._security_.UID, self._start_, self._stop_, self._timeframe_.UID, self._auto_, None if self._auto_ else self._resolution_.UID
+
     def _cache_signature_(self) -> str:
-        key = (self._security_.UID, self._start_.isoformat(), self._stop_.isoformat(), self._timeframe_.UID, self._auto_, None if self._auto_ else self._resolution_.UID)
+        security, start, stop, timeframe, auto, resolution = self._scope_()
+        key = (security, start.isoformat(), stop.isoformat(), timeframe, auto, resolution)
         return hashlib.md5(repr(key).encode()).hexdigest()
 
     def _data_token_(self, bars: list[BarAPI]) -> int:
@@ -329,7 +320,7 @@ class BacktestingAPI(SystemAPI):
 
     def _read_cache_(self, folder: Path, token: int) -> Union[tuple, None]:
         info = read_json(folder / "meta.json")
-        if info.get("token") != token or "levels" not in info: return None
+        if info.get("token") != token or info.get("format") != self._CACHE_FORMAT_ or "levels" not in info: return None
         ticks = pl.read_parquet(folder / "ticks.parquet")
         levels = info["levels"]
         intra_bars = {uid: pl.read_parquet(folder / f"intra_{uid}.parquet") for uid in levels}
@@ -347,7 +338,7 @@ class BacktestingAPI(SystemAPI):
             for name, array in zip((str(column) for column in self._CONVERSION_COLUMNS_), tick_conversions): columns[name] = array
         pl.DataFrame(columns).write_parquet(folder / "ticks.parquet")
         for uid, frame in intra_bars.items(): frame.write_parquet(folder / f"intra_{uid}.parquet")
-        write_json(folder / "meta.json", {"token": token, "levels": intra_levels})
+        write_json(folder / "meta.json", {"token": token, "levels": intra_levels, "format": self._CACHE_FORMAT_})
 
     def _acquire_frames_(self, bars: list[BarAPI]) -> tuple:
         if not self._DISK_CACHE_: return self._load_frames_(bars)
@@ -364,14 +355,17 @@ class BacktestingAPI(SystemAPI):
     def inject(self, dataset: DatasetAPI) -> None:
         self._injected_ = dataset
 
+    @staticmethod
+    def _memoize_(cache: dict, lock: threading.Lock, key: tuple, build) -> tuple[Any, bool]:
+        with lock:
+            reused = key in cache
+            if not reused:
+                cache.clear()
+                cache[key] = build()
+            return cache[key], reused
+
     def _tape_(self, bars: list[BarAPI]) -> tuple:
-        key = (self._security_.UID, self._start_, self._stop_, self._timeframe_.UID, self._auto_, None if self._auto_ else self._resolution_.UID)
-        with self._TAPE_LOCK_:
-            cached = self._TAPE_CACHE_.get(key)
-            if cached is None:
-                self._TAPE_CACHE_.clear()
-                cached = self._TAPE_CACHE_[key] = self._acquire_frames_(bars)
-            return cached
+        return self._memoize_(self._TAPE_CACHE_, self._TAPE_LOCK_, self._scope_(), lambda: self._acquire_frames_(bars))[0]
 
     def _build_dataset_(self) -> DatasetAPI:
         warmup, bars, rows = self._load_bars_()
@@ -393,7 +387,7 @@ class BacktestingAPI(SystemAPI):
         self._journal_.append(fields)
 
     def _tracked_(self) -> list:
-        return self._curves_(self.portfolio)[0] if getattr(self.portfolio, "EquityTrack", None) else []
+        return self.portfolio.EquityTrack if getattr(self.portfolio, "EquityTrack", None) else []
 
     def _stitch_(self, fold: int, label: str, window: tuple, score, equity: Union[list, None] = None,
                  training: Union[float, None] = None, settings: Union[dict, None] = None) -> None:
@@ -415,6 +409,33 @@ class BacktestingAPI(SystemAPI):
         balance = self.portfolio.InitialBalance if self.portfolio is not None else None
         return self.portfolio.Equity / balance - 1.0 if balance else 0.0
 
+    def _fitness_(self) -> float:
+        if self._fitness_label_ == FitnessType.AccountReturn.value: return self._account_return_()
+        return self._metric_(self._fitness_label_)
+
+    def _walk_forward_(self, deliverables: tuple[bool, bool, bool], fitness: Union[str, FitnessType], selection: Union[str, SelectionMode], election: Union[str, ElectionMode], training: int, validation: int, testing: int, rolling: bool, continuous: bool, purge: Union[int, None], embargo: Union[int, None]) -> None:
+        self._deliverables_: tuple[bool, bool, bool] = deliverables
+        try: fitness_type = FitnessType(fitness)
+        except ValueError: raise ValueError(f"Unknown fitness metric: {fitness} · Expected one of {FitnessType.names()}")
+        self._fitness_label_: str = fitness_type.value
+        self._selection_: SelectionMode = SelectionMode.parse(selection)
+        self._election_: ElectionMode = ElectionMode.parse(election)
+        self._training_, self._validation_, self._testing_ = training, validation, testing
+        self._rolling_, self._continuous_ = rolling, continuous
+        self._purge_, self._embargo_ = purge, embargo
+        self._range_start_, self._range_stop_ = self._start_, self._stop_
+
+    def _folds_(self) -> tuple[list, Union[tuple, None]]:
+        return SplitAPI.walk_forward_folds(self._range_start_, self._range_stop_, self._training_, self._validation_, self._testing_, self._rolling_, self._purge_, self._embargo_)
+
+    def _replay_(self, start: datetime, stop: datetime) -> float:
+        self._disconnect_()
+        self._start_, self._stop_ = start, stop
+        with self.quieted():
+            self._connect_()
+            self.deploy()
+        return self._fitness_()
+
     def _dispatch_(self, parameters: Parameter, start, stop) -> dict:
         return {
             "strategy": self._strategy_,
@@ -433,24 +454,21 @@ class BacktestingAPI(SystemAPI):
     @staticmethod
     def _resolve_(payload: dict) -> tuple:
         with PostgresDatabaseAPI(database="Quant") as db:
-            provider = ProviderAPI(UID=payload["provider"], db=db, autoload=True)
-            ticker = TickerAPI(UID=payload["ticker"], db=db, autoload=True)
-            timeframe = TimeframeAPI(UID=payload["timeframe"], db=db, autoload=True)
-            return SecurityAPI(Provider=provider, Ticker=ticker, db=db, autoload=True), timeframe
+            security = SecurityAPI(Provider=payload["provider"], Ticker=payload["ticker"], db=db, autoload=True)
+            return security, TimeframeAPI(UID=payload["timeframe"], db=db, autoload=True)
+
+    @classmethod
+    def _worker_(cls, payload: dict, log: LoggingAPI) -> tuple:
+        log.console.set_level(VerboseLevel.Warning)
+        return cls._resolve_(payload)
 
     def _preload_(self) -> None:
-        watch = Timer(); watch.start()
+        watch = Timer().start()
         if self._injected_ is not None:
             self._dataset_ = self._injected_
             outcome = "Injected"
         else:
-            key = (self._security_.UID, self._start_, self._stop_, self._timeframe_.UID, self._auto_, None if self._auto_ else self._resolution_.UID, self._window_)
-            with self._PRELOAD_LOCK_:
-                reused = key in self._PRELOAD_CACHE_
-                if not reused:
-                    self._PRELOAD_CACHE_.clear()
-                    self._PRELOAD_CACHE_[key] = self._build_dataset_()
-                self._dataset_ = self._PRELOAD_CACHE_[key]
+            self._dataset_, reused = self._memoize_(self._PRELOAD_CACHE_, self._PRELOAD_LOCK_, (*self._scope_(), self._window_), self._build_dataset_)
             outcome = "Reused" if reused else "Completed"
         watch.stop()
         self._preload_seconds_ = watch.delta()
@@ -642,9 +660,8 @@ class BacktestingAPI(SystemAPI):
 
     def _position_mode_(self) -> PositionMode:
         node = self._parameters_.PortfolioManagement
-        mode = node.PositionMode if node else None
-        if not mode: return PositionMode.Hedging
-        value = mode[0]
+        value = node.first("PositionMode", MISSING) if node else MISSING
+        if value is MISSING: return PositionMode.Hedging
         return value if isinstance(value, PositionMode) else PositionMode[str(value)]
 
     def _net_position_(self) -> Union[PositionAPI, None]:
@@ -682,12 +699,12 @@ class BacktestingAPI(SystemAPI):
             self._emit_plain_open_(action, direction, volume, sl_price, tp_price); return
         if position.Direction == direction:
             self._emit_increase_(position, direction, volume); return
-        if volume < position.Volume - self._EPSILON_:
+        if volume < position.Volume - EPSILON:
             self._emit_reduce_(position, volume); return
         closed = UpdateID.ClosedBuyPosition if position.Direction == Direction.Buy else UpdateID.ClosedSellPosition
         remainder = volume - position.Volume
         self._emit_close_(position, self._tick_, closed)
-        if remainder > self._EPSILON_:
+        if remainder > EPSILON:
             self._emit_plain_open_(action, direction, remainder, sl_price, tp_price)
 
     def _emit_plain_open_(self, action: Union[OpenBuyPositionActionAPI, OpenSellPositionActionAPI], direction: Direction, volume: float, sl_price, tp_price) -> None:
@@ -699,7 +716,7 @@ class BacktestingAPI(SystemAPI):
 
     def _emit_open_(self, action: Union[OpenBuyPositionActionAPI, OpenSellPositionActionAPI], direction: Direction) -> None:
         volume = action.Volume
-        if volume > self._contract_.VolumeMax or volume < self._contract_.VolumeMin or not equals(volume % self._contract_.VolumeStep, 0.0, abs_=self._EPSILON_):
+        if volume > self._contract_.VolumeMax or volume < self._contract_.VolumeMin or not equals(volume % self._contract_.VolumeStep, 0.0):
             self._log_.error(lambda: f"Action Open: Failed · Due to invalid Volume ({volume})"); return
         ask, bid = self._ask_bid_(self._tick_)
         entry = ask if direction == Direction.Buy else bid
@@ -723,30 +740,21 @@ class BacktestingAPI(SystemAPI):
     def _emit_target_volume_(self, action: ActionAPI, direction: Direction, intent: int) -> None:
         position = self._positions_.get(action.PositionID)
         if position is None: self._log_.error(lambda: "Action Modify Volume: Failed · Due to Position not found"); return
-        if equals(action.Volume, 0.0, abs_=self._EPSILON_):
+        if equals(action.Volume, 0.0):
             if intent > 0: self._log_.error(lambda: "Action Increase Volume: Failed · Due to target being zero"); return
             self._emit_close_(position, self._tick_, UpdateID.ClosedBuyPosition if direction == Direction.Buy else UpdateID.ClosedSellPosition); return
         delta = action.Volume - position.Volume
-        if equals(delta, 0.0, abs_=self._EPSILON_): return
+        if equals(delta, 0.0): return
         if intent > 0 and delta < 0.0: self._log_.error(lambda: f"Action Increase Volume: Failed · Due to target below current ({action.Volume} < {position.Volume})"); return
         if intent < 0 and delta > 0.0: self._log_.error(lambda: f"Action Decrease Volume: Failed · Due to target above current ({action.Volume} > {position.Volume})"); return
         if delta > 0.0: self._emit_increase_(position, direction, delta)
         else: self._emit_reduce_(position, -delta)
 
-    def _emit_modify_stop_loss_(self, action: Union[ModifyBuyPositionStopLossActionAPI, ModifySellPositionStopLossActionAPI], direction: Direction) -> None:
-        position = self._positions_.get(action.PositionID)
-        if position is None: self._log_.error(lambda: "Action Modify Stop-Loss: Failed · Due to Position not found"); return
-        position.StopLossPrice = self._round_(action.StopLoss) if action.StopLoss is not None else None
+    def _emit_modify_(self, position_id: int, field: str, price: Union[float, None], update_id: UpdateID, label: str) -> None:
+        position = self._positions_.get(position_id)
+        if position is None: self._log_.error(lambda: f"Action Modify {label}: Failed · Due to Position not found"); return
+        setattr(position, field, self._round_(price) if price is not None else None)
         self._arm_version_ += 1
-        update_id = UpdateID.ModifiedBuyPositionStopLoss if direction == Direction.Buy else UpdateID.ModifiedSellPositionStopLoss
-        self._enqueue_(update_id, self._bar_, position)
-
-    def _emit_modify_take_profit_(self, action: Union[ModifyBuyPositionTakeProfitActionAPI, ModifySellPositionTakeProfitActionAPI], direction: Direction) -> None:
-        position = self._positions_.get(action.PositionID)
-        if position is None: self._log_.error(lambda: "Action Modify Take-Profit: Failed · Due to Position not found"); return
-        position.TakeProfitPrice = self._round_(action.TakeProfit) if action.TakeProfit is not None else None
-        self._arm_version_ += 1
-        update_id = UpdateID.ModifiedBuyPositionTakeProfit if direction == Direction.Buy else UpdateID.ModifiedSellPositionTakeProfit
         self._enqueue_(update_id, self._bar_, position)
 
     def send_action(self, action: ActionAPI) -> None:
@@ -755,24 +763,20 @@ class BacktestingAPI(SystemAPI):
             case ActionID.Execution: self._enqueue_(UpdateID.Execution)
             case ActionID.OpenBuyPosition: self._emit_open_(action, Direction.Buy)
             case ActionID.OpenSellPosition: self._emit_open_(action, Direction.Sell)
-            case ActionID.CloseBuyPosition:
+            case ActionID.CloseBuyPosition | ActionID.CloseSellPosition:
                 position = self._positions_.get(action.PositionID)
                 if position is None: self._log_.error(lambda: "Action Close: Failed · Due to Position not found"); return
-                self._emit_close_(position, self._tick_, UpdateID.ClosedBuyPosition)
-            case ActionID.CloseSellPosition:
-                position = self._positions_.get(action.PositionID)
-                if position is None: self._log_.error(lambda: "Action Close: Failed · Due to Position not found"); return
-                self._emit_close_(position, self._tick_, UpdateID.ClosedSellPosition)
+                self._emit_close_(position, self._tick_, UpdateID.ClosedBuyPosition if action.ActionID == ActionID.CloseBuyPosition else UpdateID.ClosedSellPosition)
             case ActionID.IncreaseBuyPositionVolume: self._emit_target_volume_(action, Direction.Buy, 1)
             case ActionID.IncreaseSellPositionVolume: self._emit_target_volume_(action, Direction.Sell, 1)
             case ActionID.DecreaseBuyPositionVolume: self._emit_target_volume_(action, Direction.Buy, -1)
             case ActionID.DecreaseSellPositionVolume: self._emit_target_volume_(action, Direction.Sell, -1)
             case ActionID.ModifyBuyPositionVolume: self._emit_target_volume_(action, Direction.Buy, 0)
             case ActionID.ModifySellPositionVolume: self._emit_target_volume_(action, Direction.Sell, 0)
-            case ActionID.ModifyBuyPositionStopLoss: self._emit_modify_stop_loss_(action, Direction.Buy)
-            case ActionID.ModifySellPositionStopLoss: self._emit_modify_stop_loss_(action, Direction.Sell)
-            case ActionID.ModifyBuyPositionTakeProfit: self._emit_modify_take_profit_(action, Direction.Buy)
-            case ActionID.ModifySellPositionTakeProfit: self._emit_modify_take_profit_(action, Direction.Sell)
+            case ActionID.ModifyBuyPositionStopLoss: self._emit_modify_(action.PositionID, str(PositionAPI.ID.StopLossPrice), action.StopLoss, UpdateID.ModifiedBuyPositionStopLoss, "Stop-Loss")
+            case ActionID.ModifySellPositionStopLoss: self._emit_modify_(action.PositionID, str(PositionAPI.ID.StopLossPrice), action.StopLoss, UpdateID.ModifiedSellPositionStopLoss, "Stop-Loss")
+            case ActionID.ModifyBuyPositionTakeProfit: self._emit_modify_(action.PositionID, str(PositionAPI.ID.TakeProfitPrice), action.TakeProfit, UpdateID.ModifiedBuyPositionTakeProfit, "Take-Profit")
+            case ActionID.ModifySellPositionTakeProfit: self._emit_modify_(action.PositionID, str(PositionAPI.ID.TakeProfitPrice), action.TakeProfit, UpdateID.ModifiedSellPositionTakeProfit, "Take-Profit")
             case ActionID.AskAboveTarget: self._ask_above_ = action.Ask; self._arm_version_ += 1
             case ActionID.AskBelowTarget: self._ask_below_ = action.Ask; self._arm_version_ += 1
             case ActionID.BidAboveTarget: self._bid_above_ = action.Bid; self._arm_version_ += 1
@@ -850,17 +854,17 @@ class BacktestingAPI(SystemAPI):
             self._tick_ = self._synth_tick_(timestamp, ask, bid, raw_ask, raw_bid)
             self._enqueue_(UpdateID.BidBelowTarget, self._tick_); yield
 
-    def _bounds_(self, open_ts: Union[int, datetime], close_ts: Union[int, datetime]) -> tuple[int, int]:
-        ts = self._dataset_.TickTimestamps
-        if ts.size == 0: return 0, 0
+    @staticmethod
+    def _bounds_(array: np.ndarray, open_ts: Union[int, datetime], close_ts: Union[int, datetime]) -> tuple[int, int]:
+        if array.size == 0: return 0, 0
         lo = open_ts if isinstance(open_ts, int) else datetime_to_epoch(open_ts, unit=MICROSECOND)
         hi = close_ts if isinstance(close_ts, int) else datetime_to_epoch(close_ts, unit=MICROSECOND)
-        return (int(np.searchsorted(ts, lo, side="left")), int(np.searchsorted(ts, hi, side="right")))
+        return int(np.searchsorted(array, lo, side="left")), int(np.searchsorted(array, hi, side="right"))
 
     def _slice_ticks_(self, open_ts: datetime, close_ts: datetime) -> tuple[list, list, list]:
-        start, stop = self._bounds_(open_ts, close_ts)
-        if stop <= start: return [], [], []
         dataset = self._dataset_
+        start, stop = self._bounds_(dataset.TickTimestamps, open_ts, close_ts)
+        if stop <= start: return [], [], []
         return dataset.TickTimestamps[start:stop].tolist(), dataset.TickAsks[start:stop].tolist(), dataset.TickBids[start:stop].tolist()
 
     def _period_ticks_(self, bar: BarAPI) -> tuple[list, list, list]:
@@ -887,8 +891,8 @@ class BacktestingAPI(SystemAPI):
         if self._bid_above_ is not None: mask |= bid >= self._bid_above_ - pad
         if self._bid_below_ is not None: mask |= bid <= self._bid_below_ + pad
         for position in self._positions_.values():
-            sl = position.StopLossPrice.Price if position.StopLossPrice else None
-            tp = position.TakeProfitPrice.Price if position.TakeProfitPrice else None
+            sl = self._stored_(position.StopLossPrice)
+            tp = self._stored_(position.TakeProfitPrice)
             if position.Direction == Direction.Buy:
                 if sl is not None: mask |= bid <= sl + pad
                 if tp is not None: mask |= bid >= tp - pad
@@ -898,9 +902,9 @@ class BacktestingAPI(SystemAPI):
         return mask
 
     def _ticks_(self, open_ts: Union[int, datetime], close_ts: Union[int, datetime]) -> Iterator[tuple[int, float, float]]:
-        start, stop = self._bounds_(open_ts, close_ts)
-        if stop <= start: return
         dataset = self._dataset_
+        start, stop = self._bounds_(dataset.TickTimestamps, open_ts, close_ts)
+        if stop <= start: return
         times, asks, bids = dataset.TickTimestamps[start:stop], dataset.TickAsks[start:stop], dataset.TickBids[start:stop]
         bid, ask_low, ask_high = self._effective_bounds_(asks, bids)
         size, cursor, version, candidates, pointer = stop - start, 0, None, None, 0
@@ -933,8 +937,7 @@ class BacktestingAPI(SystemAPI):
         arrays = self._intra_arrays_.get(self._resolution_.UID)
         if arrays is None: return
         open_ts_array, close_ts_array, high_ts_array, low_ts_array, open_asks, open_bids, high_asks, high_bids, low_asks, low_bids, close_asks, close_bids = arrays
-        start = int(np.searchsorted(open_ts_array, datetime_to_epoch(bar.OpenTick.Timestamp.DateTime, unit=MICROSECOND), side="left"))
-        stop = int(np.searchsorted(open_ts_array, datetime_to_epoch(bar.CloseTick.Timestamp.DateTime, unit=MICROSECOND), side="right"))
+        start, stop = self._bounds_(open_ts_array, bar.OpenTick.Timestamp.DateTime, bar.CloseTick.Timestamp.DateTime)
         for index in range(start, stop):
             yield int(open_ts_array[index]), float(open_asks[index]), float(open_bids[index])
             if high_ts_array[index] <= low_ts_array[index]:
@@ -975,14 +978,14 @@ class BacktestingAPI(SystemAPI):
         arrays = {}
         for uid, frame in self._dataset_.IntraBars.items():
             arrays[uid] = (
-                frame["OpenTick.Timestamp"].dt.epoch("us").to_numpy(),
-                frame["CloseTick.Timestamp"].dt.epoch("us").to_numpy(),
-                frame["HighTick.Timestamp"].dt.epoch("us").to_numpy(),
-                frame["LowTick.Timestamp"].dt.epoch("us").to_numpy(),
-                frame["OpenTick.Ask"].to_numpy().astype("float64"), frame["OpenTick.Bid"].to_numpy().astype("float64"),
-                frame["HighTick.Ask"].to_numpy().astype("float64"), frame["HighTick.Bid"].to_numpy().astype("float64"),
-                frame["LowTick.Ask"].to_numpy().astype("float64"), frame["LowTick.Bid"].to_numpy().astype("float64"),
-                frame["CloseTick.Ask"].to_numpy().astype("float64"), frame["CloseTick.Bid"].to_numpy().astype("float64")
+                frame[str(BarAPI.OID.OpenTick.Timestamp)].dt.epoch("us").to_numpy(),
+                frame[str(BarAPI.OID.CloseTick.Timestamp)].dt.epoch("us").to_numpy(),
+                frame[str(BarAPI.OID.HighTick.Timestamp)].dt.epoch("us").to_numpy(),
+                frame[str(BarAPI.OID.LowTick.Timestamp)].dt.epoch("us").to_numpy(),
+                frame[str(BarAPI.OID.OpenTick.Ask)].to_numpy().astype("float64"), frame[str(BarAPI.OID.OpenTick.Bid)].to_numpy().astype("float64"),
+                frame[str(BarAPI.OID.HighTick.Ask)].to_numpy().astype("float64"), frame[str(BarAPI.OID.HighTick.Bid)].to_numpy().astype("float64"),
+                frame[str(BarAPI.OID.LowTick.Ask)].to_numpy().astype("float64"), frame[str(BarAPI.OID.LowTick.Bid)].to_numpy().astype("float64"),
+                frame[str(BarAPI.OID.CloseTick.Ask)].to_numpy().astype("float64"), frame[str(BarAPI.OID.CloseTick.Bid)].to_numpy().astype("float64")
             )
         return arrays
 
@@ -994,10 +997,7 @@ class BacktestingAPI(SystemAPI):
         arrays = self._intra_arrays_.get(head)
         if arrays is None: return
         open_ts_array, close_ts_array, _, _, open_asks, open_bids, high_asks, high_bids, low_asks, low_bids, close_asks, close_bids = arrays
-        lo = open_ts if isinstance(open_ts, int) else datetime_to_epoch(open_ts, unit=MICROSECOND)
-        hi = close_ts if isinstance(close_ts, int) else datetime_to_epoch(close_ts, unit=MICROSECOND)
-        start = int(np.searchsorted(open_ts_array, lo, side="left"))
-        stop = int(np.searchsorted(open_ts_array, hi, side="right"))
+        start, stop = self._bounds_(open_ts_array, open_ts, close_ts)
         for index in range(start, stop):
             bids = (open_bids[index], high_bids[index], low_bids[index], close_bids[index])
             asks = (open_asks[index], high_asks[index], low_asks[index], close_asks[index])

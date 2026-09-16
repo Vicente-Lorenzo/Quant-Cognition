@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import struct
 import contextlib
 
 from pathlib import Path
@@ -13,14 +12,12 @@ from Library.Database.Database import DatabaseAPI
 from Library.Database.Dataframe import pl
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Engine import MachineAPI
-from Library.Indicator.Indicator import IndicatorAPI
 from Library.Market.Bar import BarAPI
 from Library.Market.Market import MarketAPI
 from Library.Market.Price import Direction
 from Library.Market.Tick import TickAPI
 from Library.Portfolio.Account import AccountAPI, AccountType, MarginMode
 from Library.Portfolio.Order import OrderAPI, OrderType
-from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.Position import PositionAPI, PositionType
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Trade import TradeAPI
@@ -31,7 +28,7 @@ from Library.Protocol.Update import UpdateID, CompleteUpdateAPI, InitUpdateAPI, 
 from Library.System.System import SystemAPI, SystemType
 from Library.Universe.Contract import CommissionMode, SwapMode
 from Library.Universe.Security import SecurityAPI
-from Library.Utility.Datetime import Weekday, timestamp_to_datetime
+from Library.Utility.Datetime import timestamp_to_datetime, utc_now, Weekday
 from Library.Utility.Profiler import timer
 
 if TYPE_CHECKING:
@@ -98,6 +95,7 @@ class RealtimeAPI(SystemAPI):
 
         self._sync_buffer_: list[BarAPI] = []
         self._warmup_window_: Union[int, None] = None
+        self._warmup_frame_: Union[pl.DataFrame, None] = None
         self._warmup_database_: int = 0
         self._warmup_db_timestamps_: list[datetime] = []
         self._warmup_ready_: bool = False
@@ -115,16 +113,13 @@ class RealtimeAPI(SystemAPI):
             self._transport_ = TransportAPI(iid=self._iid_, create=False)
             self._stack_.callback(lambda: self._transport_.close() if self._transport_ else None)
             self._log_.debug(lambda: f"Connect Operation: Bound Shared Memory (iid {self._iid_})")
-            self.strategy = self._strategy_(money_management=self._parameters_.MoneyManagement, risk_management=self._parameters_.RiskManagement, signal_management=self._parameters_.SignalManagement, technical_management=self._parameters_.TechnicalManagement, fundamental_management=self._parameters_.FundamentalManagement, sentimental_management=self._parameters_.SentimentalManagement, portfolio_management=self._parameters_.PortfolioManagement)
-            self.market = MarketAPI()
-            self.indicator = IndicatorAPI(technical=self._parameters_.TechnicalManagement, fundamental=self._parameters_.FundamentalManagement, sentimental=self._parameters_.SentimentalManagement)
-            self.portfolio = PortfolioAPI()
+            self._assemble_()
             self._db_ = None if self._database_ is None else self._stack_.enter_context(PostgresDatabaseAPI(database=self._database_))
         except Exception:
             self._stack_.__exit__(None, None, None)
             raise
         if self._portfolio_.Active:
-            self._session_ = SessionAPI(UID=self._iid_, Type=self._system_, Strategy=self._strategy_.__name__, Security=self._security_, StartTimestamp=datetime.now(), db=self._db_)
+            self._session_ = SessionAPI(UID=self._iid_, Type=self._system_, Strategy=self._strategy_.__name__, Security=self._security_, StartTimestamp=utc_now(), db=self._db_)
             self._session_.save()
         super()._connect_()
 
@@ -134,7 +129,7 @@ class RealtimeAPI(SystemAPI):
 
     def _disconnect_(self) -> None:
         if self._portfolio_.Active and self._session_ is not None:
-            self._session_.StopTimestamp = datetime.now()
+            self._session_.StopTimestamp = utc_now()
             if not self._portfolio_.Empty: self._portfolio_.flush()
             if self.account is not None and self.account.UID is not None:
                 self._session_.FinalAccount = self.account
@@ -166,7 +161,7 @@ class RealtimeAPI(SystemAPI):
                 return UpdateID(data[0])
             offset = 1
             while offset < len(data):
-                length = int.from_bytes(data[offset:offset + 2], "little"); offset += 2
+                length = BinaryAPI.UINT16.unpack_from(data, offset)[0]; offset += 2
                 self._batch_queue_.append(data[offset:offset + length]); offset += length
         self._last_update_data_ = self._batch_queue_.popleft()
         return UpdateID(self._last_update_data_[0])
@@ -179,7 +174,7 @@ class RealtimeAPI(SystemAPI):
         number, environment, account_type, asset, balance, equity, credit, leverage, margin_used, margin_free, margin_level, margin_stop, margin_mode = self._binary_account_.unpack(self._last_update_data_, 1)
         self._metrics_["Accounts"] += 1
         return AccountAPI(
-            Timestamp=datetime.now(),
+            Timestamp=utc_now(),
             Number=number,
             Provider=self._security_.Provider if self._security_ else None,
             Environment=environment,
@@ -330,7 +325,7 @@ class RealtimeAPI(SystemAPI):
 
     def receive_update_bar(self, offset: int = 1) -> BarAPI:
         data = self._last_update_data_
-        bar_ts = struct.unpack_from('<q', data, 1)[0]
+        bar_ts = BinaryAPI.INT64.unpack_from(data, 1)[0]
         tick_size = self._binary_tick_._size_
         off = 9
         gap = self._deserialize_tick_(data, off); off += tick_size
@@ -338,7 +333,7 @@ class RealtimeAPI(SystemAPI):
         high = self._deserialize_tick_(data, off); off += tick_size
         low = self._deserialize_tick_(data, off); off += tick_size
         close = self._deserialize_tick_(data, off); off += tick_size
-        volume = struct.unpack_from('<d', data, off)[0]
+        volume = BinaryAPI.FLOAT64.unpack_from(data, off)[0]
         self._metrics_["Ticks"] += 5
         self._metrics_["Bars"] += 1
         return BarAPI(
@@ -401,15 +396,9 @@ class RealtimeAPI(SystemAPI):
             if self._warmup_window_ is None:
                 self._warmup_window_ = self._indicator_window_()
                 if self._warmup_window_ > 0 and self._db_ is not None and self._security_ is not None and self._security_.UID is not None:
-                    frame = MarketAPI.pull_bars(self._db_, self._security_.UID, self._timeframe_.UID, stop=update.Bar.Timestamp.DateTime, limit=self._warmup_window_)
-                    self._warmup_db_timestamps_ = frame[str(BarAPI.ID.Timestamp)].to_list() if frame.height else []
+                    self._warmup_frame_ = MarketAPI.pull_bars(self._db_, self._security_.UID, self._timeframe_.UID, stop=update.Bar.Timestamp.DateTime, limit=self._warmup_window_)
+                    self._warmup_db_timestamps_ = self._warmup_frame_[str(BarAPI.ID.Timestamp)].to_list() if self._warmup_frame_.height else []
                 self._log_.debug(lambda: f"Phase Warmup: Started · Window {self._warmup_window_} · Database {len(self._warmup_db_timestamps_)} Bars")
-            self._market_.add(update.Bar.GapTick)
-            self._market_.add(update.Bar.OpenTick)
-            self._market_.add(update.Bar.HighTick)
-            self._market_.add(update.Bar.LowTick)
-            self._market_.add(update.Bar.CloseTick)
-            self._market_.add(update.Bar)
             self._sync_buffer_.append(update.Bar)
             if len(self._sync_buffer_) == 1:
                 self._warmup_database_ = self._warmup_window_ if self._warmup_database_clean_() else 0
@@ -431,9 +420,8 @@ class RealtimeAPI(SystemAPI):
             if self._sync_buffer_:
                 stream = pl.DataFrame([b.dict(flatten=True) for b in self._sync_buffer_], strict=False)
                 combined = stream
-                if self._warmup_database_ and self._db_ is not None and self._security_ is not None and self._security_.UID is not None:
-                    database = MarketAPI.pull_bars(self._db_, self._security_.UID, self._timeframe_.UID, stop=self._sync_buffer_[0].Timestamp.DateTime, limit=self._warmup_window_)
-                    if database.height: combined = pl.concat([database, stream], how="diagonal_relaxed").select(stream.columns)
+                if self._warmup_database_ and self._warmup_frame_ is not None and self._warmup_frame_.height:
+                    combined = pl.concat([self._warmup_frame_, stream], how="diagonal_relaxed").select(stream.columns)
                 update.Market.init_data(combined)
             self._sync_buffer_.clear()
             self._transition_(self._initialization_timer_, "Initialization", self._execution_timer_)
@@ -449,8 +437,8 @@ class RealtimeAPI(SystemAPI):
             self._log_.debug(lambda: f"Phase Execution: Last Bar {self._stop_timestamp_}")
             if self._portfolio_.Active and self.portfolio and self.portfolio.Security: self.portfolio.Security.save()
             account = self._initial_account_ if self._initial_account_ is not None else update.Portfolio.Account
-            start = (self._start_timestamp_ if self._start_timestamp_ is not None else datetime.now()).date()
-            stop = (self._stop_timestamp_ if self._stop_timestamp_ is not None else datetime.now()).date()
+            start = (self._start_timestamp_ if self._start_timestamp_ is not None else utc_now()).date()
+            stop = (self._stop_timestamp_ if self._stop_timestamp_ is not None else utc_now()).date()
             self._report_(update.Portfolio, account, start, stop)
 
         initialization.on(event=UpdateID.Init, to=initialization, action=init, reason="Handshake Initialized")

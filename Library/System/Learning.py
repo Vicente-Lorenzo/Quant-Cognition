@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 import os
-import shutil
 
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
@@ -11,7 +10,7 @@ from pathlib import Path
 from typing import Union, TYPE_CHECKING
 
 from Library.Database.Dataframe import np, pl
-from Library.Model.Split import SplitAPI
+from Library.Market.Bar import BarAPI
 from Library.Statistic.Label import (
     CALMARRATIO,
     MAXEQUITYDRAWDOWNPERC,
@@ -21,16 +20,15 @@ from Library.Statistic.Label import (
     NET_SELL_AGGREGATED,
     SHARPERATIO,
     SORTINORATIO,
-    STERLINGRATIO,
     TOTALTRADESVALUE
 )
 from Library.Strategy.Hybrid.DDPG import DDPGStrategyAPI
 from Library.Strategy.Model.Reward import RewardType
 from Library.System.Backtesting import BacktestingAPI, DatasetAPI
-from Library.System.Selection import ElectionMode, SelectionMode, elect, select
-from Library.Utility.Enumeration import EnumerationAPI
+from Library.System.Selection import ElectionMode, FitnessType, SelectionMode, elect, select
 from Library.Universe.Contract import CommissionType, SpreadType, SwapType
-from Library.Utility.IO import mkdir, remove, write_json
+from Library.Utility.Datetime import utc_now, STAMP
+from Library.Utility.IO import copy_tree, mkdir, remove, write_json
 from Library.Utility.Parameter import Parameter
 from Library.Utility.Progress import ProgressAPI
 from Library.Utility.Profiler import timer
@@ -77,15 +75,6 @@ class _FrozenTechnicalAPI_:
 
     def update_offset(self, offset: int = 1) -> None:
         pass
-
-class FitnessType(EnumerationAPI):
-
-    AnnualizedReturn = NETRETURNANNPERC
-    SharpeRatio = SHARPERATIO
-    SortinoRatio = SORTINORATIO
-    CalmarRatio = CALMARRATIO
-    SterlingRatio = STERLINGRATIO
-    AccountReturn = "Account Return"
 
 class LearningAPI(BacktestingAPI):
 
@@ -138,24 +127,13 @@ class LearningAPI(BacktestingAPI):
                  run: Union[str, Path, None] = None,
                  description: Union[str, None] = None) -> None:
         super().__init__(strategy=strategy, security=security, timeframe=timeframe, resolution=timeframe, parameters=parameters, start=start, stop=stop, account=account, spread=spread, commission=commission, swap=swap, benchmark=benchmark, report=False, export=False, plot=False, run=run, description=description)
-        self._deliverables_: tuple[bool, bool, bool] = (report, export, plot)
-        self._reward_type_: RewardType = RewardType.parse(reward) if isinstance(reward, str) else reward
+        self._walk_forward_(deliverables=(report, export, plot), fitness=fitness, selection=selection, election=election, training=training, validation=validation, testing=testing, rolling=rolling, continuous=continuous, purge=purge, embargo=embargo)
+        self._reward_type_: RewardType = RewardType.parse(reward)
         self._episodes_: int = episodes
         self._tracker_: Union[ProgressAPI, None] = None
         self._epochs_: int = epochs
         self._train_frequency_: int = train_frequency
         self._gradient_steps_: int = gradient_steps
-        self._training_: int = training
-        self._validation_: int = validation
-        self._testing_: int = testing
-        self._rolling_: bool = rolling
-        self._purge_, self._embargo_ = purge, embargo
-        self._continuous_: bool = continuous
-        try: fitness_type = FitnessType(fitness)
-        except ValueError: raise ValueError(f"Unknown fitness metric: {fitness} · Expected one of {[member.name for member in FitnessType]}")
-        self._fitness_label_: str = fitness_type.value
-        self._selection_ = selection if isinstance(selection, SelectionMode) else SelectionMode.parse(selection)
-        self._election_ = election if isinstance(election, ElectionMode) else ElectionMode.parse(election)
         self._patience_: int = patience
         self._activity_: int = activity
         self._balance_: int = balance
@@ -167,8 +145,6 @@ class LearningAPI(BacktestingAPI):
         self._seeds_: int = seeds
         self._workers_: int = workers
         self._threads_: Union[int, None] = threads
-        self._range_start_: datetime = self._start_
-        self._range_stop_: datetime = self._stop_
         self._weights_: Path = self._weights_directory_()
         self._tapes_: dict = {}
 
@@ -185,11 +161,6 @@ class LearningAPI(BacktestingAPI):
         mkdir(directory)
         return directory
 
-    def _fitness_(self) -> float:
-        if self._fitness_label_ == FitnessType.AccountReturn.value:
-            return self._account_return_()
-        return self._metric_(self._fitness_label_)
-
     def _net_return_(self) -> float:
         return self._metric_(NETRETURNPERC)
 
@@ -203,18 +174,14 @@ class LearningAPI(BacktestingAPI):
 
     def _pass_(self, start: datetime, stop: datetime, training: bool, mirror: bool = False) -> float:
         self._strategy_.Training = training
-        self._disconnect_()
-        self._start_, self._stop_ = start, stop
         key = (start, stop, mirror)
         if mirror and key not in self._tapes_:
             source = self._tapes_.get((start, stop, False))
             if source is not None: self._tapes_[key] = self._mirror_dataset_(source)
         self.inject(self._tapes_.get(key))
-        with self.quieted():
-            self._connect_()
-            self.deploy()
+        score = self._replay_(start, stop)
         if key not in self._tapes_: self._tapes_[key] = replace(self.extract(), IndicatorResults=self._capture_() if not mirror else None)
-        return self._fitness_()
+        return score
 
     @staticmethod
     def _mirror_frame_(frame: Union[pl.DataFrame, None], anchor: float) -> Union[pl.DataFrame, None]:
@@ -236,7 +203,7 @@ class LearningAPI(BacktestingAPI):
         rows = dataset.ExecutionRows if dataset.ExecutionRows is not None else None
         warmup = dataset.WarmupBars
         source = warmup if warmup is not None and warmup.height else rows
-        anchor_price = source["CloseTick.Bid"][0] if source is not None and source.height else 1.0
+        anchor_price = source[str(BarAPI.OID.CloseTick.Bid)][0] if source is not None and source.height else 1.0
         anchor = anchor_price * anchor_price
         mirrored_warmup = self._mirror_frame_(warmup, anchor)
         mirrored_rows = self._mirror_frame_(rows, anchor)
@@ -273,7 +240,7 @@ class LearningAPI(BacktestingAPI):
         remove(target)
         mkdir(target)
         for item in directory.iterdir():
-            if item.is_dir() and not item.name.startswith(cls._RESERVED_): shutil.copytree(item, target / item.name)
+            if item.is_dir() and not item.name.startswith(cls._RESERVED_): copy_tree(target / item.name, item, safe=False)
         return target
 
     @classmethod
@@ -284,19 +251,16 @@ class LearningAPI(BacktestingAPI):
     def _revive_(cls, directory: Path, label: str) -> bool:
         source = directory / label
         if not source.is_dir(): return False
-        for item in source.iterdir():
-            target = directory / item.name
-            remove(target)
-            shutil.copytree(item, target)
+        for item in source.iterdir(): copy_tree(directory / item.name, item, safe=False)
         return True
 
     def _promote_(self, source: Path) -> None:
-        shutil.copytree(source, self._weights_, dirs_exist_ok=True, ignore=shutil.ignore_patterns("Fold *"))
+        copy_tree(self._weights_, source, ignore=("Fold *",), merge=True, safe=False)
         self._log_.info(lambda: f"Checkpoint Learning: Promoted · From {source} · To {self._weights_}")
 
     def _export_weights_(self) -> None:
-        directory = (self._run_ / self._OUTPUT_ / "Weights") if self._run_ is not None else (self._parameters_.path.parent / f"{self._strategy_.__name__.removesuffix('StrategyAPI')} {datetime.now():%Y-%m-%d %H-%M-%S}")
-        shutil.copytree(self._weights_, directory, dirs_exist_ok=True, ignore=shutil.ignore_patterns("Seed *", "Fold *"))
+        directory = (self._run_ / self.OUTPUT / "Weights") if self._run_ is not None else (self._parameters_.path.parent / f"{self._strategy_.key()} {utc_now():{STAMP}}")
+        copy_tree(directory, self._weights_, ignore=("Seed *", "Fold *"), merge=True, safe=False)
         self._log_.info(lambda: f"Weights Learning: Exported · To {directory}")
 
     def _payload_(self, seed: Union[int, None], directory: Path, folds: list, test: Union[tuple, None]) -> dict:
@@ -339,7 +303,7 @@ class LearningAPI(BacktestingAPI):
             "Start": self._range_start_.isoformat(),
             "Stop": self._range_stop_.isoformat(),
             "NetReturn": self._net_return_(),
-            "AccountReturn": (self.portfolio.Equity / self.portfolio.InitialBalance - 1.0) * 100.0 if self.portfolio is not None and self.portfolio.InitialBalance else None,
+            "AccountReturn": self._account_return_() * 100.0 if self.portfolio is not None and self.portfolio.InitialBalance else None,
             "AnnualizedReturn": self._metric_(NETRETURNANNPERC),
             "Sharpe": self._metric_(SHARPERATIO),
             "Sortino": self._metric_(SORTINORATIO),
@@ -478,7 +442,7 @@ class LearningAPI(BacktestingAPI):
 
     @timer
     def run(self) -> None:
-        folds, test = SplitAPI.walk_forward_folds(self._range_start_, self._range_stop_, self._training_, self._validation_, self._testing_, self._rolling_, self._purge_, self._embargo_)
+        folds, test = self._folds_()
         seeds = [self._seed_] if self._seeds_ <= 1 else [(self._seed_ or 0) + offset for offset in range(self._seeds_)]
         self._log_.info(lambda: f"Learning Plan: Started · {len(seeds)} Seeds · {len(folds)} Folds · {self._episodes_} Episodes · Test {'Yes' if test else 'No'}")
         parallel = self._workers_ > 1 and len(seeds) > 1
@@ -494,7 +458,7 @@ class LearningAPI(BacktestingAPI):
                 for directory in directories.values(): mkdir(directory)
                 payloads = [self._payload_(seed, directories[seed], folds, test) for seed in seeds]
                 with ProcessPoolExecutor(max_workers=min(self._workers_, len(seeds))) as pool:
-                    results = list(pool.map(_learn_seed_, payloads))
+                    results = list(pool.map(LearningAPI._learn_seed_, payloads))
                 for result in results:
                     self._tracker_.advance()
                     if result["Metric"] is not None and (best_metric is None or result["Metric"] > best_metric):
@@ -527,18 +491,18 @@ class LearningAPI(BacktestingAPI):
         deviation = (sum((metric - mean) ** 2 for metric in metrics) / len(metrics)) ** 0.5
         self._log_.info(lambda: f"Learning Summary: Completed · {len(metrics)} Seeds · Mean {mean:+.4f} · Std {deviation:.4f} · Best {best:+.4f}")
 
-def _learn_seed_(payload: dict) -> dict:
-    import torch
-    torch.set_num_threads(payload.get("threads") or torch.get_num_threads())
-    from Library.Logging import LoggingAPI, VerboseLevel
-    log = LoggingAPI("Worker")
-    log.console.set_level(VerboseLevel.Warning)
-    log.file.set_level(VerboseLevel.Debug)
-    security, timeframe = LearningAPI._resolve_(payload)
-    learner = LearningAPI(strategy=payload["strategy"], security=security, timeframe=timeframe, parameters=Parameter(payload["parameters"], "."), start=payload["start"], stop=payload["stop"], account=payload["account"], spread=payload["spread"], commission=payload["commission"], swap=payload["swap"], reward=payload["reward"], episodes=payload["episodes"], epochs=payload["epochs"], train_frequency=payload["train_frequency"], gradient_steps=payload["gradient_steps"], training=payload["training"], validation=payload["validation"], testing=payload["testing"], rolling=payload["rolling"], continuous=payload["continuous"], fitness=payload["fitness"], patience=payload["patience"], activity=payload.get("activity", 0), balance=payload.get("balance", 0), ratio=payload.get("ratio", 0.0), mirror=payload.get("mirror", False), mirror_ratio=payload.get("mirror_ratio", 0.5), final=payload.get("final", False), seed=payload["seed"], seeds=1, workers=1, report=False, export=False)
-    try:
-        return learner._train_seed_(payload["seed"], Path(payload["weights"]), payload["folds"], payload["test"])
-    finally:
-        learner._restore_()
+    @staticmethod
+    def _learn_seed_(payload: dict) -> dict:
+        import torch
+        torch.set_num_threads(payload.get("threads") or torch.get_num_threads())
+        from Library.Logging import LoggingAPI, VerboseLevel
+        log = LoggingAPI("Worker")
+        log.file.set_level(VerboseLevel.Debug)
+        security, timeframe = LearningAPI._worker_(payload, log)
+        learner = LearningAPI(strategy=payload["strategy"], security=security, timeframe=timeframe, parameters=Parameter(payload["parameters"], "."), start=payload["start"], stop=payload["stop"], account=payload["account"], spread=payload["spread"], commission=payload["commission"], swap=payload["swap"], reward=payload["reward"], episodes=payload["episodes"], epochs=payload["epochs"], train_frequency=payload["train_frequency"], gradient_steps=payload["gradient_steps"], training=payload["training"], validation=payload["validation"], testing=payload["testing"], rolling=payload["rolling"], continuous=payload["continuous"], fitness=payload["fitness"], patience=payload["patience"], activity=payload.get("activity", 0), balance=payload.get("balance", 0), ratio=payload.get("ratio", 0.0), mirror=payload.get("mirror", False), mirror_ratio=payload.get("mirror_ratio", 0.5), final=payload.get("final", False), seed=payload["seed"], seeds=1, workers=1, report=False, export=False)
+        try:
+            return learner._train_seed_(payload["seed"], Path(payload["weights"]), payload["folds"], payload["test"])
+        finally:
+            learner._restore_()
 
 __all__ = ["LearningAPI"]

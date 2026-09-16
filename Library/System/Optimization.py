@@ -4,12 +4,10 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Union
 
-from Library.Model.Split import SplitAPI
 from Library.Strategy.Strategy import StrategyAPI
 from Library.System.Backtesting import BacktestingAPI
-from Library.System.Learning import FitnessType
-from Library.System.Selection import ElectionMode, SelectionMode, elect, select
-from Library.System.Space import CandidateAPI, apply_candidate, build_grid, measure_plan, neighborhoods, resolve_inheritance, rounds_space, unpack_plan, unpack_section
+from Library.System.Selection import ElectionMode, FitnessType, SelectionMode, elect, select
+from Library.System.Space import CandidateAPI, SpaceAPI
 from Library.Universe.Contract import CommissionType, SpreadType, SwapType
 from Library.Universe.Security import SecurityAPI
 from Library.Universe.Timeframe import TimeframeAPI
@@ -21,6 +19,7 @@ from Library.Utility.Typing import MISSING, Missing
 class OptimizationAPI(BacktestingAPI):
 
     _CHUNK_: int = 8
+    _WORKER_: Union["OptimizationAPI", None] = None
 
     def __init__(self,
                  strategy: type[StrategyAPI],
@@ -71,17 +70,10 @@ class OptimizationAPI(BacktestingAPI):
             run=run,
             description=description
         )
-        self._deliverables_: tuple[bool, bool, bool] = (report, export, plot)
+        self._walk_forward_(deliverables=(report, export, plot), fitness=fitness, selection=selection, election=election, training=training, validation=validation, testing=testing, rolling=rolling, continuous=continuous, purge=purge, embargo=embargo)
         self._space_ = space
-        self._fitness_label_ = fitness.value if isinstance(fitness, FitnessType) else FitnessType.parse(fitness).value
-        self._selection_ = selection if isinstance(selection, SelectionMode) else SelectionMode.parse(selection)
-        self._election_ = election if isinstance(election, ElectionMode) else ElectionMode.parse(election)
-        self._training_, self._validation_, self._testing_ = training, validation, testing
-        self._rolling_, self._continuous_ = rolling, continuous
-        self._purge_, self._embargo_ = purge, embargo
         self._workers_ = max(1, int(workers or 1))
         self._baseline_ = self._parameters_
-        self._range_start_, self._range_stop_ = self._start_, self._stop_
         self._stages_: list = []
         self._ledger_: dict = {}
         self._trials_: int = 0
@@ -90,19 +82,10 @@ class OptimizationAPI(BacktestingAPI):
         self._verdict_: Union[float, None] = None
         self._outcome_: Union[float, None] = None
 
-    def _fitness_(self) -> float:
-        if self._fitness_label_ == FitnessType.AccountReturn.value: return self._account_return_()
-        return self._metric_(self._fitness_label_)
-
     def _evaluate_(self, candidate: CandidateAPI, start, stop) -> Union[float, None]:
         try:
-            self._disconnect_()
-            self._parameters_ = apply_candidate(self._baseline_, candidate)
-            self._start_, self._stop_ = start, stop
-            with self.quieted():
-                self._connect_()
-                self.deploy()
-            return self._fitness_()
+            self._parameters_ = SpaceAPI.apply_candidate(self._baseline_, candidate)
+            return self._replay_(start, stop)
         except Exception as error:
             self._log_.warning(lambda error=error, candidate=candidate: f"Candidate Optimization: Skipped ({candidate.index}) · {error}")
             return None
@@ -146,25 +129,25 @@ class OptimizationAPI(BacktestingAPI):
         scores = {}
         self._warm_(start, stop)
         self._disconnect_()
-        with ProcessPoolExecutor(max_workers=workers, initializer=_prepare_, initargs=(payload,)) as pool:
-            for index, score in pool.map(_score_, [(c.index, c.overrides) for c in grid], chunksize=self._CHUNK_):
+        with ProcessPoolExecutor(max_workers=workers, initializer=OptimizationAPI._prepare_, initargs=(payload,)) as pool:
+            for index, score in pool.map(OptimizationAPI._score_, [(c.index, c.overrides) for c in grid], chunksize=self._CHUNK_):
                 scores[index] = score
                 if tracker is not None: tracker.advance()
         return [(ledger[index], scores.get(index)) for index in sorted(scores)]
 
     def _stage_(self, fold: int, order: int, stage: dict, winners: list, span: tuple, tracker,
                 seeded: Union[dict, None] = None) -> Union[tuple, None]:
-        space = unpack_section(resolve_inheritance(stage, winners, order - 1))
-        depth = rounds_space(space)
+        space = SpaceAPI.unpack_section(SpaceAPI.resolve_inheritance(stage, winners, order - 1))
+        depth = SpaceAPI.rounds_space(space)
         chosen, outcome, width = seeded, None, 0
         for position in range(1 if seeded is not None and depth > 1 else 0, depth):
-            grid = build_grid(space, chosen, position)
+            grid = SpaceAPI.build_grid(space, chosen, position)
             if not grid: break
             scored = self._sweep_(grid, span[0], span[1], tracker)
             self._trials_ += sum(1 for _, score in scored if score is not None)
             for candidate, score in scored:
                 self._record_(Fold=fold, Stage=order, Round=position + 1, Candidate=candidate.index, Fitness=score, **candidate.settings())
-            picked = select(scored, self._selection_, adjacency=neighborhoods)
+            picked = select(scored, self._selection_, adjacency=SpaceAPI.neighborhoods)
             if picked is None: break
             candidate, score = picked
             chosen = candidate.pinned()
@@ -198,9 +181,9 @@ class OptimizationAPI(BacktestingAPI):
 
     @timer
     def run(self) -> None:
-        folds, test = SplitAPI.walk_forward_folds(self._range_start_, self._range_stop_, self._training_, self._validation_, self._testing_, self._rolling_, self._purge_, self._embargo_)
-        plan = unpack_plan(self._space_)
-        budget = measure_plan(plan)
+        folds, test = self._folds_()
+        plan = SpaceAPI.unpack_plan(self._space_)
+        budget = SpaceAPI.measure_plan(plan)
         if not budget:
             self._log_.warning(lambda: "Plan Optimization: Empty · No searchable parameters declared")
             return
@@ -264,7 +247,7 @@ class OptimizationAPI(BacktestingAPI):
             self._log_.warning(lambda: "Final Optimization: Failed · The elected candidate produced no fitness")
             return
         if self._verdict_ is None: self._verdict_ = self._outcome_
-        if any(self._deliverables_): self._publish_("Parameters.yml", getattr(self._parameters_, "data", None))
+        if any(self._deliverables_): self._publish_(self.PARAMETERS, getattr(self._parameters_, "data", None))
         self._log_.info(lambda: f"Final Optimization: Completed · Full Range · {self._fitness_label_} {self._outcome_:+.4f}")
 
     @property
@@ -287,38 +270,35 @@ class OptimizationAPI(BacktestingAPI):
     def outcome(self) -> Union[float, None]:
         return self._outcome_
 
-_WORKER_: Union[OptimizationAPI, None] = None
+    @staticmethod
+    def _prepare_(payload: dict) -> None:
+        from Library.Logging import LoggingAPI
+        log = LoggingAPI("Worker")
+        ProgressAPI.mute()
+        security, timeframe = OptimizationAPI._worker_(payload, log)
+        OptimizationAPI._WORKER_ = OptimizationAPI(
+            strategy=payload["strategy"],
+            security=security,
+            timeframe=timeframe,
+            resolution=payload["resolution"] if payload["resolution"] else MISSING,
+            parameters=Parameter(payload["parameters"], "."),
+            space=Parameter({}, "."),
+            start=payload["start"],
+            stop=payload["stop"],
+            account=payload["account"],
+            spread=payload["spread"],
+            commission=payload["commission"],
+            swap=payload["swap"],
+            fitness=payload["fitness"],
+            risk_free=payload["risk_free"],
+            report=False
+        )
 
-def _prepare_(payload: dict) -> None:
-    global _WORKER_
-    from Library.Logging import LoggingAPI, VerboseLevel
-    log = LoggingAPI("Worker")
-    log.console.set_level(VerboseLevel.Warning)
-    ProgressAPI.mute()
-    security, timeframe = OptimizationAPI._resolve_(payload)
-    _WORKER_ = OptimizationAPI(
-        strategy=payload["strategy"],
-        security=security,
-        timeframe=timeframe,
-        resolution=payload["resolution"] if payload["resolution"] else MISSING,
-        parameters=Parameter(payload["parameters"], "."),
-        space=Parameter({}, "."),
-        start=payload["start"],
-        stop=payload["stop"],
-        account=payload["account"],
-        spread=payload["spread"],
-        commission=payload["commission"],
-        swap=payload["swap"],
-        fitness=FitnessType.AnnualizedReturn,
-        risk_free=payload["risk_free"],
-        report=False
-    )
-    _WORKER_._fitness_label_ = payload["fitness"]
-
-def _score_(work: tuple) -> tuple:
-    index, overrides = work
-    if _WORKER_ is None: return index, None
-    candidate = CandidateAPI(index=index, overrides=overrides)
-    return index, _WORKER_._evaluate_(candidate, _WORKER_._range_start_, _WORKER_._range_stop_)
+    @staticmethod
+    def _score_(work: tuple) -> tuple:
+        index, overrides = work
+        if OptimizationAPI._WORKER_ is None: return index, None
+        candidate = CandidateAPI(index=index, overrides=overrides)
+        return index, OptimizationAPI._WORKER_._evaluate_(candidate, OptimizationAPI._WORKER_._range_start_, OptimizationAPI._WORKER_._range_stop_)
 
 __all__ = ["OptimizationAPI"]

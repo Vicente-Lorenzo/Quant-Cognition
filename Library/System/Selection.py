@@ -1,7 +1,17 @@
 from statistics import fmean, median
 from typing import Any, Callable, Union
 
+from Library.Statistic.Label import CALMARRATIO, NETRETURNANNPERC, SHARPERATIO, SORTINORATIO, STERLINGRATIO
 from Library.Utility.Enumeration import EnumerationAPI
+
+class FitnessType(EnumerationAPI):
+
+    AnnualizedReturn = NETRETURNANNPERC
+    SharpeRatio = SHARPERATIO
+    SortinoRatio = SORTINORATIO
+    CalmarRatio = CALMARRATIO
+    SterlingRatio = STERLINGRATIO
+    AccountReturn = "Account Return"
 
 class SelectionMode(EnumerationAPI):
 
@@ -31,7 +41,7 @@ def select(scored: list, mode: Union[str, SelectionMode] = SelectionMode.Best,
            adjacency: Union[Callable, None] = None) -> Union[tuple, None]:
     ranked = _ranked_(scored)
     if not ranked: return None
-    resolved = mode if isinstance(mode, SelectionMode) else SelectionMode.parse(mode)
+    resolved = SelectionMode.parse(mode)
     if resolved is SelectionMode.Best: return max(ranked, key=lambda entry: entry[1])
     if resolved is SelectionMode.Worst: return min(ranked, key=lambda entry: entry[1])
     if resolved is SelectionMode.Mean: return _nearest_(ranked, fmean(score for _, score in ranked))
@@ -49,7 +59,7 @@ def select(scored: list, mode: Union[str, SelectionMode] = SelectionMode.Best,
 def elect(records: list, mode: Union[str, ElectionMode] = ElectionMode.Frequency) -> Union[tuple, None]:
     entries = [record for record in records if record.get("Key") is not None]
     if not entries: return None
-    resolved = mode if isinstance(mode, ElectionMode) else ElectionMode.parse(mode)
+    resolved = ElectionMode.parse(mode)
     if resolved is ElectionMode.First: return entries[0]["Key"], {"Reason": "First fold"}
     if resolved is ElectionMode.Last: return entries[-1]["Key"], {"Reason": "Last fold"}
     tally: dict[Any, list] = {}
@@ -71,4 +81,4 @@ def elect(records: list, mode: Union[str, ElectionMode] = ElectionMode.Frequency
     winner = chooser(statistic, key=lambda key: (statistic[key], -order[key]))
     return winner, {"Reason": resolved.name, "Statistic": statistic[winner], "Folds": len(entries)}
 
-__all__ = ["ElectionMode", "SelectionMode", "elect", "select"]
+__all__ = ["ElectionMode", "FitnessType", "SelectionMode", "elect", "select"]
