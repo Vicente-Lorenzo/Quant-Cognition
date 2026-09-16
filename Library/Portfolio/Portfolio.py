@@ -7,7 +7,7 @@ from typing import Union, ClassVar, TYPE_CHECKING
 from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Query import QueryAPI
-from Library.Market.Price import Direction, PriceAPI, calculate_direction
+from Library.Market.Price import Direction, PriceAPI
 from Library.Market.Tick import TickAPI
 from Library.Portfolio.PnL import PnLAPI
 from Library.Statistic.Metric import (
@@ -470,7 +470,7 @@ class PortfolioAPI(DatapointAPI):
 
     @property
     def Direction(self) -> Direction:
-        return calculate_direction(self.NetPnL)
+        return Direction.calculate(self.NetPnL)
 
     @property
     def Return(self) -> Union[float, None]:

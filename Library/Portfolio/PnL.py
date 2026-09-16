@@ -2,7 +2,7 @@ from typing import Union
 from dataclasses import dataclass, field
 
 from Library.Database.Dataclass import DataclassAPI
-from Library.Market.Price import Direction, calculate_direction
+from Library.Market.Price import Direction
 from Library.Statistic.Metric import (
     calculate_annualized_log_return,
     calculate_annualized_return,
@@ -34,7 +34,7 @@ class PnLAPI(DataclassAPI):
 
     @property
     def Direction(self) -> Direction:
-        return calculate_direction(self.PnL)
+        return Direction.calculate(self.PnL)
 
     @property
     def Return(self) -> Union[float, None]:
