@@ -2,10 +2,9 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Union
 
-import yaml
-
 from Library.Logging import LoggingAPI
 from Library.Strategy.Strategy import StrategyAPI
+from Library.Utility.IO import read_yaml, write_yaml
 from Library.Utility.Parameter import Parameter, numbered
 from Library.Utility.Path import inspect_persistent
 
@@ -38,7 +37,7 @@ class LadderAPI:
 
     def _load_(self, path: Path) -> dict:
         if not path.is_file(): return {}
-        try: return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        try: return read_yaml(path, safe=False)
         except Exception as error:
             self._log_.warning(lambda path=path, error=error: f"Override Load: Failed · {path} · {error}")
             return {}
@@ -78,11 +77,10 @@ class LadderAPI:
 
     def promote(self, strategy: type[StrategyAPI], kind: str, sections: dict, *rungs: str, origin: Union[str, None] = None) -> Path:
         path = self.override(kind, *rungs)
-        path.parent.mkdir(parents=True, exist_ok=True)
         document = self._load_(path)
         document[strategy.key()] = sections
         if origin: document.setdefault("Provenance", {})[strategy.key()] = origin
-        path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+        write_yaml(path, document, safe=False)
         self._log_.info(lambda: f"Override Promote: Saved · {strategy.key()} · {kind} · {path}")
         return path
 
