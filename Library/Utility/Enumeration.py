@@ -4,7 +4,13 @@ from enum import Enum
 from typing import Union, Any
 from difflib import SequenceMatcher
 
+from Library.Utility.Typing import normalize
+
 class EnumerationAPI(Enum):
+
+    @classmethod
+    def names(cls) -> list[str]:
+        return [member.name for member in cls]
 
     @classmethod
     def parse(cls, value: Any) -> Any:
@@ -17,14 +23,14 @@ class EnumerationAPI(Enum):
     def _missing_(cls, value: object) -> Union[EnumerationAPI, None]:
         if not isinstance(value, str):
             return None
-        normalized_value = "".join(c for c in value if c.isalnum()).lower()
+        normalized_value = normalize(value)
         for member in cls:
-            if "".join(c for c in member.name if c.isalnum()).lower() == normalized_value:
+            if normalize(member.name) == normalized_value:
                 return member
         best_match = None
         highest_ratio = 0.0
         for member in cls:
-            normalized_name = "".join(c for c in member.name if c.isalnum()).lower()
+            normalized_name = normalize(member.name)
             ratio = SequenceMatcher(None, normalized_name, normalized_value).ratio()
             if ratio >= 0.9 and ratio > highest_ratio:
                 highest_ratio = ratio

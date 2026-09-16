@@ -30,6 +30,10 @@ class Parameter:
     def __getitem__(self, key: str) -> Any:
         return self.__getattr__(key)
 
+    def first(self, key: str, default: Any = None) -> Any:
+        value = self.__getattr__(key)
+        return value[0] if value else default
+
     def __setattr__(self, key: str, value: Any) -> None:
         if key in ("data", "path", "parent", "parent_key", "_cache_"):
             super().__setattr__(key, value)

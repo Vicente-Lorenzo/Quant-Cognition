@@ -1,4 +1,6 @@
+from functools import lru_cache
 from typing import Final, Union
+from zoneinfo import ZoneInfo, available_timezones
 from datetime import datetime, date, time, timedelta, timezone, tzinfo
 from dateutil.relativedelta import relativedelta, weekday
 
@@ -8,6 +10,7 @@ EPOCH: Final[datetime] = datetime(1970, 1, 1)
 HORIZON: Final[datetime] = datetime(2014, 1, 1)
 MILLISECOND: Final[timedelta] = timedelta(milliseconds=1)
 MICROSECOND: Final[timedelta] = timedelta(microseconds=1)
+STAMP: Final[str] = "%Y-%m-%d %H-%M-%S"
 
 class Weekday(EnumerationAPI):
 
@@ -91,6 +94,24 @@ def seconds_to_clock(seconds: Union[int, float, None]) -> str:
 def utc_now(zone: Union[tzinfo, None] = None) -> datetime:
     stamp = datetime.now(tz=timezone.utc)
     return stamp.replace(tzinfo=None) if zone is None else stamp.astimezone(zone)
+
+@lru_cache(maxsize=1)
+def zones() -> tuple[str, ...]:
+    return tuple(sorted(available_timezones()))
+
+def _zone_(zone: Union[str, tzinfo, None]) -> Union[tzinfo, None]:
+    if not zone: return None
+    return ZoneInfo(zone) if isinstance(zone, str) else zone
+
+def local_now(zone: Union[str, tzinfo, None] = None) -> datetime:
+    return datetime.now() if not zone else datetime.now(_zone_(zone)).replace(tzinfo=None)
+
+def local_to_utc(dt: datetime, zone: Union[str, tzinfo, None] = None) -> datetime:
+    if dt.tzinfo is None and zone: dt = dt.replace(tzinfo=_zone_(zone))
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+def utc_to_local(dt: datetime, zone: Union[str, tzinfo, None] = None) -> datetime:
+    return (dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)).astimezone(_zone_(zone)).replace(tzinfo=None)
 
 def weekday_shift_datetime(wd: Weekday, shift: int, today: Union[datetime, None] = None) -> datetime:
     today = today if today is not None else utc_now()

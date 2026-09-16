@@ -1,10 +1,8 @@
-import os
-import stat
 import time
-import shutil
 from typing import Union
 from pathlib import Path
 
+from Library.Utility.IO import remove
 from Library.Utility.Path import PathAPI
 from Library.Utility.Typing import format
 
@@ -29,6 +27,12 @@ class FileAPI:
 
 class PruneAPI:
 
+    DAYS: int = 30
+
+    @staticmethod
+    def horizon(days: int = DAYS) -> float:
+        return time.time() - days * 86400
+
     @staticmethod
     def newest(folder: Path) -> float:
         stamps = [entry.stat().st_mtime for entry in folder.rglob("*") if entry.is_file()]
@@ -47,40 +51,30 @@ class PruneAPI:
         except OSError:
             return 0
 
-    @staticmethod
-    def _force_(function, path, information) -> None:
-        try:
-            os.chmod(path, stat.S_IWRITE)
-            function(path)
-        except Exception:
-            pass
-
     @classmethod
     def discard(cls, path: Path) -> int:
         size = cls.weight(path)
-        try:
-            if path.is_file(): path.unlink()
-            else: shutil.rmtree(path, onerror=cls._force_)
-        except OSError:
-            return 0
-        return 0 if path.exists() else size
+        return size if remove(path) else 0
 
     @classmethod
-    def prune(cls, folders, days: int, patterns=("*",), recursive: bool = False, spare=None) -> tuple:
-        horizon = time.time() - days * 86400
+    def sweep(cls, candidates, horizon: float, spare=None) -> tuple:
         removed, reclaimed = 0, 0
+        for candidate in candidates:
+            candidate = Path(candidate)
+            if not cls.stale(candidate, horizon): continue
+            if spare is not None and spare(candidate): continue
+            size = cls.discard(candidate)
+            if not size and candidate.exists(): continue
+            removed += 1
+            reclaimed += size
+        return removed, reclaimed
+
+    @classmethod
+    def prune(cls, folders, days: int = DAYS, patterns=("*",), recursive: bool = False, spare=None) -> tuple:
+        candidates = {}
         for folder in folders:
             folder = Path(folder)
             if not folder.is_dir(): continue
-            seen = set()
             for pattern in patterns:
-                for candidate in (folder.rglob(pattern) if recursive else folder.glob(pattern)):
-                    if candidate in seen: continue
-                    seen.add(candidate)
-                    if not cls.stale(candidate, horizon): continue
-                    if spare is not None and spare(candidate): continue
-                    size = cls.discard(candidate)
-                    if not size and candidate.exists(): continue
-                    removed += 1
-                    reclaimed += size
-        return removed, reclaimed
+                for candidate in (folder.rglob(pattern) if recursive else folder.glob(pattern)): candidates.setdefault(candidate, None)
+        return cls.sweep(candidates, cls.horizon(days), spare)

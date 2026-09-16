@@ -37,8 +37,15 @@ def mkdir(path: Path, *, safe: bool = True) -> bool:
 def _force_(function, path, information) -> None:
     import os
     import stat
-    os.chmod(path, stat.S_IWRITE)
-    function(path)
+    try:
+        os.chmod(path, stat.S_IWRITE)
+        function(path)
+    except Exception:
+        pass
+
+def _clear_(path: Path) -> None:
+    mkdir(path.parent, safe=True)
+    if path.exists() or path.is_symlink(): remove(path, safe=True)
 
 def remove(path: Path, *, safe: bool = True) -> bool:
     import shutil
@@ -53,9 +60,9 @@ def remove(path: Path, *, safe: bool = True) -> bool:
             return False
         raise
 
-def read_text(path: Path, *, safe: bool = True, encoding: str = "utf-8") -> str:
+def read_text(path: Path, *, safe: bool = True, encoding: str = "utf-8", errors: str = "strict") -> str:
     try:
-        return path.read_text(encoding=encoding)
+        return path.read_text(encoding=encoding, errors=errors)
     except Exception:
         if safe:
             return ""
@@ -92,12 +99,31 @@ def write_json(path: Path, data: dict, *, safe: bool = True, encoding: str = "ut
             return False
         raise
 
+def read_yaml(path: Path, *, safe: bool = True, encoding: str = "utf-8") -> dict:
+    import yaml
+    try:
+        data = yaml.safe_load(path.read_text(encoding=encoding)) or {}
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        if safe:
+            return {}
+        raise
+
+def write_yaml(path: Path, data: dict, *, safe: bool = True, encoding: str = "utf-8") -> bool:
+    import yaml
+    try:
+        mkdir(path.parent, safe=True)
+        path.write_text(yaml.safe_dump(data, sort_keys=False), encoding=encoding)
+        return True
+    except Exception:
+        if safe:
+            return False
+        raise
+
 def symlink(dst: Path, src: Path, *, safe: bool = True) -> bool:
     import os
     try:
-        mkdir(dst.parent, safe=True)
-        if dst.exists() or dst.is_symlink():
-            remove(dst, safe=True)
+        _clear_(dst)
         os.symlink(str(src), str(dst))
         return True
     except Exception:
@@ -110,9 +136,7 @@ def hardlink(dst: Path, src: Path, *, safe: bool = True) -> bool:
     try:
         if src.is_dir():
             raise IsADirectoryError(str(src))
-        mkdir(dst.parent, safe=True)
-        if dst.exists() or dst.is_symlink():
-            remove(dst, safe=True)
+        _clear_(dst)
         os.link(str(src), str(dst))
         return True
     except Exception:
@@ -123,10 +147,19 @@ def hardlink(dst: Path, src: Path, *, safe: bool = True) -> bool:
 def copy(dst: Path, src: Path, *, safe: bool = True) -> bool:
     import shutil
     try:
-        mkdir(dst.parent, safe=True)
-        if dst.exists() or dst.is_symlink():
-            remove(dst, safe=True)
+        _clear_(dst)
         shutil.copy2(str(src), str(dst))
+        return True
+    except Exception:
+        if safe:
+            return False
+        raise
+
+def copy_tree(dst: Path, src: Path, *, ignore: tuple = (), merge: bool = False, safe: bool = True) -> bool:
+    import shutil
+    try:
+        if not merge: _clear_(dst)
+        shutil.copytree(str(src), str(dst), dirs_exist_ok=merge, ignore=shutil.ignore_patterns(*ignore) if ignore else None)
         return True
     except Exception:
         if safe:
