@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import secrets
 from datetime import datetime
-from typing import Union, TYPE_CHECKING
+from typing import Callable, Union, TYPE_CHECKING
 
+from Library.Utility.Datetime import utc_now
 from Library.Auth.Identity import IdentityAPI, AnonymousAPI
 from Library.Auth.Password import PasswordAPI
 from Library.Auth.Provider import AuthProviderAPI, LocalAuthProviderAPI
 from Library.Auth.Role import RoleAPI
 from Library.Auth.User import UserAPI
-from Library.Database import PostgresDatabaseAPI, QueryAPI
+from Library.Database import PostgresDatabaseAPI
 
 if TYPE_CHECKING:
     from flask import Flask, Request
@@ -46,22 +47,30 @@ class AuthAPI:
         self._manager_ = manager
         return manager
 
-    def _select_(self, condition: str, parameters: dict) -> Union[UserAPI, None]:
+    def _select_(self, **columns) -> Union[UserAPI, None]:
         with PostgresDatabaseAPI.attach(database=self._database_) as db:
-            frame = db.select(schema=self.Schema, table=self.Table, condition=condition, parameters=parameters, limit=1, legacy=False)
-        if frame.is_empty(): return None
-        return UserAPI.parse(frame.row(0, named=True))
+            condition, parameters = db.where(**columns)
+            row = db.first(schema=self.Schema, table=self.Table, condition=condition, parameters=parameters)
+        return None if row is None else UserAPI.parse(row)
 
-    def _update_(self, assignment: str, parameters: dict) -> None:
+    def _update_(self, username: str, **values) -> None:
         with PostgresDatabaseAPI.attach(database=self._database_) as db:
-            sql = f'UPDATE {db._target_(self.Schema, self.Table)} SET {assignment} WHERE "UID" = :key:'
-            db.execute(QueryAPI(sql), [parameters])
+            condition, parameters = db.where(UID=username)
+            db.update(schema=self.Schema, table=self.Table, data=values, condition=condition, parameters=parameters)
+
+    def _first_(self, probe: Callable) -> Union[IdentityAPI, None]:
+        for provider in self._providers_:
+            user = probe(provider)
+            if user is not None:
+                self.touch(user.UID)
+                return IdentityAPI.of(user)
+        return None
 
     def find(self, username: str) -> Union[UserAPI, None]:
-        return self._select_('"UID" = :key:', {"key": username}) if username else None
+        return self._select_(UID=username) if username else None
 
     def locate(self, email: str) -> Union[UserAPI, None]:
-        return self._select_('"Email" = :key:', {"key": email}) if email else None
+        return self._select_(Email=email) if email else None
 
     def identity(self, username: str) -> Union[IdentityAPI, None]:
         user = self.find(username)
@@ -69,26 +78,16 @@ class AuthAPI:
         return IdentityAPI.of(user)
 
     def touch(self, username: str) -> None:
-        self._update_('"LastLogin" = :ts:', {"ts": datetime.now(), "key": username})
+        self._update_(username, LastLogin=utc_now())
 
     def password(self, username: str, password: str) -> None:
-        self._update_('"Password" = :hash:', {"hash": PasswordAPI.hash(password), "key": username})
+        self._update_(username, Password=PasswordAPI.hash(password))
 
     def authenticate(self, **credentials) -> Union[IdentityAPI, None]:
-        for provider in self._providers_:
-            user = provider.authenticate(**credentials)
-            if user is not None:
-                self.touch(user.UID)
-                return IdentityAPI.of(user)
-        return None
+        return self._first_(lambda provider: provider.authenticate(**credentials))
 
     def _sso_(self, request: Request) -> Union[IdentityAPI, None]:
-        for provider in self._providers_:
-            user = provider.identify(request)
-            if user is not None:
-                self.touch(user.UID)
-                return IdentityAPI.of(user)
-        return None
+        return self._first_(lambda provider: provider.identify(request))
 
     def login(self, **credentials) -> Union[IdentityAPI, None]:
         from flask_login import login_user

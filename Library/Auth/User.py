@@ -35,8 +35,8 @@ class UserAPI(DatapointAPI):
     def Structure(self) -> dict:
         return {
             self.ID.UID: PrimaryKey(pl.String),
-            self.ID.Office: ForeignKey(pl.String, reference=f'"{OfficeAPI.Schema}"."{OfficeAPI.Table}"("{OfficeAPI.ID.UID}")'),
-            self.ID.Team: ForeignKey(pl.String, reference=f'"{TeamAPI.Schema}"."{TeamAPI.Table}"("{TeamAPI.ID.UID}")'),
+            self.ID.Office: ForeignKey(pl.String, reference=OfficeAPI.reference()),
+            self.ID.Team: ForeignKey(pl.String, reference=TeamAPI.reference()),
             self.ID.Provider: pl.String(),
             self.ID.Active: pl.Boolean(),
             self.ID.Role: pl.String(),

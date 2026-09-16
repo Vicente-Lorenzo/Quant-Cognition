@@ -24,6 +24,19 @@ class AuthProviderAPI(ABC):
     def identify(self, request: Request) -> Union[UserAPI, None]:
         return None
 
+    @staticmethod
+    def _claims_(token: str, jwks: str, audience: Union[str, None], issuer: Union[str, None] = None) -> Union[dict, None]:
+        try:
+            import jwt
+            from jwt import PyJWKClient
+        except ImportError:
+            return None
+        try:
+            key = PyJWKClient(jwks).get_signing_key_from_jwt(token).key
+            return jwt.decode(token, key, algorithms=["RS256"], audience=audience, issuer=issuer)
+        except Exception:
+            return None
+
 class LocalAuthProviderAPI(AuthProviderAPI):
 
     Name: str = "Local"
@@ -61,18 +74,8 @@ class CloudflareAuthProviderAPI(AuthProviderAPI):
 
     def _verify_(self, token: Union[str, None], email: str) -> bool:
         if not token or not self._team_ or not self._audience_: return False
-        try:
-            import jwt
-            from jwt import PyJWKClient
-        except ImportError:
-            return False
-        try:
-            keys = PyJWKClient(f"https://{self._team_}.cloudflareaccess.com/cdn-cgi/access/certs")
-            key = keys.get_signing_key_from_jwt(token).key
-            claims = jwt.decode(token, key, algorithms=["RS256"], audience=self._audience_)
-        except Exception:
-            return False
-        return str(claims.get("email", "")).lower() == email.lower()
+        claims = self._claims_(token, f"https://{self._team_}.cloudflareaccess.com/cdn-cgi/access/certs", self._audience_)
+        return claims is not None and str(claims.get("email", "")).lower() == email.lower()
 
 class OIDCAuthProviderAPI(AuthProviderAPI):
 
@@ -85,17 +88,8 @@ class OIDCAuthProviderAPI(AuthProviderAPI):
 
     def authenticate(self, *, token: Union[str, None] = None, **_) -> Union[UserAPI, None]:
         if not token or not self._issuer_: return None
-        try:
-            import jwt
-            from jwt import PyJWKClient
-        except ImportError:
-            return None
-        try:
-            keys = PyJWKClient(f"{self._issuer_.rstrip('/')}/.well-known/jwks.json")
-            key = keys.get_signing_key_from_jwt(token).key
-            claims = jwt.decode(token, key, algorithms=["RS256"], audience=self._audience_, issuer=self._issuer_)
-        except Exception:
-            return None
+        claims = self._claims_(token, f"{self._issuer_.rstrip('/')}/.well-known/jwks.json", self._audience_, self._issuer_)
+        if claims is None: return None
         email = claims.get("email")
         if not email: return None
         return self._auth_.provision(email=email, provider=self.Name, name=claims.get("name"), role=RoleAPI.Viewer)
