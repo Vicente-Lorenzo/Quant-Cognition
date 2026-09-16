@@ -38,11 +38,11 @@ from typing import Union
 from pathlib import Path
 
 from Library.Database.Dataframe import np
-from Library.Model.Core.Agent import AgentAPI
-from Library.Model.Core.Memory import MemoryAPI
+from Library.Model.Core.Agent import OffPolicyAgentAPI
 from Library.Model.Method.SAC import GaussianActorNetworkAPI, SoftCriticNetworkAPI
+from Library.Utility.IO import mkdir
 
-class SACAgentAPI(AgentAPI):
+class SACAgentAPI(OffPolicyAgentAPI):
 
     def __init__(self,
                  path: Path,
@@ -60,16 +60,11 @@ class SACAgentAPI(AgentAPI):
                  target_entropy: Union[float, None] = None,
                  seed: Union[int, None] = None):
 
-        super().__init__(model="SAC", path=path)
-
-        if seed is not None:
-            T.manual_seed(seed)
+        super().__init__(model="SAC", path=path, input_shape=input_shape, action_shape=action_shape, memory_size=memory_size, seed=seed)
 
         self.batch_size = batch_size
         self.gamma = gamma
         self.tau = tau
-
-        self.memory = MemoryAPI(size=memory_size, input_shape=input_shape, action_shape=action_shape, seed=seed)
 
         self.actor = GaussianActorNetworkAPI(model=self._model, role="actor", path=path, input_shape=input_shape, action_shape=action_shape, fc1_shape=fc1_shape, fc2_shape=fc2_shape, learning_rate=actor_lr)
 
@@ -97,7 +92,7 @@ class SACAgentAPI(AgentAPI):
         self.target_critic_1.save()
         self.target_critic_2.save()
         file = self._path / self._model / "log_alpha"
-        file.parent.mkdir(parents=True, exist_ok=True)
+        mkdir(file.parent, safe=False)
         T.save(self.log_alpha.detach().cpu(), str(file))
         super().save()
 
@@ -117,12 +112,6 @@ class SACAgentAPI(AgentAPI):
         # SAC explores intrinsically through its stochastic policy; there is no
         # external noise process to reset between episodes.
         pass
-
-    def memorize(self, state, action, reward, next_state, done) -> None:
-        self.memory.memorize(state, action, reward, next_state, done)
-
-    def remember(self, batch_size) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
-        return self.memory.remember(batch_size)
 
     def decide(self, state, explore: bool = True):
         # explore=True samples from pi (training); explore=False returns the
@@ -144,12 +133,6 @@ class SACAgentAPI(AgentAPI):
         tau = force_tau if force_tau is not None else self.tau
         self._soft_update_(self.critic_1, self.target_critic_1, tau)
         self._soft_update_(self.critic_2, self.target_critic_2, tau)
-
-    @staticmethod
-    def _soft_update_(source, target, tau) -> None:
-        with T.no_grad():
-            for online, target_param in zip(source.parameters(), target.parameters()):
-                target_param.copy_(tau * online + (1.0 - tau) * target_param)
 
     def learn(self) -> None:
         # Wait until the replay buffer holds at least one full minibatch.
@@ -189,16 +172,16 @@ class SACAgentAPI(AgentAPI):
         # still flow THROUGH them to the actor); this only skips accumulating
         # critic parameter gradients that the next zero_grad would discard, so the
         # actor update is numerically identical (standard reference-impl practice).
-        for parameter in self.critic_1.parameters(): parameter.requires_grad_(False)
-        for parameter in self.critic_2.parameters(): parameter.requires_grad_(False)
+        self.critic_1.requires_grad_(False)
+        self.critic_2.requires_grad_(False)
         new_actions, log_probabilities = self.actor.sample(states)
         value = T.min(self.critic_1.forward(states, new_actions), self.critic_2.forward(states, new_actions))
         actor_loss = (self.alpha.detach() * log_probabilities - value).mean()
         self.actor.optimizer.zero_grad()
         actor_loss.backward()
         self.actor.optimizer.step()
-        for parameter in self.critic_1.parameters(): parameter.requires_grad_(True)
-        for parameter in self.critic_2.parameters(): parameter.requires_grad_(True)
+        self.critic_1.requires_grad_(True)
+        self.critic_2.requires_grad_(True)
 
         # Temperature update (v2 Eq. 18): minimize -log_alpha*(log pi(a|s) + H_bar);
         # log pi is detached (alpha adapts to the policy, not vice versa).

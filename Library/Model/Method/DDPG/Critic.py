@@ -30,7 +30,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 from pathlib import Path
 
-from Library.Database.Dataframe import np
 from Library.Model.Core.Network import NetworkAPI
 
 class CriticNetworkAPI(NetworkAPI):
@@ -69,20 +68,12 @@ class CriticNetworkAPI(NetworkAPI):
 
     def init(self) -> None:
         # Section 7: hidden layers from U[-1/sqrt(f), 1/sqrt(f)], f = fan-in = size()[1].
-        f1 = 1. / np.sqrt(self.fc1.weight.data.size()[1])
-        self.fc1.weight.data.uniform_(-f1, f1)
-        self.fc1.bias.data.uniform_(-f1, f1)
-        f2 = 1. / np.sqrt(self.fc2.weight.data.size()[1])
-        self.fc2.weight.data.uniform_(-f2, f2)
-        self.fc2.bias.data.uniform_(-f2, f2)
+        self._uniform_(self.fc1)
+        self._uniform_(self.fc2)
         # Section 7: final-layer (Q) weights AND biases from U[-3e-3, 3e-3].
-        f3 = 0.003
-        self.q.weight.data.uniform_(-f3, f3)
-        self.q.bias.data.uniform_(-f3, f3)
+        self._uniform_(self.q, 0.003)
         # The action-input layer is treated as a hidden layer (fan-in init).
-        f4 = 1. / np.sqrt(self.action_value.weight.data.size()[1])
-        self.action_value.weight.data.uniform_(-f4, f4)
-        self.action_value.bias.data.uniform_(-f4, f4)
+        self._uniform_(self.action_value)
 
     def forward(self, state, action):
         # State pathway (LayerNorm before ReLU; paper uses BatchNorm here).

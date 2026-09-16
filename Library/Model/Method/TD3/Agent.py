@@ -46,12 +46,11 @@ from typing import Union
 from pathlib import Path
 
 from Library.Database.Dataframe import np
-from Library.Model.Core.Agent import AgentAPI
-from Library.Model.Core.Memory import MemoryAPI
+from Library.Model.Core.Agent import OffPolicyAgentAPI
 from Library.Model.Core.Noise import GaussianNoiseAPI
 from Library.Model.Method.TD3 import TD3ActorNetworkAPI, TD3CriticNetworkAPI
 
-class TD3AgentAPI(AgentAPI):
+class TD3AgentAPI(OffPolicyAgentAPI):
 
     def __init__(self,
                  path: Path,
@@ -71,10 +70,7 @@ class TD3AgentAPI(AgentAPI):
                  policy_delay: int = 2,
                  seed: Union[int, None] = None):
 
-        super().__init__(model="TD3", path=path)
-
-        if seed is not None:
-            T.manual_seed(seed)
+        super().__init__(model="TD3", path=path, input_shape=input_shape, action_shape=action_shape, memory_size=memory_size, seed=seed)
 
         self.batch_size = batch_size
         self.gamma = gamma
@@ -83,8 +79,6 @@ class TD3AgentAPI(AgentAPI):
         self.noise_clip = noise_clip
         self.policy_delay = policy_delay
         self.learn_counter = 0
-
-        self.memory = MemoryAPI(size=memory_size, input_shape=input_shape, action_shape=action_shape, seed=seed)
 
         # Gaussian exploration noise epsilon ~ N(0, 0.1) added to each action
         # (Section 6.1; TD3 replaces DDPG's OU process with uncorrelated noise).
@@ -126,12 +120,6 @@ class TD3AgentAPI(AgentAPI):
         # episodes (kept for interface symmetry with the OU-based DDPG).
         self.noise.reset()
 
-    def memorize(self, state, action, reward, next_state, done) -> None:
-        self.memory.memorize(state, action, reward, next_state, done)
-
-    def remember(self, batch_size) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
-        return self.memory.remember(batch_size)
-
     def decide(self, state, explore: bool = True):
         # Algorithm 1: a = pi(s) + epsilon, epsilon ~ N(0, sigma), bounded to [-1, 1].
         self.actor.eval()
@@ -151,12 +139,6 @@ class TD3AgentAPI(AgentAPI):
         self._soft_update_(self.critic_1, self.target_critic_1, tau)
         self._soft_update_(self.critic_2, self.target_critic_2, tau)
         self._soft_update_(self.actor, self.target_actor, tau)
-
-    @staticmethod
-    def _soft_update_(source, target, tau) -> None:
-        with T.no_grad():
-            for online, target_param in zip(source.parameters(), target.parameters()):
-                target_param.copy_(tau * online + (1.0 - tau) * target_param)
 
     def learn(self) -> None:
         # Wait until the replay buffer holds at least one full minibatch.
@@ -205,12 +187,12 @@ class TD3AgentAPI(AgentAPI):
         # to the actor); this only skips accumulating critic parameter gradients
         # that the next zero_grad would discard, so the actor update is
         # numerically identical (standard reference-impl practice).
-        for parameter in self.critic_1.parameters(): parameter.requires_grad_(False)
+        self.critic_1.requires_grad_(False)
         self.actor.optimizer.zero_grad()
         actor_loss = -T.mean(self.critic_1.forward(states, self.actor.forward(states)))
         actor_loss.backward()
         self.actor.optimizer.step()
-        for parameter in self.critic_1.parameters(): parameter.requires_grad_(True)
+        self.critic_1.requires_grad_(True)
 
         # Soft-update the target actor and both target critics (Algorithm 1).
         self.update()

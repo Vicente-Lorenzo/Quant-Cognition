@@ -50,12 +50,11 @@ from typing import Union
 from pathlib import Path
 
 from Library.Database.Dataframe import np
-from Library.Model.Core.Agent import AgentAPI
-from Library.Model.Core.Memory import MemoryAPI
+from Library.Model.Core.Agent import OffPolicyAgentAPI
 from Library.Model.Core.Noise import OrnsteinUhlenbeckNoiseAPI
 from Library.Model.Method.DDPG import ActorNetworkAPI, CriticNetworkAPI
 
-class DDPGAgentAPI(AgentAPI):
+class DDPGAgentAPI(OffPolicyAgentAPI):
 
     def __init__(self,
                  path: Path,
@@ -74,10 +73,7 @@ class DDPGAgentAPI(AgentAPI):
                  warmup: int = 0,
                  seed: Union[int, None] = None):
 
-        super().__init__(model="DDPG", path=path)
-
-        if seed is not None:
-            T.manual_seed(seed)
+        super().__init__(model="DDPG", path=path, input_shape=input_shape, action_shape=action_shape, memory_size=memory_size, seed=seed)
 
         self.batch_size = batch_size
         self.gamma = gamma
@@ -86,8 +82,6 @@ class DDPGAgentAPI(AgentAPI):
         self.actor_regularization = actor_regularization
         self.warmup = warmup
         self.rng = np.random.default_rng(seed)
-
-        self.memory = MemoryAPI(size=memory_size, input_shape=input_shape, action_shape=action_shape, seed=seed)
 
         # Ornstein-Uhlenbeck exploration N (Section 7): theta = 0.15 (mean
         # reversion), sigma = 0.2 (volatility), mu = 0 ("centered around 0").
@@ -159,12 +153,6 @@ class DDPGAgentAPI(AgentAPI):
         # Reset the OU process state between episodes (it is temporally correlated).
         self.noise.reset()
 
-    def memorize(self, state, action, reward, next_state, done) -> None:
-        self.memory.memorize(state, action, reward, next_state, done)
-
-    def remember(self, batch_size) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
-        return self.memory.remember(batch_size)
-
     def decide(self, state, explore: bool = True):
         # Warmup (see module docstring): uniform exploratory actions until the
         # buffer holds `warmup` transitions; never applied to greedy evaluation.
@@ -191,12 +179,6 @@ class DDPGAgentAPI(AgentAPI):
         tau = force_tau if force_tau is not None else self.tau
         self._soft_update_(self.critic, self.target_critic, tau)
         self._soft_update_(self.actor, self.target_actor, tau)
-
-    @staticmethod
-    def _soft_update_(source, target, tau) -> None:
-        with T.no_grad():
-            for online, target_param in zip(source.parameters(), target.parameters()):
-                target_param.copy_(tau * online + (1.0 - tau) * target_param)
 
     def learn(self) -> None:
         # Wait until the replay buffer holds at least one full minibatch and the
@@ -245,7 +227,7 @@ class DDPGAgentAPI(AgentAPI):
         # flow THROUGH the critic to the actor); this only skips accumulating
         # critic parameter gradients that the next zero_grad would discard, so the
         # actor update is numerically identical (standard reference-impl practice).
-        for parameter in self.critic.parameters(): parameter.requires_grad_(False)
+        self.critic.requires_grad_(False)
         self.actor.optimizer.zero_grad()
         if self.actor_regularization > 0.0:
             # Extended DDPG (see module docstring): penalize the pre-tanh
@@ -261,7 +243,7 @@ class DDPGAgentAPI(AgentAPI):
         if self.grad_clip > 0.0:
             T.nn.utils.clip_grad_norm_(self.actor.parameters(), self.grad_clip)
         self.actor.optimizer.step()
-        for parameter in self.critic.parameters(): parameter.requires_grad_(True)
+        self.critic.requires_grad_(True)
 
         # Soft-update both target networks (Algorithm 1).
         self.update()

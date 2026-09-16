@@ -30,7 +30,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 from pathlib import Path
 
-from Library.Database.Dataframe import np
 from Library.Model.Core.Network import NetworkAPI
 
 class ActorNetworkAPI(NetworkAPI):
@@ -67,16 +66,10 @@ class ActorNetworkAPI(NetworkAPI):
     def init(self) -> None:
         # Section 7: hidden layers from U[-1/sqrt(f), 1/sqrt(f)], f = fan-in.
         # For an nn.Linear weight of shape (out, in), fan-in is size()[1].
-        f1 = 1. / np.sqrt(self.fc1.weight.data.size()[1])
-        self.fc1.weight.data.uniform_(-f1, f1)
-        self.fc1.bias.data.uniform_(-f1, f1)
-        f2 = 1. / np.sqrt(self.fc2.weight.data.size()[1])
-        self.fc2.weight.data.uniform_(-f2, f2)
-        self.fc2.bias.data.uniform_(-f2, f2)
+        self._uniform_(self.fc1)
+        self._uniform_(self.fc2)
         # Section 7: final-layer weights AND biases from U[-3e-3, 3e-3] (low-dim).
-        f3 = 0.003
-        self.mu.weight.data.uniform_(-f3, f3)
-        self.mu.bias.data.uniform_(-f3, f3)
+        self._uniform_(self.mu, 0.003)
 
     def preactivation(self, state):
         # The pre-tanh activation u(s) = mu_linear( fc2( fc1(s) ) ) with LayerNorm
