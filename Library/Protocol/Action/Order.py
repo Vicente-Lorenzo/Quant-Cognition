@@ -7,560 +7,356 @@ from Library.Protocol.Binary import BinaryAPI
 from Library.Protocol.Action.Action import ActionAPI, ActionID
 
 @dataclass(slots=True)
-class OpenBuyStopOrderActionAPI(ActionAPI):
+class _OpenStopOrderActionAPI_(ActionAPI):
+
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'd', 'd', 'D', 'D')
+    Volume: float
+    StopPrice: float
+    StopLoss: Union[float, None]
+    TakeProfit: Union[float, None]
+
+    def __post_init__(self):
+        self.StopPrice = cast(self.StopPrice, float, None)
+        self.StopLoss = cast(self.StopLoss, float, None)
+        self.TakeProfit = cast(self.TakeProfit, float, None)
+
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.Volume, self.StopPrice, self.StopLoss, self.TakeProfit)
+
+@dataclass(slots=True)
+class _OpenLimitOrderActionAPI_(ActionAPI):
+
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'd', 'd', 'D', 'D')
+    Volume: float
+    LimitPrice: float
+    StopLoss: Union[float, None]
+    TakeProfit: Union[float, None]
+
+    def __post_init__(self):
+        self.LimitPrice = cast(self.LimitPrice, float, None)
+        self.StopLoss = cast(self.StopLoss, float, None)
+        self.TakeProfit = cast(self.TakeProfit, float, None)
+
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.Volume, self.LimitPrice, self.StopLoss, self.TakeProfit)
+
+@dataclass(slots=True)
+class _OpenStopLimitOrderActionAPI_(ActionAPI):
+
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'd', 'd', 'd', 'D', 'D')
+    Volume: float
+    StopPrice: float
+    LimitPrice: float
+    StopLoss: Union[float, None]
+    TakeProfit: Union[float, None]
+
+    def __post_init__(self):
+        self.StopPrice = cast(self.StopPrice, float, None)
+        self.LimitPrice = cast(self.LimitPrice, float, None)
+        self.StopLoss = cast(self.StopLoss, float, None)
+        self.TakeProfit = cast(self.TakeProfit, float, None)
+
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.Volume, self.StopPrice, self.LimitPrice, self.StopLoss, self.TakeProfit)
+
+@dataclass(slots=True)
+class _ModifyOrderVolumeActionAPI_(ActionAPI):
+
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
+    OrderID: int
+    Volume: float
+
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.OrderID, self.Volume)
+
+@dataclass(slots=True)
+class _ModifyOrderStopPriceActionAPI_(ActionAPI):
+
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
+    OrderID: int
+    StopPrice: float
+
+    def __post_init__(self):
+        self.StopPrice = cast(self.StopPrice, float, None)
+
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.OrderID, self.StopPrice)
+
+@dataclass(slots=True)
+class _ModifyOrderLimitPriceActionAPI_(ActionAPI):
+
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
+    OrderID: int
+    LimitPrice: float
+
+    def __post_init__(self):
+        self.LimitPrice = cast(self.LimitPrice, float, None)
+
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.OrderID, self.LimitPrice)
+
+@dataclass(slots=True)
+class _ModifyOrderStopLossActionAPI_(ActionAPI):
+
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
+    OrderID: int
+    StopLoss: Union[float, None]
+
+    def __post_init__(self):
+        self.StopLoss = cast(self.StopLoss, float, None)
+
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.OrderID, self.StopLoss)
+
+@dataclass(slots=True)
+class _ModifyOrderTakeProfitActionAPI_(ActionAPI):
+
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
+    OrderID: int
+    TakeProfit: Union[float, None]
+
+    def __post_init__(self):
+        self.TakeProfit = cast(self.TakeProfit, float, None)
+
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.OrderID, self.TakeProfit)
+
+@dataclass(slots=True)
+class _CloseOrderActionAPI_(ActionAPI):
+
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
+    OrderID: int
+
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.OrderID)
+
+@dataclass(slots=True)
+class OpenBuyStopOrderActionAPI(_OpenStopOrderActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.OpenBuyStopOrder
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'd', 'd', 'D', 'D')
-    Volume: float
-    StopPrice: float
-    StopLoss: Union[float, None]
-    TakeProfit: Union[float, None]
-
-    def __post_init__(self):
-        self.StopPrice = cast(self.StopPrice, float, None)
-        self.StopLoss = cast(self.StopLoss, float, None)
-        self.TakeProfit = cast(self.TakeProfit, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.Volume, self.StopPrice, self.StopLoss, self.TakeProfit)
 
 @dataclass(slots=True)
-class OpenSellStopOrderActionAPI(ActionAPI):
+class OpenSellStopOrderActionAPI(_OpenStopOrderActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.OpenSellStopOrder
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'd', 'd', 'D', 'D')
-    Volume: float
-    StopPrice: float
-    StopLoss: Union[float, None]
-    TakeProfit: Union[float, None]
-
-    def __post_init__(self):
-        self.StopPrice = cast(self.StopPrice, float, None)
-        self.StopLoss = cast(self.StopLoss, float, None)
-        self.TakeProfit = cast(self.TakeProfit, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.Volume, self.StopPrice, self.StopLoss, self.TakeProfit)
 
 @dataclass(slots=True)
-class ModifyBuyStopOrderVolumeActionAPI(ActionAPI):
+class ModifyBuyStopOrderVolumeActionAPI(_ModifyOrderVolumeActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopOrderVolume
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
-    OrderID: int
-    Volume: float
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.Volume)
 
 @dataclass(slots=True)
-class ModifySellStopOrderVolumeActionAPI(ActionAPI):
+class ModifySellStopOrderVolumeActionAPI(_ModifyOrderVolumeActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopOrderVolume
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
-    OrderID: int
-    Volume: float
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.Volume)
 
 @dataclass(slots=True)
-class ModifyBuyStopOrderStopPriceActionAPI(ActionAPI):
+class ModifyBuyStopOrderStopPriceActionAPI(_ModifyOrderStopPriceActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopOrderStopPrice
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
-    OrderID: int
-    StopPrice: float
-
-    def __post_init__(self):
-        self.StopPrice = cast(self.StopPrice, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.StopPrice)
 
 @dataclass(slots=True)
-class ModifySellStopOrderStopPriceActionAPI(ActionAPI):
+class ModifySellStopOrderStopPriceActionAPI(_ModifyOrderStopPriceActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopOrderStopPrice
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
-    OrderID: int
-    StopPrice: float
-
-    def __post_init__(self):
-        self.StopPrice = cast(self.StopPrice, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.StopPrice)
 
 @dataclass(slots=True)
-class ModifyBuyStopOrderStopLossActionAPI(ActionAPI):
+class ModifyBuyStopOrderStopLossActionAPI(_ModifyOrderStopLossActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopOrderStopLoss
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
-    OrderID: int
-    StopLoss: Union[float, None]
-
-    def __post_init__(self):
-        self.StopLoss = cast(self.StopLoss, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.StopLoss)
 
 @dataclass(slots=True)
-class ModifySellStopOrderStopLossActionAPI(ActionAPI):
+class ModifySellStopOrderStopLossActionAPI(_ModifyOrderStopLossActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopOrderStopLoss
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
-    OrderID: int
-    StopLoss: Union[float, None]
-
-    def __post_init__(self):
-        self.StopLoss = cast(self.StopLoss, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.StopLoss)
 
 @dataclass(slots=True)
-class ModifyBuyStopOrderTakeProfitActionAPI(ActionAPI):
+class ModifyBuyStopOrderTakeProfitActionAPI(_ModifyOrderTakeProfitActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopOrderTakeProfit
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
-    OrderID: int
-    TakeProfit: Union[float, None]
-
-    def __post_init__(self):
-        self.TakeProfit = cast(self.TakeProfit, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.TakeProfit)
 
 @dataclass(slots=True)
-class ModifySellStopOrderTakeProfitActionAPI(ActionAPI):
+class ModifySellStopOrderTakeProfitActionAPI(_ModifyOrderTakeProfitActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopOrderTakeProfit
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
-    OrderID: int
-    TakeProfit: Union[float, None]
-
-    def __post_init__(self):
-        self.TakeProfit = cast(self.TakeProfit, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.TakeProfit)
 
 @dataclass(slots=True)
-class CloseBuyStopOrderActionAPI(ActionAPI):
+class CloseBuyStopOrderActionAPI(_CloseOrderActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.CloseBuyStopOrder
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
-    OrderID: int
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID)
 
 @dataclass(slots=True)
-class CloseSellStopOrderActionAPI(ActionAPI):
+class CloseSellStopOrderActionAPI(_CloseOrderActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.CloseSellStopOrder
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
-    OrderID: int
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID)
 
 @dataclass(slots=True)
-class OpenBuyLimitOrderActionAPI(ActionAPI):
+class OpenBuyLimitOrderActionAPI(_OpenLimitOrderActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.OpenBuyLimitOrder
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'd', 'd', 'D', 'D')
-    Volume: float
-    LimitPrice: float
-    StopLoss: Union[float, None]
-    TakeProfit: Union[float, None]
-
-    def __post_init__(self):
-        self.LimitPrice = cast(self.LimitPrice, float, None)
-        self.StopLoss = cast(self.StopLoss, float, None)
-        self.TakeProfit = cast(self.TakeProfit, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.Volume, self.LimitPrice, self.StopLoss, self.TakeProfit)
 
 @dataclass(slots=True)
-class OpenSellLimitOrderActionAPI(ActionAPI):
+class OpenSellLimitOrderActionAPI(_OpenLimitOrderActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.OpenSellLimitOrder
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'd', 'd', 'D', 'D')
-    Volume: float
-    LimitPrice: float
-    StopLoss: Union[float, None]
-    TakeProfit: Union[float, None]
-
-    def __post_init__(self):
-        self.LimitPrice = cast(self.LimitPrice, float, None)
-        self.StopLoss = cast(self.StopLoss, float, None)
-        self.TakeProfit = cast(self.TakeProfit, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.Volume, self.LimitPrice, self.StopLoss, self.TakeProfit)
 
 @dataclass(slots=True)
-class ModifyBuyLimitOrderVolumeActionAPI(ActionAPI):
+class ModifyBuyLimitOrderVolumeActionAPI(_ModifyOrderVolumeActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyLimitOrderVolume
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
-    OrderID: int
-    Volume: float
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.Volume)
 
 @dataclass(slots=True)
-class ModifySellLimitOrderVolumeActionAPI(ActionAPI):
+class ModifySellLimitOrderVolumeActionAPI(_ModifyOrderVolumeActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifySellLimitOrderVolume
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
-    OrderID: int
-    Volume: float
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.Volume)
 
 @dataclass(slots=True)
-class ModifyBuyLimitOrderLimitPriceActionAPI(ActionAPI):
+class ModifyBuyLimitOrderLimitPriceActionAPI(_ModifyOrderLimitPriceActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyLimitOrderLimitPrice
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
-    OrderID: int
-    LimitPrice: float
-
-    def __post_init__(self):
-        self.LimitPrice = cast(self.LimitPrice, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.LimitPrice)
 
 @dataclass(slots=True)
-class ModifySellLimitOrderLimitPriceActionAPI(ActionAPI):
+class ModifySellLimitOrderLimitPriceActionAPI(_ModifyOrderLimitPriceActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifySellLimitOrderLimitPrice
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
-    OrderID: int
-    LimitPrice: float
-
-    def __post_init__(self):
-        self.LimitPrice = cast(self.LimitPrice, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.LimitPrice)
 
 @dataclass(slots=True)
-class ModifyBuyLimitOrderStopLossActionAPI(ActionAPI):
+class ModifyBuyLimitOrderStopLossActionAPI(_ModifyOrderStopLossActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyLimitOrderStopLoss
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
-    OrderID: int
-    StopLoss: Union[float, None]
-
-    def __post_init__(self):
-        self.StopLoss = cast(self.StopLoss, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.StopLoss)
 
 @dataclass(slots=True)
-class ModifySellLimitOrderStopLossActionAPI(ActionAPI):
+class ModifySellLimitOrderStopLossActionAPI(_ModifyOrderStopLossActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifySellLimitOrderStopLoss
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
-    OrderID: int
-    StopLoss: Union[float, None]
-
-    def __post_init__(self):
-        self.StopLoss = cast(self.StopLoss, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.StopLoss)
 
 @dataclass(slots=True)
-class ModifyBuyLimitOrderTakeProfitActionAPI(ActionAPI):
+class ModifyBuyLimitOrderTakeProfitActionAPI(_ModifyOrderTakeProfitActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyLimitOrderTakeProfit
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
-    OrderID: int
-    TakeProfit: Union[float, None]
-
-    def __post_init__(self):
-        self.TakeProfit = cast(self.TakeProfit, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.TakeProfit)
 
 @dataclass(slots=True)
-class ModifySellLimitOrderTakeProfitActionAPI(ActionAPI):
+class ModifySellLimitOrderTakeProfitActionAPI(_ModifyOrderTakeProfitActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifySellLimitOrderTakeProfit
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
-    OrderID: int
-    TakeProfit: Union[float, None]
-
-    def __post_init__(self):
-        self.TakeProfit = cast(self.TakeProfit, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.TakeProfit)
 
 @dataclass(slots=True)
-class CloseBuyLimitOrderActionAPI(ActionAPI):
+class CloseBuyLimitOrderActionAPI(_CloseOrderActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.CloseBuyLimitOrder
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
-    OrderID: int
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID)
 
 @dataclass(slots=True)
-class CloseSellLimitOrderActionAPI(ActionAPI):
+class CloseSellLimitOrderActionAPI(_CloseOrderActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.CloseSellLimitOrder
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
-    OrderID: int
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID)
 
 @dataclass(slots=True)
-class OpenBuyStopLimitOrderActionAPI(ActionAPI):
+class OpenBuyStopLimitOrderActionAPI(_OpenStopLimitOrderActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.OpenBuyStopLimitOrder
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'd', 'd', 'd', 'D', 'D')
-    Volume: float
-    StopPrice: float
-    LimitPrice: float
-    StopLoss: Union[float, None]
-    TakeProfit: Union[float, None]
-
-    def __post_init__(self):
-        self.StopPrice = cast(self.StopPrice, float, None)
-        self.LimitPrice = cast(self.LimitPrice, float, None)
-        self.StopLoss = cast(self.StopLoss, float, None)
-        self.TakeProfit = cast(self.TakeProfit, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.Volume, self.StopPrice, self.LimitPrice, self.StopLoss, self.TakeProfit)
 
 @dataclass(slots=True)
-class OpenSellStopLimitOrderActionAPI(ActionAPI):
+class OpenSellStopLimitOrderActionAPI(_OpenStopLimitOrderActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.OpenSellStopLimitOrder
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'd', 'd', 'd', 'D', 'D')
-    Volume: float
-    StopPrice: float
-    LimitPrice: float
-    StopLoss: Union[float, None]
-    TakeProfit: Union[float, None]
-
-    def __post_init__(self):
-        self.StopPrice = cast(self.StopPrice, float, None)
-        self.LimitPrice = cast(self.LimitPrice, float, None)
-        self.StopLoss = cast(self.StopLoss, float, None)
-        self.TakeProfit = cast(self.TakeProfit, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.Volume, self.StopPrice, self.LimitPrice, self.StopLoss, self.TakeProfit)
 
 @dataclass(slots=True)
-class ModifyBuyStopLimitOrderVolumeActionAPI(ActionAPI):
+class ModifyBuyStopLimitOrderVolumeActionAPI(_ModifyOrderVolumeActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopLimitOrderVolume
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
-    OrderID: int
-    Volume: float
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.Volume)
 
 @dataclass(slots=True)
-class ModifySellStopLimitOrderVolumeActionAPI(ActionAPI):
+class ModifySellStopLimitOrderVolumeActionAPI(_ModifyOrderVolumeActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopLimitOrderVolume
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
-    OrderID: int
-    Volume: float
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.Volume)
 
 @dataclass(slots=True)
-class ModifyBuyStopLimitOrderStopPriceActionAPI(ActionAPI):
+class ModifyBuyStopLimitOrderStopPriceActionAPI(_ModifyOrderStopPriceActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopLimitOrderStopPrice
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
-    OrderID: int
-    StopPrice: float
-
-    def __post_init__(self):
-        self.StopPrice = cast(self.StopPrice, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.StopPrice)
 
 @dataclass(slots=True)
-class ModifySellStopLimitOrderStopPriceActionAPI(ActionAPI):
+class ModifySellStopLimitOrderStopPriceActionAPI(_ModifyOrderStopPriceActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopLimitOrderStopPrice
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
-    OrderID: int
-    StopPrice: float
-
-    def __post_init__(self):
-        self.StopPrice = cast(self.StopPrice, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.StopPrice)
 
 @dataclass(slots=True)
-class ModifyBuyStopLimitOrderLimitPriceActionAPI(ActionAPI):
+class ModifyBuyStopLimitOrderLimitPriceActionAPI(_ModifyOrderLimitPriceActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopLimitOrderLimitPrice
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
-    OrderID: int
-    LimitPrice: float
-
-    def __post_init__(self):
-        self.LimitPrice = cast(self.LimitPrice, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.LimitPrice)
 
 @dataclass(slots=True)
-class ModifySellStopLimitOrderLimitPriceActionAPI(ActionAPI):
+class ModifySellStopLimitOrderLimitPriceActionAPI(_ModifyOrderLimitPriceActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopLimitOrderLimitPrice
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'd')
-    OrderID: int
-    LimitPrice: float
-
-    def __post_init__(self):
-        self.LimitPrice = cast(self.LimitPrice, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.LimitPrice)
 
 @dataclass(slots=True)
-class ModifyBuyStopLimitOrderStopLossActionAPI(ActionAPI):
+class ModifyBuyStopLimitOrderStopLossActionAPI(_ModifyOrderStopLossActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopLimitOrderStopLoss
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
-    OrderID: int
-    StopLoss: Union[float, None]
-
-    def __post_init__(self):
-        self.StopLoss = cast(self.StopLoss, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.StopLoss)
 
 @dataclass(slots=True)
-class ModifySellStopLimitOrderStopLossActionAPI(ActionAPI):
+class ModifySellStopLimitOrderStopLossActionAPI(_ModifyOrderStopLossActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopLimitOrderStopLoss
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
-    OrderID: int
-    StopLoss: Union[float, None]
-
-    def __post_init__(self):
-        self.StopLoss = cast(self.StopLoss, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.StopLoss)
 
 @dataclass(slots=True)
-class ModifyBuyStopLimitOrderTakeProfitActionAPI(ActionAPI):
+class ModifyBuyStopLimitOrderTakeProfitActionAPI(_ModifyOrderTakeProfitActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifyBuyStopLimitOrderTakeProfit
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
-    OrderID: int
-    TakeProfit: Union[float, None]
-
-    def __post_init__(self):
-        self.TakeProfit = cast(self.TakeProfit, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.TakeProfit)
 
 @dataclass(slots=True)
-class ModifySellStopLimitOrderTakeProfitActionAPI(ActionAPI):
+class ModifySellStopLimitOrderTakeProfitActionAPI(_ModifyOrderTakeProfitActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.ModifySellStopLimitOrderTakeProfit
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 'D')
-    OrderID: int
-    TakeProfit: Union[float, None]
-
-    def __post_init__(self):
-        self.TakeProfit = cast(self.TakeProfit, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID, self.TakeProfit)
 
 @dataclass(slots=True)
-class CloseBuyStopLimitOrderActionAPI(ActionAPI):
+class CloseBuyStopLimitOrderActionAPI(_CloseOrderActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.CloseBuyStopLimitOrder
     Direction: ClassVar[Direction] = Direction.Buy
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
-    OrderID: int
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID)
 
 @dataclass(slots=True)
-class CloseSellStopLimitOrderActionAPI(ActionAPI):
+class CloseSellStopLimitOrderActionAPI(_CloseOrderActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.CloseSellStopLimitOrder
     Direction: ClassVar[Direction] = Direction.Sell
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
-    OrderID: int
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.OrderID)
 
 __all__ = [
     "OpenBuyStopOrderActionAPI",

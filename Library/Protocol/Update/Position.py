@@ -8,140 +8,105 @@ from Library.Portfolio.Trade import TradeAPI
 from Library.Market.Bar import BarAPI
 
 @dataclass(slots=True)
-class OpenedBuyPositionUpdateAPI(UpdateAPI):
+class _PositionUpdateAPI_(UpdateAPI):
+
+    Bar: BarAPI
+    Position: PositionAPI
+
+@dataclass(slots=True)
+class _TradeUpdateAPI_(_PositionUpdateAPI_):
+
+    Trade: TradeAPI
+
+@dataclass(slots=True)
+class OpenedBuyPositionUpdateAPI(_PositionUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Position: PositionAPI
 
 @dataclass(slots=True)
-class OpenedSellPositionUpdateAPI(UpdateAPI):
+class OpenedSellPositionUpdateAPI(_PositionUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Position: PositionAPI
 
 @dataclass(slots=True)
-class IncreasedBuyPositionVolumeUpdateAPI(UpdateAPI):
+class IncreasedBuyPositionVolumeUpdateAPI(_PositionUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Position: PositionAPI
 
 @dataclass(slots=True)
-class IncreasedSellPositionVolumeUpdateAPI(UpdateAPI):
+class IncreasedSellPositionVolumeUpdateAPI(_PositionUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Position: PositionAPI
 
 @dataclass(slots=True)
-class DecreasedBuyPositionVolumeUpdateAPI(UpdateAPI):
+class DecreasedBuyPositionVolumeUpdateAPI(_TradeUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Position: PositionAPI
-    Trade: TradeAPI
 
 @dataclass(slots=True)
-class DecreasedSellPositionVolumeUpdateAPI(UpdateAPI):
+class DecreasedSellPositionVolumeUpdateAPI(_TradeUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Position: PositionAPI
-    Trade: TradeAPI
 
 @dataclass(slots=True)
-class ModifiedBuyPositionStopLossUpdateAPI(UpdateAPI):
+class ModifiedBuyPositionStopLossUpdateAPI(_PositionUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Position: PositionAPI
 
 @dataclass(slots=True)
-class ModifiedSellPositionStopLossUpdateAPI(UpdateAPI):
+class ModifiedSellPositionStopLossUpdateAPI(_PositionUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Position: PositionAPI
 
 @dataclass(slots=True)
-class ModifiedBuyPositionTakeProfitUpdateAPI(UpdateAPI):
+class ModifiedBuyPositionTakeProfitUpdateAPI(_PositionUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Position: PositionAPI
 
 @dataclass(slots=True)
-class ModifiedSellPositionTakeProfitUpdateAPI(UpdateAPI):
+class ModifiedSellPositionTakeProfitUpdateAPI(_PositionUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Position: PositionAPI
 
 @dataclass(slots=True)
-class ClosedBuyPositionUpdateAPI(UpdateAPI):
+class ClosedBuyPositionUpdateAPI(_TradeUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Position: PositionAPI
-    Trade: TradeAPI
 
 @dataclass(slots=True)
-class ClosedSellPositionUpdateAPI(UpdateAPI):
+class ClosedSellPositionUpdateAPI(_TradeUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Position: PositionAPI
-    Trade: TradeAPI
 
 @dataclass(slots=True)
-class StopLossBuyPositionUpdateAPI(UpdateAPI):
+class StopLossBuyPositionUpdateAPI(_TradeUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Position: PositionAPI
-    Trade: TradeAPI
 
 @dataclass(slots=True)
-class StopLossSellPositionUpdateAPI(UpdateAPI):
+class StopLossSellPositionUpdateAPI(_TradeUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Position: PositionAPI
-    Trade: TradeAPI
 
 @dataclass(slots=True)
-class TakeProfitBuyPositionUpdateAPI(UpdateAPI):
+class TakeProfitBuyPositionUpdateAPI(_TradeUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Position: PositionAPI
-    Trade: TradeAPI
 
 @dataclass(slots=True)
-class TakeProfitSellPositionUpdateAPI(UpdateAPI):
+class TakeProfitSellPositionUpdateAPI(_TradeUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Position: PositionAPI
-    Trade: TradeAPI
 
 @dataclass(slots=True)
-class MarginCallBuyPositionUpdateAPI(UpdateAPI):
+class MarginCallBuyPositionUpdateAPI(_TradeUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Position: PositionAPI
-    Trade: TradeAPI
 
 @dataclass(slots=True)
-class MarginCallSellPositionUpdateAPI(UpdateAPI):
+class MarginCallSellPositionUpdateAPI(_TradeUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Position: PositionAPI
-    Trade: TradeAPI
 
 __all__ = [
     "OpenedBuyPositionUpdateAPI",

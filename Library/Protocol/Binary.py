@@ -3,12 +3,12 @@ import struct
 
 class BinaryAPI:
 
-    _B_ = struct.Struct('<B')
-    _H_ = struct.Struct('<H')
-    _i_ = struct.Struct('<i')
-    _q_ = struct.Struct('<q')
-    _d_ = struct.Struct('<d')
-    _primitives_ = {'B': _B_, 'i': _i_, 'q': _q_, 'd': _d_}
+    UINT8 = struct.Struct('<B')
+    UINT16 = struct.Struct('<H')
+    INT32 = struct.Struct('<i')
+    INT64 = struct.Struct('<q')
+    FLOAT64 = struct.Struct('<d')
+    _primitives_ = {'B': UINT8, 'i': INT32, 'q': INT64, 'd': FLOAT64}
 
     __slots__ = ('_layout_', '_struct_', '_size_', '_has_nullable_')
 
@@ -37,13 +37,13 @@ class BinaryAPI:
         for t, v in zip(self._layout_, values):
             if t == 's':
                 if v is None:
-                    parts.append(self._H_.pack(0))
+                    parts.append(self.UINT16.pack(0))
                 else:
                     encoded = v.encode('utf-8')
-                    parts.append(self._H_.pack(len(encoded)))
+                    parts.append(self.UINT16.pack(len(encoded)))
                     parts.append(encoded)
             elif t == 'D':
-                parts.append(self._d_.pack(math.nan if v is None else v))
+                parts.append(self.FLOAT64.pack(math.nan if v is None else v))
             else:
                 parts.append(self._primitives_[t].pack(v))
         return b''.join(parts)
@@ -61,7 +61,7 @@ class BinaryAPI:
         off = offset
         for t in self._layout_:
             if t == 's':
-                length = self._H_.unpack_from(data, off)[0]
+                length = self.UINT16.unpack_from(data, off)[0]
                 off += 2
                 if length == 0:
                     values.append(None)
@@ -69,7 +69,7 @@ class BinaryAPI:
                     values.append(data[off:off + length].decode('utf-8'))
                     off += length
             elif t == 'D':
-                v = self._d_.unpack_from(data, off)[0]
+                v = self.FLOAT64.unpack_from(data, off)[0]
                 values.append(None if math.isnan(v) else v)
                 off += 8
             else:

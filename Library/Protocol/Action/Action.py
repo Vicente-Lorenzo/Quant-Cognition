@@ -83,22 +83,22 @@ class ActionAPI(DataclassAPI):
         raise NotImplementedError
 
 @dataclass(slots=True)
-class CompleteActionAPI(ActionAPI):
+class _EmptyActionAPI_(ActionAPI):
 
-    ActionID: ClassVar[ActionID] = ActionID.Complete
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B')
 
     def serialize(self) -> bytes:
         return self._binary_.pack(self.ActionID.value)
 
 @dataclass(slots=True)
-class ShutdownActionAPI(ActionAPI):
+class CompleteActionAPI(_EmptyActionAPI_):
+
+    ActionID: ClassVar[ActionID] = ActionID.Complete
+
+@dataclass(slots=True)
+class ShutdownActionAPI(_EmptyActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.Shutdown
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B')
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value)
 
 @dataclass(slots=True)
 class InitActionAPI(ActionAPI):
@@ -111,65 +111,53 @@ class InitActionAPI(ActionAPI):
         return self._binary_.pack(self.ActionID.value, self.ProcessID)
 
 @dataclass(slots=True)
-class ExecutionActionAPI(ActionAPI):
+class ExecutionActionAPI(_EmptyActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.Execution
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B')
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value)
 
 @dataclass(slots=True)
-class AskAboveTargetActionAPI(ActionAPI):
+class _AskTargetActionAPI_(ActionAPI):
+
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'D')
+    Ask: Union[float, None]
+
+    def __post_init__(self):
+        self.Ask = cast(self.Ask, float, None)
+
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.Ask)
+
+@dataclass(slots=True)
+class AskAboveTargetActionAPI(_AskTargetActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.AskAboveTarget
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'D')
-    Ask: Union[float, None]
-
-    def __post_init__(self):
-        self.Ask = cast(self.Ask, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.Ask)
 
 @dataclass(slots=True)
-class AskBelowTargetActionAPI(ActionAPI):
+class AskBelowTargetActionAPI(_AskTargetActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.AskBelowTarget
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'D')
-    Ask: Union[float, None]
-
-    def __post_init__(self):
-        self.Ask = cast(self.Ask, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.Ask)
 
 @dataclass(slots=True)
-class BidAboveTargetActionAPI(ActionAPI):
+class _BidTargetActionAPI_(ActionAPI):
+
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'D')
+    Bid: Union[float, None]
+
+    def __post_init__(self):
+        self.Bid = cast(self.Bid, float, None)
+
+    def serialize(self) -> bytes:
+        return self._binary_.pack(self.ActionID.value, self.Bid)
+
+@dataclass(slots=True)
+class BidAboveTargetActionAPI(_BidTargetActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.BidAboveTarget
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'D')
-    Bid: Union[float, None]
-
-    def __post_init__(self):
-        self.Bid = cast(self.Bid, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.Bid)
 
 @dataclass(slots=True)
-class BidBelowTargetActionAPI(ActionAPI):
+class BidBelowTargetActionAPI(_BidTargetActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.BidBelowTarget
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'D')
-    Bid: Union[float, None]
-
-    def __post_init__(self):
-        self.Bid = cast(self.Bid, float, None)
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.Bid)
 
 class Stream(IntFlag):
 
@@ -182,9 +170,8 @@ class Stream(IntFlag):
     All = Tick | BarOpened | BarClosed | Order | Position | Trade
 
 @dataclass(slots=True)
-class SubscribeActionAPI(ActionAPI):
+class _StreamActionAPI_(ActionAPI):
 
-    ActionID: ClassVar[ActionID] = ActionID.Subscribe
     _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'B')
     Streams: int
 
@@ -192,14 +179,14 @@ class SubscribeActionAPI(ActionAPI):
         return self._binary_.pack(self.ActionID.value, self.Streams)
 
 @dataclass(slots=True)
-class UnsubscribeActionAPI(ActionAPI):
+class SubscribeActionAPI(_StreamActionAPI_):
+
+    ActionID: ClassVar[ActionID] = ActionID.Subscribe
+
+@dataclass(slots=True)
+class UnsubscribeActionAPI(_StreamActionAPI_):
 
     ActionID: ClassVar[ActionID] = ActionID.Unsubscribe
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'B')
-    Streams: int
-
-    def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.Streams)
 
 __all__ = [
     "ActionID",

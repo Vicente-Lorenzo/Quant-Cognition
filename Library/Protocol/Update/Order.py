@@ -7,354 +7,260 @@ from Library.Portfolio.Order import OrderAPI
 from Library.Market.Bar import BarAPI
 
 @dataclass(slots=True)
-class OpenedBuyStopOrderUpdateAPI(UpdateAPI):
+class _OrderUpdateAPI_(UpdateAPI):
+
+    Bar: BarAPI
+    Order: OrderAPI
+
+@dataclass(slots=True)
+class OpenedBuyStopOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class OpenedSellStopOrderUpdateAPI(UpdateAPI):
+class OpenedSellStopOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedBuyStopOrderVolumeUpdateAPI(UpdateAPI):
+class ModifiedBuyStopOrderVolumeUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedSellStopOrderVolumeUpdateAPI(UpdateAPI):
+class ModifiedSellStopOrderVolumeUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedBuyStopOrderStopPriceUpdateAPI(UpdateAPI):
+class ModifiedBuyStopOrderStopPriceUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedSellStopOrderStopPriceUpdateAPI(UpdateAPI):
+class ModifiedSellStopOrderStopPriceUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedBuyStopOrderStopLossUpdateAPI(UpdateAPI):
+class ModifiedBuyStopOrderStopLossUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedSellStopOrderStopLossUpdateAPI(UpdateAPI):
+class ModifiedSellStopOrderStopLossUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedBuyStopOrderTakeProfitUpdateAPI(UpdateAPI):
+class ModifiedBuyStopOrderTakeProfitUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedSellStopOrderTakeProfitUpdateAPI(UpdateAPI):
+class ModifiedSellStopOrderTakeProfitUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ClosedBuyStopOrderUpdateAPI(UpdateAPI):
+class ClosedBuyStopOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ClosedSellStopOrderUpdateAPI(UpdateAPI):
+class ClosedSellStopOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class FilledBuyStopOrderUpdateAPI(UpdateAPI):
+class FilledBuyStopOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class FilledSellStopOrderUpdateAPI(UpdateAPI):
+class FilledSellStopOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ExpiredBuyStopOrderUpdateAPI(UpdateAPI):
+class ExpiredBuyStopOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ExpiredSellStopOrderUpdateAPI(UpdateAPI):
+class ExpiredSellStopOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class OpenedBuyLimitOrderUpdateAPI(UpdateAPI):
+class OpenedBuyLimitOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class OpenedSellLimitOrderUpdateAPI(UpdateAPI):
+class OpenedSellLimitOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedBuyLimitOrderVolumeUpdateAPI(UpdateAPI):
+class ModifiedBuyLimitOrderVolumeUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedSellLimitOrderVolumeUpdateAPI(UpdateAPI):
+class ModifiedSellLimitOrderVolumeUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedBuyLimitOrderLimitPriceUpdateAPI(UpdateAPI):
+class ModifiedBuyLimitOrderLimitPriceUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedSellLimitOrderLimitPriceUpdateAPI(UpdateAPI):
+class ModifiedSellLimitOrderLimitPriceUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedBuyLimitOrderStopLossUpdateAPI(UpdateAPI):
+class ModifiedBuyLimitOrderStopLossUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedSellLimitOrderStopLossUpdateAPI(UpdateAPI):
+class ModifiedSellLimitOrderStopLossUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedBuyLimitOrderTakeProfitUpdateAPI(UpdateAPI):
+class ModifiedBuyLimitOrderTakeProfitUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedSellLimitOrderTakeProfitUpdateAPI(UpdateAPI):
+class ModifiedSellLimitOrderTakeProfitUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ClosedBuyLimitOrderUpdateAPI(UpdateAPI):
+class ClosedBuyLimitOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ClosedSellLimitOrderUpdateAPI(UpdateAPI):
+class ClosedSellLimitOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class FilledBuyLimitOrderUpdateAPI(UpdateAPI):
+class FilledBuyLimitOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class FilledSellLimitOrderUpdateAPI(UpdateAPI):
+class FilledSellLimitOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ExpiredBuyLimitOrderUpdateAPI(UpdateAPI):
+class ExpiredBuyLimitOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ExpiredSellLimitOrderUpdateAPI(UpdateAPI):
+class ExpiredSellLimitOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class OpenedBuyStopLimitOrderUpdateAPI(UpdateAPI):
+class OpenedBuyStopLimitOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class OpenedSellStopLimitOrderUpdateAPI(UpdateAPI):
+class OpenedSellStopLimitOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedBuyStopLimitOrderVolumeUpdateAPI(UpdateAPI):
+class ModifiedBuyStopLimitOrderVolumeUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedSellStopLimitOrderVolumeUpdateAPI(UpdateAPI):
+class ModifiedSellStopLimitOrderVolumeUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedBuyStopLimitOrderStopPriceUpdateAPI(UpdateAPI):
+class ModifiedBuyStopLimitOrderStopPriceUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedSellStopLimitOrderStopPriceUpdateAPI(UpdateAPI):
+class ModifiedSellStopLimitOrderStopPriceUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedBuyStopLimitOrderLimitPriceUpdateAPI(UpdateAPI):
+class ModifiedBuyStopLimitOrderLimitPriceUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedSellStopLimitOrderLimitPriceUpdateAPI(UpdateAPI):
+class ModifiedSellStopLimitOrderLimitPriceUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedBuyStopLimitOrderStopLossUpdateAPI(UpdateAPI):
+class ModifiedBuyStopLimitOrderStopLossUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedSellStopLimitOrderStopLossUpdateAPI(UpdateAPI):
+class ModifiedSellStopLimitOrderStopLossUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedBuyStopLimitOrderTakeProfitUpdateAPI(UpdateAPI):
+class ModifiedBuyStopLimitOrderTakeProfitUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ModifiedSellStopLimitOrderTakeProfitUpdateAPI(UpdateAPI):
+class ModifiedSellStopLimitOrderTakeProfitUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ClosedBuyStopLimitOrderUpdateAPI(UpdateAPI):
+class ClosedBuyStopLimitOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ClosedSellStopLimitOrderUpdateAPI(UpdateAPI):
+class ClosedSellStopLimitOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class FilledBuyStopLimitOrderUpdateAPI(UpdateAPI):
+class FilledBuyStopLimitOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class FilledSellStopLimitOrderUpdateAPI(UpdateAPI):
+class FilledSellStopLimitOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ExpiredBuyStopLimitOrderUpdateAPI(UpdateAPI):
+class ExpiredBuyStopLimitOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Buy
-    Bar: BarAPI
-    Order: OrderAPI
 
 @dataclass(slots=True)
-class ExpiredSellStopLimitOrderUpdateAPI(UpdateAPI):
+class ExpiredSellStopLimitOrderUpdateAPI(_OrderUpdateAPI_):
 
     Direction: ClassVar[Direction] = Direction.Sell
-    Bar: BarAPI
-    Order: OrderAPI
 
 __all__ = [
     "OpenedBuyStopOrderUpdateAPI",

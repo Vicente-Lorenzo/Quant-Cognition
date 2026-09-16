@@ -31,6 +31,7 @@ from Library.Statistic.Metric import (
     standalone_metrics
 )
 from Library.Utility.Datetime import parse_datetime
+from Library.Utility.Typing import MISSING
 
 Metrics = [
     TOTALTRADESVALUE,
@@ -607,7 +608,7 @@ def _safe_df_(df: pl.DataFrame) -> pl.DataFrame:
     schema[str(PositionAPI.ID.Direction)] = pl.String()
     return pl.DataFrame(schema=schema)
 
-def _balance_(account: Union[AccountAPI, None], equity_curve: Union[list, None] = None) -> float:
+def _balance_(account: Union[AccountAPI, None], equity_curve: list = MISSING) -> float:
     return (equity_curve[0] if equity_curve else None) or (account.Balance if account is not None else 0.0) or 0.0
 
 def _report_(initial_balance: float, start: date, stop: date, individual: pl.DataFrame, aggregated: pl.DataFrame, columns: tuple, equity: Union[dict, None] = None, ratios: Union[dict, None] = None, override: Union[dict, None] = None, risk_free: float = 0.0) -> pl.DataFrame:
