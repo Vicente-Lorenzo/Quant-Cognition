@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import os
 import queue
-import socket
-import getpass
 import threading
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from Library.Utility.Datetime import utc_now
+from Library.Utility.Runtime import find_user
 from Library.Logging.Level import VerboseLevel
 from Library.Logging.Logger import LoggerAPI
+from Library.Logging.File import FileAPI
 
 if TYPE_CHECKING:
     from Library.Database.Database import DatabaseAPI
@@ -100,23 +101,7 @@ class StorageAPI(LoggerAPI):
         from Library.Logging.Log import LogAPI
         self.detach()
         self._db_ = db
-        self._record_ = LogAPI(
-            UID=os.urandom(16).hex(),
-            Source=source or self._source_(),
-            Level=self._level_.name,
-            Host=self._host_(),
-            User=self._user_(),
-            Process=os.getpid(),
-            Path=str(path) if path is not None else None,
-            Content="",
-            Records=0,
-            Dropped=0,
-            Truncated=False,
-            StartedAt=datetime.now(),
-            db=db,
-            migrate=migrate
-        )
-        self._record_.save()
+        self._record_ = LogAPI.open(db, source=source or FileAPI._origin_(), level=self._level_.name, user=find_user() or "Unknown", process=os.getpid(), path=path, migrate=migrate)
         self._buffer_, self._length_, self._records_, self._dropped_, self._truncated_ = [], 0, 0, 0, False
         self._signal_.clear()
         self._thread_ = threading.Thread(target=self._drain_, name="StorageLogging", daemon=True)
@@ -133,9 +118,7 @@ class StorageAPI(LoggerAPI):
             self._signal_.set()
             thread.join(timeout=timeout)
         if self._record_ is not None:
-            try:
-                self._record_.StoppedAt = datetime.now()
-                self._persist_()
+            try: self._persist_(stopped=utc_now())
             except Exception as error:
                 self._fallback_(error)
         self._db_, self._record_ = None, None
@@ -162,27 +145,9 @@ class StorageAPI(LoggerAPI):
         if self._locked_: return
         self._limit_ = max(0, limit)
 
-    @staticmethod
-    def _source_() -> str:
-        import sys
-        argument = sys.argv[0] if sys.argv else ""
-        return Path(argument).stem if argument and not argument.startswith("-") else "Python"
-
-    @staticmethod
-    def _host_() -> str:
-        try: return socket.gethostname()
-        except Exception: return "Unknown"
-
-    @staticmethod
-    def _user_() -> str:
-        try: return getpass.getuser()
-        except Exception: return "Unknown"
-
-    def _persist_(self) -> None:
+    def _persist_(self, stopped: datetime | None = None) -> None:
         if self._record_ is None: return
-        self._record_.Content = "".join(self._buffer_)
-        self._record_.Records, self._record_.Dropped, self._record_.Truncated = self._records_, self._dropped_, self._truncated_
-        self._record_.save()
+        self._record_.close("".join(self._buffer_), records=self._records_, dropped=self._dropped_, truncated=self._truncated_, stopped=stopped)
 
     def _flush_(self) -> None:
         if self._record_ is None or self._db_ is None: return
@@ -215,9 +180,6 @@ class StorageAPI(LoggerAPI):
             if self._collect_(): self._flush_()
         except Exception as error:
             self._fallback_(error)
-
-    def _format_(self, level: VerboseLevel, moment: str, head: str, tail: str, message: str) -> str:
-        return f"{moment} - {head}{level.name} - {tail}{message}\n"
 
     def _write_(self, line: str) -> None:
         if self._record_ is None or getattr(self._guard_, "busy", False): return

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime
+import uuid
+import pathlib
 from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing_extensions import Self
 from typing import Union, ClassVar, TYPE_CHECKING
 
+from Library.Utility.Datetime import utc_now
+from Library.Utility.Runtime import find_host
 from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Database import PrimaryKey
@@ -59,7 +64,66 @@ class LogAPI(DatapointAPI):
         }
 
     @classmethod
-    def prune(cls, db: "DatabaseAPI", days: int) -> int:
+    def open(cls, db: DatabaseAPI, *,
+             source: str,
+             level: str,
+             user: Union[str, None] = None,
+             process: Union[int, None] = None,
+             path: Union[str, pathlib.Path, None] = None,
+             started: Union[datetime, None] = None,
+             by: str = "Autosave",
+             migrate: bool = False) -> Self:
+        """
+        Inserts the row a log writes into, before any content exists.
+
+        The row lands immediately rather than at completion so that anything reading the database can
+        resolve the log while the work is still in flight.
+        :param db: An open database connection owned by the caller.
+        :param source: A label identifying what produced the log.
+        :param level: The name of the most verbose level the log accepts.
+        :param user: The account the work runs under.
+        :param process: The identifier of the process producing the log.
+        :param path: Optional filesystem location of the same log, for live tailing.
+        :param started: When the log opened; now when omitted.
+        :param by: The audit label stamped on the row.
+        :param migrate: Whether to create the table if it is absent.
+        :return: The freshly inserted log row.
+        """
+        record = cls(
+            UID=uuid.uuid4().hex,
+            Source=source,
+            Level=level,
+            Host=find_host(),
+            User=user,
+            Process=process,
+            Path=str(path) if path is not None else None,
+            Content="",
+            Records=0,
+            Dropped=0,
+            Truncated=False,
+            StartedAt=started or utc_now(),
+            db=db,
+            migrate=migrate
+        )
+        record.save(by=by)
+        return record
+
+    def close(self, content: str, *, records: int, dropped: int, truncated: bool, by: str = "Autosave", stopped: Union[datetime, None] = None) -> None:
+        """
+        Writes the accumulated content and counters back to the row.
+        :param content: The log content, already bounded by the caller.
+        :param records: The number of records the log received.
+        :param dropped: The number of records lost to a full queue.
+        :param truncated: Whether content was cut at the size limit.
+        :param by: The audit label stamped on the row.
+        :param stopped: When the log stopped; the row keeps its current value when omitted.
+        """
+        self.Content, self.Records, self.Dropped, self.Truncated = content, records, dropped, truncated
+        if stopped is not None: self.StoppedAt = stopped
+        self.save(by=by)
+
+    @classmethod
+    def prune(cls, db: DatabaseAPI, days: int) -> int:
         """
         Deletes log rows whose StoppedAt is older than the retention horizon.
 
@@ -70,9 +134,7 @@ class LogAPI(DatapointAPI):
         :return: The number of rows deleted.
         """
         if days <= 0: return 0
-        from Library.Database.Query import QueryAPI
-        statement = f'DELETE FROM {db._target_(cls.Schema, cls.Table)} WHERE "{cls.ID.StoppedAt}" < :horizon:'
-        horizon = datetime.now().timestamp() - days * 86400
-        db.execute(QueryAPI(statement), [{"horizon": datetime.fromtimestamp(horizon)}])
-        db.commit()
-        return db.rowcount
+        target = db.clone(schema=cls.Schema, table=cls.Table)
+        target.remove(condition=f"{target._quoted_(cls.ID.StoppedAt)} < :horizon:", parameters={"horizon": utc_now() - timedelta(days=days)})
+        target.commit()
+        return target.rowcount

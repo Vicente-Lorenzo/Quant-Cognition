@@ -1,5 +1,6 @@
 import sys
 
+from Library.Utility.Runtime import is_windows
 from Library.Logging.Level import VerboseLevel
 from Library.Logging.Logger import LoggerAPI
 
@@ -81,7 +82,7 @@ class ConsoleAPI(LoggerAPI):
             if not stream.isatty(): return False
         except Exception:
             return False
-        if not sys.platform.startswith("win"): return True
+        if not is_windows(): return True
         return ConsoleAPI._virtual_()
 
     def _open_(self) -> None:

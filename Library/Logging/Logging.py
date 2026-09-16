@@ -63,7 +63,7 @@ class LoggingAPI(logging.Logger):
 
     def __init__(self, *tags, identify: bool = True) -> None:
         frame = find_caller_frame(skip=self._PACKAGE_)
-        values = [value for value in tags if value is not None and str(value) != ""]
+        values = self._tags_(tags)
         owner = find_frame_class(frame) if identify else None
         if identify and not values:
             subsystem = find_frame_package(frame)
@@ -90,9 +90,17 @@ class LoggingAPI(logging.Logger):
         """Returns how many nested logging contexts are currently open."""
         return LoggingAPI._depth_
 
+    @staticmethod
+    def _tags_(values) -> list:
+        return [value for value in values if value is not None and str(value) != ""]
+
+    @staticmethod
+    def _trace_(kind, value, trace) -> str:
+        return "".join(traceback.format_exception(kind, value, trace))[:-1]
+
     @classmethod
     def _join_(cls, values) -> str:
-        rendered = [str(value) for value in values if value is not None and str(value) != ""]
+        rendered = [str(value) for value in cls._tags_(values)]
         return cls._SEPARATOR_.join(rendered) + cls._SEPARATOR_ if rendered else ""
 
     @classmethod
@@ -103,7 +111,7 @@ class LoggingAPI(logging.Logger):
         An empty call is ignored so a caller cannot clear them by accident; use clear_shared_tags.
         :param tags: The tags rendered before the level, in order.
         """
-        values = tuple(value for value in tags if value is not None and str(value) != "")
+        values = tuple(cls._tags_(tags))
         if not values: return
         LoggingAPI._shared_tags_ = values
         LoggingAPI._shared_head_ = cls._join_(values)
@@ -121,7 +129,7 @@ class LoggingAPI(logging.Logger):
         Nothing is derived here; the automatic identity is resolved once at construction.
         :param tags: The tags rendered after the level, in order.
         """
-        values = [value for value in tags if value is not None and str(value) != ""]
+        values = self._tags_(tags)
         self._instance_tags_ = tuple(values)
         self._instance_tail_ = self._join_(values)
 
@@ -158,13 +166,6 @@ class LoggingAPI(logging.Logger):
             sink.close()
         LoggerAPI.Terminated = True
 
-    @staticmethod
-    def _fallback_(error: Exception) -> None:
-        stream = getattr(sys, "__stderr__", None)
-        if stream is None: return
-        try: stream.write(f"Logging Emit: Failed · {type(error).__name__} · {error}\n")
-        except Exception: pass
-
     def _emit_(self, level: VerboseLevel, value: int, content, args: tuple = ()) -> None:
         try:
             message = content() if callable(content) else content
@@ -172,7 +173,7 @@ class LoggingAPI(logging.Logger):
             moment, head, tail = LoggerAPI.stamp(time()), LoggingAPI._shared_head_, self._instance_tail_
             for sink in LoggerAPI.Targets[value]: sink.write(level, moment, head, tail, message)
         except Exception as error:
-            self._fallback_(error)
+            LoggerAPI._fallback_(error, "Emit")
 
     def debug(self, content, *args) -> None:
         """Logs at Debug: everything that is not trading or execution."""
@@ -203,6 +204,13 @@ class LoggingAPI(logging.Logger):
         """Logs at Exception: the most severe level, conventionally carrying a traceback."""
         if LoggerAPI.Gate < 1: return
         self._emit_(VerboseLevel.Exception, 1, content, args)
+
+    def failure(self, content, *args) -> None:
+        """Logs a failed operation once at Error and once at Exception, building the message a single time."""
+        if LoggerAPI.Gate < 1: return
+        message = content() if callable(content) else content
+        if LoggerAPI.Gate >= 2: self._emit_(VerboseLevel.Error, 2, message, args)
+        self._emit_(VerboseLevel.Exception, 1, message, args)
 
     def critical(self, content, *args) -> None:
         """Logs at Exception; provided so standard library callers behave sensibly."""
@@ -243,11 +251,11 @@ class LoggingAPI(logging.Logger):
         if hooks:
             origin, beginning = sys.excepthook, threading.excepthook
             def _excepthook_(kind, value, trace) -> None:
-                logger.exception(lambda: f"Runtime Exception: Uncaught · {kind.__name__}\n{''.join(traceback.format_exception(kind, value, trace))[:-1]}")
+                logger.exception(lambda: f"Runtime Exception: Uncaught · {kind.__name__}\n{cls._trace_(kind, value, trace)}")
                 logger.flush()
                 origin(kind, value, trace)
             def _threadhook_(arguments) -> None:
-                logger.exception(lambda: f"Thread Exception: Uncaught · {arguments.thread.name if arguments.thread else 'Unknown'} · {arguments.exc_type.__name__}\n{''.join(traceback.format_exception(arguments.exc_type, arguments.exc_value, arguments.exc_traceback))[:-1]}")
+                logger.exception(lambda: f"Thread Exception: Uncaught · {arguments.thread.name if arguments.thread else 'Unknown'} · {arguments.exc_type.__name__}\n{cls._trace_(arguments.exc_type, arguments.exc_value, arguments.exc_traceback)}")
                 logger.flush()
                 beginning(arguments)
             sys.excepthook, threading.excepthook = _excepthook_, _threadhook_
@@ -288,7 +296,7 @@ class LoggingAPI(logging.Logger):
                 return func(*args, **kwargs)
             except Exception as error:
                 self.exception(lambda: f"Failed @ {func.__name__}")
-                self.exception(lambda: "".join(traceback.format_exception(error))[:-1])
+                self.exception(lambda: self._trace_(type(error), error, error.__traceback__))
                 raise
             finally:
                 self.debug(lambda: f"Terminated @ {func.__name__}")
@@ -318,10 +326,10 @@ class BridgeAPI(logging.Handler):
         try:
             level = VerboseLevel.standard(record.levelno)
             message = record.getMessage()
-            if record.exc_info: message = f"{message}\n{''.join(traceback.format_exception(*record.exc_info))[:-1]}"
+            if record.exc_info: message = f"{message}\n{LoggingAPI._trace_(*record.exc_info)}"
             self._logger_._emit_(level, level.value, f"{record.name}: {message}")
         except Exception as error:
-            LoggingAPI._fallback_(error)
+            LoggerAPI._fallback_(error, "Emit")
 
     def handleError(self, record: logging.LogRecord) -> None:
         pass

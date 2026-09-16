@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import os
 import sys
-import time
 from pathlib import Path
 from threading import RLock
 from typing import TextIO
 
+from Library.Utility.File import PruneAPI
 from Library.Utility.Path import inspect_temporary
 from Library.Logging.Level import VerboseLevel
 from Library.Logging.Logger import LoggerAPI
@@ -32,7 +32,7 @@ class FileAPI(LoggerAPI):
     _INVALID_: str = '<>:"/\\|?* '
     _SIZE_: int = 32 * 1024 * 1024
     _COUNT_: int = 5
-    _DAYS_: int = 30
+    _DAYS_: int = PruneAPI.DAYS
 
     Folder: str = "Logs"
     Name: str = "File"
@@ -191,12 +191,7 @@ class FileAPI(LoggerAPI):
 
     def _prune_(self, directory: Path) -> None:
         if not self._days_: return
-        horizon = time.time() - self._days_ * 86400
-        for candidate in directory.glob(f"*.{self._extension_}*"):
-            try:
-                if candidate.is_file() and candidate.stat().st_mtime < horizon: candidate.unlink()
-            except OSError:
-                continue
+        PruneAPI.prune((directory,), self._days_, patterns=(f"*.{self._extension_}*",))
 
     def _rotate_(self) -> None:
         base = self._path_
@@ -214,9 +209,6 @@ class FileAPI(LoggerAPI):
             except OSError: pass
         self._handle_ = base.open("a", encoding="utf-8", newline="\n")
         self._written_ = 0
-
-    def _format_(self, level: VerboseLevel, moment: str, head: str, tail: str, message: str) -> str:
-        return f"{moment} - {head}{level.name} - {tail}{message}\n"
 
     def _write_(self, line: str) -> None:
         with self._lock_:

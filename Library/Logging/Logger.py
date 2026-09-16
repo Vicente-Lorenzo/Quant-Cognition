@@ -1,7 +1,7 @@
 import sys
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from time import localtime, strftime
+from time import gmtime, strftime
 
 from Library.Logging.Level import VerboseLevel
 
@@ -107,7 +107,7 @@ class LoggerAPI(ABC):
         """
         second, millisecond = divmod(int(now * 1000 + 0.5), 1000)
         if second != LoggerAPI.Second:
-            LoggerAPI.Second, LoggerAPI.Prefix = second, strftime("%Y-%m-%d %H:%M:%S.", localtime(second))
+            LoggerAPI.Second, LoggerAPI.Prefix = second, strftime("%Y-%m-%d %H:%M:%S.", gmtime(second))
         return LoggerAPI.Prefix + LoggerAPI._MILLISECOND_[millisecond]
 
     @classmethod
@@ -188,18 +188,18 @@ class LoggerAPI(ABC):
         try: yield self
         finally: self.set_level(previous, force=True)
 
-    @abstractmethod
     def _format_(self, level: VerboseLevel, moment: str, head: str, tail: str, message: str) -> str:
-        raise NotImplementedError
+        return f"{moment} - {head}{level.name} - {tail}{message}\n"
 
     @abstractmethod
     def _write_(self, line: str) -> None:
         raise NotImplementedError
 
-    def _fallback_(self, error: Exception) -> None:
+    @classmethod
+    def _fallback_(cls, error: Exception, label: str | None = None) -> None:
         stream = getattr(sys, "__stderr__", None)
         if stream is None: return
-        try: stream.write(f"Logging {self.Name} Write: Failed · {type(error).__name__} · {error}\n")
+        try: stream.write(f"Logging {label or f'{cls.Name} Write'}: Failed · {type(error).__name__} · {error}\n")
         except Exception: pass
 
     def write(self, level: VerboseLevel, moment: str, head: str, tail: str, message: str) -> None:
