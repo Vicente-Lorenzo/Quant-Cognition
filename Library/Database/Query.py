@@ -20,6 +20,15 @@ class QueryAPI(FileAPI):
     _POSITIONAL_PARAMETER_TOKEN_ = re.compile(r":\?:")
     _PARAMETER_TOKEN_ = re.compile(rf"{_POSITIONAL_PARAMETER_TOKEN_.pattern}|{_NAMED_PARAMETER_TOKEN_.pattern}")
 
+    @classmethod
+    def named(cls, name: str) -> str:
+        """
+        Renders the named placeholder for a parameter.
+        :param name: The parameter name.
+        :return: The placeholder, as in :name:.
+        """
+        return f"{cls.Named}{name}{cls.Named}"
+
     def compile(self, token: Callable[[int], str], **kwargs) -> tuple[str, list[Union[int, str]]]:
         """
         Compiles the SQL query by replacing placeholders with appropriate tokens.
