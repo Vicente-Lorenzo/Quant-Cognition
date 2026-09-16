@@ -23,8 +23,9 @@ class Direction(EnumerationAPI):
     Neutral = 0
     Sell = -1
 
-def calculate_direction(value: float) -> Direction:
-    return Direction.Buy if value > 0 else Direction.Sell if value < 0 else Direction.Neutral
+    @classmethod
+    def calculate(cls, value: float) -> Direction:
+        return cls.Buy if value > 0 else cls.Sell if value < 0 else cls.Neutral
 
 class PriceMode(EnumerationAPI):
 
@@ -103,7 +104,7 @@ class PriceAPI(DataclassAPI):
     def Direction(self) -> Union[Direction, None]:
         d = self.Distance
         if d is None: return None
-        return calculate_direction(d)
+        return Direction.calculate(d)
 
     @property
     def Ratio(self) -> Union[float, None]:

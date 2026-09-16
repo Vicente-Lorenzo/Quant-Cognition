@@ -87,20 +87,20 @@ class TickAPI(DatapointAPI):
         ask_quote_conversion = coerce(ask_quote_conversion)
         bid_quote_conversion = coerce(bid_quote_conversion)
         self._security_ = self._relate_(security, SecurityAPI, db=db, autoload=autoload)
-        self._timestamp_ = TimestampAPI.assign(None, timestamp)
+        self._timestamp_ = TimestampAPI(DateTime=timestamp) if isinstance(timestamp, datetime) else TimestampAPI.assign(None, timestamp)
         contract = self._security_.Contract if self._security_ is not None else None
-        ask = PriceAPI.assign(None, ask, None, contract)
-        mid = PriceAPI.assign(None, mid, None, contract)
-        bid = PriceAPI.assign(None, bid, None, contract)
+        ask = PriceAPI(Price=ask, Reference=None, Contract=contract) if isinstance(ask, float) else PriceAPI.assign(None, ask, None, contract)
+        mid = PriceAPI(Price=mid, Reference=None, Contract=contract) if isinstance(mid, float) else PriceAPI.assign(None, mid, None, contract)
+        bid = PriceAPI(Price=bid, Reference=None, Contract=contract) if isinstance(bid, float) else PriceAPI.assign(None, bid, None, contract)
         if ask is not None and bid is not None:
             if ask.Reference is None: ask.Reference = bid.Price
             if bid.Reference is None: bid.Reference = ask.Price
             if mid is None: mid = PriceAPI(Price=(ask.Price + bid.Price) / 2, Reference=None, Contract=contract)
         self._ask_, self._mid_, self._bid_ = ask, mid, bid
-        self._ask_base_conversion_ = PriceAPI.assign(None, ask_base_conversion, None, contract)
-        self._bid_base_conversion_ = PriceAPI.assign(None, bid_base_conversion, None, contract)
-        self._ask_quote_conversion_ = PriceAPI.assign(None, ask_quote_conversion, None, contract)
-        self._bid_quote_conversion_ = PriceAPI.assign(None, bid_quote_conversion, None, contract)
+        self._ask_base_conversion_ = PriceAPI(Price=ask_base_conversion, Reference=None, Contract=contract) if isinstance(ask_base_conversion, float) else PriceAPI.assign(None, ask_base_conversion, None, contract)
+        self._bid_base_conversion_ = PriceAPI(Price=bid_base_conversion, Reference=None, Contract=contract) if isinstance(bid_base_conversion, float) else PriceAPI.assign(None, bid_base_conversion, None, contract)
+        self._ask_quote_conversion_ = PriceAPI(Price=ask_quote_conversion, Reference=None, Contract=contract) if isinstance(ask_quote_conversion, float) else PriceAPI.assign(None, ask_quote_conversion, None, contract)
+        self._bid_quote_conversion_ = PriceAPI(Price=bid_quote_conversion, Reference=None, Contract=contract) if isinstance(bid_quote_conversion, float) else PriceAPI.assign(None, bid_quote_conversion, None, contract)
         self._encode_uid_()
         super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
 
@@ -168,7 +168,8 @@ class TickAPI(DatapointAPI):
         return self._timestamp_
     @Timestamp.setter
     def Timestamp(self, val: Union[datetime, TimestampAPI, None]) -> None:
-        self._timestamp_ = TimestampAPI.assign(self._timestamp_, val)
+        if self._timestamp_ is not None and isinstance(val, datetime): self._timestamp_.DateTime = val
+        else: self._timestamp_ = TimestampAPI.assign(self._timestamp_, val)
         self._encode_uid_()
 
     @property
@@ -177,7 +178,8 @@ class TickAPI(DatapointAPI):
         return self._ask_
     @Ask.setter
     def Ask(self, val: Union[float, PriceAPI, None]) -> None:
-        self._ask_ = PriceAPI.assign(self._ask_, val, self._bid_.Price if self._bid_ else None, self._security_.Contract if self._security_ is not None else None)
+        if self._ask_ is not None and isinstance(val, float): self._ask_.Price = val
+        else: self._ask_ = PriceAPI.assign(self._ask_, val, self._bid_.Price if self._bid_ else None, self._security_.Contract if self._security_ is not None else None)
 
     @property
     def InvertedAsk(self) -> Union[float, None]:
@@ -189,7 +191,8 @@ class TickAPI(DatapointAPI):
         return self._bid_
     @Bid.setter
     def Bid(self, val: Union[float, PriceAPI, None]) -> None:
-        self._bid_ = PriceAPI.assign(self._bid_, val, self._ask_.Price if self._ask_ else None, self._security_.Contract if self._security_ is not None else None)
+        if self._bid_ is not None and isinstance(val, float): self._bid_.Price = val
+        else: self._bid_ = PriceAPI.assign(self._bid_, val, self._ask_.Price if self._ask_ else None, self._security_.Contract if self._security_ is not None else None)
 
     @property
     def InvertedBid(self) -> Union[float, None]:
@@ -201,7 +204,8 @@ class TickAPI(DatapointAPI):
         return self._ask_base_conversion_
     @AskBaseConversion.setter
     def AskBaseConversion(self, val: Union[float, PriceAPI, None]) -> None:
-        self._ask_base_conversion_ = PriceAPI.assign(self._ask_base_conversion_, val, None, self._security_.Contract if self._security_ is not None else None)
+        if self._ask_base_conversion_ is not None and isinstance(val, float): self._ask_base_conversion_.Price = val
+        else: self._ask_base_conversion_ = PriceAPI.assign(self._ask_base_conversion_, val, None, self._security_.Contract if self._security_ is not None else None)
 
     @property
     @overridefield
@@ -209,7 +213,8 @@ class TickAPI(DatapointAPI):
         return self._bid_base_conversion_
     @BidBaseConversion.setter
     def BidBaseConversion(self, val: Union[float, PriceAPI, None]) -> None:
-        self._bid_base_conversion_ = PriceAPI.assign(self._bid_base_conversion_, val, None, self._security_.Contract if self._security_ is not None else None)
+        if self._bid_base_conversion_ is not None and isinstance(val, float): self._bid_base_conversion_.Price = val
+        else: self._bid_base_conversion_ = PriceAPI.assign(self._bid_base_conversion_, val, None, self._security_.Contract if self._security_ is not None else None)
 
     @property
     @overridefield
@@ -217,7 +222,8 @@ class TickAPI(DatapointAPI):
         return self._ask_quote_conversion_
     @AskQuoteConversion.setter
     def AskQuoteConversion(self, val: Union[float, PriceAPI, None]) -> None:
-        self._ask_quote_conversion_ = PriceAPI.assign(self._ask_quote_conversion_, val, None, self._security_.Contract if self._security_ is not None else None)
+        if self._ask_quote_conversion_ is not None and isinstance(val, float): self._ask_quote_conversion_.Price = val
+        else: self._ask_quote_conversion_ = PriceAPI.assign(self._ask_quote_conversion_, val, None, self._security_.Contract if self._security_ is not None else None)
 
     @property
     @overridefield
@@ -225,7 +231,8 @@ class TickAPI(DatapointAPI):
         return self._bid_quote_conversion_
     @BidQuoteConversion.setter
     def BidQuoteConversion(self, val: Union[float, PriceAPI, None]) -> None:
-        self._bid_quote_conversion_ = PriceAPI.assign(self._bid_quote_conversion_, val, None, self._security_.Contract if self._security_ is not None else None)
+        if self._bid_quote_conversion_ is not None and isinstance(val, float): self._bid_quote_conversion_.Price = val
+        else: self._bid_quote_conversion_ = PriceAPI.assign(self._bid_quote_conversion_, val, None, self._security_.Contract if self._security_ is not None else None)
 
     @property
     def Spread(self) -> Union[PriceAPI, None]:
@@ -239,7 +246,8 @@ class TickAPI(DatapointAPI):
         return self._mid_
     @Mid.setter
     def Mid(self, val: Union[float, PriceAPI, None]) -> None:
-        self._mid_ = PriceAPI.assign(self._mid_, val, None, self._security_.Contract if self._security_ is not None else None)
+        if self._mid_ is not None and isinstance(val, float): self._mid_.Price = val
+        else: self._mid_ = PriceAPI.assign(self._mid_, val, None, self._security_.Contract if self._security_ is not None else None)
 
     @property
     def InvertedMid(self) -> Union[float, None]:
