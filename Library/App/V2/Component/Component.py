@@ -10,9 +10,6 @@ from dash.development.base_component import Component
 from Library.App.V2.Session import TriggerAPI
 from Library.Utility.Typing import MISSING
 
-def prop(name: str | None = None, default: Any = MISSING):
-    return field(default=default, metadata={"prop": name})
-
 @dataclass(kw_only=True)
 class ComponentAPI(ABC):
 
@@ -37,6 +34,10 @@ class ComponentAPI(ABC):
     @functools.cache
     def _props_(cls) -> tuple:
         return tuple((f.name, f.metadata["prop"] or f.name) for f in fields(cls) if "prop" in f.metadata)
+
+    @staticmethod
+    def prop(name: str | None = None, default: Any = MISSING):
+        return field(default=default, metadata={"prop": name})
 
     def arguments(self) -> dict:
         kwargs = {}
@@ -126,8 +127,8 @@ class MarkdownAPI(TextAPI):
     classname: str = "markdown"
     builder: type[Component] = dcc.Markdown
 
-    allow_html: bool = prop("dangerously_allow_html")
-    dedent: bool = prop()
+    allow_html: bool = ComponentAPI.prop("dangerously_allow_html")
+    dedent: bool = ComponentAPI.prop()
 
 @dataclass(kw_only=True)
 class IntervalAPI(ComponentAPI):
@@ -135,9 +136,9 @@ class IntervalAPI(ComponentAPI):
     classname: str = "interval"
     builder: type[Component] = dcc.Interval
 
-    interval: int = prop()
-    intervals: int = prop("n_intervals")
-    disabled: bool = prop()
+    interval: int = ComponentAPI.prop()
+    intervals: int = ComponentAPI.prop("n_intervals")
+    disabled: bool = ComponentAPI.prop()
 
     def __post_init__(self):
         super().__post_init__()
@@ -149,9 +150,9 @@ class StorageAPI(ComponentAPI):
     classname: str = "store"
     builder: type[Component] = dcc.Store
 
-    data: dict = prop()
-    autoclear: bool = prop("clear_data")
-    persistence: str = prop("storage_type")
+    data: dict = ComponentAPI.prop()
+    autoclear: bool = ComponentAPI.prop("clear_data")
+    persistence: str = ComponentAPI.prop("storage_type")
 
     def __post_init__(self):
         super().__post_init__()
@@ -173,11 +174,11 @@ class UploadAPI(ComponentAPI):
     classname: str = "upload"
     builder: type[Component] = dcc.Upload
 
-    accept: str = prop()
-    multiple: bool = prop()
-    disabled: bool = prop()
-    minsize: int = prop("min_size")
-    maxsize: int = prop("max_size")
+    accept: str = ComponentAPI.prop()
+    multiple: bool = ComponentAPI.prop()
+    disabled: bool = ComponentAPI.prop()
+    minsize: int = ComponentAPI.prop("min_size")
+    maxsize: int = ComponentAPI.prop("max_size")
 
 @dataclass(kw_only=True)
 class InputAPI(ComponentAPI):
@@ -185,17 +186,17 @@ class InputAPI(ComponentAPI):
     classname: str = "input"
     builder: type[Component] = dbc.Input
 
-    type: str = prop()
-    name: str = prop()
-    value: Any = prop()
-    placeholder: str = prop()
-    autocomplete: str = prop("autoComplete")
-    submits: int = prop("n_submit")
-    min: int | float = prop()
-    max: int | float = prop()
-    step: int | float = prop()
-    debounce: bool | int = prop()
-    disabled: bool = prop()
+    type: str = ComponentAPI.prop()
+    name: str = ComponentAPI.prop()
+    value: Any = ComponentAPI.prop()
+    placeholder: str = ComponentAPI.prop()
+    autocomplete: str = ComponentAPI.prop("autoComplete")
+    submits: int = ComponentAPI.prop("n_submit")
+    min: int | float = ComponentAPI.prop()
+    max: int | float = ComponentAPI.prop()
+    step: int | float = ComponentAPI.prop()
+    debounce: bool | int = ComponentAPI.prop()
+    disabled: bool = ComponentAPI.prop()
 
 @dataclass(kw_only=True)
 class SelectAPI(ComponentAPI):
@@ -203,10 +204,10 @@ class SelectAPI(ComponentAPI):
     classname: str = "select"
     builder: type[Component] = dbc.Select
 
-    options: list = prop()
-    value: str = prop()
-    placeholder: str = prop()
-    disabled: bool = prop()
+    options: list = ComponentAPI.prop()
+    value: str = ComponentAPI.prop()
+    placeholder: str = ComponentAPI.prop()
+    disabled: bool = ComponentAPI.prop()
 
 @dataclass(kw_only=True)
 class SwitchAPI(ComponentAPI):
@@ -214,9 +215,9 @@ class SwitchAPI(ComponentAPI):
     classname: str = "switch"
     builder: type[Component] = dbc.Switch
 
-    label: str = prop()
-    value: bool = prop()
-    disabled: bool = prop()
+    label: str = ComponentAPI.prop()
+    value: bool = ComponentAPI.prop()
+    disabled: bool = ComponentAPI.prop()
 
 @dataclass(kw_only=True)
 class TextareaAPI(ComponentAPI):
@@ -224,10 +225,10 @@ class TextareaAPI(ComponentAPI):
     classname: str = "textarea"
     builder: type[Component] = dbc.Textarea
 
-    value: str = prop()
-    placeholder: str = prop()
-    rows: int = prop()
-    disabled: bool = prop()
+    value: str = ComponentAPI.prop()
+    placeholder: str = ComponentAPI.prop()
+    rows: int = ComponentAPI.prop()
+    disabled: bool = ComponentAPI.prop()
 
 @dataclass(kw_only=True)
 class ButtonAPI(ComponentAPI):
@@ -236,15 +237,15 @@ class ButtonAPI(ComponentAPI):
     builder: type[Component] = dbc.Button
 
     label: list[Component] = MISSING
-    title: str = prop()
-    type: str = prop()
-    clicks: int = prop("n_clicks")
-    value: str = prop()
-    active: bool = prop()
-    disabled: bool = prop()
-    href: str = prop()
-    size: str = prop()
-    background: str = prop("color")
+    title: str = ComponentAPI.prop()
+    type: str = ComponentAPI.prop()
+    clicks: int = ComponentAPI.prop("n_clicks")
+    value: str = ComponentAPI.prop()
+    active: bool = ComponentAPI.prop()
+    disabled: bool = ComponentAPI.prop()
+    href: str = ComponentAPI.prop()
+    size: str = ComponentAPI.prop()
+    background: str = ComponentAPI.prop("color")
     external: bool = MISSING
     download: DownloadAPI | dict = MISSING
     upload: UploadAPI | dict = MISSING
@@ -279,8 +280,8 @@ class ImageAPI(ComponentAPI):
     classname: str = "image"
     builder: type[Component] = html.Img
 
-    src: str = prop()
-    alt: str = prop()
+    src: str = ComponentAPI.prop()
+    alt: str = ComponentAPI.prop()
 
 @dataclass(kw_only=True)
 class IframeAPI(ComponentAPI):
@@ -288,8 +289,8 @@ class IframeAPI(ComponentAPI):
     classname: str = "iframe"
     builder: type[Component] = html.Iframe
 
-    src: str = prop()
-    srcdoc: str = prop("srcDoc")
+    src: str = ComponentAPI.prop()
+    srcdoc: str = ComponentAPI.prop("srcDoc")
 
 @dataclass(kw_only=True)
 class ContainerAPI(ComponentAPI):
@@ -299,7 +300,7 @@ class ContainerAPI(ComponentAPI):
     elements: list[Component] = MISSING
     builder: type[Component] = dbc.Container
 
-    fluid: str | bool = prop()
+    fluid: str | bool = ComponentAPI.prop()
     invert: bool = MISSING
 
     def __post_init__(self):
@@ -319,8 +320,8 @@ class RowContainerAPI(ContainerAPI):
     classname: str = "row"
     builder: type[Component] = dbc.Row
 
-    align: str = prop()
-    justify: str = prop()
+    align: str = ComponentAPI.prop()
+    justify: str = ComponentAPI.prop()
 
 @dataclass(kw_only=True)
 class ColContainerAPI(ContainerAPI):
@@ -328,8 +329,8 @@ class ColContainerAPI(ContainerAPI):
     classname: str = "col"
     builder: type[Component] = dbc.Col
 
-    align: str = prop()
-    width: int | dict = prop()
+    align: str = ComponentAPI.prop()
+    width: int | dict = ComponentAPI.prop()
 
 @dataclass(kw_only=True)
 class ButtonContainerAPI(ContainerAPI):
@@ -337,8 +338,8 @@ class ButtonContainerAPI(ContainerAPI):
     classname: str = "buttons"
     builder: type[Component] = dbc.ButtonGroup
 
-    vertical: bool = prop()
-    size: str = prop()
+    vertical: bool = ComponentAPI.prop()
+    size: str = ComponentAPI.prop()
 
 @dataclass(kw_only=True)
 class DropdownAPI(ComponentAPI):
@@ -346,24 +347,24 @@ class DropdownAPI(ComponentAPI):
     classname: str = "dropdown"
     builder: type[Component] = dbc.DropdownMenuItem
 
-    header: bool = prop()
-    divider: bool = prop()
-    active: bool = prop()
-    disabled: bool = prop()
+    header: bool = ComponentAPI.prop()
+    divider: bool = ComponentAPI.prop()
+    active: bool = ComponentAPI.prop()
+    disabled: bool = ComponentAPI.prop()
 
 @dataclass(kw_only=True)
 class DropdownContainerAPI(ContainerAPI):
 
     classname: str = "dropdowns"
 
-    direction: str = prop()
-    disabled: bool = prop()
-    align_end: bool = prop()
-    in_navbar: bool = prop()
-    in_nav: bool = prop("nav")
-    in_group: bool = prop("group")
-    size: str = prop()
-    background: str = prop("color")
+    direction: str = ComponentAPI.prop()
+    disabled: bool = ComponentAPI.prop()
+    align_end: bool = ComponentAPI.prop()
+    in_navbar: bool = ComponentAPI.prop()
+    in_nav: bool = ComponentAPI.prop("nav")
+    in_group: bool = ComponentAPI.prop("group")
+    size: str = ComponentAPI.prop()
+    background: str = ComponentAPI.prop("color")
 
     elements: list[DropdownAPI] = MISSING
     builder: type[Component] = dbc.DropdownMenu
@@ -400,12 +401,12 @@ class NavigatorContainerAPI(ContainerAPI):
     elements: list[NavigatorAPI] = MISSING
     builder: type[Component] = dbc.Nav
 
-    vertical: str | bool = prop()
-    horizontal: str = prop()
-    justified: bool = prop()
-    fill: bool = prop()
-    in_card: bool = prop("card")
-    in_navbar: bool = prop("navbar")
+    vertical: str | bool = ComponentAPI.prop()
+    horizontal: str = ComponentAPI.prop()
+    justified: bool = ComponentAPI.prop()
+    fill: bool = ComponentAPI.prop()
+    in_card: bool = ComponentAPI.prop("card")
+    in_navbar: bool = ComponentAPI.prop("navbar")
 
 @dataclass(kw_only=True)
 class LoadingAPI(ComponentAPI):
@@ -435,9 +436,9 @@ class NotificationAPI(ComponentAPI):
     icon: str = MISSING
     header: str = MISSING
     background: str = MISSING
-    duration: int | None = prop()
-    dismissable: bool = prop(default=True)
-    persistence: bool | str = prop()
+    duration: int | None = ComponentAPI.prop()
+    dismissable: bool = ComponentAPI.prop(default=True)
+    persistence: bool | str = ComponentAPI.prop()
 
     def __post_init__(self):
         if self.background is not MISSING: self.stylename = " ".join(p for p in (self.background, self.stylename) if p)
@@ -461,14 +462,14 @@ class ModalAPI(ComponentAPI):
     body: list[Component] = MISSING
     footer: list[Component] = MISSING
 
-    size: str = prop()
-    fade: bool = prop()
-    open: bool = prop("is_open")
-    centered: bool = prop()
-    keyboard: bool = prop()
-    backdrop: bool | str = prop()
-    scrollable: bool = prop()
-    fullscreen: bool | str = prop()
+    size: str = ComponentAPI.prop()
+    fade: bool = ComponentAPI.prop()
+    open: bool = ComponentAPI.prop("is_open")
+    centered: bool = ComponentAPI.prop()
+    keyboard: bool = ComponentAPI.prop()
+    backdrop: bool | str = ComponentAPI.prop()
+    scrollable: bool = ComponentAPI.prop()
+    fullscreen: bool | str = ComponentAPI.prop()
 
     def build(self) -> list[Component]:
         elements = []

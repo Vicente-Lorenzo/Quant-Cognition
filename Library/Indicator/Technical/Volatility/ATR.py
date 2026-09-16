@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Union
 
 from Library.Database.Dataframe import pl
-from Library.Indicator.Technical.Technical import MODE, NeutralSignalAPI, PERIOD, TechnicalType
+from Library.Indicator.Technical.Technical import NeutralSignalAPI, TechnicalAPI, TechnicalType
 
 if TYPE_CHECKING:
     from Library.Market.Market import MarketAPI
@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 class AverageTrueRangeAPI(NeutralSignalAPI):
 
     Type = TechnicalType.Volatility
-    Parameters = (PERIOD, MODE)
+    Parameters = (TechnicalAPI.PERIOD, TechnicalAPI.MODE)
 
     def _extract_(self, market: MarketAPI) -> Union[pl.Series, pl.DataFrame]:
         return pl.DataFrame({

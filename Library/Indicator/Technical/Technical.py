@@ -37,16 +37,16 @@ class SlotAPI:
     def revised(self, **changes) -> Self:
         return replace(self, **changes)
 
-WINDOW = SlotAPI(name="window", default=14, ladder=((5, 100, 5), (-8, 8, 2), (-3, 3, 1)))
-PERIOD = SlotAPI(name="window", default=14, ladder=((5, 50, 5), (-4, 4, 2), (-2, 2, 1)))
-FAST = SlotAPI(name="fast_window", default=5, ladder=((2, 30, 2), (-4, 4, 1)))
-SLOW = SlotAPI(name="slow_window", default=20, ladder=((10, 100, 5), (-8, 8, 2), (-3, 3, 1)))
-MODE = SlotAPI(name="mode", default=IndicatorMode.Off, parser=IndicatorMode.parse)
-
 class TechnicalAPI:
 
     Type: ClassVar[TechnicalType] = TechnicalType.Other
     Parameters: ClassVar[tuple] = ()
+
+    WINDOW = SlotAPI(name="window", default=14, ladder=((5, 100, 5), (-8, 8, 2), (-3, 3, 1)))
+    PERIOD = SlotAPI(name="window", default=14, ladder=((5, 50, 5), (-4, 4, 2), (-2, 2, 1)))
+    FAST = SlotAPI(name="fast_window", default=5, ladder=((2, 30, 2), (-4, 4, 1)))
+    SLOW = SlotAPI(name="slow_window", default=20, ladder=((10, 100, 5), (-8, 8, 2), (-3, 3, 1)))
+    MODE = SlotAPI(name="mode", default=IndicatorMode.Off, parser=IndicatorMode.parse)
 
     @classmethod
     def admits(cls, values: dict) -> bool:
@@ -164,7 +164,7 @@ class NeutralSignalAPI(TechnicalAPI):
 class ConstantAPI(TechnicalAPI):
 
     Type = TechnicalType.Other
-    Parameters = (MODE,)
+    Parameters = (TechnicalAPI.MODE,)
     _FILTER_ = False
     _SIGNAL_ = False
 
@@ -195,7 +195,7 @@ class ConstantAPI(TechnicalAPI):
 class BaselineAPI(PriceSignalAPI):
 
     Type = TechnicalType.Baseline
-    Parameters = (WINDOW, MODE)
+    Parameters = (TechnicalAPI.WINDOW, TechnicalAPI.MODE)
     _TAIL_ = 1
 
     def batch(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:

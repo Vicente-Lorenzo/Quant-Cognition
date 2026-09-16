@@ -10,7 +10,7 @@ from Library.Indicator.Technical.Baseline.KAMA import KaufmanAdaptiveMovingAvera
 from Library.Indicator.Technical.Baseline.SMA import SimpleMovingAverageAPI
 from Library.Indicator.Technical.Baseline.TRIMA import TriangularMovingAverageAPI
 from Library.Indicator.Technical.Baseline.WMA import WeightedMovingAverageAPI
-from Library.Indicator.Technical.Technical import MODE, PriceSignalAPI, SlotAPI, TechnicalAPI, TechnicalType, WINDOW
+from Library.Indicator.Technical.Technical import PriceSignalAPI, SlotAPI, TechnicalAPI, TechnicalType
 from Library.Utility.Enumeration import EnumerationAPI
 
 if TYPE_CHECKING:
@@ -25,12 +25,11 @@ class MovingAverageType(EnumerationAPI):
     Triangular = 4
     Kaufman = 5
 
-MOVING = SlotAPI(name="type", default=MovingAverageType.Exponential, parser=MovingAverageType.parse)
-
 class MovingAverageAPI(PriceSignalAPI):
 
     Type = TechnicalType.Baseline
-    Parameters = (WINDOW, MOVING, MODE)
+    MOVING = SlotAPI(name="type", default=MovingAverageType.Exponential, parser=MovingAverageType.parse)
+    Parameters = (TechnicalAPI.WINDOW, MOVING, TechnicalAPI.MODE)
     _AVERAGES_ = {
         MovingAverageType.Simple: SimpleMovingAverageAPI,
         MovingAverageType.Exponential: ExponentialMovingAverageAPI,

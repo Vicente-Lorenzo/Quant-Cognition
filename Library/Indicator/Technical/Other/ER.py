@@ -1,12 +1,12 @@
 from typing import Union
 
 from Library.Database.Dataframe import pl
-from Library.Indicator.Technical.Technical import MODE, NeutralSignalAPI, PERIOD, TechnicalType
+from Library.Indicator.Technical.Technical import NeutralSignalAPI, TechnicalAPI, TechnicalType
 
 class EfficiencyRatioAPI(NeutralSignalAPI):
 
     Type = TechnicalType.Other
-    Parameters = (PERIOD.revised(default=24), MODE)
+    Parameters = (TechnicalAPI.PERIOD.revised(default=24), TechnicalAPI.MODE)
 
     def _ratio_(self, data: Union[pl.Series, pl.DataFrame]) -> Union[float, None]:
         window = data.tail(self.Window + 1)

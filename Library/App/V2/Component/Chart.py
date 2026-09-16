@@ -4,7 +4,7 @@ from typing import Any
 from dash import dcc, html
 from dataclasses import dataclass
 
-from Library.App.V2.Component.Component import ComponentAPI, Component, ImageAPI, IframeAPI, prop
+from Library.App.V2.Component.Component import ComponentAPI, Component, ImageAPI, IframeAPI
 from Library.Utility.Typing import MISSING
 
 @dataclass(kw_only=True)
@@ -13,9 +13,9 @@ class PlotlyAPI(ComponentAPI):
     classname: str = "plotly"
     builder: type[Component] = dcc.Graph
 
-    figure: Any = prop()
-    config: dict = prop()
-    responsive: bool | str = prop(default=True)
+    figure: Any = ComponentAPI.prop()
+    config: dict = ComponentAPI.prop()
+    responsive: bool | str = ComponentAPI.prop(default=True)
 
 @dataclass(kw_only=True)
 class NetworkAPI(PlotlyAPI):

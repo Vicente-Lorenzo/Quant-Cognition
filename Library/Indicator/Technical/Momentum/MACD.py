@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Union
 
 from Library.Database.Dataframe import pl
 from Library.Indicator.Indicator import IndicatorMode
-from Library.Indicator.Technical.Technical import MODE, SlotAPI, TechnicalAPI, TechnicalType
+from Library.Indicator.Technical.Technical import SlotAPI, TechnicalAPI, TechnicalType
 from Library.Market.Series import SeriesAPI
 
 if TYPE_CHECKING:
@@ -15,7 +15,7 @@ class MovingAverageConvergenceDivergenceAPI(TechnicalAPI):
     Type = TechnicalType.Momentum
     Parameters = (SlotAPI(name="slow_period", default=26, ladder=((15, 60, 5), (-4, 4, 2), (-2, 2, 1))),
                   SlotAPI(name="fast_period", default=12, ladder=((5, 30, 5), (-4, 4, 2), (-2, 2, 1))),
-                  SlotAPI(name="signal_period", default=9, ladder=((3, 20, 2), (-2, 2, 1))), MODE)
+                  SlotAPI(name="signal_period", default=9, ladder=((3, 20, 2), (-2, 2, 1))), TechnicalAPI.MODE)
 
     @classmethod
     def admits(cls, values: dict) -> bool:

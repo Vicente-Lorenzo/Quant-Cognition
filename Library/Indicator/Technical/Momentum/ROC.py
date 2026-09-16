@@ -2,12 +2,12 @@ import math
 from typing import Union
 
 from Library.Database.Dataframe import pl
-from Library.Indicator.Technical.Technical import MODE, NeutralSignalAPI, PERIOD, TechnicalType
+from Library.Indicator.Technical.Technical import NeutralSignalAPI, TechnicalAPI, TechnicalType
 
 class RateOfChangeAPI(NeutralSignalAPI):
 
     Type = TechnicalType.Momentum
-    Parameters = (PERIOD.revised(default=12), MODE)
+    Parameters = (TechnicalAPI.PERIOD.revised(default=12), TechnicalAPI.MODE)
 
     def batch(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
         if data.is_empty(): return self._pad_()

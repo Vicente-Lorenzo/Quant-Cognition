@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from Library.Indicator.Indicator import IndicatorMode
-from Library.Indicator.Technical.Baseline.MA import MOVING, MovingAverageAPI, MovingAverageType
-from Library.Indicator.Technical.Technical import FAST, MODE, SLOW, TechnicalAPI, TechnicalType
+from Library.Indicator.Technical.Baseline.MA import MovingAverageAPI, MovingAverageType
+from Library.Indicator.Technical.Technical import TechnicalAPI, TechnicalType
 
 if TYPE_CHECKING:
     from Library.Market.Market import MarketAPI
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 class MovingAverageCrossAPI(TechnicalAPI):
 
     Type = TechnicalType.Overlap
-    Parameters = (FAST, SLOW, MOVING, MODE)
+    Parameters = (TechnicalAPI.FAST, TechnicalAPI.SLOW, MovingAverageAPI.MOVING, TechnicalAPI.MODE)
     _COMPONENT_ = MovingAverageAPI
 
     @classmethod
