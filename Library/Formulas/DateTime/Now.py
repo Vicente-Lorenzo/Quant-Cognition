@@ -1,10 +1,8 @@
-from datetime import datetime
-
 from Library.Formulas import formula
-from Library.Utility import datetime_to_string
+from Library.Utility import datetime_to_string, local_now
 
 def _now_(fmt: str) -> str:
-    return datetime_to_string(datetime.now(), fmt)
+    return datetime_to_string(local_now(), fmt)
 
 @formula
 def datetime_now():

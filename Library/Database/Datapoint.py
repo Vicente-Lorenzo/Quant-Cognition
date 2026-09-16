@@ -3,16 +3,13 @@ from __future__ import annotations
 from threading import local
 from datetime import datetime
 from dataclasses import dataclass, field, InitVar
-from typing import Union, ClassVar, TYPE_CHECKING, Any
+from typing import Any, Callable, ClassVar, Union
 
+from Library.Utility.Datetime import utc_now
 from Library.Database.Dataframe import pl
 from Library.Database.Dataclass import DataclassAPI
-from Library.Database.Database import IdentityKey, PrimaryKey, ForeignKey
-from Library.Database.Query import QueryAPI
+from Library.Database.Database import DatabaseAPI, IdentityKey, ForeignKey
 from Library.Utility.Typing import MISSING
-
-if TYPE_CHECKING:
-    from Library.Database.Database import DatabaseAPI
 
 @dataclass
 class DatapointAPI(DataclassAPI):
@@ -67,8 +64,19 @@ class DatapointAPI(DataclassAPI):
             except Exception as e:
                 if self._db_ is not None: self._db_._log_.debug(lambda: f"Autosave {type(self).__name__}: Failed · {e}")
 
+    @staticmethod
+    def _relate_(value: Any, kind: type, normalize: Callable = MISSING, **kwargs) -> Any:
+        if isinstance(value, kind): return value
+        if value is MISSING or value is None: return None
+        return kind(UID=normalize(value) if normalize else value, **kwargs)
+
+    @classmethod
+    def reference(cls, clause: str = MISSING) -> str:
+        target = f'"{cls.Schema}"."{cls.Table}"("{cls.ID.UID}")'
+        return f"{target} {clause}" if clause else target
+
     def primary_keys(self) -> list[str]:
-        return [str(n) for n, d in self.Structure.items() if isinstance(d, PrimaryKey) or (isinstance(d, (IdentityKey, ForeignKey)) and getattr(d, "primary", False))]
+        return [str(n) for n, d in self.Structure.items() if DatabaseAPI.primary(d)]
 
     def foreign_keys(self) -> list[str]:
         return [str(n) for n, d in self.Structure.items() if isinstance(d, ForeignKey)]
@@ -91,7 +99,7 @@ class DatapointAPI(DataclassAPI):
 
     def _stamp_(self, by: str, at: Union[datetime, None] = None) -> None:
         self.UpdatedBy = by
-        self.UpdatedAt = at or datetime.now()
+        self.UpdatedAt = at or utc_now()
 
     def _push_(self, by: str) -> None:
         if self._db_ is None: return
@@ -112,11 +120,8 @@ class DatapointAPI(DataclassAPI):
             elif identity_cols and all(data.get(k) is not None for k in identity_cols):
                 update_data = {k: v for k, v in data.items() if k not in identity_cols}
                 if update_data:
-                    sql = f"UPDATE {self._db_._target_(self.Schema, self.Table)} SET "
-                    sql += ", ".join([f'"{k}" = :{k}:' for k in update_data.keys()])
-                    sql += " WHERE " + " AND ".join([f'"{k}" = :{k}:' for k in identity_cols])
-                    params = {**update_data, **{k: data[k] for k in identity_cols}}
-                    self._db_.execute(QueryAPI(sql), [params])
+                    condition, parameters = self._db_.where(**{k: data[k] for k in identity_cols})
+                    self._db_.update(schema=self.Schema, table=self.Table, data=update_data, condition=condition, parameters=parameters)
             else:
                 fallback_key = identity_cols or natural_key or list(self.Structure.keys())[:1]
                 self._db_.upsert(schema=self.Schema, table=self.Table, data=data, key=fallback_key)
@@ -138,9 +143,8 @@ class DatapointAPI(DataclassAPI):
         if key in loading: return None
         loading.add(key)
         try:
-            df = self._db_.select(schema=self.Schema, table=self.Table, condition=condition, parameters=parameters, limit=1, legacy=False)
-            if df.is_empty(): return None
-            row = df.row(0, named=True)
+            row = self._db_.first(schema=self.Schema, table=self.Table, condition=condition, parameters=parameters)
+            if row is None: return None
             save_state, self._autosave_ = self._autosave_, False
             try:
                 for k, v in row.items():
@@ -155,7 +159,8 @@ class DatapointAPI(DataclassAPI):
         if self._db_ is None: return None
         ident = self.identifier()
         if not ident: return None
-        return self._fetch_(condition=" AND ".join([f'"{k}" = :{k}:' for k in ident.keys()]), parameters=ident, overload=overload)
+        condition, parameters = self._db_.where(**ident)
+        return self._fetch_(condition=condition, parameters=parameters, overload=overload)
 
     def overload(self) -> Union[dict, None]:
         return self._pull_(overload=True)

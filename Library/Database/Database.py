@@ -52,7 +52,9 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
     _ADMIN_: Union[str, None] = None
     _PARAMETER_TOKEN_: Callable[[int], str] | None = None
     _PARAMETER_LIMIT_: int = 1000
+    _CHECK_SEPARATOR_: str = ",\n    "
     _SCOPES_: contextvars.ContextVar = contextvars.ContextVar("_SCOPES_", default=None)
+    _CATALOG_: pl.DataFrame = pl.DataFrame({"Database": [], "Schema": [], "Table": [], "Column": []})
 
     _PYTHON_DATATYPE_MAPPING_: dict = {
         bytes: pl.Binary,
@@ -222,13 +224,52 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         ql, qr = self._quote_
         return f"{ql}{schema}{qr}.{ql}{table}{qr}"
 
-    def _quoted_(self, *columns: str) -> str:
+    def _quoted_(self, *columns: str, prefix: str = "") -> str:
         ql, qr = self._quote_
-        return ", ".join(f"{ql}{c}{qr}" for c in columns)
+        return ", ".join(f"{prefix}{ql}{c}{qr}" for c in columns)
+
+    def _pairs_(self, columns: Sequence[str], left: str, right: str, separator: str = ", ") -> str:
+        return separator.join(f"{self._quoted_(column, prefix=left)} = {self._quoted_(column, prefix=right)}" for column in columns)
+
+    @staticmethod
+    def _updatable_(columns: Sequence[str], keys: Sequence[str], exclude: Sequence[str]) -> list:
+        return [column for column in columns if column not in keys and column not in exclude]
+
+    def _matched_(self, columns: Sequence[str], keys: Sequence[str], exclude: Sequence[str]) -> str:
+        updates = self._pairs_(self._updatable_(columns, keys, exclude), "target.", "source.")
+        matched = f" WHEN MATCHED THEN UPDATE SET {updates}" if updates else ""
+        return f"{matched} WHEN NOT MATCHED THEN INSERT ({self._quoted_(*columns)}) VALUES ({self._quoted_(*columns, prefix='source.')})"
+
+    @staticmethod
+    def _binding_(column: str, index: int = MISSING) -> str:
+        return column if index is MISSING else f"{column}_{index}"
+
+    def _values_(self, columns: Sequence[str], rows: int = 1) -> str:
+        return ", ".join("(" + ", ".join(QueryAPI.named(self._binding_(column, MISSING if rows == 1 else index)) for column in columns) + ")" for index in range(rows))
 
     @staticmethod
     def _records_(frame: Union[pd.DataFrame, pl.DataFrame]) -> list:
         return frame.to_dicts() if hasattr(frame, "to_dicts") else frame.to_dict("records")
+
+    @classmethod
+    def _scalar_(cls, frame: Union[pd.DataFrame, pl.DataFrame]) -> Any:
+        records = cls._records_(frame)
+        return next(iter(records[0].values())) if records else None
+
+    @classmethod
+    def _column_(cls, frame: Union[pd.DataFrame, pl.DataFrame]) -> list:
+        return [next(iter(row.values())) for row in cls._records_(frame)]
+
+    @staticmethod
+    def _hierarchy_(database: Any, schema: Any, table: Any) -> dict:
+        if table and (not database or not schema): raise ValueError("Schema and Database must be provided to operate on a Table")
+        if schema and not database: raise ValueError("Database must be provided to operate on a Schema")
+        if not database and not schema and not table: raise ValueError("At least one structure must be specified")
+        return {k: v for k, v in {"database": database, "schema": schema, "table": table}.items() if v}
+
+    @staticmethod
+    def _require_(database: Any, schema: Any, table: Any, action: str) -> None:
+        if not database or not schema or not table: raise ValueError(f"Database, Schema and Table must be provided to {action}")
 
     @property
     def _params_(self) -> dict:
@@ -267,38 +308,13 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
                 schema[col_name] = None
         return self.frame(data=rows, schema=schema, legacy=legacy)
 
+    @staticmethod
+    def _row_(name: str, datatype: str, is_pk: int, is_fk: int) -> str:
+        return f"('{name}', '{datatype}', {is_pk}, {is_fk})"
+
     def _check_(self, structure: Union[dict, None] = None) -> str:
         structure = structure if structure is not None else self._STRUCTURE_
-        values = []
-        for name, dtype in structure.items():
-            datatype = self._CHECK_DATATYPE_MAPPING_[self._normalize_(dtype)]
-            is_pk = int(isinstance(dtype, PrimaryKey) or (isinstance(dtype, (IdentityKey, ForeignKey)) and dtype.primary))
-            is_fk = int(isinstance(dtype, ForeignKey))
-            values.append(f"('{name}', '{datatype}', {is_pk}, {is_fk})")
-        return ",\n    ".join(values)
-
-    def _create_(self, structure: Union[dict, None] = None) -> str:
-        structure = structure if structure is not None else self._STRUCTURE_
-        ql, qr = self._quote_
-        defs = []
-        pks = []
-        for name, dtype in structure.items():
-            indexed = isinstance(dtype, (PrimaryKey, IdentityKey, ForeignKey))
-            base = self._datatype_(dtype, indexed=indexed)
-            if isinstance(dtype, IdentityKey):
-                if dtype.primary: pks.append(name)
-                else: base += " UNIQUE"
-                base += self._identity_()
-            elif isinstance(dtype, PrimaryKey):
-                pks.append(name)
-            elif isinstance(dtype, ForeignKey):
-                if dtype.primary: pks.append(name)
-                base += f" REFERENCES {dtype.reference}"
-            defs.append(f"{ql}{name}{qr} {base}")
-        if pks:
-            pk_cols = ", ".join(f"{ql}{c}{qr}" for c in pks)
-            defs.append(f"PRIMARY KEY ({pk_cols})")
-        return ",\n    ".join(defs)
+        return self._CHECK_SEPARATOR_.join(self._row_(name, self._CHECK_DATATYPE_MAPPING_[self._normalize_(dtype)], int(self.primary(dtype)), int(isinstance(dtype, ForeignKey))) for name, dtype in structure.items())
 
     def _datatype_(self, dtype, *, indexed: bool = False) -> str:
         return self._CREATE_DATATYPE_MAPPING_[self._normalize_(dtype)]
@@ -306,9 +322,32 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
     def _identity_(self) -> str:
         return " GENERATED ALWAYS AS IDENTITY"
 
+    def _declare_(self, dtype, inline: bool = False) -> str:
+        datatype = self._datatype_(dtype, indexed=isinstance(dtype, (IdentityKey, PrimaryKey, ForeignKey)))
+        if inline and self.primary(dtype): datatype += " PRIMARY KEY"
+        if isinstance(dtype, IdentityKey): return f"{datatype}{'' if dtype.primary else ' UNIQUE'}{self._identity_()}"
+        if isinstance(dtype, ForeignKey): return f"{datatype} REFERENCES {dtype.reference}"
+        return datatype
+
+    def _create_(self, structure: Union[dict, None] = None) -> str:
+        structure = structure if structure is not None else self._STRUCTURE_
+        definitions = [f"{self._quoted_(name)} {self._declare_(dtype)}" for name, dtype in structure.items()]
+        keys = [name for name, dtype in structure.items() if self.primary(dtype)]
+        if keys: definitions.append(f"PRIMARY KEY ({self._quoted_(*keys)})")
+        return ",\n    ".join(definitions)
+
+    @staticmethod
+    def primary(dtype: Any) -> bool:
+        """
+        Checks whether a structure dtype takes part in the primary key.
+        :param dtype: A structure dtype, key wrapper or plain type.
+        :return: True for a primary key, or an identity or foreign key declared primary.
+        """
+        return isinstance(dtype, PrimaryKey) or (isinstance(dtype, (IdentityKey, ForeignKey)) and dtype.primary)
+
     def _structure_keys_(self) -> list:
         if not self._STRUCTURE_: return []
-        return [name for name, dtype in self._STRUCTURE_.items() if isinstance(dtype, PrimaryKey) or (isinstance(dtype, (IdentityKey, ForeignKey)) and dtype.primary)]
+        return [name for name, dtype in self._STRUCTURE_.items() if self.primary(dtype)]
 
     def _route_(self, method: str, database: Any, schema: Any, table: Any, args: tuple = (), **kwargs) -> Union[tuple[str | None, str | None, str | None], list]:
         db = database if database is not MISSING else self._database_
@@ -342,6 +381,68 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
             db.connect()
             return getattr(db, method)(*args, database=database, schema=schema, table=table, admin=admin, **kwargs)
         return None
+
+    def _forward_(self, method: str, query: QueryAPI, args: tuple, database: Any, schema: Any, table: Any, admin: Any, kwargs: dict) -> tuple[Union[Self, None], dict]:
+        routed = self._route_(method, database, schema, table, args=(query, *args), admin=admin, **kwargs)
+        if isinstance(routed, list): return self, kwargs
+        database, schema, table = routed
+        forwarded = self._clone_(method, (query, *args), database, schema, table, admin, **kwargs)
+        if forwarded is not None: return forwarded, kwargs
+        return None, {**kwargs, **{key: value for key, value in {"database": database, "schema": schema, "table": table}.items() if value is not MISSING}}
+
+    def _expand_(self, query: QueryAPI, frame: pl.DataFrame, database: Any, **kwargs) -> pl.DataFrame:
+        databases = frame["Database"].unique().to_list()
+        if database != "%" and all(d == self.database for d in databases): return frame
+        frames = []
+        for name in databases:
+            expanded = self.executeone(query, database=name, admin=False, **kwargs).fetchall(legacy=False)
+            frames.append(expanded if not expanded.is_empty() else frame.filter(pl.col("Database") == name))
+        return self._concat_(frames) if frames else frame
+
+    def _close_(self, label: str, action: Callable) -> Self:
+        if not self.connected(): self._log_.debug(lambda: f"{label} Operation: Skipped (Not Connected)")
+        elif self.autocommited(): self._log_.debug(lambda: f"{label} Operation: Skipped (Autocommit Enabled)")
+        elif not self.transitioned(): self._log_.debug(lambda: f"{label} Operation: Skipped (No Open Transaction)")
+        else:
+            timer = Timer().start()
+            action()
+            self._transaction_ = False
+            timer.stop()
+            self._log_.debug(lambda: f"{label} Operation: Closed Transaction ({timer.result()})")
+        return self
+
+    def _rows_(self, label: str, fetch: Callable, legacy: Union[bool, Missing]) -> Union[pd.DataFrame, pl.DataFrame]:
+        timer, df = self._fetch_(callback=lambda: self._frame_(fetch(), legacy=legacy), abort=self.rollback)
+        self._log_.debug(lambda: f"{label} Operation: Fetched {len(df)} Data Points ({timer.result()})")
+        return df
+
+    def _timed_(self, label: str, *callbacks: Callable) -> None:
+        timer = Timer().start()
+        for callback in callbacks: callback()
+        timer.stop()
+        self._log_.info(lambda: f"Migration Operation: Migrated {label} ({timer.result()})")
+
+    def _provision_(self, operation: str, database: Any, schema: Any, kwargs: dict) -> None:
+        if database and not self.exists(database=database, schema=None, table=None):
+            self._log_.warning(lambda: f"{operation} Operation: Missing {database} Database")
+            self.executeone(self._CREATE_DATABASE_QUERY_, **kwargs, admin=True).commit()
+            self._log_.alert(lambda: f"{operation} Operation: Created {database} Database")
+        if schema and not self.exists(database=database, schema=schema, table=None):
+            self._log_.warning(lambda: f"{operation} Operation: Missing {schema} Schema")
+            self.executeone(self._CREATE_SCHEMA_QUERY_, **kwargs, admin=False).commit()
+            self._log_.alert(lambda: f"{operation} Operation: Created {schema} Schema")
+
+    def _build_(self, operation: str, table: Any, kwargs: dict, structure: dict, recreate: bool = False) -> None:
+        if recreate: self.executeone(self._DELETE_TABLE_QUERY_, **kwargs, admin=False).commit()
+        else: self._log_.warning(lambda: f"{operation} Operation: Missing {table} Table")
+        self.executeone(self._CREATE_TABLE_QUERY_, definitions=self._create_(structure=structure), **kwargs, admin=False).commit()
+        self._log_.alert(lambda: f"{operation} Operation: {'Recreated' if recreate else 'Created'} {table} Table")
+
+    def _repoint_(self, owner: str, name: str, clause: str, database: Any, table: Any) -> None:
+        constraint = self._quoted_(name)
+        self.executeone(QueryAPI(f"ALTER TABLE {owner} DROP CONSTRAINT {constraint}"), database=database, admin=False)
+        self.executeone(QueryAPI(f"ALTER TABLE {owner} ADD CONSTRAINT {constraint} {clause}"), database=database, admin=False)
+        self._log_.alert(lambda: f"Realign Operation: Repointed {name} · To {table}")
 
     @property
     def database(self) -> Union[str, None]:
@@ -477,34 +578,14 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         Commits the current transaction.
         :return: Self reference.
         """
-        if not self.connected(): self._log_.debug(lambda: "Commit Operation: Skipped (Not Connected)")
-        elif self.autocommited(): self._log_.debug(lambda: "Commit Operation: Skipped (Autocommit Enabled)")
-        elif not self.transitioned(): self._log_.debug(lambda: "Commit Operation: Skipped (No Open Transaction)")
-        else:
-            timer = Timer()
-            timer.start()
-            self._connection_.commit()
-            self._transaction_ = False
-            timer.stop()
-            self._log_.debug(lambda: f"Commit Operation: Closed Transaction ({timer.result()})")
-        return self
+        return self._close_("Commit", lambda: self._connection_.commit())
 
     def rollback(self) -> Self:
         """
         Rolls back the current transaction.
         :return: Self reference.
         """
-        if not self.connected(): self._log_.debug(lambda: "Rollback Operation: Skipped (Not Connected)")
-        elif self.autocommited(): self._log_.debug(lambda: "Rollback Operation: Skipped (Autocommit Enabled)")
-        elif not self.transitioned(): self._log_.debug(lambda: "Rollback Operation: Skipped (No Open Transaction)")
-        else:
-            timer = Timer()
-            timer.start()
-            self._connection_.rollback()
-            self._transaction_ = False
-            timer.stop()
-            self._log_.debug(lambda: f"Rollback Operation: Closed Transaction ({timer.result()})")
-        return self
+        return self._close_("Rollback", lambda: self._connection_.rollback())
 
     def fetchone(self, *, legacy: Union[bool, Missing] = MISSING) -> Union[pd.DataFrame, pl.DataFrame]:
         """
@@ -512,9 +593,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         :param legacy: If True, returns Pandas DataFrames instead of Polars.
         :return: A DataFrame containing the fetched row.
         """
-        timer, df = self._fetch_(callback=lambda: self._frame_(self._cursor_.fetchone(), legacy=legacy), abort=self.rollback)
-        self._log_.debug(lambda: f"Fetch One Operation: Fetched {len(df)} Data Points ({timer.result()})")
-        return df
+        return self._rows_("Fetch One", lambda: self._cursor_.fetchone(), legacy)
 
     def fetchmany(self, *, n: int, legacy: Union[bool, Missing] = MISSING) -> Union[pd.DataFrame, pl.DataFrame]:
         """
@@ -523,9 +602,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         :param legacy: If True, returns Pandas DataFrames instead of Polars.
         :return: A DataFrame containing the fetched rows.
         """
-        timer, df = self._fetch_(callback=lambda: self._frame_(self._cursor_.fetchmany(n), legacy=legacy), abort=self.rollback)
-        self._log_.debug(lambda: f"Fetch Many Operation: Fetched {len(df)} Data Points ({timer.result()})")
-        return df
+        return self._rows_("Fetch Many", lambda: self._cursor_.fetchmany(n), legacy)
 
     def fetchall(self, *, legacy: Union[bool, Missing] = MISSING) -> Union[pd.DataFrame, pl.DataFrame]:
         """
@@ -533,9 +610,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         :param legacy: If True, returns Pandas DataFrames instead of Polars.
         :return: A DataFrame containing the fetched rows.
         """
-        timer, df = self._fetch_(callback=lambda: self._frame_(self._cursor_.fetchall(), legacy=legacy), abort=self.rollback)
-        self._log_.debug(lambda: f"Fetch All Operation: Fetched {len(df)} Data Points ({timer.result()})")
-        return df
+        return self._rows_("Fetch All", lambda: self._cursor_.fetchall(), legacy)
 
     def executeone(self, query: QueryAPI, *args, database: Union[str, Sequence, None, Missing] = MISSING, schema: Union[str, Sequence, None, Missing] = MISSING, table: Union[str, Sequence, None, Missing] = MISSING, admin: Union[bool, Missing] = MISSING, **kwargs) -> Self:
         """
@@ -548,14 +623,8 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         :param kwargs: Additional query parameters.
         :return: Self reference.
         """
-        routed = self._route_("executeone", database, schema, table, args=(query, *args), admin=admin, **kwargs)
-        if isinstance(routed, list): return self
-        database, schema, table = routed
-        clone_result = self._clone_("executeone", (query, *args), database, schema, table, admin, **kwargs)
-        if clone_result is not None: return clone_result
-        if database is not MISSING: kwargs["database"] = database
-        if schema is not MISSING: kwargs["schema"] = schema
-        if table is not MISSING: kwargs["table"] = table
+        forwarded, kwargs = self._forward_("executeone", query, args, database, schema, table, admin, kwargs)
+        if forwarded is not None: return forwarded
         sql, configuration, kwargs = self._query_(query, **kwargs)
         parameters = query.bind(configuration, *args, **kwargs) if configuration else None
         def _execute_():
@@ -577,24 +646,16 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         :param kwargs: Additional query parameters.
         :return: Self reference.
         """
-        routed = self._route_("executemany", database, schema, table, args=(query, *args), admin=admin, **kwargs)
-        if isinstance(routed, list): return self
-        database, schema, table = routed
-        clone_result = self._clone_("executemany", (query, *args), database, schema, table, admin, **kwargs)
-        if clone_result is not None: return clone_result
-        if database is not MISSING: kwargs["database"] = database
-        if schema is not MISSING: kwargs["schema"] = schema
-        if table is not MISSING: kwargs["table"] = table
+        forwarded, kwargs = self._forward_("executemany", query, args, database, schema, table, admin, kwargs)
+        if forwarded is not None: return forwarded
         batch = self.flatten(args[0]) if len(args) == 1 else self.flatten(args)
         if not batch or not all(isinstance(row, (list, tuple, dict)) for row in batch):
             e = ValueError("Expecting batch as tuple/list of tuples/lists or tuple/list of dicts")
-            self._log_.error(lambda: f"Execute Many Operation: Failed · {e}")
-            self._log_.exception(lambda: f"Execute Many Operation: Failed · {e}")
+            self._log_.failure(lambda: f"Execute Many Operation: Failed · {e}")
             raise e
         if not all(isinstance(row, type(batch[0])) for row in batch):
             e = ValueError("Expecting batch to be the same type (all tuples, all lists, or all dicts)")
-            self._log_.error(lambda: f"Execute Many Operation: Failed · {e}")
-            self._log_.exception(lambda: f"Execute Many Operation: Failed · {e}")
+            self._log_.failure(lambda: f"Execute Many Operation: Failed · {e}")
             raise e
         sql, configuration, kwargs = self._query_(query, **kwargs)
         parameters = []
@@ -658,15 +719,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         df = self.executeone(self._LIST_CATALOG_QUERY_, database=database, schema=schema, table=table, system=system, admin=True).fetchall(legacy=False)
         if df.is_empty() or "Database" not in df.columns:
             return self.frame(df, legacy=legacy)
-        databases = df["Database"].unique().to_list()
-        expansion = database == "%" or any(d != self.database for d in databases)
-        if not expansion:
-            return self.frame(df, legacy=legacy)
-        frames = []
-        for db_name in databases:
-            db_df = self.executeone(self._LIST_CATALOG_QUERY_, database=db_name, schema=schema, table=table, system=system, admin=False).fetchall(legacy=False)
-            frames.append(db_df if not db_df.is_empty() else df.filter(pl.col("Database") == db_name))
-        return self.frame(self._concat_(frames) if frames else df, legacy=legacy)
+        return self.frame(self._expand_(self._LIST_CATALOG_QUERY_, df, database, schema=schema, table=table, system=system), legacy=legacy)
 
     def search(self, *,
                database: Union[str, Sequence, None, Missing] = MISSING,
@@ -699,21 +752,20 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         self._log_.debug(lambda: "Search Operation: Searching catalog")
         databases = self.executeone(self._LIST_CATALOG_QUERY_, database=database, schema="%", table="%", system=0, admin=True).fetchall(legacy=False)
         if databases.is_empty() or "Database" not in databases.columns:
-            return self.frame(pl.DataFrame({"Database": [], "Schema": [], "Table": [], "Column": []}), legacy=legacy)
+            return self.frame(self._CATALOG_, legacy=legacy)
         catalog_frames = []
         for db_name in databases["Database"].unique().to_list():
             df = self.executeone(self._SEARCH_CATALOG_QUERY_, database=db_name, schema=schema, table=table, column=column, admin=False).fetchall(legacy=False)
             if not df.is_empty():
                 catalog_frames.append(df)
-        catalog = self._concat_(catalog_frames) if catalog_frames else pl.DataFrame({"Database": [], "Schema": [], "Table": [], "Column": []})
+        catalog = self._concat_(catalog_frames) if catalog_frames else self._CATALOG_
         if catalog.is_empty() or row is None:
             return self.frame(catalog, legacy=legacy)
-        ql, qr = self._quote_
         value = str(row)
         frames = []
         for db_name, s_name, t_name, c_name in catalog.iter_rows():
             target = self._target_(s_name, t_name)
-            condition = f"{self._cast_(f'{ql}{c_name}{qr}')} = {QueryAPI.Positional}"
+            condition = f"{self._cast_(self._quoted_(c_name))} = {QueryAPI.Positional}"
             sql = self._limit_(self._condition_(self._select_(target, "1"), condition), 1)
             try:
                 df = self.executeone(QueryAPI(sql), value, database=db_name, schema=s_name, table=t_name, admin=False).fetchall(legacy=False)
@@ -721,7 +773,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
                     frames.append(pl.DataFrame({"Database": [db_name], "Schema": [s_name], "Table": [t_name], "Column": [c_name]}))
             except Exception:
                 pass
-        return self.frame(self._concat_(frames) if frames else pl.DataFrame({"Database": [], "Schema": [], "Table": [], "Column": []}), legacy=legacy)
+        return self.frame(self._concat_(frames) if frames else self._CATALOG_, legacy=legacy)
 
     def exists(self, *,
                database: Union[str, Sequence, None, Missing] = MISSING,
@@ -737,13 +789,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         routed = self._route_("exists", database, schema, table)
         if isinstance(routed, list): return all(routed)
         database, schema, table = routed
-        if table and (not database or not schema):
-            raise ValueError("Schema and Database must be provided to operate on a Table")
-        if schema and not database:
-            raise ValueError("Database must be provided to operate on a Schema")
-        if not database and not schema and not table:
-            raise ValueError("At least one structure must be specified")
-        kwargs = {k: v for k, v in {"database": database, "schema": schema, "table": table}.items() if v}
+        kwargs = self._hierarchy_(database, schema, table)
         if database:
             self._log_.debug(lambda: f"Check Operation: Checking {database} Database")
             db = self.executeone(self._CHECK_DATABASE_QUERY_, **kwargs, admin=True)
@@ -784,13 +830,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         structure = structure if structure is not MISSING else self._STRUCTURE_
         if not structure:
             raise ValueError("Structure must be provided to diff a Table")
-        if table and (not database or not schema):
-            raise ValueError("Schema and Database must be provided to operate on a Table")
-        if schema and not database:
-            raise ValueError("Database must be provided to operate on a Schema")
-        if not database and not schema and not table:
-            raise ValueError("At least one structure must be specified")
-        kwargs = {k: v for k, v in {"database": database, "schema": schema, "table": table}.items() if v}
+        kwargs = self._hierarchy_(database, schema, table)
         definitions = self._check_(structure=structure)
         self._log_.debug(lambda: f"Diff Operation: Checking {table} Structure")
         db = self.executeone(self._CHECK_STRUCTURE_QUERY_, definitions=definitions, **kwargs, admin=False)
@@ -833,7 +873,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
             condition="table_schema = :order_schema: AND table_name = :order_table: ORDER BY ordinal_position",
             parameters={"order_schema": schema, "order_table": table}
         )
-        return [next(iter(row.values())) for row in self._records_(frame)]
+        return self._column_(frame)
 
     def sessions(self, *,
                database: Union[str, Sequence, None, Missing] = MISSING,
@@ -873,14 +913,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         df = self.executeone(self._SIZE_CATALOG_QUERY_, database=database, schema=schema, table=table, admin=True).fetchall(legacy=False)
         if df.is_empty() or "Database" not in df.columns:
             return self.frame(df, legacy=legacy)
-        databases = df["Database"].unique().to_list()
-        expansion = database == "%" or any(d != self.database for d in databases)
-        if expansion:
-            frames = []
-            for db_name in databases:
-                db_df = self.executeone(self._SIZE_CATALOG_QUERY_, database=db_name, schema=schema, table=table, admin=False).fetchall(legacy=False)
-                frames.append(db_df if not db_df.is_empty() else df.filter(pl.col("Database") == db_name))
-            df = self._concat_(frames) if frames else df
+        df = self._expand_(self._SIZE_CATALOG_QUERY_, df, database, schema=schema, table=table)
         if not df.is_empty() and "Size" in df.columns:
             df = df.with_columns(pl.col("Size").map_elements(memory_to_string, return_dtype=pl.String).alias("Formatted"))
         return self.frame(df, legacy=legacy)
@@ -901,44 +934,18 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         routed = self._route_("create", database, schema, table, structure=structure)
         if isinstance(routed, list): return self
         database, schema, table = routed
-        if table and (not database or not schema):
-            raise ValueError("Schema and Database must be provided to operate on a Table")
-        if schema and not database:
-            raise ValueError("Database must be provided to operate on a Schema")
-        if not database and not schema and not table:
-            raise ValueError("At least one structure must be specified")
-        kwargs = {k: v for k, v in {"database": database, "schema": schema, "table": table}.items() if v}
-        if database:
-            if not self.exists(database=database, schema=None, table=None):
-                self._log_.warning(lambda: f"Create Operation: Missing {database} Database")
-                self.executeone(self._CREATE_DATABASE_QUERY_, **kwargs, admin=True).commit()
-                self._log_.alert(lambda: f"Create Operation: Created {database} Database")
-        if schema:
-            if not self.exists(database=database, schema=schema, table=None):
-                self._log_.warning(lambda: f"Create Operation: Missing {schema} Schema")
-                db = self.executeone(self._CREATE_SCHEMA_QUERY_, **kwargs, admin=False)
-                db.commit()
-                self._log_.alert(lambda: f"Create Operation: Created {schema} Schema")
+        kwargs = self._hierarchy_(database, schema, table)
+        self._provision_("Create", database, schema, kwargs)
         if table:
             structure_val = structure if structure is not MISSING else self._STRUCTURE_
             if structure_val is None:
                 raise ValueError("Structure must be provided to create a Table")
             if not self.exists(database=database, schema=schema, table=table):
-                self._log_.warning(lambda: f"Create Operation: Missing {table} Table")
-                definitions = self._create_(structure=structure_val)
-                db = self.executeone(self._CREATE_TABLE_QUERY_, definitions=definitions, **kwargs, admin=False)
-                db.commit()
-                self._log_.alert(lambda: f"Create Operation: Created {table} Table")
-            else:
-                if self.diff(database=database, schema=schema, table=table, structure=structure_val):
-                    self._log_.warning(lambda: f"Create Operation: Mismatched {table} Structure")
-                    db = self.executeone(self._DELETE_TABLE_QUERY_, **kwargs, admin=False)
-                    db.commit()
-                    self._log_.warning(lambda: f"Create Operation: Missing {table} Table")
-                    definitions = self._create_(structure=structure_val)
-                    db = self.executeone(self._CREATE_TABLE_QUERY_, definitions=definitions, **kwargs, admin=False)
-                    db.commit()
-                    self._log_.alert(lambda: f"Create Operation: Created {table} Table")
+                self._build_("Create", table, kwargs, structure_val)
+            elif self.diff(database=database, schema=schema, table=table, structure=structure_val):
+                self._log_.warning(lambda: f"Create Operation: Mismatched {table} Structure")
+                self.executeone(self._DELETE_TABLE_QUERY_, **kwargs, admin=False).commit()
+                self._build_("Create", table, kwargs, structure_val)
         return self
 
     def delete(self, *,
@@ -955,13 +962,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         routed = self._route_("delete", database, schema, table)
         if isinstance(routed, list): return self
         database, schema, table = routed
-        if table and (not database or not schema):
-            raise ValueError("Schema and Database must be provided to operate on a Table")
-        if schema and not database:
-            raise ValueError("Database must be provided to operate on a Schema")
-        if not database and not schema and not table:
-            raise ValueError("At least one structure must be specified")
-        kwargs = {k: v for k, v in {"database": database, "schema": schema, "table": table}.items() if v}
+        kwargs = self._hierarchy_(database, schema, table)
         if table:
             if self.exists(database=database, schema=schema, table=table):
                 self.executeone(self._DELETE_TABLE_QUERY_, **kwargs, admin=False).commit()
@@ -1037,32 +1038,14 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         routed = self._route_("migrate", database, schema, table, structure=structure)
         if isinstance(routed, list): return self
         database, schema, table = routed
-        if table and (not database or not schema):
-            raise ValueError("Schema and Database must be provided to operate on a Table")
-        if schema and not database:
-            raise ValueError("Database must be provided to operate on a Schema")
-        if not database and not schema and not table:
-            raise ValueError("At least one structure must be specified")
-        kwargs = {k: v for k, v in {"database": database, "schema": schema, "table": table}.items() if v}
-        if database:
-            if not self.exists(database=database, schema=None, table=None):
-                self._log_.warning(lambda: f"Migrate Operation: Missing {database} Database")
-                self.executeone(self._CREATE_DATABASE_QUERY_, **kwargs, admin=True).commit()
-                self._log_.alert(lambda: f"Migrate Operation: Created {database} Database")
-        if schema:
-            if not self.exists(database=database, schema=schema, table=None):
-                self._log_.warning(lambda: f"Migrate Operation: Missing {schema} Schema")
-                self.executeone(self._CREATE_SCHEMA_QUERY_, **kwargs, admin=False).commit()
-                self._log_.alert(lambda: f"Migrate Operation: Created {schema} Schema")
+        kwargs = self._hierarchy_(database, schema, table)
+        self._provision_("Migrate", database, schema, kwargs)
         if table:
             structure_val = structure if structure is not MISSING else self._STRUCTURE_
             if structure_val is None:
                 raise ValueError("Structure must be provided to migrate a Table")
             if not self.exists(database=database, schema=schema, table=table):
-                self._log_.warning(lambda: f"Migrate Operation: Missing {table} Table")
-                definitions = self._create_(structure=structure_val)
-                self.executeone(self._CREATE_TABLE_QUERY_, definitions=definitions, **kwargs, admin=False).commit()
-                self._log_.alert(lambda: f"Migrate Operation: Created {table} Table")
+                self._build_("Migrate", table, kwargs, structure_val)
             elif self.diff(database=database, schema=schema, table=table, structure=structure_val):
                 self._log_.warning(lambda: f"Migrate Operation: Structure mismatch for {table} Table")
                 definitions = self._check_(structure=structure_val)
@@ -1072,10 +1055,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
                 new_only -= actual
                 common = [c for c in structure_val if c not in new_only]
                 if not common:
-                    self.executeone(self._DELETE_TABLE_QUERY_, **kwargs, admin=False).commit()
-                    definitions = self._create_(structure=structure_val)
-                    self.executeone(self._CREATE_TABLE_QUERY_, definitions=definitions, **kwargs, admin=False).commit()
-                    self._log_.alert(lambda: f"Migrate Operation: Recreated {table} Table")
+                    self._build_("Migrate", table, kwargs, structure_val, recreate=True)
                 else:
                     temp_table = f"{table}_{uuid.uuid4().hex[:8]}"
                     original_table = self._table_
@@ -1183,8 +1163,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
               table: Union[str, None, Missing] = MISSING) -> int:
         """Counts the rows a table currently holds."""
         frame = self.executeone(QueryAPI(f"SELECT COUNT(*) FROM {self._target_(schema, table)}"), database=database, schema=schema, table=table, admin=False).fetchall(legacy=False)
-        records = self._records_(frame)
-        return int(next(iter(records[0].values()))) if records else 0
+        return int(self._scalar_(frame) or 0)
 
     def add(self, *,
                database: Union[str, Sequence, None, Missing] = MISSING,
@@ -1204,20 +1183,10 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         routed = self._route_("add", database, schema, table, structure=structure)
         if isinstance(routed, list): return self
         database, schema, table = routed
-        if not database or not schema or not table:
-            raise ValueError("Database, Schema and Table must be provided to add a Column")
+        self._require_(database, schema, table, "add a Column")
         target = self._target_(schema, table)
         for name, dtype in structure.items():
-            datatype = self._CREATE_DATATYPE_MAPPING_[self._normalize_(dtype)]
-            if isinstance(dtype, IdentityKey):
-                if dtype.primary: datatype += " PRIMARY KEY"
-                else: datatype += " UNIQUE"
-                datatype += self._identity_()
-            elif isinstance(dtype, PrimaryKey):
-                datatype += " PRIMARY KEY"
-            elif isinstance(dtype, ForeignKey):
-                datatype += f" REFERENCES {dtype.reference}"
-            sql = self._add_(target, self._quoted_(name), datatype)
+            sql = self._add_(target, self._quoted_(name), self._declare_(dtype, inline=True))
             self.executeone(QueryAPI(sql), database=database, schema=schema, table=table, admin=False)
         self._log_.alert(lambda: f"Add Operation: Added Columns to {table} Table")
         return self
@@ -1240,8 +1209,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         routed = self._route_("drop", database, schema, table, column=column)
         if isinstance(routed, list): return self
         database, schema, table = routed
-        if not database or not schema or not table:
-            raise ValueError("Database, Schema and Table must be provided to drop a Column")
+        self._require_(database, schema, table, "drop a Column")
         if isinstance(column, (list, tuple)):
             for c in column: self.drop(database=database, schema=schema, table=table, column=c)
             return self
@@ -1271,8 +1239,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         routed = self._route_("rename", database, schema, table, column=column, name=name)
         if isinstance(routed, list): return self
         database, schema, table = routed
-        if not database or not schema or not table:
-            raise ValueError("Database, Schema and Table must be provided to rename a Column")
+        self._require_(database, schema, table, "rename a Column")
         if isinstance(column, (list, tuple)):
             if not isinstance(name, (list, tuple)) or len(name) != len(column):
                 raise ValueError("Name must be a list/tuple of the same length as Column")
@@ -1305,8 +1272,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         routed = self._route_("reorder", database, schema, table, columns=columns, structure=structure)
         if isinstance(routed, list): return self
         database, schema, table = routed
-        if not database or not schema or not table:
-            raise ValueError("Database, Schema and Table must be provided to reorder a Table")
+        self._require_(database, schema, table, "reorder a Table")
         source = structure or self._STRUCTURE_
         if source is None:
             df = self.select(database=database, schema=schema, table=table, columns=columns, limit=1, legacy=False)
@@ -1349,8 +1315,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         routed = self._route_("select", database, schema, table, columns=columns, condition=condition, order=order, limit=limit, parameters=parameters, legacy=legacy)
         if isinstance(routed, list): return self.frame(self._concat_(routed), legacy=legacy)
         database, schema, table = routed
-        if not database or not schema or not table:
-            raise ValueError("Database, Schema and Table must be provided to select rows")
+        self._require_(database, schema, table, "select rows")
         target = self._target_(schema, table)
         cols_str = self._ALL_ if columns is None else self._quoted_(*columns) if isinstance(columns, (list, tuple)) else columns
         sql = self._select_(target, cols_str)
@@ -1359,6 +1324,38 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         if limit is not None: sql = self._limit_(sql, limit)
         db = self.executeone(QueryAPI(sql), database=database, schema=schema, table=table, admin=False, **(parameters or {}))
         return db.fetchall(legacy=legacy)
+
+    def records(self, **select) -> list:
+        """
+        Selects rows from a table as dictionaries.
+        :param select: The arguments select() accepts; the result is always read through Polars.
+        :return: One dictionary per selected row.
+        """
+        return self._records_(self.select(**{**select, "legacy": False}))
+
+    def first(self, **select) -> Union[dict, None]:
+        """
+        Selects the first row of a table as a dictionary.
+        :param select: The arguments select() accepts; the limit is forced to one row.
+        :return: The row, or None when nothing matches.
+        """
+        rows = self.records(**{**select, "limit": 1})
+        return rows[0] if rows else None
+
+    def where(self, **columns) -> tuple[Union[str, None], Union[dict, None]]:
+        """
+        Builds an equality condition over columns, joined with AND.
+        :param columns: Column values; MISSING skips the column and None matches NULL.
+        :return: The condition and its parameters, each None when nothing constrains the rows.
+        """
+        conditions, parameters = [], {}
+        for name, value in columns.items():
+            if value is MISSING: continue
+            if value is None: conditions.append(f"{self._quoted_(name)} IS NULL")
+            else:
+                conditions.append(f"{self._quoted_(name)} = {QueryAPI.named(name)}")
+                parameters[name] = value
+        return " AND ".join(conditions) or None, parameters or None
 
     def fingerprint(self, *,
                     database: Union[str, Sequence, None, Missing] = MISSING,
@@ -1446,13 +1443,13 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         routed = self._route_("insert", database, schema, table, data=data)
         if isinstance(routed, list): return self
         database, schema, table = routed
-        if not database or not schema or not table: raise ValueError("Database, Schema and Table must be provided to insert rows")
+        self._require_(database, schema, table, "insert rows")
         columns, records, multiple = self.parse(data)
         if not records: return self
         target = self._target_(schema, table)
         if columns:
             cols_str = self._quoted_(*columns)
-            vals_str = ", ".join(f"{QueryAPI.Named}{c}{QueryAPI.Named}" for c in columns)
+            vals_str = ", ".join(QueryAPI.named(c) for c in columns)
             sql = self._insert_(target, cols_str, vals_str)
         else:
             vals_str = ", ".join(QueryAPI.Positional for _ in records[0])
@@ -1466,7 +1463,8 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
                schema: Union[str, Sequence, None, Missing] = MISSING,
                table: Union[str, Sequence, None, Missing] = MISSING,
                data: Any = None,
-               condition: Union[str, None] = None) -> Self:
+               condition: Union[str, None] = None,
+               parameters: dict = MISSING) -> Self:
         """
         Updates data in a table.
         :param database: Target database.
@@ -1474,22 +1472,25 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         :param table: Target table.
         :param data: The data to update.
         :param condition: The WHERE condition.
+        :param parameters: Parameters for the condition, bound beneath each row's values.
         :return: Self reference.
+        :raises ValueError: If a condition parameter shares a name with an updated column.
         """
         if data is None: raise ValueError("Data must be provided to update rows")
-        routed = self._route_("update", database, schema, table, data=data, condition=condition)
+        routed = self._route_("update", database, schema, table, data=data, condition=condition, parameters=parameters)
         if isinstance(routed, list): return self
         database, schema, table = routed
-        if not database or not schema or not table: raise ValueError("Database, Schema and Table must be provided to update rows")
+        self._require_(database, schema, table, "update rows")
         columns, records, multiple = self.parse(data)
         if not records: return self
         if not columns: raise ValueError("Dictionary or DataFrame structure required for updates to identify columns")
+        parameters = parameters or {}
+        if clashes := sorted(set(parameters) & set(columns)): raise ValueError(f"Update parameters shadow updated columns: {', '.join(clashes)}")
         target = self._target_(schema, table)
-        n = QueryAPI.Named
-        set_str = ", ".join(f"{self._quoted_(c)} = {n}{c}{n}" for c in columns)
+        set_str = ", ".join(f"{self._quoted_(c)} = {QueryAPI.named(c)}" for c in columns)
         sql = self._update_(target, set_str)
         sql = self._condition_(sql, condition)
-        self.execute(QueryAPI(sql), records, database=database, schema=schema, table=table, admin=False)
+        self.execute(QueryAPI(sql), records, database=database, schema=schema, table=table, admin=False, **(parameters or {}))
         self._log_.alert(lambda: f"Update Operation: Processed {len(records)} rows in {table} Table")
         return self
 
@@ -1521,7 +1522,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
             if returning: raise ValueError("returning is not supported with multiple targets")
             return self
         database, schema, table = routed
-        if not database or not schema or not table: raise ValueError("Database, Schema and Table must be provided to upsert rows")
+        self._require_(database, schema, table, "upsert rows")
         columns, records, _ = self.parse(data)
         if not records: return self
         if not columns: raise ValueError("Dictionary or DataFrame structure required for upserts to identify columns")
@@ -1538,7 +1539,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         for start in range(0, len(records), chunk_size):
             chunk = records[start:start + chunk_size]
             sql = self._upsert_(target, columns, keys, exclude or (), returning_cols, rows=len(chunk))
-            bindings = chunk[0] if len(chunk) == 1 else {f"{c}_{i}": rec[c] for i, rec in enumerate(chunk) for c in columns}
+            bindings = chunk[0] if len(chunk) == 1 else {self._binding_(c, i): rec[c] for i, rec in enumerate(chunk) for c in columns}
             db = self.executeone(QueryAPI(sql), database=database, schema=schema, table=table, admin=False, **bindings)
             frames.append(db.fetchall(legacy=False))
         self._log_.alert(lambda: f"Upsert Operation: Processed {len(records)} rows in {table} Table")
@@ -1579,8 +1580,7 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         routed = self._route_("remove", database, schema, table, condition=condition, parameters=parameters)
         if isinstance(routed, list): return self
         database, schema, table = routed
-        if not database or not schema or not table:
-            raise ValueError("Database, Schema and Table must be provided to remove rows")
+        self._require_(database, schema, table, "remove rows")
         target = self._target_(schema, table)
         sql = self._delete_(target)
         sql = self._condition_(sql, condition)
@@ -1594,37 +1594,18 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         :return: Self reference.
         """
         try:
-            timer = Timer()
-            timer.start()
-            if self.databased():
-                subtimer = Timer()
-                subtimer.start()
-                self.disconnect()
-                self.connect(admin=True)
-                self.create(database=self._database_, schema=None, table=None)
-                subtimer.stop()
-                self._log_.info(lambda: f"Migration Operation: Migrated Database ({subtimer.result()})")
+            timer = Timer().start()
+            if self.databased(): self._timed_("Database", self.disconnect, lambda: self.connect(admin=True), lambda: self.create(database=self._database_, schema=None, table=None))
             self.disconnect()
             self.connect()
-            if self.schemed():
-                subtimer = Timer()
-                subtimer.start()
-                self.create(database=self._database_, schema=self._schema_, table=None)
-                subtimer.stop()
-                self._log_.info(lambda: f"Migration Operation: Migrated Schema ({subtimer.result()})")
-            if self.tabled():
-                subtimer = Timer()
-                subtimer.start()
-                self.migrate()
-                subtimer.stop()
-                self._log_.info(lambda: f"Migration Operation: Migrated Table ({subtimer.result()})")
+            if self.schemed(): self._timed_("Schema", lambda: self.create(database=self._database_, schema=self._schema_, table=None))
+            if self.tabled(): self._timed_("Table", self.migrate)
             timer.stop()
             self._log_.info(lambda: f"Migration Operation: Migrated ({timer.result()})")
             return self
         except Exception as e:
             self.rollback()
-            self._log_.error(lambda: "Migration Operation: Failed")
-            self._log_.exception(lambda: str(e))
+            self._log_.failure(lambda e=e: f"Migration Operation: Failed · {e}")
             raise
 
     def kill(self, *,
@@ -1657,6 +1638,5 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         try:
             self.executeone(self._KILL_SESSION_QUERY_, id=id, admin=True).commit()
         except Exception as e:
-            self._log_.error(lambda: f"Kill Operation: Failed to terminate session {id}")
-            self._log_.exception(lambda: str(e))
+            self._log_.failure(lambda e=e: f"Kill Operation: Failed · Session {id} · {e}")
         return self

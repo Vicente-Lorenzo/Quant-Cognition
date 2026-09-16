@@ -5,7 +5,6 @@ import atexit
 import queue
 import threading
 
-from datetime import datetime
 from collections.abc import Sequence
 from typing import Callable, Union, TYPE_CHECKING
 
@@ -165,7 +164,7 @@ class BufferAPI(threading.Thread):
             self._log_.debug(lambda: f"Drain {t.Table}: {len(records)} Records · {count} Unique Rows ({timer.result()})")
         except Exception as e:
             self._failed_[t].extend(records)
-            self._log_.error(lambda: f"Drain {t.Table}: Failed · Retained {len(records)} Records · {sum(len(v) for v in self._failed_.values())} Pending · {e}")
+            self._log_.error(lambda e=e: f"Drain {t.Table}: Failed · Retained {len(records)} Records · {sum(len(v) for v in self._failed_.values())} Pending · {e}")
 
     def _consume_(self, db: DatabaseAPI) -> None:
         snapshot = {t: self._collect_(t) for t in reversed(self._types_)}

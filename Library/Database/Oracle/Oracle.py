@@ -242,10 +242,11 @@ class OracleDatabaseAPI(DatabaseAPI):
                 f"EXECUTE IMMEDIATE '{insert}'; "
                 f"IF generated IS NOT NULL THEN EXECUTE IMMEDIATE {alter}ALWAYS AS IDENTITY)'; END IF; END;")
 
-    def _row_(self, name: str, datatype: str, is_pk: int, is_fk: int) -> str:
+    @staticmethod
+    def _row_(name: str, datatype: str, is_pk: int, is_fk: int) -> str:
         return f"SELECT '{name}' AS column_name, '{datatype}' AS data_type, {is_pk} AS is_pk, {is_fk} AS is_fk FROM dual"
 
     def _upsert_(self, target: str, columns: Sequence[str], keys: Sequence[str], exclude: Sequence[str] = (), returning: Sequence[str] = (), rows: int = 1) -> str:
         if returning: raise NotImplementedError("Oracle MERGE does not support RETURNING via this driver path")
-        source = " UNION ALL ".join("SELECT " + ", ".join(f"{QueryAPI.named(self._binding_(column, None if rows == 1 else index))} AS {self._quoted_(column)}" for column in columns) + " FROM dual" for index in range(rows))
+        source = " UNION ALL ".join("SELECT " + ", ".join(f"{QueryAPI.named(self._binding_(column, MISSING if rows == 1 else index))} AS {self._quoted_(column)}" for column in columns) + " FROM dual" for index in range(rows))
         return f"MERGE INTO {target} target USING ({source}) source ON ({self._pairs_(keys, 'target.', 'source.', ' AND ')}){self._matched_(columns, keys, exclude)}"

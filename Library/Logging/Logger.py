@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from time import gmtime, strftime
 
+from Library.Utility.Typing import MISSING, Missing
 from Library.Logging.Level import VerboseLevel
 
 class LoggerAPI(ABC):
@@ -16,8 +17,9 @@ class LoggerAPI(ABC):
     to exactly the sinks accepting it, which removes per-sink filtering from the emit loop. Both are
     rebuilt by refresh() whenever a sink's level or enablement changes.
 
-    Subclasses implement _format_ and _write_. They must not raise; write() converts any failure
-    into a diagnostic on the original standard error so that logging can never take down a caller.
+    Subclasses implement _write_ and may override _format_. They must not raise; write() converts
+    any failure into a diagnostic on the original standard error so that logging can never take down
+    a caller.
     """
 
     _MILLISECOND_: tuple = tuple(f"{index:03d}" for index in range(1000))
@@ -196,7 +198,7 @@ class LoggerAPI(ABC):
         raise NotImplementedError
 
     @classmethod
-    def _fallback_(cls, error: Exception, label: str | None = None) -> None:
+    def _fallback_(cls, error: Exception, label: str | Missing = MISSING) -> None:
         stream = getattr(sys, "__stderr__", None)
         if stream is None: return
         try: stream.write(f"Logging {label or f'{cls.Name} Write'}: Failed · {type(error).__name__} · {error}\n")

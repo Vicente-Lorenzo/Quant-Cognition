@@ -208,7 +208,10 @@ class LoggingAPI(logging.Logger):
     def failure(self, content, *args) -> None:
         """Logs a failed operation once at Error and once at Exception, building the message a single time."""
         if LoggerAPI.Gate < 1: return
-        message = content() if callable(content) else content
+        try: message = content() if callable(content) else content
+        except Exception as error:
+            LoggerAPI._fallback_(error, "Emit")
+            return
         if LoggerAPI.Gate >= 2: self._emit_(VerboseLevel.Error, 2, message, args)
         self._emit_(VerboseLevel.Exception, 1, message, args)
 
@@ -296,7 +299,7 @@ class LoggingAPI(logging.Logger):
                 return func(*args, **kwargs)
             except Exception as error:
                 self.exception(lambda: f"Failed @ {func.__name__}")
-                self.exception(lambda: self._trace_(type(error), error, error.__traceback__))
+                self.exception(lambda error=error: self._trace_(type(error), error, error.__traceback__))
                 raise
             finally:
                 self.debug(lambda: f"Terminated @ {func.__name__}")

@@ -9,6 +9,7 @@ from typing import Union, ClassVar, TYPE_CHECKING
 
 from Library.Utility.Datetime import utc_now
 from Library.Utility.Runtime import find_host
+from Library.Utility.Typing import MISSING, Missing
 from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Database import PrimaryKey
@@ -20,7 +21,7 @@ class LogAPI(DatapointAPI):
     """
     One durable row per captured log.
 
-    The row is created when the log opens so that consumers can reach it while the work is still
+    The row is created when the log starts so that consumers can reach it while the work is still
     running, and its content is refreshed as the log grows. Bulk content lives here only for the
     small logs a scheduled run produces; large framework logs stay on the filesystem and are
     referenced through Path.
@@ -64,15 +65,15 @@ class LogAPI(DatapointAPI):
         }
 
     @classmethod
-    def open(cls, db: DatabaseAPI, *,
-             source: str,
-             level: str,
-             user: Union[str, None] = None,
-             process: Union[int, None] = None,
-             path: Union[str, pathlib.Path, None] = None,
-             started: Union[datetime, None] = None,
-             by: str = "Autosave",
-             migrate: bool = False) -> Self:
+    def start(cls, db: DatabaseAPI, *,
+              source: str,
+              level: str,
+              user: Union[str, None] = None,
+              process: Union[int, None] = None,
+              path: Union[str, pathlib.Path, None] = None,
+              started: Union[datetime, None, Missing] = MISSING,
+              by: str = "Autosave",
+              migrate: bool = False) -> Self:
         """
         Inserts the row a log writes into, before any content exists.
 
@@ -84,7 +85,7 @@ class LogAPI(DatapointAPI):
         :param user: The account the work runs under.
         :param process: The identifier of the process producing the log.
         :param path: Optional filesystem location of the same log, for live tailing.
-        :param started: When the log opened; now when omitted.
+        :param started: When the log started; now when omitted.
         :param by: The audit label stamped on the row.
         :param migrate: Whether to create the table if it is absent.
         :return: The freshly inserted log row.
@@ -108,7 +109,7 @@ class LogAPI(DatapointAPI):
         record.save(by=by)
         return record
 
-    def close(self, content: str, *, records: int, dropped: int, truncated: bool, by: str = "Autosave", stopped: Union[datetime, None] = None) -> None:
+    def stop(self, content: str, *, records: int, dropped: int, truncated: bool, by: str = "Autosave", stopped: Union[datetime, None, Missing] = MISSING) -> None:
         """
         Writes the accumulated content and counters back to the row.
         :param content: The log content, already bounded by the caller.
@@ -119,7 +120,7 @@ class LogAPI(DatapointAPI):
         :param stopped: When the log stopped; the row keeps its current value when omitted.
         """
         self.Content, self.Records, self.Dropped, self.Truncated = content, records, dropped, truncated
-        if stopped is not None: self.StoppedAt = stopped
+        if stopped: self.StoppedAt = stopped
         self.save(by=by)
 
     @classmethod

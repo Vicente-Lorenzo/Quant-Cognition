@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from Library.Utility.Datetime import utc_now
 from Library.Utility.Runtime import find_user
+from Library.Utility.Typing import MISSING, Missing
 from Library.Logging.Level import VerboseLevel
 from Library.Logging.Logger import LoggerAPI
 from Library.Logging.File import FileAPI
@@ -101,7 +102,7 @@ class StorageAPI(LoggerAPI):
         from Library.Logging.Log import LogAPI
         self.detach()
         self._db_ = db
-        self._record_ = LogAPI.open(db, source=source or FileAPI._origin_(), level=self._level_.name, user=find_user() or "Unknown", process=os.getpid(), path=path, migrate=migrate)
+        self._record_ = LogAPI.start(db, source=source or FileAPI._origin_(), level=self._level_.name, user=find_user() or "Unknown", process=os.getpid(), path=path, migrate=migrate)
         self._buffer_, self._length_, self._records_, self._dropped_, self._truncated_ = [], 0, 0, 0, False
         self._signal_.clear()
         self._thread_ = threading.Thread(target=self._drain_, name="StorageLogging", daemon=True)
@@ -145,9 +146,9 @@ class StorageAPI(LoggerAPI):
         if self._locked_: return
         self._limit_ = max(0, limit)
 
-    def _persist_(self, stopped: datetime | None = None) -> None:
+    def _persist_(self, stopped: datetime | None | Missing = MISSING) -> None:
         if self._record_ is None: return
-        self._record_.close("".join(self._buffer_), records=self._records_, dropped=self._dropped_, truncated=self._truncated_, stopped=stopped)
+        self._record_.stop("".join(self._buffer_), records=self._records_, dropped=self._dropped_, truncated=self._truncated_, stopped=stopped)
 
     def _flush_(self) -> None:
         if self._record_ is None or self._db_ is None: return

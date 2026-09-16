@@ -1,7 +1,8 @@
 import logging
-from enum import Enum
 
-class VerboseLevel(Enum):
+from Library.Utility.Enumeration import EnumerationAPI
+
+class VerboseLevel(EnumerationAPI):
     """
     Framework logging severity, ordered by verbosity rather than by severity.
 
