@@ -1,6 +1,7 @@
 import subprocess
 
-from Cache import ROOT, clean, windowless
+from Cache import ROOT, clean
+from Library.Utility.Runtime import windowless
 
 REQUIREMENTS = ROOT / "Requirements.txt"
 

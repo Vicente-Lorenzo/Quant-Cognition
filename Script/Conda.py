@@ -2,9 +2,10 @@ import os
 import subprocess
 from pathlib import Path
 
-from Cache import ROOT, clean, windowless
+from Cache import ROOT, clean
+from Library.Utility.Runtime import windowless
+from Setup.Environment import run_manager
 
-MAMBA = os.environ.get("MAMBA_EXE") or "mamba"
 ENVIRONMENTS = {"Quant": ROOT / "Quant.yml", "Future": ROOT / "Future.yml", "Exotics": ROOT / "Exotics.yml"}
 
 def _base_():
@@ -22,9 +23,9 @@ def ensure_environment(base, name, manifest):
         print(f"Conda Update: Skipped · {manifest.name} Absent")
         return
     verb = "update" if _exists_(base, name) else "create"
-    command = [MAMBA, "env", verb, "--name", name, "--file", str(manifest)]
+    command = ["env", verb, "--name", name, "--file", str(manifest)]
     if verb == "update": command.append("--prune")
-    subprocess.run(command, check=True, **windowless())
+    run_manager(command, check=True)
 
 def main():
     clean()
