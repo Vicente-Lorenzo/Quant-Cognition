@@ -1,73 +1,33 @@
-import threading
-from typing import Union, Callable
+from typing import Callable, Union
+from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOATrendbarPeriod
+from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOADepthEvent, ProtoOASpotEvent
 
-from Library.Utility.Service import ServiceAPI
 from Library.Market.Tick import TickAPI
-from Library.Market.Bar import BarAPI
-from Library.Spotware.Market import MarketAPI
+from Library.Utility.Service import ServiceAPI
 
 class StreamingAPI(ServiceAPI):
-
-    _SPOT_EVENT_ = "ProtoOASpotEvent"
-    _DEPTH_EVENT_ = "ProtoOADepthEvent"
 
     def ticks(self,
               symbols: Union[int, list[int]],
               callback: Callable,
               frame: bool = False,
               limit: Union[int, None] = None,
-              timeout: Union[int, None] = None) -> None:
-        from ctrader_open_api import Protobuf
+              timeout: Union[float, None] = None) -> int:
         ids = [int(i) for i in self._api_.flatten(symbols)]
-        try:
-            self.connect()
-            counter = {"n": 0}
-            done = threading.Event()
-            def handler(message):
-                if done.is_set(): return
-                payload = Protobuf.extract(message)
-                if type(payload).__name__ != self._SPOT_EVENT_: return
-                if int(payload.symbolId) not in ids: return
-
-                from Library.Utility.Datetime import timestamp_to_datetime
-                from datetime import timezone
-
-                dt = None
-                if payload.HasField("timestamp"):
-                    dt = timestamp_to_datetime(int(payload.timestamp), milliseconds=True).replace(tzinfo=timezone.utc)
-
-                if payload.HasField("bid") or payload.HasField("ask"):
-                    tick = TickAPI(
-                        SecurityUID=int(payload.symbolId),
-                        DateTime=dt,
-                        AskPrice=(payload.ask / MarketAPI._PRICE_SCALE_) if payload.HasField("ask") else None,
-                        BidPrice=(payload.bid / MarketAPI._PRICE_SCALE_) if payload.HasField("bid") else None,
-                        db=self._api_._db_ if hasattr(self._api_, "_db_") else None
-                    )
-                    callback(self._api_.frame([tick]) if frame else tick)
-                    counter["n"] += 1
-                    if limit is not None and counter["n"] >= limit: done.set()
-            self._api_._subscribe_(handler)
-            try:
-                request = Protobuf.get("ProtoOASubscribeSpotsReq",
-                                       ctidTraderAccountId=self._api_._account_id_,
-                                       symbolId=ids)
-                self._api_._send_(request)
-                done.wait(timeout=timeout)
-            finally:
-                self._api_._unsubscribe_(handler)
-                try:
-                    unsub = Protobuf.get("ProtoOAUnsubscribeSpotsReq",
-                                         ctidTraderAccountId=self._api_._account_id_,
-                                         symbolId=ids)
-                    self._api_._send_(unsub)
-                except Exception: pass
-        except KeyboardInterrupt:
-            self._log_.info(lambda: "Ticks Stream: Interrupted by User")
-        except Exception as e:
-            self._log_.error(lambda: "Ticks Stream: Failed")
-            self._log_.exception(lambda: str(e))
-            raise
+        stamp, ask, bid = str(TickAPI.ID.Timestamp), str(TickAPI.ID.Ask), str(TickAPI.ID.Bid)
+        def _decode_(payload) -> list:
+            if not isinstance(payload, ProtoOASpotEvent) or payload.symbolId not in ids: return []
+            if not (payload.HasField("bid") or payload.HasField("ask")): return []
+            row = {
+                "Symbol": int(payload.symbolId),
+                stamp: self._api_._optional_(payload, "timestamp", self._api_._stamp_),
+                ask: self._api_._optional_(payload, "ask", self._api_._price_),
+                bid: self._api_._optional_(payload, "bid", self._api_._price_)
+            }
+            return [self._api_.frame([row]) if frame else row]
+        subscribe = self._api_._message_("ProtoOASubscribeSpotsReq", symbolId=ids)
+        unsubscribe = self._api_._message_("ProtoOAUnsubscribeSpotsReq", symbolId=ids)
+        return self._api_._listen_(subscribe, unsubscribe, _decode_, callback, limit=limit, timeout=timeout)
 
     def bars(self,
              symbol: int,
@@ -75,124 +35,33 @@ class StreamingAPI(ServiceAPI):
              callback: Callable,
              frame: bool = False,
              limit: Union[int, None] = None,
-             timeout: Union[int, None] = None) -> None:
-        from ctrader_open_api import Protobuf
+             timeout: Union[float, None] = None) -> int:
         sid = int(symbol)
-        tf_id = MarketAPI._timeframe_id_(timeframe)
-        tf_uid = MarketAPI._timeframe_uid_(tf_id)
-        try:
-            self.connect()
-            counter = {"n": 0}
-            done = threading.Event()
-            def handler(message):
-                if done.is_set(): return
-                payload = Protobuf.extract(message)
-                if type(payload).__name__ != self._SPOT_EVENT_: return
-                if int(payload.symbolId) != sid: return
-                for bar in payload.trendbar:
-                    if int(bar.period) != tf_id: continue
-                    low = bar.low
-                    from Library.Utility.Datetime import timestamp_to_datetime
-                    from datetime import timezone
-                    ts = timestamp_to_datetime(int(bar.utcTimestampInMinutes) * 60, milliseconds=False).replace(tzinfo=timezone.utc)
-                    b = BarAPI(
-                        SecurityUID=sid,
-                        TimeframeUID=tf_uid,
-                        DateTime=ts,
-                        OpenBidPrice=(low + bar.deltaOpen) / MarketAPI._PRICE_SCALE_,
-                        HighBidPrice=(low + bar.deltaHigh) / MarketAPI._PRICE_SCALE_,
-                        LowBidPrice=low / MarketAPI._PRICE_SCALE_,
-                        CloseBidPrice=(low + bar.deltaClose) / MarketAPI._PRICE_SCALE_,
-                        TickVolume=int(bar.volume),
-                        db=self._api_._db_ if hasattr(self._api_, "_db_") else None
-                    )
-                    callback(self._api_.frame([b]) if frame else b)
-                    counter["n"] += 1
-                    if limit is not None and counter["n"] >= limit:
-                        done.set()
-                        return
-            self._api_._subscribe_(handler)
-            try:
-                request = Protobuf.get("ProtoOASubscribeLiveTrendbarReq",
-                                       ctidTraderAccountId=self._api_._account_id_,
-                                       period=tf_id,
-                                       symbolId=sid)
-                self._api_._send_(request)
-                done.wait(timeout=timeout)
-            finally:
-                self._api_._unsubscribe_(handler)
-                try:
-                    unsub = Protobuf.get("ProtoOAUnsubscribeLiveTrendbarReq",
-                                         ctidTraderAccountId=self._api_._account_id_,
-                                         period=tf_id,
-                                         symbolId=sid)
-                    self._api_._send_(unsub)
-                except Exception: pass
-        except KeyboardInterrupt:
-            self._log_.info(lambda: "Bars Stream: Interrupted by User")
-        except Exception as e:
-            self._log_.error(lambda: "Bars Stream: Failed")
-            self._log_.exception(lambda: str(e))
-            raise
+        period = self._api_.market._period_(timeframe)
+        label = ProtoOATrendbarPeriod.Name(period)
+        def _decode_(payload) -> list:
+            if not isinstance(payload, ProtoOASpotEvent) or payload.symbolId != sid: return []
+            rows = [self._api_.market._trendbar_(bar, sid, label) for bar in payload.trendbar if bar.period == period]
+            return [self._api_.frame([row]) for row in rows] if frame else rows
+        subscribe = self._api_._message_("ProtoOASubscribeLiveTrendbarReq", period=period, symbolId=sid)
+        unsubscribe = self._api_._message_("ProtoOAUnsubscribeLiveTrendbarReq", period=period, symbolId=sid)
+        return self._api_._listen_(subscribe, unsubscribe, _decode_, callback, limit=limit, timeout=timeout)
 
     def depth(self,
               symbols: Union[int, list[int]],
               callback: Callable,
               frame: bool = False,
               limit: Union[int, None] = None,
-              timeout: Union[int, None] = None) -> None:
-        from ctrader_open_api import Protobuf
+              timeout: Union[float, None] = None) -> int:
         ids = [int(i) for i in self._api_.flatten(symbols)]
-        try:
-            self.connect()
-            counter = {"n": 0}
-            done = threading.Event()
-            def handler(message):
-                if done.is_set(): return
-                payload = Protobuf.extract(message)
-                if type(payload).__name__ != self._DEPTH_EVENT_: return
-                if int(payload.symbolId) not in ids: return
-                rows = []
-                for q in payload.newQuotes:
-                    rows.append({
-                        "SecurityUID": int(payload.symbolId),
-                        "QuoteId": int(q.id),
-                        "Size": int(q.size),
-                        "BidPrice": (q.bid / MarketAPI._PRICE_SCALE_) if q.HasField("bid") else None,
-                        "AskPrice": (q.ask / MarketAPI._PRICE_SCALE_) if q.HasField("ask") else None,
-                        "Action": "New"
-                    })
-                for qid in payload.deletedQuotes:
-                    rows.append({
-                        "SecurityUID": int(payload.symbolId),
-                        "QuoteId": int(qid),
-                        "Size": None,
-                        "BidPrice": None,
-                        "AskPrice": None,
-                        "Action": "Deleted"
-                    })
-                if not rows: return
-                callback(self._api_.frame(rows) if frame else rows)
-                counter["n"] += 1
-                if limit is not None and counter["n"] >= limit: done.set()
-            self._api_._subscribe_(handler)
-            try:
-                request = Protobuf.get("ProtoOASubscribeDepthQuotesReq",
-                                       ctidTraderAccountId=self._api_._account_id_,
-                                       symbolId=ids)
-                self._api_._send_(request)
-                done.wait(timeout=timeout)
-            finally:
-                self._api_._unsubscribe_(handler)
-                try:
-                    unsub = Protobuf.get("ProtoOAUnsubscribeDepthQuotesReq",
-                                         ctidTraderAccountId=self._api_._account_id_,
-                                         symbolId=ids)
-                    self._api_._send_(unsub)
-                except Exception: pass
-        except KeyboardInterrupt:
-            self._log_.info(lambda: "Depth Stream: Interrupted by User")
-        except Exception as e:
-            self._log_.error(lambda: "Depth Stream: Failed")
-            self._log_.exception(lambda: str(e))
-            raise
+        ask, bid = str(TickAPI.ID.Ask), str(TickAPI.ID.Bid)
+        def _decode_(payload) -> list:
+            if not isinstance(payload, ProtoOADepthEvent) or payload.symbolId not in ids: return []
+            sid = int(payload.symbolId)
+            rows = [{**self._api_.market._quote_(sid, quote), "Action": "New"} for quote in payload.newQuotes]
+            rows += [{"Symbol": sid, "Quote": int(quote), "Size": None, bid: None, ask: None, "Action": "Deleted"} for quote in payload.deletedQuotes]
+            if not rows: return []
+            return [self._api_.frame(rows) if frame else rows]
+        subscribe = self._api_._message_("ProtoOASubscribeDepthQuotesReq", symbolId=ids)
+        unsubscribe = self._api_._message_("ProtoOAUnsubscribeDepthQuotesReq", symbolId=ids)
+        return self._api_._listen_(subscribe, unsubscribe, _decode_, callback, limit=limit, timeout=timeout)
