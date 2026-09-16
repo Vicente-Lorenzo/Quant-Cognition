@@ -19,11 +19,7 @@ class ReferenceAPI(ServiceAPI):
         :param legacy: If True, returns a Pandas DataFrame; if False, Polars. Defaults to the API setting.
         :returns: Long-format frame with columns "ticker", "field" and "value" (one row per security and field).
         """
-        def _fetch_():
-            return self._api_._call_("bdp", securities, fields, legacy=legacy, overrides=overrides)
-        timer, df = super()._fetch_(callback=_fetch_)
-        self._log_.info(lambda: f"Fetch Operation: Fetched {len(df)} Data Points ({timer.result()})")
-        return df
+        return self._api_._engine_(self, "Fetch Operation: Fetched", "Data Points", "bdp", securities, fields, legacy=legacy, overrides=overrides)
 
     def bulk(self,
              securities: str | list[str],
@@ -39,8 +35,4 @@ class ReferenceAPI(ServiceAPI):
         :param legacy: If True, returns a Pandas DataFrame; if False, Polars. Defaults to the API setting.
         :returns: One row per bulk record, tagged with "ticker" and "field" columns plus the field's own columns.
         """
-        def _fetch_():
-            return self._api_._call_("bds", securities, field, legacy=legacy, overrides=overrides)
-        timer, df = super()._fetch_(callback=_fetch_)
-        self._log_.info(lambda: f"Bulk Operation: Fetched {len(df)} Records ({timer.result()})")
-        return df
+        return self._api_._engine_(self, "Bulk Operation: Fetched", "Records", "bds", securities, field, legacy=legacy, overrides=overrides)

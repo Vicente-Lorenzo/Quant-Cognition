@@ -30,8 +30,4 @@ class HistoricalAPI(ServiceAPI):
         :returns: Long-format frame with columns "ticker", "date", "field" and "value" (one row per security, date and field).
         """
         period = self._PERIODICITY_[timeframe.upper()]
-        def _fetch_():
-            return self._api_._call_("bdh", securities, fields, start, "today" if stop is MISSING else stop, Per=period, legacy=legacy, overrides=overrides)
-        timer, df = super()._fetch_(callback=_fetch_)
-        self._log_.info(lambda: f"Fetch Operation: Fetched {len(df)} Data Points ({timer.result()})")
-        return df
+        return self._api_._engine_(self, "Fetch Operation: Fetched", "Data Points", "bdh", securities, fields, start, "today" if stop is MISSING else stop, Per=period, legacy=legacy, overrides=overrides)

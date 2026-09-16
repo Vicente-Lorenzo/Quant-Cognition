@@ -1,6 +1,7 @@
 """Main Bloomberg interface backed by the xbbg 1.4.1 engine with optional ZMQ remote calls."""
 from Library.Database.Dataframe import DataframeAPI, pd, pl
 from Library.Utility.Remote import RemoteAPI
+from Library.Utility.Service import ServiceAPI
 from Library.Utility.Typing import MISSING, Missing
 from Library.Bloomberg.Reference import ReferenceAPI
 from Library.Bloomberg.Historical import HistoricalAPI
@@ -67,6 +68,11 @@ class BloombergAPI(RemoteAPI, DataframeAPI):
             from xbbg import blp
             return getattr(blp, name)(*args, backend=self._backend_(legacy), **kwargs)
         return self.deserialize(self._request_(name, *args, **kwargs), legacy=legacy)
+
+    def _engine_(self, service: ServiceAPI, label: str, noun: str, name: str, *args, **kwargs) -> pd.DataFrame | pl.DataFrame:
+        timer, df = service._fetch_(callback=lambda: self._call_(name, *args, **kwargs))
+        service._log_.info(lambda: f"{label} {len(df)} {noun} ({timer.result()})")
+        return df
 
     def _dispatch_(self, name: str, args: list, kwargs: dict) -> bytes:
         """Serves one remote envelope by running the local engine call and encoding the frame as Arrow IPC."""

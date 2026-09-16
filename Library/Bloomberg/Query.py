@@ -15,8 +15,4 @@ class QueryAPI(ServiceAPI):
         :param legacy: If True, returns a Pandas DataFrame; if False, Polars. Defaults to the API setting.
         :returns: A frame whose columns follow the BQL query's own output schema.
         """
-        def _execute_():
-            return self._api_._call_("bql", query, legacy=legacy)
-        timer, df = super()._fetch_(callback=_execute_)
-        self._log_.info(lambda: f"Execute Operation: Executed {len(df)} Rows ({timer.result()})")
-        return df
+        return self._api_._engine_(self, "Execute Operation: Executed", "Rows", "bql", query, legacy=legacy)
