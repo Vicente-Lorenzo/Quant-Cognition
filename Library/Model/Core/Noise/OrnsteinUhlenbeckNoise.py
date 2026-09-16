@@ -39,18 +39,9 @@ class OrnsteinUhlenbeckNoiseAPI(NoiseAPI):
         self.reset()
 
     def __call__(self) -> Union[np.ndarray, float]:
-        if np.isscalar(self._mu):
-            noise = self._theta * (self._mu - self._x_prev) * self._dt \
-                    + self._sigma * np.sqrt(self._dt) * self._rng.normal()
-        else:
-            noise = self._theta * (self._mu - self._x_prev) * self._dt \
-                    + self._sigma * np.sqrt(self._dt) * self._rng.normal(size=self._mu.shape)
-
+        noise = self._theta * (self._mu - self._x_prev) * self._dt + self._sigma * np.sqrt(self._dt) * self._sample_()
         self._x_prev += noise
         return self._x_prev
 
     def reset(self) -> None:
-        if self._x0 is not None:
-            self._x_prev = np.copy(self._x0)
-        else:
-            self._x_prev = np.zeros_like(self._mu)
+        self._x_prev = self._origin_(self._x0, self._mu, np.zeros_like)

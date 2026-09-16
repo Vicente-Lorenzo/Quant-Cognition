@@ -3,7 +3,10 @@ import torch.nn as nn
 from pathlib import Path
 from abc import ABC, abstractmethod
 
+from Library.Database.Dataframe import np
 from Library.Logging import LoggingAPI
+from Library.Utility.IO import mkdir
+from Library.Utility.Typing import MISSING
 
 class NetworkAPI(nn.Module, ABC):
 
@@ -16,6 +19,12 @@ class NetworkAPI(nn.Module, ABC):
         self._file = path / model / role
         self._log: LoggingAPI = LoggingAPI("Network Management")
 
+    @staticmethod
+    def _uniform_(layer: nn.Linear, bound: float = MISSING) -> None:
+        bound = 1. / np.sqrt(layer.weight.data.size()[1]) if bound is MISSING else bound
+        layer.weight.data.uniform_(-bound, bound)
+        layer.bias.data.uniform_(-bound, bound)
+
     @abstractmethod
     def init(self) -> None:
         raise NotImplementedError
@@ -26,7 +35,7 @@ class NetworkAPI(nn.Module, ABC):
         self.to(self.device)
 
     def save(self) -> None:
-        self._file.parent.mkdir(parents=True, exist_ok=True)
+        mkdir(self._file.parent, safe=False)
         T.save(self.state_dict(), str(self._file))
         self._log.debug(lambda: f"Saved network state for {self._model} {self._role}")
 

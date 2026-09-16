@@ -36,20 +36,11 @@ class GeometricBrownianNoiseAPI(NoiseAPI):
         self.reset()
 
     def __call__(self) -> Union[np.ndarray, float]:
-        if np.isscalar(self._mu):
-            noise = self._rng.normal()
-            drift = (self._mu - 0.5 * self._sigma ** 2) * self._dt
-            diffusion = self._sigma * np.sqrt(self._dt) * noise
-        else:
-            noise = self._rng.normal(size=self._mu.shape)
-            drift = (self._mu - 0.5 * self._sigma ** 2) * self._dt
-            diffusion = self._sigma * np.sqrt(self._dt) * noise
-
+        noise = self._sample_()
+        drift = (self._mu - 0.5 * self._sigma ** 2) * self._dt
+        diffusion = self._sigma * np.sqrt(self._dt) * noise
         self._s_prev *= np.exp(drift + diffusion)
         return self._s_prev
 
     def reset(self) -> None:
-        if self._s0 is not None:
-            self._s_prev = np.copy(self._s0)
-        else:
-            self._s_prev = np.ones_like(self._mu)
+        self._s_prev = self._origin_(self._s0, self._mu, np.ones_like)

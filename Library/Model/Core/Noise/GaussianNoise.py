@@ -29,10 +29,7 @@ class GaussianNoiseAPI(NoiseAPI):
         self._sigma: float = sigma
 
     def __call__(self) -> Union[np.ndarray, float]:
-        if np.isscalar(self._mu):
-            return self._mu + self._sigma * self._rng.normal()
-        else:
-            return self._mu + self._sigma * self._rng.normal(size=self._mu.shape)
+        return self._mu + self._sigma * self._sample_()
 
     def reset(self) -> None:
         pass
