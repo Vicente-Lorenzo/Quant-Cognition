@@ -10,14 +10,14 @@ from Library.Universe.Universe import UniverseAPI
 
 if TYPE_CHECKING: from Library.Database import DatabaseAPI
 
-_UNIT_MAP_ = {"T": "Tick", "S": "Second", "M": "Minute", "H": "Hour", "D": "Day", "W": "Week", "MN": "Month", "Y": "Year"}
-_MINUTES_MAP_ = {"S": 1 / 60, "M": 1, "H": 60, "D": 1440, "W": 10080, "MN": 43200, "Y": 525600}
-_NAME_TO_UNIT_ = {v: k for k, v in _UNIT_MAP_.items()}
-_UID_PATTERN_ = re.compile(r"^([A-Z]+)(\d*)$")
-_ALIAS_UID_PATTERN_ = re.compile(r"^(\d*)([A-Z]+)(\d*)$")
-
 @dataclass
 class TimeframeAPI(UniverseAPI):
+
+    _UNIT_MAP_ = {"T": "Tick", "S": "Second", "M": "Minute", "H": "Hour", "D": "Day", "W": "Week", "MN": "Month", "Y": "Year"}
+    _MINUTES_MAP_ = {"S": 1 / 60, "M": 1, "H": 60, "D": 1440, "W": 10080, "MN": 43200, "Y": 525600}
+    _NAME_TO_UNIT_ = {v: k for k, v in _UNIT_MAP_.items()}
+    _UID_PATTERN_ = re.compile(r"^([A-Z]+)(\d*)$")
+    _ALIAS_UID_PATTERN_ = re.compile(r"^(\d*)([A-Z]+)(\d*)$")
 
     Table: ClassVar[str] = "Timeframe"
 
@@ -48,7 +48,7 @@ class TimeframeAPI(UniverseAPI):
         if uid in ["SECONDLY", "S", "SECOND", "1S"]: return "S1"
         if uid in ["YEARLY", "Y", "YEAR", "1Y"]: return "Y1"
         if uid in ["TICK", "TICKS", "T", "1T", "T1"]: return "T1"
-        match = _ALIAS_UID_PATTERN_.match(uid)
+        match = TimeframeAPI._ALIAS_UID_PATTERN_.match(uid)
         if match:
             prefix, unit, suffix = match.groups()
             v = int(prefix or suffix or 1)
@@ -75,12 +75,12 @@ class TimeframeAPI(UniverseAPI):
 
     def _infer_(self) -> None:
         if not self.UID: return
-        match = _UID_PATTERN_.match(self.UID)
+        match = TimeframeAPI._UID_PATTERN_.match(self.UID)
         if not match: return
         unit, suffix = match.groups()
         v = int(suffix or 1)
         self.Unit, self.Value = unit, v
-        name = _UNIT_MAP_.get(unit, "Minute")
+        name = TimeframeAPI._UNIT_MAP_.get(unit, "Minute")
         self.Name = name if v == 1 else f"{name}{v}"
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
@@ -89,7 +89,7 @@ class TimeframeAPI(UniverseAPI):
             condition, parameters = '"Name" = :value:', {"value": self.Name}
         row = super()._pull_(overload=overload) if condition is None else self._fetch_(condition=condition, parameters=parameters, overload=overload)
         if not row and not condition:
-            if self.Unit is None and not _UID_PATTERN_.match(self.UID): raise ValueError(f"Timeframe '{self.UID}' not found in database and lacks correct format for creation.")
+            if self.Unit is None and not TimeframeAPI._UID_PATTERN_.match(self.UID): raise ValueError(f"Timeframe '{self.UID}' not found in database and lacks correct format for creation.")
         return row
 
     @property
@@ -100,7 +100,7 @@ class TimeframeAPI(UniverseAPI):
     @property
     def Minutes(self) -> Union[float, None]:
         if self.Value is None or self.Unit is None or self.Unit == "T": return None
-        return self.Value * _MINUTES_MAP_.get(self.Unit, 1)
+        return self.Value * TimeframeAPI._MINUTES_MAP_.get(self.Unit, 1)
 
     @property
     def Seconds(self) -> Union[float, None]:
