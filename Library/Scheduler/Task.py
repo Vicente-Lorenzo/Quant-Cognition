@@ -45,9 +45,9 @@ class TaskAPI(DatapointAPI):
     def Structure(self) -> dict:
         return {
             self.ID.UID: PrimaryKey(pl.String),
-            self.ID.WID: ForeignKey(pl.String, reference=f'"{WorkflowAPI.Schema}"."{WorkflowAPI.Table}"("{WorkflowAPI.ID.UID}")'),
+            self.ID.WID: ForeignKey(pl.String, reference=WorkflowAPI.reference()),
             self.ID.Name: pl.String(),
-            self.ID.Owner: ForeignKey(pl.String, reference=f'"{UserAPI.Schema}"."{UserAPI.Table}"("{UserAPI.ID.UID}")'),
+            self.ID.Owner: ForeignKey(pl.String, reference=UserAPI.reference()),
             self.ID.Enabled: pl.Boolean(),
             self.ID.Kind: pl.String(),
             self.ID.Type: pl.String(),

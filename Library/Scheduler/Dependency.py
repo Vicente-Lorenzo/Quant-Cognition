@@ -20,8 +20,8 @@ class DependencyAPI(DatapointAPI):
     @property
     def Structure(self) -> dict:
         return {
-            self.ID.WID: ForeignKey(pl.String, reference=f'"{WorkflowAPI.Schema}"."{WorkflowAPI.Table}"("{WorkflowAPI.ID.UID}")', primary=True),
-            self.ID.Predecessor: ForeignKey(pl.String, reference=f'"{TaskAPI.Schema}"."{TaskAPI.Table}"("{TaskAPI.ID.UID}")', primary=True),
-            self.ID.Successor: ForeignKey(pl.String, reference=f'"{TaskAPI.Schema}"."{TaskAPI.Table}"("{TaskAPI.ID.UID}")', primary=True),
+            self.ID.WID: ForeignKey(pl.String, reference=WorkflowAPI.reference(), primary=True),
+            self.ID.Predecessor: ForeignKey(pl.String, reference=TaskAPI.reference(), primary=True),
+            self.ID.Successor: ForeignKey(pl.String, reference=TaskAPI.reference(), primary=True),
             **super().Structure
         }

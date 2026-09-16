@@ -1,7 +1,9 @@
 from datetime import datetime
 from dataclasses import dataclass
+from typing_extensions import Self
 from typing import Union, ClassVar
 
+from Library.Utility.Datetime import utc_now
 from Library.Auth.User import UserAPI
 from Library.Logging.Log import LogAPI
 from Library.Engine.Machine import MachineAPI
@@ -77,8 +79,8 @@ class RunAPI(DatapointAPI):
     def Structure(self) -> dict:
         return {
             self.ID.UID: PrimaryKey(pl.String),
-            self.ID.CID: ForeignKey(pl.String, reference=f'"{CycleAPI.Schema}"."{CycleAPI.Table}"("{CycleAPI.ID.UID}")'),
-            self.ID.TID: ForeignKey(pl.String, reference=f'"{TaskAPI.Schema}"."{TaskAPI.Table}"("{TaskAPI.ID.UID}")'),
+            self.ID.CID: ForeignKey(pl.String, reference=CycleAPI.reference()),
+            self.ID.TID: ForeignKey(pl.String, reference=TaskAPI.reference()),
             self.ID.Kind: pl.String(),
             self.ID.Status: pl.String(),
             self.ID.Retention: pl.String(),
@@ -91,8 +93,8 @@ class RunAPI(DatapointAPI):
             self.ID.Retry: pl.Int64(),
             self.ID.Memory: pl.Int64(),
             self.ID.PID: pl.Int64(),
-            self.ID.Auditor: ForeignKey(pl.String, reference=f'"{UserAPI.Schema}"."{UserAPI.Table}"("{UserAPI.ID.UID}")'),
-            self.ID.LID: ForeignKey(pl.String, reference=f'"{LogAPI.Schema}"."{LogAPI.Table}"("{LogAPI.ID.UID}") ON DELETE SET NULL'),
+            self.ID.Auditor: ForeignKey(pl.String, reference=UserAPI.reference()),
+            self.ID.LID: ForeignKey(pl.String, reference=LogAPI.reference("ON DELETE SET NULL")),
             self.ID.Log: pl.String(),
             self.ID.Progress: pl.Float64(),
             self.ID.Stage: pl.String(),
@@ -106,7 +108,7 @@ class RunAPI(DatapointAPI):
         machine.perform(RunEvent.Start, None)
         machine.perform(RunEvent.RequireApproval if self.Status == RunStatus.Approving.name else RunEvent.RequireReview, None)
         machine.perform(event, None)
-        self.Status, self.Auditor, self.StoppedAt = machine.At.Name, by, self.StoppedAt or datetime.now()
+        self.Status, self.Auditor, self.StoppedAt = machine.At.Name, by, self.StoppedAt or utc_now()
         self.save(by=by)
         return True
 
@@ -137,3 +139,30 @@ class RunAPI(DatapointAPI):
         reviewing.on(event=RunEvent.Accept, to=success, action=None, reason="Salvaged")
         reviewing.on(event=RunEvent.Reject, to=failure, action=None, reason="Confirmed Failure")
         return machine
+
+    @staticmethod
+    def outcome(*, failure: bool, approval: bool, review: bool, retriable: bool = False) -> str:
+        machine = RunAPI.machine()
+        machine.perform(RunEvent.Start, None)
+        if not failure: machine.perform(RunEvent.RequireApproval if approval else RunEvent.Complete, None)
+        elif retriable: machine.perform(RunEvent.Retry, None)
+        else: machine.perform(RunEvent.RequireReview if review else RunEvent.Fail, None)
+        return machine.At.Name
+
+    @classmethod
+    def closed(cls, row: dict, now: datetime, **overrides) -> Self:
+        fields = {
+            "UID": row["UID"],
+            "CID": row["CID"],
+            "TID": row["TID"],
+            "Kind": row["Kind"],
+            "ExitCode": row["ExitCode"],
+            "Retry": row["Retry"],
+            "PID": row["PID"],
+            "Log": row["Log"],
+            "StartedAt": row["StartedAt"],
+            "StoppedAt": now,
+            "Duration": (now - row["StartedAt"]).total_seconds() if row["StartedAt"] else None,
+            "Heartbeat": row["Heartbeat"]
+        }
+        return cls(**{**fields, **overrides})

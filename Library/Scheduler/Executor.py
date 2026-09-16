@@ -5,23 +5,25 @@ import shlex
 import shutil
 import sys
 import time
-import socket
 import uuid
 import subprocess
 from pathlib import Path
-from datetime import datetime
 from typing import Union
 
 import psutil
 
+from Library.Utility.Datetime import utc_now
 from Library.Logging import LoggingAPI, StorageAPI, VerboseLevel
 from Library.Logging.Log import LogAPI
 from Library.Utility.Progress import ProgressAPI
 from Library.Utility.Path import inspect_persistent, inspect_temporary, traceback_root
 from Library.Utility.File import PruneAPI
+from Library.Utility.IO import mkdir, read_text, remove
+from Library.Utility.Memory import memory_to_string
+from Library.Utility.Runtime import split_arguments, windowless
 from Library.Scheduler.Workflow import Kind
 from Library.Scheduler.Task import TaskAPI, TaskType
-from Library.Scheduler.Run import RunAPI, RunEvent, RunStatus
+from Library.Scheduler.Run import RunAPI, RunStatus
 from Library.Database import PostgresDatabaseAPI, QueryAPI
 
 class ExecutorAPI:
@@ -33,7 +35,6 @@ class ExecutorAPI:
     Folder: str = "Runs"
     Runs: str = str(inspect_temporary(Folder))
     Kept: str = str(inspect_persistent(Folder))
-    _CONTENT_: int = 8 * 1024 * 1024
     _SCOPE_: str = "--run"
     _STORAGE_: str = "--storage"
     _LOGGED_ = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[.,]\d+ - ")
@@ -48,7 +49,7 @@ class ExecutorAPI:
         source = cls.settle(uid)
         target = (Path(cls.Kept) if persist else Path(cls.Runs)) / str(uid)
         if source == target or not source.is_dir(): return target if target.is_dir() else None
-        target.parent.mkdir(parents=True, exist_ok=True)
+        mkdir(target.parent, safe=False)
         if target.exists():
             PruneAPI.discard(target)
             if target.exists(): raise OSError(f"Run folder not replaceable · {target}")
@@ -61,7 +62,7 @@ class ExecutorAPI:
 
     @classmethod
     def _verbosity_(cls, arguments: Union[str, None]) -> str:
-        tokens = cls._tokens_(arguments)
+        tokens = split_arguments(arguments)
         for index, token in enumerate(tokens[:-1]):
             if token == cls._STORAGE_ and tokens[index + 1] in VerboseLevel.__members__: return tokens[index + 1]
         return StorageAPI._DEFAULT_.name
@@ -81,25 +82,9 @@ class ExecutorAPI:
     def _open_log_(self, run: RunAPI, task: TaskAPI, path: str) -> Union[str, None]:
         try:
             with PostgresDatabaseAPI(database=self._database_) as db:
-                record = LogAPI(
-                    UID=uuid.uuid4().hex,
-                    Source=task.Name,
-                    Level=self._verbosity_(run.Arguments),
-                    Host=socket.gethostname(),
-                    User=run.Auditor,
-                    Process=run.PID,
-                    Path=path,
-                    Content="",
-                    Records=0,
-                    Dropped=0,
-                    Truncated=False,
-                    StartedAt=datetime.now(),
-                    db=db
-                )
-                record.save(by="Scheduler")
-                return record.UID
+                return LogAPI.start(db, source=task.Name, level=self._verbosity_(run.Arguments), user=run.Auditor, process=run.PID, path=path, by="Scheduler").UID
         except Exception as error:
-            self._log_.debug(lambda: f"Run Log Open: Failed · {error}")
+            self._log_.debug(lambda error=error: f"Run Log Start: Failed · {error}")
             return None
 
     def _rescue_(self, folder: Path, escaped: list) -> None:
@@ -110,26 +95,20 @@ class ExecutorAPI:
                 sink.write("\n".join(escaped) + "\n")
             self._log_.warning(lambda: f"Run Output: Escaped · {len(escaped)} Lines · Appended To Run.log")
         except Exception as error:
-            self._log_.debug(lambda: f"Run Output Rescue: Failed · {error}")
+            self._log_.debug(lambda error=error: f"Run Output Rescue: Failed · {error}")
 
     def _close_log_(self, run: RunAPI, path: str) -> None:
         source = Path(path)
-        raw = source.read_text(encoding="utf-8", errors="replace") if source.exists() else ""
-        content, escaped = self._sift_(raw, VerboseLevel[self._verbosity_(run.Arguments)])
+        content, escaped = self._sift_(read_text(source, errors="replace"), VerboseLevel[self._verbosity_(run.Arguments)])
         self._rescue_(source.parent, escaped)
-        try: source.unlink(missing_ok=True)
-        except Exception: pass
+        remove(source)
         if run.LID is None: return
         try:
             with PostgresDatabaseAPI(database=self._database_) as db:
                 record = LogAPI(UID=run.LID, db=db, autoload=True)
-                record.Records = content.count("\n")
-                record.Truncated = len(content) > self._CONTENT_
-                record.Content = content[:self._CONTENT_]
-                record.StoppedAt = datetime.now()
-                record.save(by="Scheduler")
+                record.stop(content[:StorageAPI._LIMIT_], records=content.count("\n"), dropped=record.Dropped, truncated=len(content) > StorageAPI._LIMIT_, by="Scheduler", stopped=utc_now())
         except Exception as error:
-            self._log_.debug(lambda: f"Run Log Close: Failed · {error}")
+            self._log_.debug(lambda error=error: f"Run Log Stop: Failed · {error}")
 
     @classmethod
     def _scoped_(cls, arguments: str, folder: str) -> str:
@@ -139,13 +118,8 @@ class ExecutorAPI:
         return " ".join([*tokens, cls._SCOPE_, f'"{folder}"'])
 
     @staticmethod
-    def _tokens_(arguments: str) -> list[str]:
-        tokens = shlex.split(arguments, posix=False) if arguments else []
-        return [token[1:-1] if len(token) > 1 and token[0] == token[-1] and token[0] in "\"'" else token for token in tokens]
-
-    @staticmethod
     def _command_(kind: TaskType, path: str, arguments: str = None) -> list[str]:
-        extra = ExecutorAPI._tokens_(arguments)
+        extra = split_arguments(arguments)
         if kind is TaskType.Batch: return ["cmd", "/c", path, *extra]
         if kind is TaskType.Shell: return ["bash", path, *extra]
         return [sys.executable, path, *extra]
@@ -165,7 +139,7 @@ class ExecutorAPI:
         if cycle is not None: command += ["--cycle", cycle]
         if retry: command += ["--retry", str(retry)]
         if manual: command += ["--manual"]
-        return subprocess.Popen(command, cwd=ExecutorAPI._ROOT_, env=ExecutorAPI._environment_(), creationflags=subprocess.CREATE_NO_WINDOW)
+        return subprocess.Popen(command, cwd=ExecutorAPI._ROOT_, env=ExecutorAPI._environment_(), **windowless())
 
     @staticmethod
     def _sample_(monitor: psutil.Process, peak: int) -> int:
@@ -185,7 +159,7 @@ class ExecutorAPI:
         run._db_ = None
 
     def _beat_(self, run: RunAPI) -> None:
-        run.Heartbeat = datetime.now()
+        run.Heartbeat = utc_now()
         with PostgresDatabaseAPI(database=self._database_) as db:
             sql = f'UPDATE {db._target_(run.Schema, run.Table)} SET "Heartbeat" = :heartbeat:, "Progress" = :progress:, "Stage" = :stage:, "Remaining" = :remaining: WHERE "UID" = :uid:'
             db.execute(QueryAPI(sql), [{"heartbeat": run.Heartbeat, "progress": run.Progress, "stage": run.Stage, "remaining": run.Remaining, "uid": run.UID}])
@@ -211,47 +185,43 @@ class ExecutorAPI:
             return offset
 
     def run(self, task: TaskAPI, *, cycle: Union[str, None] = None, retry: int = 0, manual: bool = False, arguments: Union[str, None] = None) -> RunAPI:
-        machine = RunAPI.machine()
         artifact = TaskType.parse(task.Type)
         label = artifact.name if isinstance(artifact, TaskType) else str(task.Type)
         kind = Kind.Service.name if Kind.parse(task.Kind) is Kind.Service else Kind.Manual.name if manual else Kind.Scheduled.name
         arguments = arguments if arguments is not None else task.Arguments
-        run = RunAPI(UID=uuid.uuid4().hex, CID=cycle, TID=task.UID, Kind=kind, Status=RunStatus.Waiting.name, Retry=retry, Arguments=arguments, Heartbeat=datetime.now())
+        run = RunAPI(UID=uuid.uuid4().hex, CID=cycle, TID=task.UID, Kind=kind, Status=RunStatus.Waiting.name, Retry=retry, Arguments=arguments, Heartbeat=utc_now())
         self._persist_(run)
-        machine.perform(RunEvent.Start, None)
-        started = datetime.now()
-        run.Status, run.StartedAt, run.Heartbeat = machine.At.Name, started, started
+        started, clock = utc_now(), time.monotonic()
+        run.Status, run.StartedAt, run.Heartbeat = RunStatus.Running.name, started, started
         self._persist_(run)
         self._log_.info(lambda: f"Run Launch: Started ({task.Name}) · {label} · {task.Path}")
         folder = Path(self.Runs) / run.UID
-        folder.mkdir(parents=True, exist_ok=True)
+        mkdir(folder, safe=False)
         log = str(folder / "Console.log")
         run.LID = self._open_log_(run, task, log)
-        peak, beat = 0, started
+        peak, beat = 0, clock
         with open(log, "wb") as sink:
-            process = subprocess.Popen(self._command_(artifact, task.Path, self._scoped_(arguments, str(folder))), cwd=self._ROOT_, env=self._environment_(), stdout=sink, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
+            process = subprocess.Popen(self._command_(artifact, task.Path, self._scoped_(arguments, str(folder))), cwd=self._ROOT_, env=self._environment_(), stdout=sink, stderr=subprocess.STDOUT, **windowless())
             run.PID = os.getpid()
             try: monitor = psutil.Process(process.pid)
             except psutil.Error: monitor = None
             self._persist_(run)
-            cursor, pulse, seen = 0, started, None
+            cursor, pulse, seen = 0, clock, None
             while process.poll() is None:
                 if monitor is not None: peak = self._sample_(monitor, peak)
-                now = datetime.now()
+                now = time.monotonic()
                 cursor = self._follow_(log, cursor, run)
                 moved = run.Progress != seen
-                if (now - beat).total_seconds() >= self._HEARTBEAT_ or (moved and (now - pulse).total_seconds() >= self._PULSE_):
+                if now - beat >= self._HEARTBEAT_ or (moved and now - pulse >= self._PULSE_):
                     self._beat_(run)
                     beat, pulse, seen = now, now, run.Progress
                 time.sleep(self._POLL_)
             if monitor is not None: peak = self._sample_(monitor, peak)
         exit_code = process.returncode
-        stopped = datetime.now()
-        if exit_code == 0: machine.perform(RunEvent.RequireApproval if task.RequiresApproval else RunEvent.Complete, None)
-        elif retry < (task.MaxRetry or 0): machine.perform(RunEvent.Retry, None)
-        else: machine.perform(RunEvent.RequireReview if task.RequiresReview else RunEvent.Fail, None)
-        run.Status, run.StoppedAt, run.Duration, run.Memory, run.ExitCode, run.Log = machine.At.Name, stopped, (stopped - started).total_seconds(), peak, exit_code, log
+        stopped, duration = utc_now(), time.monotonic() - clock
+        status = RunAPI.outcome(failure=exit_code != 0, approval=task.RequiresApproval, review=task.RequiresReview, retriable=retry < (task.MaxRetry or 0))
+        run.Status, run.StoppedAt, run.Duration, run.Memory, run.ExitCode, run.Log = status, stopped, duration, peak, exit_code, log
         self._close_log_(run, log)
         self._persist_(run)
-        self._log_.info(lambda: f"Run Finish: {run.Status} ({task.Name}) · {run.Duration:.2f}s · {peak / 1048576:.1f} MB · Exit {exit_code}")
+        self._log_.info(lambda: f"Run Finish: {run.Status} ({task.Name}) · {run.Duration:.2f}s · {memory_to_string(peak)} · Exit {exit_code}")
         return run

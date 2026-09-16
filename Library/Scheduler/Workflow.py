@@ -28,6 +28,7 @@ class WorkflowAPI(DatapointAPI):
     Enabled: Union[bool, None] = None
     Kind: Union[str, Kind, None] = None
     Schedule: Union[str, None] = None
+    Zone: Union[str, None] = None
     Waits: Union[bool, None] = None
     Description: Union[str, None] = None
 
@@ -36,10 +37,11 @@ class WorkflowAPI(DatapointAPI):
         return {
             self.ID.UID: PrimaryKey(pl.String),
             self.ID.Name: pl.String(),
-            self.ID.Owner: ForeignKey(pl.String, reference=f'"{UserAPI.Schema}"."{UserAPI.Table}"("{UserAPI.ID.UID}")'),
+            self.ID.Owner: ForeignKey(pl.String, reference=UserAPI.reference()),
             self.ID.Enabled: pl.Boolean(),
             self.ID.Kind: pl.String(),
             self.ID.Schedule: pl.String(),
+            self.ID.Zone: pl.String(),
             self.ID.Waits: pl.Boolean(),
             self.ID.Description: pl.String(),
             **super().Structure
