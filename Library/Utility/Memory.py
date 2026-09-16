@@ -1,9 +1,6 @@
 from typing import Union
 
-def memory_to_string(size: Union[int, float]) -> str:
-    if size is None: return "0B"
-    size = round(size)
-    for unit in ["B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"]:
-        size, remainder = divmod(size, 1000)
-        if not size: return f"{remainder}{unit}"
-    return f"{remainder}{unit}"
+def memory_to_string(size: Union[int, float, None]) -> str:
+    size, units, index = float(size or 0), ("B", "kB", "MB", "GB", "TB", "PB"), 0
+    while abs(size) >= 1024 and index < len(units) - 1: size, index = size / 1024, index + 1
+    return f"{size:.0f} {units[index]}" if not index else f"{size:.1f} {units[index]}"
