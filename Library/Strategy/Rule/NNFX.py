@@ -80,35 +80,39 @@ class NNFXStrategyAPI(StrategyAPI):
         drawdown = update.Portfolio.EquityDrawdown or 0.0
         return self._drawdown_factor_ if drawdown <= -self._drawdown_threshold_ / 100.0 else 1.0
 
-    def define_so_buy_action(self, update: OpenedBuyPositionUpdateAPI) -> list:
+    def _register_(self, update: Union[OpenedBuyPositionUpdateAPI, OpenedSellPositionUpdateAPI]) -> None:
         self._last_position_id_ = update.Position.UID
         self._position_bars_held_ = 0
+
+    def _tsl_bid_(self, update: Union[OpenedBuyPositionUpdateAPI, ModifiedBuyPositionStopLossUpdateAPI]) -> float:
+        return update.Position.StopLossPrice.Price + (self._trailing_stop_loss_scale_ + self._trailing_stop_loss_step_) * self._last_position_atr_ + update.Portfolio.Security.Contract.PointSize
+
+    def _tsl_ask_(self, update: Union[OpenedSellPositionUpdateAPI, ModifiedSellPositionStopLossUpdateAPI]) -> float:
+        return update.Position.StopLossPrice.Price - (self._trailing_stop_loss_scale_ + self._trailing_stop_loss_step_) * self._last_position_atr_ - update.Portfolio.Security.Contract.PointSize
+
+    def define_so_buy_action(self, update: OpenedBuyPositionUpdateAPI) -> list:
+        self._register_(update)
         return [BidAboveTargetActionAPI(Bid=update.Position.EntryPrice.Price + self._scaling_out_scale_ * self._last_position_atr_)]
 
     def define_so_sell_action(self, update: OpenedSellPositionUpdateAPI) -> list:
-        self._last_position_id_ = update.Position.UID
-        self._position_bars_held_ = 0
+        self._register_(update)
         return [AskBelowTargetActionAPI(Ask=update.Position.EntryPrice.Price - self._scaling_out_scale_ * self._last_position_atr_)]
 
     def register_open_buy_action(self, update: OpenedBuyPositionUpdateAPI) -> list:
-        self._last_position_id_ = update.Position.UID
-        self._position_bars_held_ = 0
+        self._register_(update)
         return []
 
     def register_open_sell_action(self, update: OpenedSellPositionUpdateAPI) -> list:
-        self._last_position_id_ = update.Position.UID
-        self._position_bars_held_ = 0
+        self._register_(update)
         return []
 
     def define_tsl_open_buy_action(self, update: OpenedBuyPositionUpdateAPI) -> list:
-        self._last_position_id_ = update.Position.UID
-        self._position_bars_held_ = 0
-        return [BidAboveTargetActionAPI(Bid=update.Position.StopLossPrice.Price + (self._trailing_stop_loss_scale_ + self._trailing_stop_loss_step_) * self._last_position_atr_ + update.Portfolio.Security.Contract.PointSize)]
+        self._register_(update)
+        return [BidAboveTargetActionAPI(Bid=self._tsl_bid_(update))]
 
     def define_tsl_open_sell_action(self, update: OpenedSellPositionUpdateAPI) -> list:
-        self._last_position_id_ = update.Position.UID
-        self._position_bars_held_ = 0
-        return [AskBelowTargetActionAPI(Ask=update.Position.StopLossPrice.Price - (self._trailing_stop_loss_scale_ + self._trailing_stop_loss_step_) * self._last_position_atr_ - update.Portfolio.Security.Contract.PointSize)]
+        self._register_(update)
+        return [AskBelowTargetActionAPI(Ask=self._tsl_ask_(update))]
 
     def stagnation_stop_loss_action(self, update: BarUpdateAPI) -> list:
         self._position_bars_held_ += 1
@@ -136,10 +140,10 @@ class NNFXStrategyAPI(StrategyAPI):
         return [ModifySellPositionStopLossActionAPI(PositionID=self._last_position_id_, StopLoss=update.Position.EntryPrice.Price)]
 
     def define_tsl_buy_action(self, update: ModifiedBuyPositionStopLossUpdateAPI) -> list:
-        return [BidAboveTargetActionAPI(Bid=update.Position.StopLossPrice.Price + (self._trailing_stop_loss_scale_ + self._trailing_stop_loss_step_) * self._last_position_atr_ + update.Portfolio.Security.Contract.PointSize)]
+        return [BidAboveTargetActionAPI(Bid=self._tsl_bid_(update))]
 
     def define_tsl_sell_action(self, update: ModifiedSellPositionStopLossUpdateAPI) -> list:
-        return [AskBelowTargetActionAPI(Ask=update.Position.StopLossPrice.Price - (self._trailing_stop_loss_scale_ + self._trailing_stop_loss_step_) * self._last_position_atr_ - update.Portfolio.Security.Contract.PointSize)]
+        return [AskBelowTargetActionAPI(Ask=self._tsl_ask_(update))]
 
     def detected_tsl_buy_action(self, update: TickUpdateAPI) -> list:
         return [ModifyBuyPositionStopLossActionAPI(PositionID=self._last_position_id_, StopLoss=update.Tick.Bid.Price - self._trailing_stop_loss_scale_ * self._last_position_atr_)]

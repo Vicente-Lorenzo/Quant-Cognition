@@ -90,33 +90,28 @@ class TrendStrategyAPI(NNFXStrategyAPI):
         normal_exits_buy = []
         normal_exits_sell = []
         for technical_name, (normal_entry_mode, continuation_entry_mode, normal_exit_mode) in modes.items():
-            match normal_entry_mode:
-                case IndicatorMode.Filter.name:
-                    normal_entries_buy.append(lambda update, tname=technical_name: getattr(update.Technical, tname).filter_buy(update.Market))
-                    normal_entries_sell.append(lambda update, tname=technical_name: getattr(update.Technical, tname).filter_sell(update.Market))
-                case IndicatorMode.Signal.name:
-                    normal_entries_buy.append(lambda update, tname=technical_name: getattr(update.Technical, tname).signal_buy(update.Market))
-                    normal_entries_sell.append(lambda update, tname=technical_name: getattr(update.Technical, tname).signal_sell(update.Market))
-            match continuation_entry_mode:
-                case IndicatorMode.Filter.name:
-                    continuation_entries_buy.append(lambda update, tname=technical_name: getattr(update.Technical, tname).filter_buy(update.Market))
-                    continuation_entries_sell.append(lambda update, tname=technical_name: getattr(update.Technical, tname).filter_sell(update.Market))
-                case IndicatorMode.Signal.name:
-                    continuation_entries_buy.append(lambda update, tname=technical_name: getattr(update.Technical, tname).signal_buy(update.Market))
-                    continuation_entries_sell.append(lambda update, tname=technical_name: getattr(update.Technical, tname).signal_sell(update.Market))
-            match normal_exit_mode:
-                case IndicatorMode.Filter.name:
-                    normal_exits_buy.append(lambda update, tname=technical_name: getattr(update.Technical, tname).filter_sell(update.Market))
-                    normal_exits_sell.append(lambda update, tname=technical_name: getattr(update.Technical, tname).filter_buy(update.Market))
-                case IndicatorMode.Signal.name:
-                    normal_exits_buy.append(lambda update, tname=technical_name: getattr(update.Technical, tname).signal_sell(update.Market))
-                    normal_exits_sell.append(lambda update, tname=technical_name: getattr(update.Technical, tname).signal_buy(update.Market))
+            if gates := self._gates_(technical_name, normal_entry_mode):
+                normal_entries_buy.append(gates[0])
+                normal_entries_sell.append(gates[1])
+            if gates := self._gates_(technical_name, continuation_entry_mode):
+                continuation_entries_buy.append(gates[0])
+                continuation_entries_sell.append(gates[1])
+            if gates := self._gates_(technical_name, normal_exit_mode):
+                normal_exits_buy.append(gates[1])
+                normal_exits_sell.append(gates[0])
         self._normal_entry_buy_ = lambda update: all(f(update) for f in normal_entries_buy) if normal_entries_buy else False
         self._normal_entry_sell_ = lambda update: all(f(update) for f in normal_entries_sell) if normal_entries_sell else False
         self._continuation_entry_buy_ = lambda update: all(f(update) for f in continuation_entries_buy) if continuation_entries_buy else False
         self._continuation_entry_sell_ = lambda update: all(f(update) for f in continuation_entries_sell) if continuation_entries_sell else False
         self._normal_exit_buy_ = lambda update: any(f(update) for f in normal_exits_buy) if normal_exits_buy else False
         self._normal_exit_sell_ = lambda update: any(f(update) for f in normal_exits_sell) if normal_exits_sell else False
+
+    @staticmethod
+    def _gates_(name: str, mode) -> Union[tuple, None]:
+        match mode:
+            case IndicatorMode.Filter.name: return lambda update: getattr(update.Technical, name).filter_buy(update.Market), lambda update: getattr(update.Technical, name).filter_sell(update.Market)
+            case IndicatorMode.Signal.name: return lambda update: getattr(update.Technical, name).signal_buy(update.Market), lambda update: getattr(update.Technical, name).signal_sell(update.Market)
+        return None
 
     def update_position(self, update: BarUpdateAPI) -> Union[list, None]:
         return self._emit_(update, self._signal_position_(update))

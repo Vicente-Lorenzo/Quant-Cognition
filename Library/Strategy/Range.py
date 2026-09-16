@@ -8,7 +8,7 @@ from typing import Union
 @dataclass(frozen=True)
 class RangeAPI:
 
-    _PATTERN_ = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*(?:\.\.|-)\s*(-?\d+(?:\.\d+)?)\s*(?::\s*(\d+(?:\.\d+)?)\s*)?$")
+    PATTERN = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*(?:\.\.|-)\s*(-?\d+(?:\.\d+)?)\s*(?::\s*(\d+(?:\.\d+)?)\s*)?$")
     _DEPTH_ = 3
 
     Low: Union[int, float]
@@ -42,7 +42,7 @@ class RangeAPI:
     def parse(cls, value) -> Union[RangeAPI, None]:
         if isinstance(value, RangeAPI): return value
         if not isinstance(value, str): return None
-        found = cls._PATTERN_.match(value)
+        found = cls.PATTERN.match(value)
         if found is None: return None
         low, high, step = (Decimal(part) if part is not None else None for part in found.groups())
         if high < low: raise ValueError(f"Range {value!r}: Failed · High below Low")

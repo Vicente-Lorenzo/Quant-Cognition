@@ -4,7 +4,12 @@ from Library.Strategy.Rule.NNFX import NNFXStrategyAPI
 from Library.Strategy.Rule.Trend import TrendStrategyAPI
 from Library.Strategy.Hybrid.DDPG import DDPGStrategyAPI
 
-STRATEGIES: tuple[type[StrategyAPI], ...] = (DownloadStrategyAPI, NNFXStrategyAPI, TrendStrategyAPI, DDPGStrategyAPI)
-CATALOG: dict[str, type[StrategyAPI]] = {entry.key(): entry for entry in STRATEGIES}
+class CatalogAPI:
 
-__all__ = ["STRATEGIES", "CATALOG"]
+    STRATEGIES: tuple[type[StrategyAPI], ...] = (DownloadStrategyAPI, NNFXStrategyAPI, TrendStrategyAPI, DDPGStrategyAPI)
+    CATALOG: dict[str, type[StrategyAPI]] = {entry.key(): entry for entry in STRATEGIES}
+    DEFAULT: type[StrategyAPI] = TrendStrategyAPI
+
+    @classmethod
+    def resolve(cls, key: str) -> type[StrategyAPI]:
+        return cls.CATALOG.get(key, cls.DEFAULT)

@@ -350,45 +350,24 @@ class DDPGStrategyAPI(StrategyAPI):
         super().__init__(money_management, risk_management, signal_management, technical_management, fundamental_management, sentimental_management, portfolio_management)
         self._risk_percentage_, = self.MoneyManagement.RiskPercentage
         self._atr_scale_, = self.MoneyManagement.ATRScale
-        weights = self.SignalManagement.Weights
-        self._configured_weights_ = weights[0] if weights else None
-        neutralize = self.SignalManagement.NeutralizeReward
-        self._neutralize_reward_ = bool(neutralize[0]) if neutralize else False
-        neutralize_scale = self.SignalManagement.NeutralizeScale
-        self._neutralize_scale_ = float(neutralize_scale[0]) if neutralize_scale else 1.0
-        turnover = self.SignalManagement.TurnoverCost
-        self._turnover_cost_ = float(turnover[0]) if turnover else 0.0
-        smoothing = self.SignalManagement.SignalSmoothing
-        self._signal_smoothing_ = float(smoothing[0]) if smoothing else 0.0
-        interval = self.SignalManagement.DecisionInterval
-        self._decision_interval_ = max(1, int(interval[0])) if interval else 1
-        schedule = self.SignalManagement.DecisionSchedule
-        self._decision_schedule_ = str(schedule[0]).upper() if schedule else None
-        rebalance = self.SignalManagement.RebalanceThreshold
-        self._rebalance_threshold_ = float(rebalance[0]) if rebalance else 0.0
-        account = self.SignalManagement.AccountFeatures
-        self._account_features_enabled_ = bool(account[0]) if account else True
+        self._configured_weights_ = self.SignalManagement.first("Weights")
+        self._neutralize_reward_ = bool(self.SignalManagement.first("NeutralizeReward", False))
+        self._neutralize_scale_ = float(self.SignalManagement.first("NeutralizeScale", 1.0))
+        self._turnover_cost_ = float(self.SignalManagement.first("TurnoverCost", 0.0))
+        self._signal_smoothing_ = float(self.SignalManagement.first("SignalSmoothing", 0.0))
+        self._decision_interval_ = max(1, int(self.SignalManagement.first("DecisionInterval", 1)))
+        schedule = self.SignalManagement.first("DecisionSchedule")
+        self._decision_schedule_ = str(schedule).upper() if schedule is not None else None
+        self._rebalance_threshold_ = float(self.SignalManagement.first("RebalanceThreshold", 0.0))
+        self._account_features_enabled_ = bool(self.SignalManagement.first("AccountFeatures", True))
         momentum, overlap = self._observation_features_()
-        reference = self.SignalManagement.ExposureReference
-        self._action_ = ActionAPI(mode=SizingMode.Balance, maximum=float(reference[0]) if reference else self._EXPOSURE_REFERENCE_, deadzone=0.0)
+        self._action_ = ActionAPI(mode=SizingMode.Balance, maximum=float(self.SignalManagement.first("ExposureReference", self._EXPOSURE_REFERENCE_)), deadzone=0.0)
         self._observation_ = DDPGObservationAPI(action=self._action_, momentum_features=momentum, overlap_features=overlap, normalize_window=self.SignalManagement.NormalizeWindow[0], window=self.SignalManagement.ObservationWindow[0], account=self._account_features_enabled_)
-        scale = self.SignalManagement.RewardScale
-        clip = self.SignalManagement.RewardClip
-        self._reward_ = RewardAPI(kind=self.Reward, scale=float(scale[0]) if scale else self.RewardScale, clip=float(clip[0]) if clip else self.RewardClip)
+        self._reward_ = RewardAPI(kind=self.Reward, scale=float(self.SignalManagement.first("RewardScale", self.RewardScale)), clip=float(self.SignalManagement.first("RewardClip", self.RewardClip)))
         self._agent_: AgentAPI = self.Agent if self.Agent is not None else self._create_agent_((self._observation_.shape(),), self._ACTION_SHAPE_)
         if self.Agent is None and not self.Training and (self.Weights is not None or self._configured_weights_ is not None):
             self._agent_.load()
-        self._previous_observation_ = None
-        self._previous_action_ = None
-        self._previous_equity_: Union[float, None] = None
-        self._previous_bar_close_: Union[float, None] = None
-        self._previous_exposure_: float = 0.0
-        self._smoothed_signal_: Union[float, None] = None
-        self._current_action_ = None
-        self._pending_reward_: float = 0.0
-        self._decision_index_: int = 0
-        self._decision_bucket_ = None
-        self._step_index_: int = 0
+        self._clear_()
 
     def _observation_features_(self) -> tuple:
         technical = IndicatorAPI.parse_technical(self.TechnicalManagement.data)
@@ -416,7 +395,7 @@ class DDPGStrategyAPI(StrategyAPI):
             gamma=self.SignalManagement.DiscountFactor[0],
             grad_clip=self.SignalManagement.GradientClip[0],
             actor_regularization=self.SignalManagement.ActorRegularization[0],
-            warmup=self.SignalManagement.WarmupSteps[0] if self.SignalManagement.WarmupSteps else 0,
+            warmup=self.SignalManagement.first("WarmupSteps", 0),
             seed=self.Seed
         )
 
@@ -424,9 +403,6 @@ class DDPGStrategyAPI(StrategyAPI):
         if self.Weights is not None: return self.Weights
         if self._configured_weights_ is not None: return Path(self._configured_weights_)
         return self._DEFAULT_WEIGHTS_
-
-    def _exposure_(self, update: BarUpdateAPI) -> float:
-        return sum(position.Volume for position in update.Portfolio.BuyPositions) - sum(position.Volume for position in update.Portfolio.SellPositions)
 
     def _reference_volume_(self, update: BarUpdateAPI) -> float:
         atr = update.Technical.ATR.Result.last()
@@ -441,11 +417,11 @@ class DDPGStrategyAPI(StrategyAPI):
         return reference * max(-1.0, min(1.0, action))
 
     def _control_(self, update: BarUpdateAPI, action: float) -> Union[list, None]:
-        if self._neutral_(action, self.DirectionalExitThreshold) and self._exposure_(update): target = 0.0
+        if self._neutral_(action, self.DirectionalExitThreshold) and self._net_exposure_(update): target = 0.0
         else: target = self._target_(update, action)
         if target is None: return None
         contract = update.Portfolio.Security.Contract
-        delta = target - self._exposure_(update)
+        delta = target - self._net_exposure_(update)
         floor = contract.VolumeMin
         if self._rebalance_threshold_ > 0.0:
             reference = self._reference_volume_(update)
@@ -472,7 +448,7 @@ class DDPGStrategyAPI(StrategyAPI):
     def _held_exposure_(self, update: BarUpdateAPI, close: float) -> float:
         equity = update.Portfolio.Equity
         if not equity or not close: return 0.0
-        return self._exposure_(update) * close / equity
+        return self._net_exposure_(update) * close / equity
 
     def _bucket_(self, update: BarUpdateAPI) -> Union[tuple, None]:
         if not self._decision_schedule_: return None
@@ -515,21 +491,24 @@ class DDPGStrategyAPI(StrategyAPI):
             self._smoothed_signal_ = signal
         return self._emit_(update, self._control_(update, signal), signal)
 
+    def _clear_(self) -> None:
+        self._previous_observation_ = None
+        self._previous_action_ = None
+        self._previous_equity_: Union[float, None] = None
+        self._previous_bar_close_: Union[float, None] = None
+        self._previous_exposure_: float = 0.0
+        self._smoothed_signal_: Union[float, None] = None
+        self._current_action_ = None
+        self._pending_reward_: float = 0.0
+        self._decision_index_: int = 0
+        self._decision_bucket_ = None
+        self._step_index_: int = 0
+
     def _initialize_(self, _: Any) -> None:
         self._agent_.reset()
         self._observation_.reset()
         self._reward_.reset()
-        self._previous_observation_ = None
-        self._previous_action_ = None
-        self._previous_equity_ = None
-        self._previous_bar_close_ = None
-        self._previous_exposure_ = 0.0
-        self._smoothed_signal_ = None
-        self._current_action_ = None
-        self._pending_reward_ = 0.0
-        self._decision_index_ = 0
-        self._decision_bucket_ = None
-        self._step_index_ = 0
+        self._clear_()
 
     def signal_management(self) -> MachineAPI:
         signal_engine = MachineAPI(Name="Signal Management", Events=len(UpdateID))

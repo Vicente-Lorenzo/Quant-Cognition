@@ -5,13 +5,14 @@ from typing import Union
 from Library.Logging import LoggingAPI
 from Library.Strategy.Strategy import StrategyAPI
 from Library.Utility.IO import read_yaml, write_yaml
-from Library.Utility.Parameter import Parameter, numbered
+from Library.Strategy.Syntax import SyntaxAPI
+from Library.Utility.Parameter import Parameter
 from Library.Utility.Path import inspect_persistent
 
 class LadderAPI:
 
     Folder: str = "Overrides"
-    _RUNGS_: tuple = ("Provider", "Category", "Ticker", "Timeframe")
+    RUNGS: tuple = ("Provider", "Category", "Ticker", "Timeframe")
     _ORIGIN_: str = "Defaults"
 
     def __init__(self, root: Union[str, Path, None] = None) -> None:
@@ -27,7 +28,7 @@ class LadderAPI:
         merged = deepcopy(base) if base else {}
         for key, value in (override or {}).items():
             current = merged.get(key)
-            blended = isinstance(value, dict) and isinstance(current, dict) and numbered(value) == numbered(current)
+            blended = isinstance(value, dict) and isinstance(current, dict) and SyntaxAPI.numbered(value) == SyntaxAPI.numbered(current)
             merged[key] = LadderAPI.merge(current, value) if blended else deepcopy(value)
         return merged
 
