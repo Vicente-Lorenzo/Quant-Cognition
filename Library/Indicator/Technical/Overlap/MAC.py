@@ -13,6 +13,7 @@ class MovingAverageCrossAPI(TechnicalAPI):
 
     Type = TechnicalType.Overlap
     Parameters = (FAST, SLOW, MOVING, MODE)
+    _COMPONENT_ = MovingAverageAPI
 
     @classmethod
     def admits(cls, values: dict) -> bool:
@@ -21,8 +22,8 @@ class MovingAverageCrossAPI(TechnicalAPI):
     def __init__(self, name: str, fast_window: int, slow_window: int, type: MovingAverageType, mode: IndicatorMode) -> None:
         super().__init__(name=name, window=slow_window, mode=mode)
         self.TypeMA: MovingAverageType = type
-        self.Fast: MovingAverageAPI = MovingAverageAPI(name=f"{name}.Fast", window=fast_window, type=type, mode=IndicatorMode.Off)
-        self.Slow: MovingAverageAPI = MovingAverageAPI(name=f"{name}.Slow", window=slow_window, type=type, mode=IndicatorMode.Off)
+        self.Fast: TechnicalAPI = self._COMPONENT_(name=f"{name}.Fast", window=fast_window, type=type, mode=IndicatorMode.Off)
+        self.Slow: TechnicalAPI = self._COMPONENT_(name=f"{name}.Slow", window=slow_window, type=type, mode=IndicatorMode.Off)
         self._indicators_ = [self.Fast, self.Slow]
         self.Window = self._window_()
 

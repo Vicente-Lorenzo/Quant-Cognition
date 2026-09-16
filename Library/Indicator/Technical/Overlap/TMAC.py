@@ -1,40 +1,6 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
-from Library.Indicator.Indicator import IndicatorMode
-from Library.Indicator.Technical.Baseline.MA import MOVING, MovingAverageType
 from Library.Indicator.Technical.Baseline.TMA import TripleMovingAverageAPI
-from Library.Indicator.Technical.Technical import FAST, MODE, SLOW, TechnicalAPI, TechnicalType
+from Library.Indicator.Technical.Overlap.MAC import MovingAverageCrossAPI
 
-if TYPE_CHECKING:
-    from Library.Market.Market import MarketAPI
+class TripleMovingAverageCrossAPI(MovingAverageCrossAPI):
 
-class TripleMovingAverageCrossAPI(TechnicalAPI):
-
-    Type = TechnicalType.Overlap
-    Parameters = (FAST, SLOW, MOVING, MODE)
-
-    @classmethod
-    def admits(cls, values: dict) -> bool:
-        return values["fast_window"] < values["slow_window"]
-
-    def __init__(self, name: str, fast_window: int, slow_window: int, type: MovingAverageType, mode: IndicatorMode) -> None:
-        super().__init__(name=name, window=slow_window, mode=mode)
-        self.TypeMA: MovingAverageType = type
-        self.Fast: TripleMovingAverageAPI = TripleMovingAverageAPI(name=f"{name}.Fast", window=fast_window, type=type, mode=IndicatorMode.Off)
-        self.Slow: TripleMovingAverageAPI = TripleMovingAverageAPI(name=f"{name}.Slow", window=slow_window, type=type, mode=IndicatorMode.Off)
-        self._indicators_ = [self.Fast, self.Slow]
-        self.Window = self._window_()
-
-    def filter_buy(self, market: MarketAPI) -> bool:
-        return bool(self.Fast.Result.over(self.Slow.Result))
-
-    def filter_sell(self, market: MarketAPI) -> bool:
-        return bool(self.Fast.Result.under(self.Slow.Result))
-
-    def signal_buy(self, market: MarketAPI) -> bool:
-        return bool(self.Fast.Result.crossover(self.Slow.Result))
-
-    def signal_sell(self, market: MarketAPI) -> bool:
-        return bool(self.Fast.Result.crossunder(self.Slow.Result))
+    _COMPONENT_ = TripleMovingAverageAPI

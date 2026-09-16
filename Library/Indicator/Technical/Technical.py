@@ -75,8 +75,20 @@ class TechnicalAPI:
     def _extract_(self, market: MarketAPI) -> Union[pl.Series, pl.DataFrame]:
         return market.CloseTicks.Price.tail()
 
+    @staticmethod
+    def _nulls_(length: int) -> pl.Series:
+        return pl.Series([None] * length, dtype=pl.Float64)
+
+    @staticmethod
+    def _mask_(series: pl.Series, count: int) -> pl.Series:
+        if len(series) > count: return pl.Series([None] * count + series.to_list()[count:])
+        return TechnicalAPI._nulls_(len(series))
+
+    def _scalar_(self, value: Union[float, None]) -> pl.DataFrame:
+        return pl.DataFrame({self.Name: pl.Series([value], dtype=pl.Float64)})
+
     def _pad_(self) -> pl.DataFrame:
-        return pl.DataFrame({self.Name: pl.Series([None], dtype=pl.Float64)})
+        return self._scalar_(None)
 
     def batch(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
         return self._pad_()
@@ -120,3 +132,77 @@ class TechnicalAPI:
 
     def signal_sell(self, market: MarketAPI) -> bool:
         return False
+
+class PriceSignalAPI(TechnicalAPI):
+
+    def filter_buy(self, market: MarketAPI) -> bool:
+        return bool(market.CloseTicks.Price.over(self.Result))
+
+    def filter_sell(self, market: MarketAPI) -> bool:
+        return bool(market.CloseTicks.Price.under(self.Result))
+
+    def signal_buy(self, market: MarketAPI) -> bool:
+        return bool(market.CloseTicks.Price.crossover(self.Result))
+
+    def signal_sell(self, market: MarketAPI) -> bool:
+        return bool(market.CloseTicks.Price.crossunder(self.Result))
+
+class NeutralSignalAPI(TechnicalAPI):
+
+    def filter_buy(self, market: MarketAPI) -> bool:
+        return True
+
+    def filter_sell(self, market: MarketAPI) -> bool:
+        return True
+
+    def signal_buy(self, market: MarketAPI) -> bool:
+        return False
+
+    def signal_sell(self, market: MarketAPI) -> bool:
+        return False
+
+class ConstantAPI(TechnicalAPI):
+
+    Type = TechnicalType.Other
+    Parameters = (MODE,)
+    _FILTER_ = False
+    _SIGNAL_ = False
+
+    def __init__(self, name: str, mode: IndicatorMode) -> None:
+        super().__init__(name=name, window=0, mode=mode)
+
+    def init_data(self, market: MarketAPI) -> None:
+        pass
+
+    def update_data(self, market: MarketAPI) -> None:
+        pass
+
+    def update_offset(self, offset: int = 1) -> None:
+        pass
+
+    def filter_buy(self, market: MarketAPI) -> bool:
+        return self._FILTER_
+
+    def filter_sell(self, market: MarketAPI) -> bool:
+        return self._FILTER_
+
+    def signal_buy(self, market: MarketAPI) -> bool:
+        return self._SIGNAL_
+
+    def signal_sell(self, market: MarketAPI) -> bool:
+        return self._SIGNAL_
+
+class BaselineAPI(PriceSignalAPI):
+
+    Type = TechnicalType.Baseline
+    Parameters = (WINDOW, MODE)
+    _TAIL_ = 1
+
+    def batch(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
+        if data.is_empty(): return self._pad_()
+        return pl.DataFrame({self.Name: self._batch_(data, self.Window)})
+
+    def stream(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
+        series = data.tail(self.Window * self._TAIL_)
+        if len(series) < self.Window: return self._pad_()
+        return self._scalar_(self._batch_(series, self.Window)[-1])

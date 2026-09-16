@@ -4,7 +4,13 @@ from typing import TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
 from Library.Indicator.Indicator import IndicatorMode
-from Library.Indicator.Technical.Technical import MODE, SlotAPI, TechnicalAPI, TechnicalType, WINDOW
+from Library.Indicator.Technical.Baseline.EMA import ExponentialMovingAverageAPI
+from Library.Indicator.Technical.Baseline.HMA import HullMovingAverageAPI
+from Library.Indicator.Technical.Baseline.KAMA import KaufmanAdaptiveMovingAverageAPI
+from Library.Indicator.Technical.Baseline.SMA import SimpleMovingAverageAPI
+from Library.Indicator.Technical.Baseline.TRIMA import TriangularMovingAverageAPI
+from Library.Indicator.Technical.Baseline.WMA import WeightedMovingAverageAPI
+from Library.Indicator.Technical.Technical import MODE, PriceSignalAPI, SlotAPI, TechnicalAPI, TechnicalType, WINDOW
 from Library.Utility.Enumeration import EnumerationAPI
 
 if TYPE_CHECKING:
@@ -21,56 +27,37 @@ class MovingAverageType(EnumerationAPI):
 
 MOVING = SlotAPI(name="type", default=MovingAverageType.Exponential, parser=MovingAverageType.parse)
 
-class MovingAverageAPI(TechnicalAPI):
+class MovingAverageAPI(PriceSignalAPI):
 
     Type = TechnicalType.Baseline
     Parameters = (WINDOW, MOVING, MODE)
+    _AVERAGES_ = {
+        MovingAverageType.Simple: SimpleMovingAverageAPI,
+        MovingAverageType.Exponential: ExponentialMovingAverageAPI,
+        MovingAverageType.Weighted: WeightedMovingAverageAPI,
+        MovingAverageType.Hull: HullMovingAverageAPI,
+        MovingAverageType.Triangular: TriangularMovingAverageAPI,
+        MovingAverageType.Kaufman: KaufmanAdaptiveMovingAverageAPI
+    }
 
     def __init__(self, name: str, window: int, type: MovingAverageType, mode: IndicatorMode) -> None:
         super().__init__(name=name, window=window, mode=mode)
         self.TypeMA: MovingAverageType = type
-        match self.TypeMA:
-            case MovingAverageType.Simple:
-                from Library.Indicator.Technical.Baseline.SMA import SimpleMovingAverageAPI
-                self.MA: TechnicalAPI = SimpleMovingAverageAPI(name=name, window=window, mode=IndicatorMode.Off)
-            case MovingAverageType.Exponential:
-                from Library.Indicator.Technical.Baseline.EMA import ExponentialMovingAverageAPI
-                self.MA = ExponentialMovingAverageAPI(name=name, window=window, mode=IndicatorMode.Off)
-            case MovingAverageType.Weighted:
-                from Library.Indicator.Technical.Baseline.WMA import WeightedMovingAverageAPI
-                self.MA = WeightedMovingAverageAPI(name=name, window=window, mode=IndicatorMode.Off)
-            case MovingAverageType.Hull:
-                from Library.Indicator.Technical.Baseline.HMA import HullMovingAverageAPI
-                self.MA = HullMovingAverageAPI(name=name, window=window, mode=IndicatorMode.Off)
-            case MovingAverageType.Triangular:
-                from Library.Indicator.Technical.Baseline.TRIMA import TriangularMovingAverageAPI
-                self.MA = TriangularMovingAverageAPI(name=name, window=window, mode=IndicatorMode.Off)
-            case MovingAverageType.Kaufman:
-                from Library.Indicator.Technical.Baseline.KAMA import KaufmanAdaptiveMovingAverageAPI
-                self.MA = KaufmanAdaptiveMovingAverageAPI(name=name, window=window, mode=IndicatorMode.Off)
+        self.MA: TechnicalAPI = self._resolve_(type)(name=name, window=window, mode=IndicatorMode.Off)
         self.Result = self.MA.Result
 
     @staticmethod
+    def _resolve_(type: MovingAverageType) -> type:
+        return MovingAverageAPI._AVERAGES_[type]
+
+    @staticmethod
     def _batch_(series: pl.Series, window: int, type: MovingAverageType) -> pl.Series:
-        match type:
-            case MovingAverageType.Simple:
-                from Library.Indicator.Technical.Baseline.SMA import SimpleMovingAverageAPI
-                return SimpleMovingAverageAPI._batch_(series, window)
-            case MovingAverageType.Exponential:
-                from Library.Indicator.Technical.Baseline.EMA import ExponentialMovingAverageAPI
-                return ExponentialMovingAverageAPI._batch_(series, window)
-            case MovingAverageType.Weighted:
-                from Library.Indicator.Technical.Baseline.WMA import WeightedMovingAverageAPI
-                return WeightedMovingAverageAPI._batch_(series, window)
-            case MovingAverageType.Hull:
-                from Library.Indicator.Technical.Baseline.HMA import HullMovingAverageAPI
-                return HullMovingAverageAPI._batch_(series, window)
-            case MovingAverageType.Triangular:
-                from Library.Indicator.Technical.Baseline.TRIMA import TriangularMovingAverageAPI
-                return TriangularMovingAverageAPI._batch_(series, window)
-            case MovingAverageType.Kaufman:
-                from Library.Indicator.Technical.Baseline.KAMA import KaufmanAdaptiveMovingAverageAPI
-                return KaufmanAdaptiveMovingAverageAPI._batch_(series, window)
+        return MovingAverageAPI._resolve_(type)._batch_(series, window)
+
+    @staticmethod
+    def _nest_(valid: pl.Series, window: int, type: MovingAverageType, length: int) -> pl.Series:
+        nested = MovingAverageAPI._batch_(valid, window, type)
+        return pl.Series([None] * (length - len(nested)) + nested.to_list())
 
     def init_data(self, market: MarketAPI) -> None:
         self.MA.init_data(market)
@@ -80,15 +67,3 @@ class MovingAverageAPI(TechnicalAPI):
 
     def update_offset(self, offset: int = 1) -> None:
         self.MA.update_offset(offset)
-
-    def filter_buy(self, market: MarketAPI) -> bool:
-        return bool(market.CloseTicks.Price.over(self.Result))
-
-    def filter_sell(self, market: MarketAPI) -> bool:
-        return bool(market.CloseTicks.Price.under(self.Result))
-
-    def signal_buy(self, market: MarketAPI) -> bool:
-        return bool(market.CloseTicks.Price.crossover(self.Result))
-
-    def signal_sell(self, market: MarketAPI) -> bool:
-        return bool(market.CloseTicks.Price.crossunder(self.Result))

@@ -1,15 +1,10 @@
-from __future__ import annotations
-
 import math
-from typing import TYPE_CHECKING, Union
+from typing import Union
 
 from Library.Database.Dataframe import pl
-from Library.Indicator.Technical.Technical import MODE, PERIOD, TechnicalAPI, TechnicalType
+from Library.Indicator.Technical.Technical import MODE, NeutralSignalAPI, PERIOD, TechnicalType
 
-if TYPE_CHECKING:
-    from Library.Market.Market import MarketAPI
-
-class RealizedVolatilityAPI(TechnicalAPI):
+class RealizedVolatilityAPI(NeutralSignalAPI):
 
     Type = TechnicalType.Volatility
     Parameters = (PERIOD.revised(default=16), MODE)
@@ -18,12 +13,7 @@ class RealizedVolatilityAPI(TechnicalAPI):
         if data.is_empty(): return self._pad_()
         log_returns = (data / data.shift(1)).log().fill_null(0.0)
         variance = log_returns.pow(2).ewm_mean(alpha=1.0 / self.Window, adjust=False)
-        rv = variance.sqrt()
-        nulls = [None] * self.Window
-        if len(rv) > self.Window:
-            rv = pl.Series(nulls + rv.to_list()[self.Window:])
-        else:
-            rv = pl.Series([None] * len(rv), dtype=pl.Float64)
+        rv = self._mask_(variance.sqrt(), self.Window)
         return pl.DataFrame({self.Name: rv})
 
     def stream(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
@@ -36,18 +26,6 @@ class RealizedVolatilityAPI(TechnicalAPI):
             if len(data) < self.Window + 1: return self._pad_()
             log_returns = (data / data.shift(1)).log().fill_null(0.0)
             variance = log_returns.pow(2).ewm_mean(alpha=1.0 / self.Window, adjust=False)
-            return pl.DataFrame({self.Name: pl.Series([math.sqrt(float(variance[-1]))], dtype=pl.Float64)})
+            return self._scalar_(math.sqrt(float(variance[-1])))
         variance = (prev_rv * prev_rv * (self.Window - 1) + log_return * log_return) / self.Window
-        return pl.DataFrame({self.Name: pl.Series([math.sqrt(variance)], dtype=pl.Float64)})
-
-    def filter_buy(self, market: MarketAPI) -> bool:
-        return True
-
-    def filter_sell(self, market: MarketAPI) -> bool:
-        return True
-
-    def signal_buy(self, market: MarketAPI) -> bool:
-        return False
-
-    def signal_sell(self, market: MarketAPI) -> bool:
-        return False
+        return self._scalar_(math.sqrt(variance))

@@ -20,6 +20,31 @@ class IndicatorMode(EnumerationAPI):
     Filter = 1
     Signal = 2
 
+class CompositeAPI:
+
+    def __init__(self, name: str, window: int, mode: IndicatorMode, **indicators) -> None:
+        self.Name: str = name
+        self.Mode: IndicatorMode = mode
+        self._indicators_: list = list(indicators.values())
+        for k, v in indicators.items():
+            setattr(self, k, v)
+        self.Window: int = self._window_() or window
+
+    def _window_(self) -> int:
+        return max((ind.Window for ind in self._indicators_ if hasattr(ind, "Window")), default=0)
+
+    def init_data(self, market: MarketAPI) -> None:
+        for ind in self._indicators_:
+            if hasattr(ind, "init_data"): ind.init_data(market)
+
+    def update_data(self, market: MarketAPI) -> None:
+        for ind in self._indicators_:
+            if hasattr(ind, "update_data"): ind.update_data(market)
+
+    def update_offset(self, offset: int = 1) -> None:
+        for ind in self._indicators_:
+            if hasattr(ind, "update_offset"): ind.update_offset(offset)
+
 @dataclass
 class IndicatorAPI:
 
@@ -47,6 +72,10 @@ class IndicatorAPI:
         return next((member for member in vars(imported).values()
                      if isinstance(member, type) and issubclass(member, TechnicalAPI) and member.__module__ == module), None)
 
+    @staticmethod
+    def _parse_(api: type, parameters: Union[dict, None]) -> CompositeAPI:
+        return api(name=api.__name__.removesuffix("API"), window=0, mode=IndicatorMode.Off)
+
     @classmethod
     def resolve_technical(cls, acronym: Any) -> Union[type, None]:
         module = cls.catalog().get(acronym) if isinstance(acronym, str) else None
@@ -65,21 +94,15 @@ class IndicatorAPI:
             indicators[name] = indicator.compose(name, config)
         return TechnicalAPI(name="Technical", window=0, mode=IndicatorMode.Off, **indicators)
 
-    @staticmethod
-    def parse_fundamental(parameters: Union[dict, None]) -> FundamentalAPI:
+    @classmethod
+    def parse_fundamental(cls, parameters: Union[dict, None]) -> FundamentalAPI:
         from Library.Indicator.Fundamental.Fundamental import FundamentalAPI
-        if not parameters:
-            return FundamentalAPI(name="Fundamental", window=0, mode=IndicatorMode.Off)
-        indicators = {}
-        return FundamentalAPI(name="Fundamental", window=0, mode=IndicatorMode.Off, **indicators)
+        return cls._parse_(FundamentalAPI, parameters)
 
-    @staticmethod
-    def parse_sentimental(parameters: Union[dict, None]) -> SentimentalAPI:
+    @classmethod
+    def parse_sentimental(cls, parameters: Union[dict, None]) -> SentimentalAPI:
         from Library.Indicator.Sentimental.Sentimental import SentimentalAPI
-        if not parameters:
-            return SentimentalAPI(name="Sentimental", window=0, mode=IndicatorMode.Off)
-        indicators = {}
-        return SentimentalAPI(name="Sentimental", window=0, mode=IndicatorMode.Off, **indicators)
+        return cls._parse_(SentimentalAPI, parameters)
 
     def init_data(self, market: MarketAPI) -> None:
         if self.Technical: self.Technical.init_data(market)

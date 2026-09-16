@@ -43,17 +43,8 @@ class MovingAverageConvergenceDivergenceAPI(TechnicalAPI):
         if data.is_empty(): return self._pad_()
         fast_ema = data.ewm_mean(span=self.FastPeriod, adjust=False)
         slow_ema = data.ewm_mean(span=self.SlowPeriod, adjust=False)
-        macd = fast_ema - slow_ema
-        nulls = [None] * (self.SlowPeriod - 1)
-        if len(macd) > self.SlowPeriod - 1:
-            macd = pl.Series(nulls + macd.to_list()[self.SlowPeriod - 1:])
-        else:
-            macd = pl.Series([None] * len(macd), dtype=pl.Float64)
-        signal = macd.ewm_mean(span=self.SignalPeriod, adjust=False, ignore_nulls=True)
-        if len(signal) > self.Window - 1:
-            signal = pl.Series([None] * (self.Window - 1) + signal.to_list()[self.Window - 1:])
-        else:
-            signal = pl.Series([None] * len(signal), dtype=pl.Float64)
+        macd = self._mask_(fast_ema - slow_ema, self.SlowPeriod - 1)
+        signal = self._mask_(macd.ewm_mean(span=self.SignalPeriod, adjust=False, ignore_nulls=True), self.Window - 1)
         histogram = macd - signal
         return pl.DataFrame({
             f"{self.Name}.FastEMA": fast_ema,

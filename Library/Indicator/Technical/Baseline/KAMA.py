@@ -1,21 +1,13 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Union
+from typing import Union
 
 from Library.Database.Dataframe import np, pl
-from Library.Indicator.Technical.Technical import MODE, TechnicalAPI, TechnicalType, WINDOW
+from Library.Indicator.Technical.Technical import BaselineAPI
 
-if TYPE_CHECKING:
-    from Library.Market.Market import MarketAPI
-
-class KaufmanAdaptiveMovingAverageAPI(TechnicalAPI):
-
-    Type = TechnicalType.Baseline
-    Parameters = (WINDOW, MODE)
+class KaufmanAdaptiveMovingAverageAPI(BaselineAPI):
 
     @staticmethod
     def _batch_(series: pl.Series, window: int) -> pl.Series:
-        if len(series) <= window: return pl.Series([None] * len(series), dtype=pl.Float64)
+        if len(series) <= window: return KaufmanAdaptiveMovingAverageAPI._nulls_(len(series))
         fast_alpha = 2 / (2 + 1)
         slow_alpha = 2 / (30 + 1)
         p = series.to_numpy()
@@ -32,11 +24,6 @@ class KaufmanAdaptiveMovingAverageAPI(TechnicalAPI):
             kama[i] = kama[i - 1] + sc[i - window] * (p[i] - kama[i - 1])
         return pl.Series(kama)
 
-    def batch(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
-        if data.is_empty(): return self._pad_()
-        ma = self._batch_(data, self.Window)
-        return pl.DataFrame({self.Name: ma})
-
     def stream(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
         fast_alpha = 2 / (2 + 1)
         slow_alpha = 2 / (30 + 1)
@@ -47,7 +34,7 @@ class KaufmanAdaptiveMovingAverageAPI(TechnicalAPI):
             kama = self._batch_(data, self.Window)
             seed = kama[-1]
             if seed is None or seed != seed: return self._pad_()
-            return pl.DataFrame({self.Name: pl.Series([float(seed)], dtype=pl.Float64)})
+            return self._scalar_(float(seed))
         old_price = (data[-(self.Window + 1)] if len(data) > self.Window else None)
         if old_price is None or new_price is None: return self._pad_()
         change = abs(new_price - old_price)
@@ -57,16 +44,4 @@ class KaufmanAdaptiveMovingAverageAPI(TechnicalAPI):
         er = change / volatility if volatility != 0 else 0
         sc = (er * (fast_alpha - slow_alpha) + slow_alpha) ** 2
         new_kama = prev_kama + sc * (new_price - prev_kama)
-        return pl.DataFrame({self.Name: pl.Series([new_kama], dtype=pl.Float64)})
-
-    def filter_buy(self, market: MarketAPI) -> bool:
-        return bool(market.CloseTicks.Price.over(self.Result))
-
-    def filter_sell(self, market: MarketAPI) -> bool:
-        return bool(market.CloseTicks.Price.under(self.Result))
-
-    def signal_buy(self, market: MarketAPI) -> bool:
-        return bool(market.CloseTicks.Price.crossover(self.Result))
-
-    def signal_sell(self, market: MarketAPI) -> bool:
-        return bool(market.CloseTicks.Price.crossunder(self.Result))
+        return self._scalar_(new_kama)

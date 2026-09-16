@@ -1,20 +1,12 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Union
+from typing import Union
 
 from Library.Database.Dataframe import pl
-from Library.Indicator.Technical.Technical import MODE, PERIOD, TechnicalAPI, TechnicalType
+from Library.Indicator.Technical.Technical import MODE, NeutralSignalAPI, PERIOD, TechnicalType
 
-if TYPE_CHECKING:
-    from Library.Market.Market import MarketAPI
-
-class EfficiencyRatioAPI(TechnicalAPI):
+class EfficiencyRatioAPI(NeutralSignalAPI):
 
     Type = TechnicalType.Other
     Parameters = (PERIOD.revised(default=24), MODE)
-
-    def _extract_(self, market: MarketAPI) -> Union[pl.Series, pl.DataFrame]:
-        return market.CloseTicks.Price.tail()
 
     def _ratio_(self, data: Union[pl.Series, pl.DataFrame]) -> Union[float, None]:
         window = data.tail(self.Window + 1)
@@ -37,16 +29,4 @@ class EfficiencyRatioAPI(TechnicalAPI):
     def stream(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
         ratio = self._ratio_(data)
         if ratio is None: return self._pad_()
-        return pl.DataFrame({self.Name: pl.Series([ratio], dtype=pl.Float64)})
-
-    def filter_buy(self, market: MarketAPI) -> bool:
-        return True
-
-    def filter_sell(self, market: MarketAPI) -> bool:
-        return True
-
-    def signal_buy(self, market: MarketAPI) -> bool:
-        return False
-
-    def signal_sell(self, market: MarketAPI) -> bool:
-        return False
+        return self._scalar_(ratio)

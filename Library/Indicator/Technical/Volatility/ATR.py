@@ -3,12 +3,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Union
 
 from Library.Database.Dataframe import pl
-from Library.Indicator.Technical.Technical import MODE, PERIOD, TechnicalAPI, TechnicalType
+from Library.Indicator.Technical.Technical import MODE, NeutralSignalAPI, PERIOD, TechnicalType
 
 if TYPE_CHECKING:
     from Library.Market.Market import MarketAPI
 
-class AverageTrueRangeAPI(TechnicalAPI):
+class AverageTrueRangeAPI(NeutralSignalAPI):
 
     Type = TechnicalType.Volatility
     Parameters = (PERIOD, MODE)
@@ -30,12 +30,7 @@ class AverageTrueRangeAPI(TechnicalAPI):
         tr2 = (highs - prev_closes).abs()
         tr3 = (lows - prev_closes).abs()
         tr = pl.DataFrame({"tr1": tr1, "tr2": tr2, "tr3": tr3}).max_horizontal()
-        atr = tr.ewm_mean(alpha=1.0 / self.Window, adjust=False)
-        nulls = [None] * self.Window
-        if len(atr) > self.Window:
-            atr = pl.Series(nulls + atr.to_list()[self.Window:])
-        else:
-            atr = pl.Series([None] * len(atr), dtype=pl.Float64)
+        atr = self._mask_(tr.ewm_mean(alpha=1.0 / self.Window, adjust=False), self.Window)
         return pl.DataFrame({self.Name: atr})
 
     def stream(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
@@ -60,18 +55,6 @@ class AverageTrueRangeAPI(TechnicalAPI):
             tr_series = pl.DataFrame({"t1": t1, "t2": t2, "t3": t3}).max_horizontal().drop_nulls()
             if len(tr_series) < self.Window: return self._pad_()
             atr = tr_series.ewm_mean(alpha=1.0 / self.Window, adjust=False)
-            return pl.DataFrame({self.Name: pl.Series([float(atr[-1])], dtype=pl.Float64)})
+            return self._scalar_(float(atr[-1]))
         new_atr = (prev_atr * (self.Window - 1) + tr) / self.Window
-        return pl.DataFrame({self.Name: pl.Series([new_atr], dtype=pl.Float64)})
-
-    def filter_buy(self, market: MarketAPI) -> bool:
-        return True
-
-    def filter_sell(self, market: MarketAPI) -> bool:
-        return True
-
-    def signal_buy(self, market: MarketAPI) -> bool:
-        return False
-
-    def signal_sell(self, market: MarketAPI) -> bool:
-        return False
+        return self._scalar_(new_atr)

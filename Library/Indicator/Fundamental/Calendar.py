@@ -4,7 +4,7 @@ import json
 import time
 import argparse
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from dataclasses import dataclass
 from typing import ClassVar, TYPE_CHECKING
 
@@ -13,6 +13,7 @@ from Library.Logging import VerboseLevel
 from Library.Database.Dataframe import pl
 from Library.Database.Database import PrimaryKey
 from Library.Database.Datapoint import DatapointAPI
+from Library.Utility.Datetime import parse_datetime, timestamp_to_datetime, utc_now
 
 if TYPE_CHECKING:
     from Library.Database.Database import DatabaseAPI
@@ -143,7 +144,7 @@ class CalendarAPI(DatapointAPI):
                 revision = event.get("revision") or None
                 rows.append({
                     str(cls.ID.UID): event.get("id"),
-                    str(cls.ID.Timestamp): datetime.fromtimestamp(dateline, tz=timezone.utc).replace(tzinfo=None) if dateline else None,
+                    str(cls.ID.Timestamp): timestamp_to_datetime(dateline) if dateline else None,
                     str(cls.ID.Event): event.get("ebaseId"),
                     str(cls.ID.Currency): event.get("currency") or None,
                     str(cls.ID.Country): event.get("country") or None,
@@ -164,25 +165,8 @@ class CalendarAPI(DatapointAPI):
 
     @classmethod
     def _frame_(cls, rows: list) -> pl.DataFrame:
-        return pl.DataFrame(rows, schema={
-            str(cls.ID.UID): pl.Int64,
-            str(cls.ID.Timestamp): pl.Datetime,
-            str(cls.ID.Event): pl.Int64,
-            str(cls.ID.Currency): pl.String,
-            str(cls.ID.Country): pl.String,
-            str(cls.ID.Title): pl.String,
-            str(cls.ID.Impact): pl.String,
-            str(cls.ID.Actual): pl.String,
-            str(cls.ID.Forecast): pl.String,
-            str(cls.ID.Previous): pl.String,
-            str(cls.ID.Revision): pl.String,
-            str(cls.ID.ActualValue): pl.Float64,
-            str(cls.ID.ForecastValue): pl.Float64,
-            str(cls.ID.PreviousValue): pl.Float64,
-            str(cls.ID.RevisionValue): pl.Float64,
-            str(cls.ID.ActualBetter): pl.Int64,
-            str(cls.ID.RevisionBetter): pl.Int64
-        })
+        stamps = (cls.ID.UpdatedAt, cls.ID.UpdatedBy)
+        return pl.DataFrame(rows, schema={str(name): kind.dtype if isinstance(kind, PrimaryKey) else kind for name, kind in cls().Structure.items() if name not in stamps})
 
     @classmethod
     def _week_(cls, day: datetime) -> list:
@@ -205,7 +189,7 @@ class CalendarAPI(DatapointAPI):
             rows = cls._week_(week)
             if rows:
                 frame = cls._frame_(rows).filter(pl.col(str(cls.ID.UID)).is_not_null()).unique(subset=[str(cls.ID.UID)], keep="last")
-                frame = frame.with_columns(pl.lit(by).alias(str(cls.ID.UpdatedBy)), pl.lit(datetime.now()).alias(str(cls.ID.UpdatedAt)))
+                frame = frame.with_columns(pl.lit(by).alias(str(cls.ID.UpdatedBy)), pl.lit(utc_now()).alias(str(cls.ID.UpdatedAt)))
                 cls.push(db, frame)
                 total += frame.height
             log.debug(lambda moment=week, count=len(rows): f"Fetch Operation: Retrieved {count} Events ({moment:%Y-%m-%d})")
@@ -225,9 +209,9 @@ def main() -> int:
         log.console.set_level(VerboseLevel.Info)
         log.file.set_level(VerboseLevel.Debug)
         try:
-            now = datetime.now()
-            start = datetime.strptime(args.start, "%Y-%m-%d") if args.start else now - timedelta(days=6)
-            stop = datetime.strptime(args.stop, "%Y-%m-%d") if args.stop else now
+            now = utc_now()
+            start = parse_datetime(args.start) if args.start else now - timedelta(days=6)
+            stop = parse_datetime(args.stop) if args.stop else now
             with PostgresDatabaseAPI(database=args.database) as db:
                 total = CalendarAPI.download(db, start, stop, by="Backfill" if args.start or args.stop else "Daily", delay=args.delay)
             log.info(lambda: f"Calendar Download: Completed ({total} Events · {start:%Y-%m-%d} · {stop:%Y-%m-%d})")
