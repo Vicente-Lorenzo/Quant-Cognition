@@ -4,7 +4,6 @@ import cProfile
 
 from typing import Callable
 from functools import wraps
-from datetime import datetime
 from time import perf_counter
 from dataclasses import dataclass, field
 
@@ -18,6 +17,7 @@ class Timer:
 
     def start(self):
         self._start_ = perf_counter()
+        return self
 
     def stop(self):
         self._stop_ = perf_counter()
@@ -42,11 +42,13 @@ def timer(func: Callable):
     return wrapper
 
 PROFILES: str = "Profiles"
+PROFILE: str = ".pstats"
 
 def profiler(func: Callable, destination=True):
     @wraps(func)
     def wrapper(*args, **kwargs):
         from Library.Logging import LoggingAPI
+        from Library.Utility.IO import mkdir
         from Library.Utility.Path import inspect_destination
         log = LoggingAPI()
         timestamp = datetime_to_string(utc_now(), "%Y%m%d-%H%M%S")
@@ -54,8 +56,8 @@ def profiler(func: Callable, destination=True):
             result = func(*args, **kwargs)
         stats = pstats.Stats(pr, stream=io.StringIO())
         folder = inspect_destination(destination, PROFILES)
-        folder.mkdir(parents=True, exist_ok=True)
-        snapshot = folder / f"profile-{timestamp}.pstat"
+        mkdir(folder, safe=False)
+        snapshot = folder / f"profile-{timestamp}{PROFILE}"
         stats.dump_stats(str(snapshot))
         log.warning(lambda: f"Profile @ {func.__name__}: Snapshot {snapshot}")
         return result

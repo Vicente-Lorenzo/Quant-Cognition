@@ -41,8 +41,7 @@ class ServiceAPI(ABC):
             if not self.disconnected():
                 self._log_.warning(lambda: "Connect Operation: Disconnecting (Bad Connection)")
                 self.disconnect()
-            timer = Timer()
-            timer.start()
+            timer = Timer().start()
             self._connect_(**kwargs)
             if not self.guarded():
                 self._guard_ = self.disconnect
@@ -52,8 +51,7 @@ class ServiceAPI(ABC):
             self._log_.info(lambda: f"Connect Operation: Connected ({timer.result()})")
             return self
         except Exception as e:
-            self._log_.error(lambda: f"Connect Operation: Failed · {e}")
-            self._log_.exception(lambda: f"Connect Operation: Failed · {e}")
+            self._log_.failure(lambda e=e: f"Connect Operation: Failed · {e}")
             raise
 
     def __enter__(self): return self.connect()
@@ -74,8 +72,7 @@ class ServiceAPI(ABC):
             if self.disconnected():
                 self._log_.debug(lambda: "Disconnect Operation: Skipped (Already Disconnected)")
                 return self
-            timer = Timer()
-            timer.start()
+            timer = Timer().start()
             self._disconnect_()
             timer.stop()
             if self.guarded():
@@ -85,8 +82,7 @@ class ServiceAPI(ABC):
             self._log_.info(lambda: f"Disconnect Operation: Disconnected ({timer.result()})")
             return self
         except Exception as e:
-            self._log_.error(lambda: f"Disconnect Operation: Failed · {e}")
-            self._log_.exception(lambda: f"Disconnect Operation: Failed · {e}")
+            self._log_.failure(lambda e=e: f"Disconnect Operation: Failed · {e}")
             raise
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -102,30 +98,19 @@ class ServiceAPI(ABC):
         try: self.disconnect()
         except Exception: pass
 
-    def _fetch_(self, callback: Callable, abort: Callable = None):
-        timer = Timer()
-        timer.start()
+    def _attempt_(self, operation: str, callback: Callable, abort: Callable | Missing = MISSING) -> tuple:
+        timer = Timer().start()
         try:
             self.connect()
-            result = callback()
-            return timer, result
+            return timer, callback()
         except Exception as e:
-            if abort is not None: abort()
-            self._log_.error(lambda: f"Fetch Operation: Failed · {e}")
-            self._log_.exception(lambda: f"Fetch Operation: Failed · {e}")
+            if abort is not MISSING: abort()
+            self._log_.failure(lambda e=e: f"{operation} Operation: Failed · {e}")
             raise
         finally: timer.stop()
 
-    def _execute_(self, callback: Callable, abort: Callable = None):
-        timer = Timer()
-        timer.start()
-        try:
-            self.connect()
-            callback()
-            return timer
-        except Exception as e:
-            if abort is not None: abort()
-            self._log_.error(lambda: f"Execute Operation: Failed · {e}")
-            self._log_.exception(lambda: f"Execute Operation: Failed · {e}")
-            raise
-        finally: timer.stop()
+    def _fetch_(self, callback: Callable, abort: Callable | Missing = MISSING):
+        return self._attempt_("Fetch", callback, abort)
+
+    def _execute_(self, callback: Callable, abort: Callable | Missing = MISSING):
+        return self._attempt_("Execute", callback, abort)[0]

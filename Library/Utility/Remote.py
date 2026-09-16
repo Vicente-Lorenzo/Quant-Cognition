@@ -155,8 +155,7 @@ class RemoteAPI(ServiceAPI):
                 if limit is not None and count >= limit: break
             self._log_.debug(lambda: f"Stream Operation: Completed ({count} Updates)")
         except Exception as e:
-            self._log_.error(lambda: f"Stream Operation: Failed · {e}")
-            self._log_.exception(lambda: f"Stream Operation: Failed · {e}")
+            self._log_.failure(lambda e=e: f"Stream Operation: Failed · {e}")
         finally:
             source.close()
             publisher.close()
@@ -176,8 +175,7 @@ class RemoteAPI(ServiceAPI):
             while True:
                 request = socket.recv(copy=False)
                 peer = self._peer_(request)
-                timer = Timer()
-                timer.start()
+                timer = Timer().start()
                 try:
                     self._filter_(peer, whitelist, blacklist)
                     envelope = json.loads(bytes(request.buffer))
@@ -201,11 +199,11 @@ class RemoteAPI(ServiceAPI):
                 except PermissionError as e:
                     timer.stop()
                     self._reply_(socket, {"status": "error", "error": f"{e}"})
-                    self._log_.warning(lambda: f"Serve Operation: Rejected · {e} ({peer})")
+                    self._log_.warning(lambda e=e: f"Serve Operation: Rejected · {e} ({peer})")
                 except Exception as e:
                     timer.stop()
                     self._reply_(socket, {"status": "error", "error": f"{e}"})
-                    self._log_.error(lambda: f"Serve Operation: Failed · {e}")
+                    self._log_.error(lambda e=e: f"Serve Operation: Failed · {e}")
         except KeyboardInterrupt:
             self._log_.info(lambda: "Serve Operation: Interrupted by User")
         finally:

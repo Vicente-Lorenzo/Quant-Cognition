@@ -173,6 +173,9 @@ def findvariable(value: object) -> Union[str, None]:
         del caller
         del frame
 
+def normalize(text: str) -> str:
+    return "".join(character for character in text if character.isalnum()).lower()
+
 def cast(cast_value, cast_type: type, cast_default):
     try:
         return cast_value if isinstance(cast_value, cast_type) else cast_type(cast_value)

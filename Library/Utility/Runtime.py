@@ -151,6 +151,19 @@ def find_caller_class(*, depth: int = 0, skip: Union[str, None] = None) -> Union
 def find_caller_package(*, depth: int = 0, skip: Union[str, None] = None, package: str = "Library") -> Union[str, None]:
     return find_frame_package(find_caller_frame(depth=depth + 1, skip=skip), package=package)
 
+def find_host() -> str:
+    import socket
+    try: return socket.gethostname() or "Unknown"
+    except OSError: return "Unknown"
+
+def split_arguments(arguments: Union[str, None]) -> list[str]:
+    import shlex
+    tokens = shlex.split(arguments, posix=False) if arguments else []
+    return [token[1:-1] if len(token) > 1 and token[0] == token[-1] and token[0] in "\"'" else token for token in tokens]
+
+def join_arguments(parts) -> str:
+    return " ".join(f'"{part}"' if not part or " " in part else part for part in (str(part) for part in parts))
+
 def windowless() -> dict:
     return {"creationflags": subprocess.CREATE_NO_WINDOW} if is_windows() else {}
 
@@ -168,7 +181,7 @@ def terminate(pid: Union[int, None]) -> None:
         except psutil.Error: pass
 
 def open_browser(url) -> None:
-    if os.name == "nt" and shutil.which("explorer"):
+    if is_windows() and shutil.which("explorer"):
         subprocess.Popen(["explorer.exe", str(url)])
         return
     import webbrowser
