@@ -124,3 +124,10 @@ class FieldAPI:
     @staticmethod
     def missing(fields, values) -> list:
         return [entry.label for entry, value in zip(fields, values) if entry.required and not value]
+
+    @classmethod
+    def requirement(cls, fields, values) -> str:
+        missing = cls.missing(fields, values)
+        if not missing: return ""
+        names = missing[0] if len(missing) == 1 else f"{', '.join(missing[:-1])} and {missing[-1]}"
+        return f"{names} {'is' if len(missing) == 1 else 'are'} required"

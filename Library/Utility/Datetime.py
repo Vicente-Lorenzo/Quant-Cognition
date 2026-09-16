@@ -4,10 +4,10 @@ from zoneinfo import ZoneInfo, available_timezones
 from datetime import datetime, date, time, timedelta, timezone, tzinfo
 from dateutil.relativedelta import relativedelta, weekday
 
+from Library.Utility.Typing import MISSING, Missing
 from Library.Utility.Enumeration import EnumerationAPI
 
 EPOCH: Final[datetime] = datetime(1970, 1, 1)
-HORIZON: Final[datetime] = datetime(2014, 1, 1)
 MILLISECOND: Final[timedelta] = timedelta(milliseconds=1)
 MICROSECOND: Final[timedelta] = timedelta(microseconds=1)
 STAMP: Final[str] = "%Y-%m-%d %H-%M-%S"
@@ -97,21 +97,23 @@ def utc_now(zone: Union[tzinfo, None] = None) -> datetime:
 
 @lru_cache(maxsize=1)
 def zones() -> tuple[str, ...]:
-    return tuple(sorted(available_timezones()))
+    return tuple(sorted(name for name in available_timezones() if name != "Factory" and all(part[:1].isupper() for part in name.split("/"))))
 
-def _zone_(zone: Union[str, tzinfo, None]) -> Union[tzinfo, None]:
+def _zone_(zone: Union[str, tzinfo, None, Missing]) -> Union[tzinfo, None]:
     if not zone: return None
     return ZoneInfo(zone) if isinstance(zone, str) else zone
 
-def local_now(zone: Union[str, tzinfo, None] = None) -> datetime:
+def local_now(zone: Union[str, tzinfo, None, Missing] = MISSING) -> datetime:
     return datetime.now() if not zone else datetime.now(_zone_(zone)).replace(tzinfo=None)
 
-def local_to_utc(dt: datetime, zone: Union[str, tzinfo, None] = None) -> datetime:
+def local_to_utc(dt: datetime, zone: Union[str, tzinfo, None, Missing] = MISSING) -> datetime:
     if dt.tzinfo is None and zone: dt = dt.replace(tzinfo=_zone_(zone))
     return dt.astimezone(timezone.utc).replace(tzinfo=None)
 
-def utc_to_local(dt: datetime, zone: Union[str, tzinfo, None] = None) -> datetime:
-    return (dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)).astimezone(_zone_(zone)).replace(tzinfo=None)
+def utc_to_local(dt: datetime, zone: Union[str, tzinfo, None, Missing] = MISSING) -> datetime:
+    moment = dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    stamp = moment.astimezone(_zone_(zone)).replace(tzinfo=None)
+    return stamp if local_to_utc(stamp, zone) == local_to_utc(moment) else stamp.replace(fold=1)
 
 def weekday_shift_datetime(wd: Weekday, shift: int, today: Union[datetime, None] = None) -> datetime:
     today = today if today is not None else utc_now()

@@ -1,9 +1,7 @@
 import sys
 import json
-import yaml
 import uuid
 from argparse import ArgumentParser, Namespace
-from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import Union
@@ -12,32 +10,44 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Logging import LoggingAPI, VerboseLevel
-from Library.Strategy import DDPGStrategyAPI, DownloadStrategyAPI, LadderAPI, NNFXStrategyAPI, RewardType, StrategyAPI, StrategyType, TrendStrategyAPI
+from Library.Strategy import LadderAPI, RewardType, StrategyAPI, StrategyType
+from Library.Strategy.Catalog import CatalogAPI
 from Library.System import BacktestingAPI, ElectionMode, FitnessType, LearningAPI, OptimizationAPI, RealtimeAPI, SelectionMode, SystemAPI, SystemType
-from Library.Universe import CommissionType, ProviderAPI, SecurityAPI, SpreadType, SwapType, TickerAPI, TimeframeAPI
-from Library.Utility import HORIZON, MISSING, Missing, Parameter, inspect_temporary, profiler, timer
+from Library.Universe import CommissionType, SecurityAPI, SpreadType, SwapType, TimeframeAPI
+from Library.Utility import MISSING, Missing, Parameter, inspect_temporary, profiler, timer
+from Library.Utility.Datetime import utc_now
+from Library.Utility.IO import mkdir, write_text, write_yaml
+from Library.Utility.Runtime import join_arguments
 
 def _parse_() -> Namespace:
     base_parser = ArgumentParser(add_help=False)
-    base_parser.add_argument("--console", type=str, default=VerboseLevel.Debug.name, choices=[_.name for _ in VerboseLevel])
-    base_parser.add_argument("--file", type=str, default=VerboseLevel.Debug.name, choices=[_.name for _ in VerboseLevel])
-    base_parser.add_argument("--storage", type=str, default=VerboseLevel.Warning.name, choices=[_.name for _ in VerboseLevel])
-    base_parser.add_argument("--strategy", type=str, default=StrategyType.Download.name, choices=[_.name for _ in StrategyType])
+    base_parser.add_argument("--console", type=str, default=VerboseLevel.Debug.name, choices=VerboseLevel.names())
+    base_parser.add_argument("--file", type=str, default=VerboseLevel.Debug.name, choices=VerboseLevel.names())
+    base_parser.add_argument("--storage", type=str, default=VerboseLevel.Warning.name, choices=VerboseLevel.names())
+    base_parser.add_argument("--strategy", type=str, default=StrategyType.Download.name, choices=StrategyType.names())
     base_parser.add_argument("--provider", type=str, default="Spotware")
     base_parser.add_argument("--ticker", type=str, default="EURUSD")
     base_parser.add_argument("--timeframe", type=str, default="Daily")
-    base_parser.add_argument("--risk-free", type=float, default=0.0)
-    base_parser.add_argument("--benchmark", type=str, nargs="?", const="", default=None)
-    base_parser.add_argument("--report", action="store_true", default=False)
-    base_parser.add_argument("--export", nargs="?", const=True, default=False, metavar="PATH")
-    base_parser.add_argument("--plot", nargs="?", const=True, default=False, metavar="PATH")
-    base_parser.add_argument("--description", type=str, default=None)
-    base_parser.add_argument("--profile", nargs="?", const=True, default=False, metavar="PATH")
-    base_parser.add_argument("--run", type=str, default=None, metavar="FOLDER")
+
+    resolution_parser = ArgumentParser(add_help=False)
+    resolution_parser.add_argument("--resolution", type=str, default=MISSING)
+
+    parameter_parser = ArgumentParser(add_help=False)
+    parameter_parser.add_argument("--parameters", type=str, default=MISSING, metavar="PATH")
+
+    output_parser = ArgumentParser(add_help=False)
+    output_parser.add_argument("--risk-free", type=float, default=0.0)
+    output_parser.add_argument("--benchmark", type=str, nargs="?", const="", default=None)
+    output_parser.add_argument("--report", action="store_true", default=False)
+    output_parser.add_argument("--export", nargs="?", const=True, default=False, metavar="PATH")
+    output_parser.add_argument("--plot", nargs="?", const=True, default=False, metavar="PATH")
+    output_parser.add_argument("--run", type=str, default=None, metavar="FOLDER")
+    output_parser.add_argument("--description", type=str, default=None)
+    output_parser.add_argument("--profile", nargs="?", const=True, default=False, metavar="PATH")
 
     period_parser = ArgumentParser(add_help=False)
-    period_parser.add_argument("--start", type=str, default=HORIZON.strftime("%Y-%m-%d"))
-    period_parser.add_argument("--stop", type=str, default="2030-01-01")
+    period_parser.add_argument("--start", type=str, required=True)
+    period_parser.add_argument("--stop", type=str, required=True)
 
     account_parser = ArgumentParser(add_help=False)
     account_parser.add_argument("--account-asset", type=str, default="EUR")
@@ -61,54 +71,52 @@ def _parse_() -> Namespace:
     realtime_parser.add_argument("--portfolio-maxsize", type=int, default=MISSING)
 
     fee_parser = ArgumentParser(add_help=False)
-    fee_parser.add_argument("--spread-type", type=str, default=SpreadType.Auto.name, choices=[_.name for _ in SpreadType])
+    fee_parser.add_argument("--spread-type", type=str, default=SpreadType.Auto.name, choices=SpreadType.names())
     fee_parser.add_argument("--spread-value", type=float, default=MISSING)
-    fee_parser.add_argument("--commission-type", type=str, default=CommissionType.Auto.name, choices=[_.name for _ in CommissionType])
+    fee_parser.add_argument("--commission-type", type=str, default=CommissionType.Auto.name, choices=CommissionType.names())
     fee_parser.add_argument("--commission-value", type=float, default=MISSING)
-    fee_parser.add_argument("--swap-type", type=str, default=SwapType.Auto.name, choices=[_.name for _ in SwapType])
+    fee_parser.add_argument("--swap-type", type=str, default=SwapType.Auto.name, choices=SwapType.names())
     fee_parser.add_argument("--swap-buy", type=float, default=MISSING)
     fee_parser.add_argument("--swap-sell", type=float, default=MISSING)
 
     parser = ArgumentParser()
     system_parser = parser.add_subparsers(dest="system", required=True)
 
-    system_parser.add_parser(SystemType.Live.name, parents=[base_parser, realtime_parser])
-    system_parser.add_parser(SystemType.Simulation.name, parents=[base_parser, realtime_parser])
-    system_parser.add_parser(SystemType.Testing.name, parents=[base_parser, realtime_parser])
+    system_parser.add_parser(SystemType.Live.name, parents=[base_parser, realtime_parser, output_parser])
+    system_parser.add_parser(SystemType.Simulation.name, parents=[base_parser, realtime_parser, output_parser])
+    system_parser.add_parser(SystemType.Testing.name, parents=[base_parser, realtime_parser, output_parser])
 
-    backtesting_parser = system_parser.add_parser(SystemType.Backtesting.name, parents=[base_parser, period_parser, account_parser, fee_parser])
-    backtesting_parser.add_argument("--resolution", type=str, default=MISSING)
+    system_parser.add_parser(SystemType.Backtesting.name, parents=[base_parser, resolution_parser, parameter_parser, period_parser, account_parser, fee_parser, output_parser])
 
-    optimization_parser = system_parser.add_parser(SystemType.Optimization.name, parents=[base_parser, period_parser, account_parser, fee_parser])
+    optimization_parser = system_parser.add_parser(SystemType.Optimization.name, parents=[base_parser, resolution_parser, parameter_parser, period_parser, account_parser, fee_parser, output_parser])
+    optimization_parser.add_argument("--fitness", type=str, default=FitnessType.AnnualizedReturn.name, choices=FitnessType.names())
+    optimization_parser.add_argument("--selection", type=str, default=SelectionMode.Best.name, choices=SelectionMode.names())
+    optimization_parser.add_argument("--election", type=str, default=ElectionMode.Frequency.name, choices=ElectionMode.names())
+    optimization_parser.add_argument("--purge", type=int, default=None)
+    optimization_parser.add_argument("--embargo", type=int, default=None)
     optimization_parser.add_argument("--training", type=int, default=0)
     optimization_parser.add_argument("--validation", type=int, default=0)
     optimization_parser.add_argument("--testing", type=int, default=0)
-    optimization_parser.add_argument("--fitness", type=str, default=FitnessType.AnnualizedReturn.name, choices=[_.name for _ in FitnessType])
-    optimization_parser.add_argument("--resolution", type=str, default=MISSING)
-    optimization_parser.add_argument("--selection", type=str, default=SelectionMode.Best.name, choices=[_.name for _ in SelectionMode])
-    optimization_parser.add_argument("--election", type=str, default=ElectionMode.Frequency.name, choices=[_.name for _ in ElectionMode])
-    optimization_parser.add_argument("--purge", type=int, default=None)
-    optimization_parser.add_argument("--embargo", type=int, default=None)
     optimization_parser.add_argument("--rolling", action="store_true")
     optimization_parser.add_argument("--continuous", action="store_true", default=False)
     optimization_parser.add_argument("--workers", type=int, default=1)
 
-    learning_parser = system_parser.add_parser(SystemType.Learning.name, parents=[base_parser, period_parser, account_parser, fee_parser])
-    learning_parser.add_argument("--selection", type=str, default=SelectionMode.Best.name, choices=[_.name for _ in SelectionMode])
-    learning_parser.add_argument("--election", type=str, default=ElectionMode.Last.name, choices=[_.name for _ in ElectionMode])
-    learning_parser.add_argument("--purge", type=int, default=None)
-    learning_parser.add_argument("--embargo", type=int, default=None)
-    learning_parser.add_argument("--reward", type=str, default=RewardType.LogReturn.name, choices=[_.name for _ in RewardType])
+    learning_parser = system_parser.add_parser(SystemType.Learning.name, parents=[base_parser, parameter_parser, period_parser, account_parser, fee_parser, output_parser])
+    learning_parser.add_argument("--reward", type=str, default=RewardType.LogReturn.name, choices=RewardType.names())
     learning_parser.add_argument("--episodes", type=int, default=1)
     learning_parser.add_argument("--epochs", type=int, default=1)
     learning_parser.add_argument("--train-frequency", type=int, default=1)
     learning_parser.add_argument("--gradient-steps", type=int, default=1)
+    learning_parser.add_argument("--purge", type=int, default=None)
+    learning_parser.add_argument("--embargo", type=int, default=None)
     learning_parser.add_argument("--training", type=int, default=0)
     learning_parser.add_argument("--validation", type=int, default=0)
     learning_parser.add_argument("--testing", type=int, default=0)
     learning_parser.add_argument("--rolling", action="store_true", default=False)
     learning_parser.add_argument("--continuous", action="store_true", default=False)
-    learning_parser.add_argument("--fitness", type=str, default=FitnessType.AnnualizedReturn.name, choices=[_.name for _ in FitnessType])
+    learning_parser.add_argument("--fitness", type=str, default=FitnessType.AnnualizedReturn.name, choices=FitnessType.names())
+    learning_parser.add_argument("--selection", type=str, default=SelectionMode.Best.name, choices=SelectionMode.names())
+    learning_parser.add_argument("--election", type=str, default=ElectionMode.Last.name, choices=ElectionMode.names())
     learning_parser.add_argument("--patience", type=int, default=0)
     learning_parser.add_argument("--activity", type=int, default=0)
     learning_parser.add_argument("--balance", type=int, default=0)
@@ -149,13 +157,6 @@ def _portfolio_(system: SystemType, batch: Union[int, Missing], interval: Union[
         case _: automatic = 0, 0.0, 0, 0
     return _settled_((batch, interval, workers, maxsize), automatic)
 
-def _strategy_(args: Namespace) -> type[StrategyAPI]:
-    match StrategyType(args.strategy):
-        case StrategyType.Download: return DownloadStrategyAPI
-        case StrategyType.NNFX: return NNFXStrategyAPI
-        case StrategyType.DDPG: return DDPGStrategyAPI
-        case StrategyType.Trend: return TrendStrategyAPI
-
 def _system_(args: Namespace, strategy: type[StrategyAPI], security: SecurityAPI, timeframe: TimeframeAPI, resolve) -> Union[SystemAPI, None]:
     system = SystemType(args.system)
     strategy_type = StrategyType(args.strategy)
@@ -182,7 +183,7 @@ def _system_(args: Namespace, strategy: type[StrategyAPI], security: SecurityAPI
                 description=args.description
             )
         case SystemType.Backtesting:
-            params: Parameter = resolve("Backtesting")
+            params: Parameter = resolve("Backtesting", args.parameters)
             return BacktestingAPI(
                 strategy=strategy,
                 security=security,
@@ -204,7 +205,7 @@ def _system_(args: Namespace, strategy: type[StrategyAPI], security: SecurityAPI
                 description=args.description
             )
         case SystemType.Optimization:
-            params: Parameter = resolve("Backtesting")
+            params: Parameter = resolve("Backtesting", args.parameters)
             space: Parameter = resolve("Optimization")
             return OptimizationAPI(
                 strategy=strategy,
@@ -238,7 +239,7 @@ def _system_(args: Namespace, strategy: type[StrategyAPI], security: SecurityAPI
                 description=args.description
             )
         case SystemType.Learning:
-            params: Parameter = resolve("Learning")
+            params: Parameter = resolve("Learning", args.parameters)
             return LearningAPI(
                 strategy=strategy,
                 security=security,
@@ -255,6 +256,8 @@ def _system_(args: Namespace, strategy: type[StrategyAPI], security: SecurityAPI
                 epochs=args.epochs,
                 train_frequency=args.train_frequency,
                 gradient_steps=args.gradient_steps,
+                purge=args.purge,
+                embargo=args.embargo,
                 training=args.training,
                 validation=args.validation,
                 testing=args.testing,
@@ -263,8 +266,6 @@ def _system_(args: Namespace, strategy: type[StrategyAPI], security: SecurityAPI
                 fitness=args.fitness,
                 selection=args.selection,
                 election=args.election,
-                purge=args.purge,
-                embargo=args.embargo,
                 patience=args.patience,
                 activity=args.activity,
                 balance=args.balance,
@@ -284,8 +285,9 @@ def _system_(args: Namespace, strategy: type[StrategyAPI], security: SecurityAPI
                 description=args.description
             )
 
-def _parameters_(ladder: LadderAPI, strategy: type[StrategyAPI], rungs: tuple, trails: dict, kind: str) -> Parameter:
-    parameters, trails[kind] = ladder.parameterize(strategy, kind, *rungs)
+def _parameters_(ladder: LadderAPI, strategy: type[StrategyAPI], rungs: tuple, trails: dict, folder: Path, kind: str, pinned: Union[str, Missing] = MISSING) -> Parameter:
+    if pinned is MISSING: parameters, trails[kind] = ladder.parameterize(strategy, kind, *rungs)
+    else: parameters, trails[kind] = ladder.pin(strategy, kind, pinned, folder / SystemAPI.INPUT / SystemAPI.PARAMETERS)
     return parameters
 
 def _scope_(provider, category, ticker, timeframe) -> tuple:
@@ -293,18 +295,18 @@ def _scope_(provider, category, ticker, timeframe) -> tuple:
 
 def _snapshot_(folder: Path, args: Namespace, parameters, log: LoggingAPI, trails: Union[dict, None] = None, rungs: tuple = ()) -> None:
     try:
-        entry = folder / "Input"
-        entry.mkdir(parents=True, exist_ok=True)
+        entry = folder / SystemAPI.INPUT
+        mkdir(entry, safe=False)
         data = getattr(parameters, "data", None)
-        if data is not None: (entry / "Parameters.yml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+        if data is not None: write_yaml(entry / SystemAPI.PARAMETERS, data, safe=False)
         start, stop = getattr(args, "start", None), getattr(args, "stop", None)
         manifest = {"System": args.system, "Strategy": args.strategy, "Provider": args.provider, "Ticker": args.ticker,
                     "Timeframe": args.timeframe, "Start": None if start is None else str(start), "Stop": None if stop is None else str(stop),
-                    "Description": args.description, "StartedAt": datetime.now().isoformat(),
-                    "Command": " ".join(sys.argv[1:]),
+                    "Description": args.description, "StartedAt": utc_now().isoformat(),
+                    "Command": join_arguments(sys.argv[1:]),
                     "Parameters": trails or None,
                     "Scope": list(rungs) or None}
-        (folder / "Run.json").write_text(json.dumps({key: value for key, value in manifest.items() if value is not None}, indent=2), encoding="utf-8")
+        write_text(folder / SystemAPI.MANIFEST, json.dumps({key: value for key, value in manifest.items() if value is not None}, indent=2), safe=False)
     except Exception as error:
         log.warning(lambda error=error: f"Snapshot Operation: Failed · {error}")
 
@@ -319,28 +321,25 @@ def main() -> None:
     log.console.set_level(VerboseLevel[args.console])
     log.file.set_level(VerboseLevel[args.file])
     log.storage.set_level(VerboseLevel[args.storage])
-    folder = Path(args.run) if args.run else inspect_temporary("Runs", uuid.uuid4().hex)
-    folder.mkdir(parents=True, exist_ok=True)
+    folder = Path(args.run) if args.run else inspect_temporary(SystemAPI.RUNS, uuid.uuid4().hex)
+    mkdir(folder, safe=False)
     args.run = str(folder)
     log.file.set_path(folder)
     log.file.set_name("Run")
-    if args.profile is True: args.profile = str(folder / "Output")
+    if args.profile is True: args.profile = str(folder / SystemAPI.OUTPUT)
 
     @timer
     @log.guard
     def run() -> None:
         with PostgresDatabaseAPI(database="Quant") as db:
-            provider_uid, ticker_uid = ProviderAPI.normalize(args.provider), TickerAPI.normalize(args.ticker)
-            ticker = TickerAPI(UID=ticker_uid, db=db, autoload=True)
-            provider = ProviderAPI(UID=provider_uid, db=db, autoload=True)
+            security = SecurityAPI(Provider=args.provider, Ticker=args.ticker, db=db, autoload=True)
             timeframe = TimeframeAPI(UID=TimeframeAPI.normalize(args.timeframe), db=db, autoload=True)
-            security = SecurityAPI(Provider=provider, Ticker=ticker, db=db, autoload=True)
             category = security.Category
-            if category is None: raise ValueError(f"Security {provider_uid} {ticker_uid}: Failed · Due to missing Category")
-            strategy = _strategy_(args)
-            rungs = _scope_(provider, category, ticker, timeframe)
+            if category is None: raise ValueError(f"Security {security.Provider.UID} {security.Ticker.UID}: Failed · Due to missing Category")
+            strategy = CatalogAPI.CATALOG[args.strategy]
+            rungs = _scope_(security.Provider, category, security.Ticker, timeframe)
             trails = {}
-            resolve = partial(_parameters_, ladder, strategy, rungs, trails)
+            resolve = partial(_parameters_, ladder, strategy, rungs, trails, folder)
             system = _system_(args, strategy, security, timeframe, resolve)
             if system is None: return
             _snapshot_(folder, args, getattr(system, "_parameters_", None), log, trails, rungs)

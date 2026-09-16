@@ -1,10 +1,10 @@
 import time
-from typing import Union
+from typing import Callable, Union
 from pathlib import Path
 
 from Library.Utility.IO import remove
 from Library.Utility.Path import PathAPI
-from Library.Utility.Typing import format
+from Library.Utility.Typing import MISSING, Missing, format
 
 class FileAPI:
 
@@ -57,12 +57,12 @@ class PruneAPI:
         return size if remove(path) else 0
 
     @classmethod
-    def sweep(cls, candidates, horizon: float, spare=None) -> tuple:
+    def sweep(cls, candidates, horizon: float, spare: Union[Callable, Missing] = MISSING) -> tuple:
         removed, reclaimed = 0, 0
         for candidate in candidates:
             candidate = Path(candidate)
             if not cls.stale(candidate, horizon): continue
-            if spare is not None and spare(candidate): continue
+            if spare is not MISSING and spare(candidate): continue
             size = cls.discard(candidate)
             if not size and candidate.exists(): continue
             removed += 1
@@ -70,7 +70,7 @@ class PruneAPI:
         return removed, reclaimed
 
     @classmethod
-    def prune(cls, folders, days: int = DAYS, patterns=("*",), recursive: bool = False, spare=None) -> tuple:
+    def prune(cls, folders, days: int = DAYS, patterns=("*",), recursive: bool = False, spare: Union[Callable, Missing] = MISSING) -> tuple:
         candidates = {}
         for folder in folders:
             folder = Path(folder)

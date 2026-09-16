@@ -54,7 +54,9 @@ def remove(path: Path, *, safe: bool = True) -> bool:
             path.unlink(missing_ok=True)
         elif path.is_dir():
             shutil.rmtree(path, onerror=_force_)
-        return not path.exists()
+        if path.exists():
+            raise OSError(f"Failed to remove {path}")
+        return True
     except Exception:
         if safe:
             return False

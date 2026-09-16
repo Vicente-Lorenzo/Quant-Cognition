@@ -7,14 +7,14 @@ from re import Pattern, compile, search
 from dataclasses import dataclass, field, InitVar
 
 from Library.Utility.Typing import contains
-from Library.Utility.Runtime import is_notebook, find_notebook
+from Library.Utility.Runtime import is_mac, is_notebook, is_windows, find_notebook
 
 def inspect_application() -> str:
     return traceback_root().name
 
 def inspect_root(builder: type[PurePath] = Path) -> Union[PurePath, Path]:
-    if sys.platform == "win32": home = builder(environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
-    elif sys.platform == "darwin": home = builder(Path.home() / "Library" / "Application Support")
+    if is_windows(): home = builder(environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    elif is_mac(): home = builder(Path.home() / "Library" / "Application Support")
     else: home = builder(Path.home() / ".local" / "share")
     return home / inspect_application()
 

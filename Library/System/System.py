@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import json
-import yaml
+import bisect
 
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from datetime import datetime
 from pathlib import Path
 from typing import Sequence, Union, TYPE_CHECKING
 
@@ -13,12 +12,14 @@ from Library.Statistic.Composition import backtest
 from Library.Statistic.Label import BENCHMARK_LABEL
 from Library.Database import BufferAPI
 from Library.Database.Dataframe import pl
+from Library.Indicator.Indicator import IndicatorAPI
 from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Market.Bar import BarAPI
 from Library.Market.Market import MarketAPI
 from Library.Market.Tick import TickAPI
 from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.Order import OrderAPI
+from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.Position import PositionAPI, PositionStatus
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Statistic import generate_benchmark_report, generate_net_report, order_view, position_view, trade_view, deal_view
@@ -105,10 +106,11 @@ from Library.Protocol.Update import (
     ExceptionUpdateAPI
 )
 from Library.System.Lifecycle import LifecycleAPI
-from Library.Universe.Provider import ProviderAPI
 from Library.Universe.Security import SecurityAPI
-from Library.Universe.Ticker import TickerAPI
+from Library.Utility.Datetime import utc_now, STAMP
 from Library.Utility.Enumeration import EnumerationAPI
+from Library.Utility.IO import mkdir, write_text, write_yaml
+from Library.Utility.Memory import memory_to_string
 from Library.Utility.Path import inspect_destination
 from Library.Utility.Service import ServiceAPI
 from Library.Utility.Profiler import Timer
@@ -116,11 +118,9 @@ from Library.Utility.Profiler import Timer
 if TYPE_CHECKING:
     from Library.Engine import MachineAPI
     from Library.Indicator.Fundamental import FundamentalAPI
-    from Library.Indicator.Indicator import IndicatorAPI
     from Library.Indicator.Sentimental import SentimentalAPI
     from Library.Indicator.Technical import TechnicalAPI
     from Library.Utility.Parameter import Parameter
-    from Library.Portfolio.Portfolio import PortfolioAPI
     from Library.Strategy.Strategy import StrategyAPI
     from Library.Universe.Timeframe import TimeframeAPI
 
@@ -138,7 +138,12 @@ class SystemAPI(ServiceAPI, ABC):
     Exports: str = "Exports"
     Plots: str = "Plots"
 
-    _OUTPUT_: str = "Output"
+    RUNS: str = "Runs"
+    INPUT: str = "Input"
+    OUTPUT: str = "Output"
+    RESULT: str = "Result.json"
+    MANIFEST: str = "Run.json"
+    PARAMETERS: str = "Parameters.yml"
 
     def __init__(self,
                  strategy: type[StrategyAPI],
@@ -206,6 +211,12 @@ class SystemAPI(ServiceAPI, ABC):
     def disconnected(self) -> bool:
         return not self._connected_
 
+    def _assemble_(self) -> None:
+        self.strategy = self._strategy_(money_management=self._parameters_.MoneyManagement, risk_management=self._parameters_.RiskManagement, signal_management=self._parameters_.SignalManagement, technical_management=self._parameters_.TechnicalManagement, fundamental_management=self._parameters_.FundamentalManagement, sentimental_management=self._parameters_.SentimentalManagement, portfolio_management=self._parameters_.PortfolioManagement)
+        self.market = MarketAPI()
+        self.indicator = IndicatorAPI(technical=self._parameters_.TechnicalManagement, fundamental=self._parameters_.FundamentalManagement, sentimental=self._parameters_.SentimentalManagement)
+        self.portfolio = PortfolioAPI()
+
     def _connect_(self) -> None:
         if self.indicator is not None:
             self.technical = self.indicator.Technical
@@ -248,13 +259,15 @@ class SystemAPI(ServiceAPI, ABC):
             return json.dumps(value.to_list() if isinstance(value, pl.Series) else value, default=str)
         return df.with_columns([pl.col(name).map_elements(_encode_, return_dtype=pl.Utf8).alias(name) for name in columns])
 
+    def _output_(self, name: str, write, content) -> Path:
+        path = self._run_ / self.OUTPUT / name
+        write(path, content, safe=False)
+        return path
+
     def _publish_(self, name: str, sections: dict) -> Union[Path, None]:
         if self._run_ is None or not sections: return None
         try:
-            folder = self._run_ / self._OUTPUT_
-            folder.mkdir(parents=True, exist_ok=True)
-            path = folder / name
-            path.write_text(yaml.safe_dump(sections, sort_keys=False), encoding="utf-8")
+            path = self._output_(name, write_yaml, sections)
             self._log_.info(lambda: f"Publish Operation: Saved · {path}")
             return path
         except Exception as error:
@@ -263,7 +276,7 @@ class SystemAPI(ServiceAPI, ABC):
 
     def _destination_(self, request, temporary: str, scoped: str = "") -> Union[Path, None]:
         if request is None or request is False: return None
-        if request is True and self._run_ is not None: return self._run_.joinpath(self._OUTPUT_, scoped) if scoped else self._run_ / self._OUTPUT_
+        if request is True and self._run_ is not None: return self._run_.joinpath(self.OUTPUT, scoped) if scoped else self._run_ / self.OUTPUT
         return inspect_destination(request, temporary)
 
     def _export_(self, tables: dict) -> None:
@@ -272,9 +285,9 @@ class SystemAPI(ServiceAPI, ABC):
             destination = self._destination_(self._exporting_, self.Exports, "Export")
             if self._run_ is not None and self._exporting_ is True:
                 folder = destination
-                folder.mkdir(parents=True, exist_ok=True)
+                mkdir(folder, safe=False)
             else:
-                base = destination / f"{datetime.now():%Y-%m-%d %H-%M-%S} {ident}"
+                base = destination / f"{utc_now():{STAMP}} {ident}"
                 folder, index = base, 2
                 while folder.exists():
                     folder = base.parent / f"{base.name} ({index})"
@@ -295,17 +308,16 @@ class SystemAPI(ServiceAPI, ABC):
         if self.market is None: return []
         frame = self.market.dataframe()
         if frame is None or frame.is_empty(): return []
-        columns = ("Timestamp", "OpenTick.Bid", "HighTick.Bid", "LowTick.Bid", "CloseTick.Bid", "OpenTick.Timestamp")
+        columns = (str(BarAPI.ID.Timestamp), str(BarAPI.OID.OpenTick.Bid), str(BarAPI.OID.HighTick.Bid), str(BarAPI.OID.LowTick.Bid), str(BarAPI.OID.CloseTick.Bid), str(BarAPI.OID.OpenTick.Timestamp))
         if any(column not in frame.columns for column in columns): return []
-        if "Volume" in frame.columns: columns += ("Volume",)
+        if str(BarAPI.ID.Volume) in frame.columns: columns += (str(BarAPI.ID.Volume),)
         return list(zip(*(frame[column].to_list() for column in columns)))
 
     @staticmethod
-    def _curves_(portfolio: PortfolioAPI) -> tuple[list, list]:
+    def _curves_(portfolio: PortfolioAPI, trades: pl.DataFrame) -> tuple[list, list]:
         equity = portfolio.EquityTrack
         balance = []
-        trades = trade_view(portfolio.Trades)
-        exit_stamp, exit_balance = str(TradeAPI.ID.ExitTimestamp), "ExitBalance"
+        exit_stamp, exit_balance = str(TradeAPI.ID.ExitTimestamp), str(TradeAPI.ID.ExitBalance)
         if not trades.is_empty() and exit_stamp in trades.columns and exit_balance in trades.columns:
             balance = [(stamp, value) for stamp, value in zip(trades[exit_stamp].to_list(), trades[exit_balance].to_list()) if stamp is not None and value is not None]
         opening = portfolio.InitialBalance
@@ -315,28 +327,25 @@ class SystemAPI(ServiceAPI, ABC):
     @staticmethod
     def _label_at_(stamp, bars: list):
         if stamp is None or not bars: return None
-        low, high = 0, len(bars) - 1
-        if stamp < bars[0][5]: return None
-        while low < high:
-            middle = (low + high + 1) // 2
-            if bars[middle][5] <= stamp: low = middle
-            else: high = middle - 1
-        return bars[low][0]
+        index = bisect.bisect_right(bars, stamp, key=lambda bar: bar[5]) - 1
+        return bars[index][0] if index >= 0 else None
 
-    def _markers_(self, portfolio: PortfolioAPI) -> list:
-        trades = trade_view(portfolio.Trades)
+    def _markers_(self, trades: pl.DataFrame, bars: list) -> list:
         if trades.is_empty(): return []
         fields = (str(TradeAPI.ID.UID), str(TradeAPI.ID.Direction), str(TradeAPI.ID.EntryTimestamp), str(TradeAPI.ID.ExitTimestamp), str(TradeAPI.ID.EntryPrice), str(TradeAPI.ID.ExitPrice), str(TradeAPI.ID.NetPnL))
         if any(field not in trades.columns for field in fields): return []
-        bars = self._bars_()
         return [(row[0], str(row[1]), self._label_at_(row[2], bars), self._label_at_(row[3], bars), row[4], row[5], row[6] or 0.0) for row in zip(*(trades[field].to_list() for field in fields))]
+
+    @staticmethod
+    def _ticker_(security: SecurityAPI) -> str:
+        return str(getattr(getattr(security, "Ticker", None), "UID", None) or "Security")
 
     @staticmethod
     def _label_(security: SecurityAPI, suffix: Union[str, None] = None) -> str:
         ticker = security.Ticker if security else None
         contract = security.Contract if security else None
         kind = contract.Type if contract else None
-        parts = [str(ticker.UID) if ticker and ticker.UID else "Security"]
+        parts = [SystemAPI._ticker_(security)]
         if ticker and ticker.Description: parts.append(str(ticker.Description))
         if kind is not None: parts.append(kind.name if hasattr(kind, "name") else str(kind))
         if suffix: parts.append(suffix)
@@ -348,9 +357,8 @@ class SystemAPI(ServiceAPI, ABC):
                    getattr(self.indicator.Sentimental, "Window", 0) or 0]
         return max(windows)
 
-    def _benchmarks_(self, start, stop) -> dict:
+    def _benchmarks_(self, start, stop, bars: list) -> dict:
         benchmarks = {}
-        bars = self._bars_()
         if bars: benchmarks[self._label_(self._security_, "Buy & Hold")] = [(bar[0], bar[4]) for bar in bars]
         database = getattr(self, "_db_", None)
         if not self._benchmark_: return benchmarks
@@ -360,11 +368,10 @@ class SystemAPI(ServiceAPI, ABC):
         for spec in self._benchmark_:
             try:
                 provider_uid, _, ticker_uid = spec.rpartition(":")
-                provider = ProviderAPI(UID=ProviderAPI.normalize(provider_uid), db=database, autoload=True) if provider_uid else self._security_.Provider
-                security = SecurityAPI(Provider=provider, Ticker=TickerAPI(UID=TickerAPI.normalize(ticker_uid), db=database, autoload=True), db=database, autoload=True)
+                security = SecurityAPI(Provider=provider_uid or self._security_.Provider, Ticker=ticker_uid, db=database, autoload=True)
                 frame = MarketAPI.pull_bars(database, security.UID, self._timeframe_.UID, start=start, stop=stop)
                 if frame.is_empty(): raise ValueError(f"No {self._timeframe_.UID} Bars")
-                benchmarks[self._label_(security)] = list(zip(frame["Timestamp"].to_list(), frame["CloseTick.Bid"].to_list()))
+                benchmarks[self._label_(security)] = list(zip(frame[str(BarAPI.ID.Timestamp)].to_list(), frame[str(BarAPI.OID.CloseTick.Bid)].to_list()))
             except Exception as error:
                 self._log_.warning(lambda s=spec, e=error: f"Benchmark Operation: Skipped · {s} · {e}")
         return benchmarks
@@ -375,20 +382,20 @@ class SystemAPI(ServiceAPI, ABC):
     def _analysis_(self) -> dict:
         return {}
 
-    def _plot_(self, portfolio: PortfolioAPI, account: Union[AccountAPI, None], start, stop, benchmarks: dict, tables: dict) -> None:
-        equity, balance = self._curves_(portfolio)
-        ticker = self._security_.Ticker.UID if self._security_ and self._security_.Ticker else "Security"
+    def _plot_(self, portfolio: PortfolioAPI, account: Union[AccountAPI, None], start, stop, benchmarks: dict, tables: dict, bars: list, trades: pl.DataFrame) -> None:
+        equity, balance = self._curves_(portfolio, trades)
+        ticker = self._ticker_(self._security_)
         title = f"{self.__class__.__name__} · {self._strategy_.__name__} · {ticker} {self._timeframe_.UID} · {start} → {stop}"
         workspace = backtest(
             title=title,
             description=self._description_,
             anchor=start,
             currency=account.Asset if account is not None and account.Asset else "",
-            bars=self._bars_(),
+            bars=bars,
             equity=equity,
             balance=balance,
             signals=self.strategy.Signals if self.strategy is not None else [],
-            trades=self._markers_(portfolio),
+            trades=self._markers_(trades, bars),
             benchmarks=benchmarks,
             directional=(self.strategy.DirectionalEntryThreshold, self.strategy.DirectionalExitThreshold) if self.strategy is not None else None,
             volumetric=(self.strategy.VolumeEntryThreshold, self.strategy.VolumeExitThreshold) if self.strategy is not None else None,
@@ -397,18 +404,15 @@ class SystemAPI(ServiceAPI, ABC):
         self._result_(workspace)
         if not self._plotting_: return
         destination = self._destination_(self._plotting_, self.Plots)
-        naming = "Plot" if self._run_ is not None and self._plotting_ is True else f"{datetime.now():%Y-%m-%d %H-%M-%S} {ticker} {self._strategy_.__name__}"
+        naming = "Plot" if self._run_ is not None and self._plotting_ is True else f"{utc_now():{STAMP}} {ticker} {self._strategy_.__name__}"
         path = workspace.render(destination, name=naming)
         self._log_.info(lambda: f"Plot Operation: Rendered · {path}")
 
     def _result_(self, workspace) -> None:
         if self._run_ is None: return
         try:
-            folder = self._run_ / self._OUTPUT_
-            folder.mkdir(parents=True, exist_ok=True)
-            path = folder / "Result.json"
-            path.write_text(workspace.encode(), encoding="utf-8")
-            self._log_.info(lambda: f"Result Operation: Saved · {path} · {path.stat().st_size / 1048576:.1f} MB")
+            path = self._output_(self.RESULT, write_text, workspace.encode())
+            self._log_.info(lambda: f"Result Operation: Saved · {path} · {memory_to_string(path.stat().st_size)}")
         except Exception as error:
             self._log_.error(lambda error=error: f"Result Operation: Failed · {error}")
             self._failures_.append(f"Result: {error}")
@@ -431,20 +435,23 @@ class SystemAPI(ServiceAPI, ABC):
         if portfolio is None: return
         net = generate_net_report(portfolio.Positions, portfolio.Trades, account, start, stop, portfolio.EquityCurve, portfolio.Excursions, risk_free=self._risk_free_)
         self.statistics = net
-        benchmarks = {}
-        try: benchmarks = self._benchmarks_(start, stop)
+        bars, benchmarks = [], {}
+        try:
+            bars = self._bars_()
+            benchmarks = self._benchmarks_(start, stop, bars)
         except Exception as error: self._log_.error(lambda error=error: f"Benchmark Operation: Failed · {error}")
         self.benchmarks = generate_benchmark_report(portfolio.EquityTrack, benchmarks, start, stop, risk_free=self._risk_free_) if self._benchmarking_ else None
         if not (self._reporting_ or self._exporting_ or self._plotting_): return
+        trades = trade_view(portfolio.Trades)
         tables = {
             "Orders": order_view(portfolio.Orders),
             "Positions": position_view(portfolio.Positions),
-            "Trades": trade_view(portfolio.Trades),
+            "Trades": trades,
             "Deals": deal_view(portfolio.Deals),
             "Net": net,
         }
         if self.benchmarks is not None and not self.benchmarks.is_empty(): tables[BENCHMARK_LABEL] = self.benchmarks
-        try: self._plot_(portfolio, account, start, stop, benchmarks, tables)
+        try: self._plot_(portfolio, account, start, stop, benchmarks, tables, bars, trades)
         except Exception as error:
             self._log_.error(lambda error=error: f"Plot Operation: Failed · {error}")
             self._failures_.append(f"Plot: {error}")
@@ -459,7 +466,7 @@ class SystemAPI(ServiceAPI, ABC):
         self._delivered_()
 
     def _identity_(self) -> str:
-        ticker = getattr(getattr(self._security_, "Ticker", None), "UID", None) or "Security"
+        ticker = self._ticker_(self._security_)
         frame = getattr(self._timeframe_, "UID", None)
         return f"{ticker} {frame}" if frame else ticker
 

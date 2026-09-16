@@ -71,7 +71,7 @@ class Parameter:
             self.parent._save_()
         else:
             with self.path.open("w", encoding="utf-8") as f:
-                yaml.safe_dump(self.data, f)
+                yaml.safe_dump(self.data, f, sort_keys=False)
 
     def keys(self) -> Any:
         return self.data.keys()
@@ -87,45 +87,3 @@ class Parameter:
 
     def __repr__(self) -> str:
         return repr(f"Parameter(path={self.path}, data={self.data})")
-
-SEPARATOR = " · "
-SEPARATORS = ("·", ";")
-ALTERNATIVE = "|"
-
-def _decode_(text: str):
-    part = str(text).strip()
-    if part == "": return None
-    for cast in (int, float):
-        try: return cast(part)
-        except ValueError: continue
-    return part
-
-def numbered(body) -> bool:
-    return isinstance(body, dict) and bool(body) and all(str(key).replace("-", "").strip().isdigit() for key in body)
-
-def format_value(value) -> str:
-    if value is None: return ""
-    if isinstance(value, (list, tuple)): return ", ".join("" if item is None else str(item) for item in value)
-    return str(value)
-
-def parse_value(text: str) -> list:
-    return [_decode_(part) for part in str(text).split(",")]
-
-def format_slots(value) -> str:
-    if value is None: return ""
-    if not isinstance(value, (list, tuple)): return str(value)
-    slots = []
-    for slot in value:
-        options = slot if isinstance(slot, (list, tuple)) else [slot]
-        slots.append(ALTERNATIVE.join("" if option is None else str(option) for option in options))
-    return SEPARATOR.join(slots)
-
-def parse_slots(text: str) -> list:
-    body = str(text).strip()
-    if body == "": return []
-    for symbol in SEPARATORS[1:]: body = body.replace(symbol, SEPARATORS[0])
-    slots = []
-    for part in body.split(SEPARATORS[0]):
-        options = [_decode_(option) for option in part.split(ALTERNATIVE)]
-        slots.append(options if len(options) > 1 else options[0])
-    return slots

@@ -32,6 +32,12 @@ class LadderAPI:
             merged[key] = LadderAPI.merge(current, value) if blended else deepcopy(value)
         return merged
 
+    @classmethod
+    def arrange(cls, merged: dict, template: Union[dict, None]) -> dict:
+        if not isinstance(merged, dict) or not isinstance(template, dict): return merged
+        keys = [key for key in template if key in merged] + [key for key in merged if key not in template]
+        return {key: cls.arrange(merged[key], template.get(key)) for key in keys}
+
     @staticmethod
     def scopes(*rungs: str) -> tuple:
         return tuple(tuple(rungs[:depth]) for depth in range(len(rungs) + 1))
@@ -65,8 +71,8 @@ class LadderAPI:
         return Parameter(sections, self.override(kind, *rungs)), trail
 
     def pin(self, strategy: type[StrategyAPI], kind: str, source: Union[str, Path], target: Union[str, Path]) -> tuple[Parameter, list]:
-        source = Path(source)
-        return Parameter(self.merge(strategy.defaults(kind), read_yaml(source, safe=False)), Path(target)), [self._ORIGIN_, str(source)]
+        source, pinned = Path(source), read_yaml(Path(source), safe=False)
+        return Parameter(self.arrange(self.merge(strategy.defaults(kind), pinned), pinned), Path(target)), [self._ORIGIN_, str(source)]
 
     def sources(self, strategy: type[StrategyAPI], kind: str, *rungs: str) -> dict:
         found = {}
