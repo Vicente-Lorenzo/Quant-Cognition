@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 from argparse import ArgumentParser
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from Library.Utility.Datetime import utc_now
 from Library.Utility.Path import inspect_persistent

@@ -4,12 +4,12 @@ import subprocess
 from pathlib import Path
 from typing import Callable, Union
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from Library.Logging import LoggingAPI
 from Library.Utility.Path import traceback_root
 from Library.Utility.Runtime import windowless
-from Setup.Task import attempt
+from Script.Task import attempt
 
 def find_manifest() -> Path:
     return traceback_root() / "Quant.yml"

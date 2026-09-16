@@ -1,7 +1,10 @@
 import sys
 import subprocess
+from pathlib import Path
 
-from Cache import ROOT, clean
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from Script.Environment.Cache import ROOT, clean
 from Library.Utility.Runtime import windowless
 
 REQUIREMENTS = ROOT / "Requirements.txt"

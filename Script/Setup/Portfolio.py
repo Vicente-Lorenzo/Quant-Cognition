@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.Order import OrderAPI
@@ -9,7 +9,7 @@ from Library.Portfolio.Position import PositionAPI
 from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Trade import TradeAPI
 from Library.Logging import LoggingAPI
-from Setup.Task import migrate, provision
+from Script.Task import migrate, provision
 
 def populate_portfolio(db):
     migrate(db, SessionAPI, AccountAPI, OrderAPI, PositionAPI, TradeAPI)

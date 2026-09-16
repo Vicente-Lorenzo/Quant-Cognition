@@ -1,12 +1,12 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Logging.Log import LogAPI
-from Setup.Enum import enum_block
-from Setup.Task import migrate, provision
+from Script.Setup.Enum import enum_block
+from Script.Task import migrate, provision
 
 def logging_block() -> str:
     return enum_block("VerboseLevel", VerboseLevel)

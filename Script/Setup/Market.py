@@ -1,12 +1,12 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from Library.Market.Bar import BarAPI
 from Library.Market.Tick import TickAPI
 from Library.Logging import LoggingAPI
-from Setup.Task import migrate, provision
+from Script.Task import migrate, provision
 
 def populate_market(db):
     migrate(db, TickAPI, BarAPI)

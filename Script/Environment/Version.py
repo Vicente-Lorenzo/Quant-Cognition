@@ -5,7 +5,7 @@ import subprocess
 import urllib.request
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from Library.Logging import LoggingAPI
 from Library.Utility.IO import read_text
@@ -42,7 +42,7 @@ def _report_(raw: subprocess.CompletedProcess) -> dict | None:
     except json.JSONDecodeError: return None
 
 def plan(root: Path = None, timeout: int = _SOLVE_) -> tuple:
-    from Setup.Environment import find_manifest, run_manager
+    from Script.Environment.Update import find_manifest, run_manager
     root = root if root is not None else traceback_root()
     try: raw = run_manager(["env", "update", "--name", "Quant", "--file", str(find_manifest()), "--prune", "--dry-run", "--json"], accept=_report_, capture_output=True, text=True, timeout=timeout)
     except FileNotFoundError: return [], "No environment manager found"

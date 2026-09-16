@@ -13,13 +13,13 @@ from Library.Database import PostgresDatabaseAPI
 from Library.Logging import LoggingAPI
 from Library.Utility.Path import traceback_root
 from Library.Utility.Runtime import windowless
-from Setup.Enum import write_all
-from Setup.Auth import setup_auth, seed_admin, ADMIN
-from Setup.Scheduler import setup_scheduler
-from Setup.Universe import populate_universe
-from Setup.Market import populate_market
-from Setup.Portfolio import populate_portfolio
-from Setup.Indicator import setup_indicator
+from Script.Setup.Enum import write_all
+from Script.Setup.Auth import setup_auth, seed_admin, ADMIN
+from Script.Setup.Scheduler import setup_scheduler
+from Script.Setup.Universe import populate_universe
+from Script.Setup.Market import populate_market
+from Script.Setup.Portfolio import populate_portfolio
+from Script.Setup.Indicator import setup_indicator
 
 OWNER = ADMIN
 ORCHESTRATOR = "Quant Scheduler"
@@ -29,14 +29,14 @@ WORKFLOWS = [
         "uid": "Setup", "name": "Setup", "schedule": None, "kind": Kind.Manual, "tolerates": False,
         "description": "Zero-to-hero provisioning of all Quant database schemas and tables — launched manually",
         "tasks": [
-            {"uid": "Setup.Enums", "name": "Setup Enums", "path": "Setup/Enum.py", "kind": Kind.Scheduled, "description": "Generates the C# Connector enum source from the Python enumerations"},
-            {"uid": "Setup.Auth", "name": "Setup Auth", "path": "Setup/Auth.py", "kind": Kind.Scheduled, "description": "Creates the Auth schema (Team · Office · User) and seeds the administrator account"},
-            {"uid": "Setup.Logging", "name": "Setup Logging", "path": "Setup/Logging.py", "kind": Kind.Scheduled, "description": "Creates the Logging schema (Log) holding one durable row per captured log"},
-            {"uid": "Setup.Scheduler", "name": "Setup Scheduler", "path": "Setup/Scheduler.py", "kind": Kind.Scheduled, "description": "Creates the Scheduler schema (Workflow · Task · Dependency · Run)"},
-            {"uid": "Setup.Universe", "name": "Setup Universe", "path": "Setup/Universe.py", "kind": Kind.Scheduled, "description": "Creates and populates the Universe schema (categories · providers · tickers · contracts · securities · timeframes)"},
-            {"uid": "Setup.Market", "name": "Setup Market", "path": "Setup/Market.py", "kind": Kind.Scheduled, "description": "Creates the Market schema (Tick · Bar)"},
-            {"uid": "Setup.Portfolio", "name": "Setup Portfolio", "path": "Setup/Portfolio.py", "kind": Kind.Scheduled, "description": "Creates the Portfolio schema (Session · Account · Order · Position · Trade)"},
-            {"uid": "Setup.Indicator", "name": "Setup Indicator", "path": "Setup/Indicator.py", "kind": Kind.Scheduled, "description": "Creates the Indicator schema (Calendar)"}
+            {"uid": "Setup.Enums", "name": "Setup Enums", "path": "Script/Setup/Enum.py", "kind": Kind.Scheduled, "description": "Generates the C# Connector enum source from the Python enumerations"},
+            {"uid": "Setup.Auth", "name": "Setup Auth", "path": "Script/Setup/Auth.py", "kind": Kind.Scheduled, "description": "Creates the Auth schema (Team · Office · User) and seeds the administrator account"},
+            {"uid": "Setup.Logging", "name": "Setup Logging", "path": "Script/Setup/Logging.py", "kind": Kind.Scheduled, "description": "Creates the Logging schema (Log) holding one durable row per captured log"},
+            {"uid": "Setup.Scheduler", "name": "Setup Scheduler", "path": "Script/Setup/Scheduler.py", "kind": Kind.Scheduled, "description": "Creates the Scheduler schema (Workflow · Task · Dependency · Run)"},
+            {"uid": "Setup.Universe", "name": "Setup Universe", "path": "Script/Setup/Universe.py", "kind": Kind.Scheduled, "description": "Creates and populates the Universe schema (categories · providers · tickers · contracts · securities · timeframes)"},
+            {"uid": "Setup.Market", "name": "Setup Market", "path": "Script/Setup/Market.py", "kind": Kind.Scheduled, "description": "Creates the Market schema (Tick · Bar)"},
+            {"uid": "Setup.Portfolio", "name": "Setup Portfolio", "path": "Script/Setup/Portfolio.py", "kind": Kind.Scheduled, "description": "Creates the Portfolio schema (Session · Account · Order · Position · Trade)"},
+            {"uid": "Setup.Indicator", "name": "Setup Indicator", "path": "Script/Setup/Indicator.py", "kind": Kind.Scheduled, "description": "Creates the Indicator schema (Calendar)"}
         ],
         "edges": [
             ("Setup.Auth", "Setup.Logging"),
@@ -53,12 +53,12 @@ WORKFLOWS = [
         "uid": "Environment", "name": "Environment", "schedule": "0 4 * * *", "kind": Kind.Scheduled, "tolerates": True,
         "description": "Daily maintenance — refreshes the Quant conda environment then relaunches the always-on tunnel and application server",
         "tasks": [
-            {"uid": "Environment.Cache", "name": "Cache Cleanup", "path": "Script/Cache.py", "kind": Kind.Scheduled, "description": "Removes Python bytecode and tooling caches plus C# build artifacts across the repository"},
-            {"uid": "Environment.Retention", "name": "Log Retention", "path": "Setup/Retention.py", "kind": Kind.Scheduled, "description": "Prunes expired log files from the temporary folders and expired log rows from the Logging schema"},
-            {"uid": "Environment.Version", "name": "Version Check", "path": "Setup/Version.py", "kind": Kind.Scheduled, "description": "Reports when a vendored frontend library has a newer release upstream — never upgrades automatically"},
-            {"uid": "Environment.Update", "name": "Environment Update", "path": "Setup/Environment.py", "kind": Kind.Scheduled, "description": "Syncs the active conda environment to the pinned Quant manifest while the services are suspended"},
-            {"uid": "Environment.Tunnel", "name": "Cloudflare Tunnel", "path": "Library/Web/Service/Tunnel.py", "kind": Kind.Service, "description": "Runs the named Cloudflare tunnel exposing the loopback app server to the public edge"},
-            {"uid": "Environment.Server", "name": "Application Server", "path": "Library/Web/Service/Tray.py", "kind": Kind.Service, "description": "Serves the Quant Cognition Dash application under waitress with its own system-tray controls"}
+            {"uid": "Environment.Cache", "name": "Cache Cleanup", "path": "Script/Environment/Cache.py", "kind": Kind.Scheduled, "description": "Removes Python bytecode and tooling caches plus C# build artifacts across the repository"},
+            {"uid": "Environment.Retention", "name": "Log Retention", "path": "Script/Environment/Retention.py", "kind": Kind.Scheduled, "description": "Prunes expired log files from the temporary folders and expired log rows from the Logging schema"},
+            {"uid": "Environment.Version", "name": "Version Check", "path": "Script/Environment/Version.py", "kind": Kind.Scheduled, "description": "Reports when a vendored frontend library has a newer release upstream — never upgrades automatically"},
+            {"uid": "Environment.Update", "name": "Environment Update", "path": "Script/Environment/Update.py", "kind": Kind.Scheduled, "description": "Syncs the active conda environment to the pinned Quant manifest while the services are suspended"},
+            {"uid": "Environment.Tunnel", "name": "Cloudflare Tunnel", "path": "Script/Environment/Tunnel.py", "kind": Kind.Service, "description": "Runs the named Cloudflare tunnel exposing the loopback app server to the public edge"},
+            {"uid": "Environment.Server", "name": "Application Server", "path": "Script/Environment/Server.py", "kind": Kind.Service, "description": "Serves the Quant Cognition Dash application under waitress with its own system-tray controls"}
         ],
         "edges": [
             ("Environment.Cache", "Environment.Retention"),
@@ -72,7 +72,7 @@ WORKFLOWS = [
         "uid": "Market", "name": "Market Data", "schedule": "0 6 * * *", "kind": Kind.Scheduled, "tolerates": True,
         "description": "Daily download and update of market and fundamental data into the database",
         "tasks": [
-            {"uid": "Market.Calendar", "name": "Economic Calendar", "path": "Library/Indicator/Fundamental/Calendar.py", "kind": Kind.Scheduled, "description": "Downloads and updates the Forex Factory economic calendar (rolling week · idempotent upsert)"}
+            {"uid": "Market.Calendar", "name": "Economic Calendar", "path": "Script/Market/Calendar.py", "kind": Kind.Scheduled, "description": "Downloads and updates the Forex Factory economic calendar (rolling week · idempotent upsert)"}
         ],
         "edges": []
     }
@@ -140,10 +140,10 @@ def schedule_orchestrator():
     command = f'"{interpreter}" "{LAUNCHER}"'
     subprocess.run(["schtasks", "/Create", "/TN", ORCHESTRATOR, "/TR", command, "/SC", "ONLOGON", "/RL", "HIGHEST", "/F"], check=True, **windowless())
 
-def main(database="Quant", boot=False):
+def main(database="Quant", boot=False, registration=False):
     with LoggingAPI() as log:
         try:
-            provision(database)
+            if not registration: provision(database)
             manager = ManagerAPI(database=database)
             register(manager)
             enlist(manager)
@@ -163,8 +163,9 @@ def _cli_():
     parser = ArgumentParser(prog="Install")
     parser.add_argument("--database", default="Quant", choices=["Quant", "Tests"])
     parser.add_argument("--boot", action="store_true")
+    parser.add_argument("--register", action="store_true")
     args = parser.parse_args()
-    return main(args.database, args.boot)
+    return main(args.database, args.boot, args.register)
 
 if __name__ == "__main__":
     raise SystemExit(_cli_())

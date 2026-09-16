@@ -2,7 +2,7 @@ import sys
 import secrets
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from Library.Auth.Auth import AuthAPI
 from Library.Auth.Role import RoleAPI
@@ -11,7 +11,7 @@ from Library.Auth.Office import OfficeAPI
 from Library.Auth.User import UserAPI
 from Library.Database import PostgresDatabaseAPI
 from Library.Logging import LoggingAPI
-from Setup.Task import attempt, migrate
+from Script.Task import attempt, migrate
 
 ADMIN = "vicente.aser.lorenzo@gmail.com"
 

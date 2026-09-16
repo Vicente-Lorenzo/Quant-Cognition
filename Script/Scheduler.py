@@ -6,6 +6,8 @@ sys.path.insert(0, str(ROOT))
 
 def main():
     try:
+        from Library.Logging import LoggingAPI
+        from Library.Scheduler.Scheduler import SchedulerAPI
         from Library.Scheduler.Tray import TrayAPI
     except ImportError:
         import os
@@ -18,7 +20,7 @@ def main():
             **{"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
         ).returncode
     if sys.stdout is None or sys.stderr is None: TrayAPI.redirect(TrayAPI._LOG_)
-    return TrayAPI.serve()
+    return TrayAPI.main(LoggingAPI(), lambda: SchedulerAPI().start())
 
 if __name__ == "__main__":
     raise SystemExit(main())

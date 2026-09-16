@@ -2,6 +2,8 @@ import sys
 import subprocess
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from Library.Utility.Runtime import windowless
 
 def main() -> int:

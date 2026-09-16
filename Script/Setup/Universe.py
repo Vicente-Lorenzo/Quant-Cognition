@@ -1,12 +1,12 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from Library.Utility.Datetime import utc_now
 from Library.Database.Dataframe import pl
 from Library.Logging import LoggingAPI
-from Setup.Task import migrate, provision
+from Script.Task import migrate, provision
 from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Ticker import TickerAPI, ContractType
 from Library.Universe.Contract import ContractAPI, PayoffType

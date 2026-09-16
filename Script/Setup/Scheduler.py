@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from Library.Logging.Log import LogAPI
 from Library.Scheduler.Workflow import WorkflowAPI
@@ -13,9 +13,9 @@ from Library.Scheduler.Scheduler import SchedulerAPI
 from Library.Database import QueryAPI
 from Library.Logging import LoggingAPI
 from Library.Utility.IO import read_text
-from Setup.Auth import setup_auth
-from Setup.Logging import setup_logging
-from Setup.Task import migrate, provision
+from Script.Setup.Auth import setup_auth
+from Script.Setup.Logging import setup_logging
+from Script.Task import migrate, provision
 
 def setup_notify(db):
     schema, channel = WorkflowAPI.Schema, SchedulerAPI.Channel

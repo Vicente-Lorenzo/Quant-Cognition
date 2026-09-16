@@ -1,10 +1,13 @@
 import os
+import sys
 import subprocess
 from pathlib import Path
 
-from Cache import ROOT, clean
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from Script.Environment.Cache import ROOT, clean
 from Library.Utility.Runtime import windowless
-from Setup.Environment import run_manager
+from Script.Environment.Update import run_manager
 
 ENVIRONMENTS = {"Quant": ROOT / "Quant.yml", "Future": ROOT / "Future.yml", "Exotics": ROOT / "Exotics.yml"}
 
