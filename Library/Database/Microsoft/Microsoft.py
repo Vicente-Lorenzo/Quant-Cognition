@@ -222,9 +222,7 @@ class MicrosoftDatabaseAPI(DatabaseAPI):
         for row in self._records_(frame):
             clause = f'FOREIGN KEY ({row["holders"]}) REFERENCES {target} ({row["targets"]})'
             clause += f' ON DELETE {row["deletion"].replace("_", " ")} ON UPDATE {row["updation"].replace("_", " ")}'
-            self.executeone(QueryAPI(f'ALTER TABLE {row["owner"]} DROP CONSTRAINT [{row["name"]}]'), database=database, admin=False)
-            self.executeone(QueryAPI(f'ALTER TABLE {row["owner"]} ADD CONSTRAINT [{row["name"]}] {clause}'), database=database, admin=False)
-            self._log_.alert(lambda r=row: f"Realign Operation: Repointed {r['name']} · To {table}")
+            self._repoint_(row["owner"], row["name"], clause, database, table)
         return self
 
     def _carry_(self, *,
@@ -245,22 +243,11 @@ class MicrosoftDatabaseAPI(DatabaseAPI):
                "FROM sys.dm_db_index_operational_stats(DB_ID(), OBJECT_ID(:fingerprint_object:), NULL, NULL)")
         db = self.executeone(QueryAPI(sql), database=database, admin=False, fingerprint_object=self._target_(schema, table))
         frame = db.fetchall(legacy=False)
-        records = frame.to_dicts() if hasattr(frame, "to_dicts") else frame.to_dict("records")
+        records = self._records_(frame)
         if records and records[0].get("token") is not None: return str(records[0]["token"])
         return None
 
     def _upsert_(self, target: str, columns: Sequence[str], keys: Sequence[str], exclude: Sequence[str] = (), returning: Sequence[str] = (), rows: int = 1) -> str:
-        ql, qr = self._quote_
-        n = QueryAPI.Named
-        source_cols = self._quoted_(*columns)
-        if rows == 1: source_vals = "(" + ", ".join(f"{n}{c}{n}" for c in columns) + ")"
-        else: source_vals = ", ".join("(" + ", ".join(f"{n}{c}_{i}{n}" for c in columns) + ")" for i in range(rows))
-        on_cond = " AND ".join(f"target.{ql}{k}{qr} = source.{ql}{k}{qr}" for k in keys)
-        updates = ", ".join(f"target.{ql}{c}{qr} = source.{ql}{c}{qr}" for c in columns if c not in keys and c not in exclude)
-        sql = f"MERGE INTO {target} AS target USING (VALUES {source_vals}) AS source({source_cols}) ON {on_cond}"
-        if updates: sql += f" WHEN MATCHED THEN UPDATE SET {updates}"
-        insert_vals = ", ".join(f"source.{ql}{c}{qr}" for c in columns)
-        sql += f" WHEN NOT MATCHED THEN INSERT ({source_cols}) VALUES ({insert_vals})"
-        if returning: sql += " OUTPUT " + ", ".join(f"inserted.{ql}{r}{qr}" for r in returning)
-        sql += ";"
-        return sql
+        sql = f"MERGE INTO {target} AS target USING (VALUES {self._values_(columns, rows)}) AS source({self._quoted_(*columns)}) ON {self._pairs_(keys, 'target.', 'source.', ' AND ')}{self._matched_(columns, keys, exclude)}"
+        if returning: sql += f" OUTPUT {self._quoted_(*returning, prefix='inserted.')}"
+        return f"{sql};"

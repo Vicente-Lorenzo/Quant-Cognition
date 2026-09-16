@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import time
 import atexit
 import queue
 import threading
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections.abc import Sequence
 from typing import Callable, Union, TYPE_CHECKING
 
+from Library.Utility.Datetime import utc_now
 from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
@@ -45,7 +47,7 @@ class BufferAPI(threading.Thread):
         self._queue_: dict = {t: queue.Queue(maxsize=maxsize) for t in self._types_}
         self._signal_: queue.Queue = queue.Queue()
         self._work_: queue.Queue = queue.Queue()
-        self._last_flush_: datetime = datetime.now()
+        self._last_flush_: float = time.monotonic()
 
         self._db_: Callable[[], DatabaseAPI] = db or (lambda: PostgresDatabaseAPI(database=DatapointAPI.Database))
 
@@ -68,7 +70,7 @@ class BufferAPI(threading.Thread):
         if total == 0: return True
         if self._full_: return True
         if 0 < self._batch_ <= total: return False
-        if self._interval_ > 0 and (datetime.now() - self._last_flush_) >= timedelta(seconds=self._interval_): return False
+        if self._interval_ > 0 and time.monotonic() - self._last_flush_ >= self._interval_: return False
         return True
 
     @property
@@ -93,7 +95,7 @@ class BufferAPI(threading.Thread):
             buffer.clear()
             pushed = True
         self._count_ = 0
-        self._last_flush_ = datetime.now()
+        self._last_flush_ = time.monotonic()
         if pushed: self._signal_.put(True)
 
     def shutdown(self) -> None:
@@ -121,9 +123,9 @@ class BufferAPI(threading.Thread):
 
     def _write_(self, db: DatabaseAPI, t: type[DatapointAPI], records: list) -> None:
         if not records: return
-        stamp = datetime.now()
+        stamp = utc_now()
         try:
-            timer = Timer(); timer.start()
+            timer = Timer().start()
             identity = records[0].identity_keys()
             key = records[0].natural_keys()
             structure = getattr(records[0], "Structure", None)

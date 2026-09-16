@@ -5,7 +5,7 @@ from collections.abc import Sequence
 
 from Library.Database.Dataframe import pl
 from Library.Database.Query import QueryAPI
-from Library.Database.Database import DatabaseAPI, IdentityKey, PrimaryKey, ForeignKey
+from Library.Database.Database import DatabaseAPI
 from Library.Utility.Typing import MISSING, Missing
 
 class OracleDatabaseAPI(DatabaseAPI):
@@ -16,6 +16,7 @@ class OracleDatabaseAPI(DatabaseAPI):
     _ADMIN_: str = "ORCL"
     _PARAMETER_TOKEN_: Callable[[int], str] = staticmethod(lambda i: f":{i}")
     _PARAMETER_LIMIT_: int = 32000
+    _CHECK_SEPARATOR_: str = "\nUNION ALL\n"
 
     _CHECK_DATATYPE_MAPPING_: dict = {
         pl.Binary: "BLOB",
@@ -210,12 +211,9 @@ class OracleDatabaseAPI(DatabaseAPI):
         frame = self.executeone(QueryAPI(sql), database=database, admin=False, realign_source=source).fetchall(legacy=False)
         target = self._target_(schema, table)
         for row in self._records_(frame):
-            owner = self._target_(row["holder_schema"], row["holder_table"])
             clause = f'FOREIGN KEY ({row["holders"]}) REFERENCES {target} ({row["targets"]})'
             if row["deletion"] and row["deletion"] != "NO ACTION": clause += f' ON DELETE {row["deletion"]}'
-            self.executeone(QueryAPI(f'ALTER TABLE {owner} DROP CONSTRAINT "{row["name"]}"'), database=database, admin=False)
-            self.executeone(QueryAPI(f'ALTER TABLE {owner} ADD CONSTRAINT "{row["name"]}" {clause}'), database=database, admin=False)
-            self._log_.alert(lambda r=row: f"Realign Operation: Repointed {r['name']} · To {table}")
+            self._repoint_(self._target_(row["holder_schema"], row["holder_table"]), row["name"], clause, database, table)
         return self
 
     def _ordinals_(self, *,
@@ -225,7 +223,7 @@ class OracleDatabaseAPI(DatabaseAPI):
         frame = self.executeone(QueryAPI("SELECT column_name FROM all_tab_columns WHERE owner = :order_schema: "
                                          "AND table_name = :order_table: ORDER BY column_id"),
                                 database=database, admin=False, order_schema=schema, order_table=table).fetchall(legacy=False)
-        return [next(iter(row.values())) for row in self._records_(frame)]
+        return self._column_(frame)
 
     def _carry_(self, *,
                 database: Union[str, None, Missing] = MISSING,
@@ -244,27 +242,10 @@ class OracleDatabaseAPI(DatabaseAPI):
                 f"EXECUTE IMMEDIATE '{insert}'; "
                 f"IF generated IS NOT NULL THEN EXECUTE IMMEDIATE {alter}ALWAYS AS IDENTITY)'; END IF; END;")
 
-    def _check_(self, structure: Union[dict, None] = None) -> str:
-        structure = structure if structure is not None else self._STRUCTURE_
-        values = []
-        for name, dtype in structure.items():
-            datatype = self._CHECK_DATATYPE_MAPPING_[self._normalize_(dtype)]
-            is_pk = int(isinstance(dtype, PrimaryKey) or (isinstance(dtype, (IdentityKey, ForeignKey)) and dtype.primary))
-            is_fk = int(isinstance(dtype, ForeignKey))
-            values.append(f"SELECT '{name}' AS column_name, '{datatype}' AS data_type, {is_pk} AS is_pk, {is_fk} AS is_fk FROM dual")
-        return "\nUNION ALL\n".join(values)
+    def _row_(self, name: str, datatype: str, is_pk: int, is_fk: int) -> str:
+        return f"SELECT '{name}' AS column_name, '{datatype}' AS data_type, {is_pk} AS is_pk, {is_fk} AS is_fk FROM dual"
 
     def _upsert_(self, target: str, columns: Sequence[str], keys: Sequence[str], exclude: Sequence[str] = (), returning: Sequence[str] = (), rows: int = 1) -> str:
         if returning: raise NotImplementedError("Oracle MERGE does not support RETURNING via this driver path")
-        ql, qr = self._quote_
-        n = QueryAPI.Named
-        if rows == 1: source = "SELECT " + ", ".join(f"{n}{c}{n} AS {ql}{c}{qr}" for c in columns) + " FROM dual"
-        else: source = " UNION ALL ".join("SELECT " + ", ".join(f"{n}{c}_{i}{n} AS {ql}{c}{qr}" for c in columns) + " FROM dual" for i in range(rows))
-        on_cond = " AND ".join(f"target.{ql}{k}{qr} = source.{ql}{k}{qr}" for k in keys)
-        updates = ", ".join(f"target.{ql}{c}{qr} = source.{ql}{c}{qr}" for c in columns if c not in keys and c not in exclude)
-        insert_cols = self._quoted_(*columns)
-        insert_vals = ", ".join(f"source.{ql}{c}{qr}" for c in columns)
-        sql = f"MERGE INTO {target} target USING ({source}) source ON ({on_cond})"
-        if updates: sql += f" WHEN MATCHED THEN UPDATE SET {updates}"
-        sql += f" WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({insert_vals})"
-        return sql
+        source = " UNION ALL ".join("SELECT " + ", ".join(f"{QueryAPI.named(self._binding_(column, None if rows == 1 else index))} AS {self._quoted_(column)}" for column in columns) + " FROM dual" for index in range(rows))
+        return f"MERGE INTO {target} target USING ({source}) source ON ({self._pairs_(keys, 'target.', 'source.', ' AND ')}){self._matched_(columns, keys, exclude)}"

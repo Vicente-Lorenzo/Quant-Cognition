@@ -5,7 +5,6 @@ from typing_extensions import Self
 from collections.abc import Sequence
 
 from Library.Database.Dataframe import pl
-from Library.Database.Query import QueryAPI
 from Library.Database.Database import DatabaseAPI
 from Library.Utility.Typing import MISSING, Missing
 
@@ -159,18 +158,13 @@ class PostgresDatabaseAPI(DatabaseAPI):
     def _limit_(self, sql: str, limit: int) -> str:
         return f"{sql} LIMIT {limit}"
 
+    def _conflict_(self, columns: Sequence[str], keys: Sequence[str], exclude: Sequence[str]) -> str:
+        updates = self._pairs_(self._updatable_(columns, keys, exclude), "", "EXCLUDED.")
+        return f"ON CONFLICT ({self._quoted_(*keys)}) {f'DO UPDATE SET {updates}' if updates else 'DO NOTHING'}"
+
     def _upsert_(self, target: str, columns: Sequence[str], keys: Sequence[str], exclude: Sequence[str] = (), returning: Sequence[str] = (), rows: int = 1) -> str:
-        ql, qr = self._quote_
-        n = QueryAPI.Named
-        cols_str = self._quoted_(*columns)
-        if rows == 1: vals_str = "(" + ", ".join(f"{n}{c}{n}" for c in columns) + ")"
-        else: vals_str = ", ".join("(" + ", ".join(f"{n}{c}_{i}{n}" for c in columns) + ")" for i in range(rows))
-        key_str = self._quoted_(*keys)
-        updates = ", ".join(f"{ql}{c}{qr} = EXCLUDED.{ql}{c}{qr}" for c in columns if c not in keys and c not in exclude)
-        sql = f"INSERT INTO {target} ({cols_str}) VALUES {vals_str} ON CONFLICT ({key_str})"
-        sql += f" DO UPDATE SET {updates}" if updates else " DO NOTHING"
-        if returning: sql += f" RETURNING {self._quoted_(*returning)}"
-        return sql
+        sql = f"INSERT INTO {target} ({self._quoted_(*columns)}) VALUES {self._values_(columns, rows)} {self._conflict_(columns, keys, exclude)}"
+        return f"{sql} RETURNING {self._quoted_(*returning)}" if returning else sql
 
     @staticmethod
     def _csvframe_(data: Any, columns: Union[Sequence[str], None]) -> pl.DataFrame:
@@ -193,7 +187,7 @@ class PostgresDatabaseAPI(DatabaseAPI):
         routed = self._route_("copy", database, schema, table, data=data, columns=columns)
         if isinstance(routed, list): return self
         database, schema, table = routed
-        if not database or not schema or not table: raise ValueError("Database, Schema and Table must be provided to copy rows")
+        self._require_(database, schema, table, "copy rows")
         frame = self._csvframe_(data, columns)
         if frame.is_empty(): return self
         self._copy_(self._target_(schema, table), frame)
@@ -214,22 +208,18 @@ class PostgresDatabaseAPI(DatabaseAPI):
         routed = self._route_("merge", database, schema, table, data=data, key=key, exclude=exclude)
         if isinstance(routed, list): return self
         database, schema, table = routed
-        if not database or not schema or not table: raise ValueError("Database, Schema and Table must be provided to merge rows")
+        self._require_(database, schema, table, "merge rows")
         frame = self._csvframe_(data, None)
         if frame.is_empty(): return self
         target = self._target_(schema, table)
         columns = list(frame.columns)
         keys = [key] if isinstance(key, str) else list(key)
-        ql, qr = self._quote_
         cols = self._quoted_(*columns)
-        key_str = self._quoted_(*keys)
-        updates = ", ".join(f"{ql}{c}{qr} = EXCLUDED.{ql}{c}{qr}" for c in columns if c not in keys and c not in (exclude or ()))
-        conflict = f"DO UPDATE SET {updates}" if updates else "DO NOTHING"
-        stage = f"{ql}_merge_{table}{qr}"
+        stage = self._quoted_(f"_merge_{table}")
         with self._connection_.transaction():
             self._cursor_.execute(f"CREATE TEMP TABLE {stage} (LIKE {target} INCLUDING DEFAULTS) ON COMMIT DROP")
             self._copy_(stage, frame)
-            self._cursor_.execute(f"INSERT INTO {target} ({cols}) SELECT {cols} FROM {stage} ON CONFLICT ({key_str}) {conflict}")
+            self._cursor_.execute(f"INSERT INTO {target} ({cols}) SELECT {cols} FROM {stage} {self._conflict_(columns, keys, exclude or ())}")
         self._log_.alert(lambda: f"Merge Operation: Merged {frame.height} rows in {table} Table")
         return self
 
@@ -239,7 +229,7 @@ class PostgresDatabaseAPI(DatabaseAPI):
         :param channel: The notification channel name.
         :return: True when the subscription is active.
         """
-        self._connection_.execute(f'LISTEN "{channel}"')
+        self._connection_.execute(f"LISTEN {self._quoted_(channel)}")
         return True
 
     def notify(self, *, channel: str) -> bool:
@@ -248,7 +238,7 @@ class PostgresDatabaseAPI(DatabaseAPI):
         :param channel: The notification channel name.
         :return: True when the notification was published.
         """
-        self._connection_.execute(f'NOTIFY "{channel}"')
+        self._connection_.execute(f"NOTIFY {self._quoted_(channel)}")
         return True
 
     def wait(self, *, timeout: float) -> bool:
@@ -276,10 +266,7 @@ class PostgresDatabaseAPI(DatabaseAPI):
             parameters={"realign_source": f"%{source}%"}
         )
         for row in self._records_(frame):
-            definition = row["definition"].replace(f'"{source}"', f'"{table}"')
-            self.executeone(QueryAPI(f'ALTER TABLE {row["owner"]} DROP CONSTRAINT "{row["name"]}"'), database=database, admin=False)
-            self.executeone(QueryAPI(f'ALTER TABLE {row["owner"]} ADD CONSTRAINT "{row["name"]}" {definition}'), database=database, admin=False)
-            self._log_.alert(lambda r=row: f"Realign Operation: Repointed {r['name']} · To {table}")
+            self._repoint_(row["owner"], row["name"], row["definition"].replace(self._quoted_(source), self._quoted_(table)), database, table)
         return self
 
     def _carry_(self, *,
@@ -302,6 +289,5 @@ class PostgresDatabaseAPI(DatabaseAPI):
             condition='schemaname = :fingerprint_schema: AND relname = :fingerprint_table:',
             parameters={"fingerprint_schema": schema, "fingerprint_table": table}
         )
-        records = self._records_(frame)
-        if records: return str(next(iter(records[0].values())))
-        return None
+        token = self._scalar_(frame)
+        return None if token is None else str(token)
