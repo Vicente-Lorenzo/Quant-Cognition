@@ -844,7 +844,7 @@ Note that `Library/Research`, this module, is distinct from the top-level `Resea
   68k points each. Thin to about 2k points a series, roughly 4 MB, before shipping to a browser; over
   8 MB wedges the Dash dev server. **Decimation must use one shared time grid** or cross-pane crosshair
   lookups break.
-- `net.csv` is 85 metric rows by 6 value columns with the label column `Statistical Metrics`, and
+- `net.csv` is 90 metric rows (85 until 2026-09-17) by 6 value columns with the label column `Statistical Metrics`, and
   historical files drift — `Annualised` against `Annualized`. **Key by normalised label, never by row
   index.**
 - Cancel and finish race: the Runner must reload before writing terminal state.
@@ -855,7 +855,7 @@ Note that `Library/Research`, this module, is distinct from the top-level `Resea
   archiving anything.
 
 **Reading list, in order:** `Library/System/System.py` for `_report_`, `_export_`, `_plot_`, `_curves_`,
-`_bars_` and `deploy`; `Library/Portfolio/Portfolio.py` for `EquityTrack`, `EquityCurve` and
+`_bars_` and `deploy`; `Library/Portfolio/Portfolio.py` for `EquityCurve` (a `CurveAPI`, whose `Track` is the stamped series) and
 `_record_equity_`; `Library/Strategy/Strategy.py` for `_emit_`, `Recording` and `Signals`;
 `Library/Scheduler/Run.py` with `Manager.py` and `Executor.py`; `Script/Setup/Scheduler.py` with
 `Script/Install.py`; `Library/App/V2/Lightweight/Lightweight.py` for the consumer contract.
@@ -1555,8 +1555,8 @@ Once 2.8 is verified end to end.
 - ~~`net.csv`'s "Net Return (%)" compounded per-trade log returns (38.29 % on the DDPG golden against an
   account return of 34.02 %)~~ **Fixed 2026-09-17** — it is Σ NetPnL / opening balance, so Buy + Sell = Total
   and Winning + Losing = Net; the golden now reads 34.0155 %. `FitnessType.AnnualizedReturn`, the default
-  `--fitness`, therefore ranks by account CAGR. The five offline goldens' stored `net.csv` still carry the
-  old return rows (the file is outside the byte gate).
+  `--fitness`, therefore ranks by account CAGR. The stored `net.csv` of the five offline goldens and the
+  DDPG golden were regenerated on 2026-09-17 under the per-column curve definitions (`RULES.md`).
 - Multi-tab `Open` depends on the browser, not the code. Browsers permit one popup per gesture. The button
   opens the first in place, attempts the rest, and reports how many were blocked. No code-only fix.
 

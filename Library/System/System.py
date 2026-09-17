@@ -114,6 +114,7 @@ from Library.Utility.Memory import memory_to_string
 from Library.Utility.Path import inspect_destination
 from Library.Utility.Service import ServiceAPI
 from Library.Utility.Profiler import Timer
+from Library.Utility.Typing import MISSING
 
 if TYPE_CHECKING:
     from Library.Engine import MachineAPI
@@ -216,6 +217,7 @@ class SystemAPI(ServiceAPI, ABC):
         self.market = MarketAPI()
         self.indicator = IndicatorAPI(technical=self._parameters_.TechnicalManagement, fundamental=self._parameters_.FundamentalManagement, sentimental=self._parameters_.SentimentalManagement)
         self.portfolio = PortfolioAPI()
+        self.portfolio.RiskFree = self._risk_free_
 
     def _connect_(self) -> None:
         if self.indicator is not None:
@@ -315,7 +317,7 @@ class SystemAPI(ServiceAPI, ABC):
 
     @staticmethod
     def _curves_(portfolio: PortfolioAPI, trades: pl.DataFrame) -> tuple[list, list]:
-        equity = portfolio.EquityTrack
+        equity = portfolio.EquityCurve.Track
         balance = []
         exit_stamp, exit_balance = str(TradeAPI.ID.ExitTimestamp), str(TradeAPI.ID.ExitBalance)
         if not trades.is_empty() and exit_stamp in trades.columns and exit_balance in trades.columns:
@@ -397,8 +399,8 @@ class SystemAPI(ServiceAPI, ABC):
             signals=self.strategy.Signals if self.strategy is not None else [],
             trades=self._markers_(trades, bars),
             benchmarks=benchmarks,
-            directional=(self.strategy.DirectionalEntryThreshold, self.strategy.DirectionalExitThreshold) if self.strategy is not None else None,
-            volumetric=(self.strategy.VolumeEntryThreshold, self.strategy.VolumeExitThreshold) if self.strategy is not None else None,
+            directional=(self.strategy.DirectionalEntryThreshold, self.strategy.DirectionalExitThreshold) if self.strategy is not None else MISSING,
+            volumetric=(self.strategy.VolumeEntryThreshold, self.strategy.VolumeExitThreshold) if self.strategy is not None else MISSING,
             sheets=tables)
         workspace = self._workspace_(workspace)
         self._result_(workspace)
@@ -433,14 +435,14 @@ class SystemAPI(ServiceAPI, ABC):
 
     def _report_(self, portfolio: PortfolioAPI, account: Union[AccountAPI, None], start, stop) -> None:
         if portfolio is None: return
-        net = generate_net_report(portfolio.Positions, portfolio.Trades, account, start, stop, portfolio.EquityCurve, portfolio.Excursions, risk_free=self._risk_free_)
+        net = generate_net_report(portfolio.Positions, portfolio.Trades, account, start, stop, (portfolio.BuyEquityCurve, portfolio.SellEquityCurve, portfolio.EquityCurve))
         self.statistics = net
         bars, benchmarks = [], {}
         try:
             bars = self._bars_()
             benchmarks = self._benchmarks_(start, stop, bars)
         except Exception as error: self._log_.error(lambda error=error: f"Benchmark Operation: Failed · {error}")
-        self.benchmarks = generate_benchmark_report(portfolio.EquityTrack, benchmarks, start, stop, risk_free=self._risk_free_) if self._benchmarking_ else None
+        self.benchmarks = generate_benchmark_report(portfolio.EquityCurve.Track, benchmarks, start, stop, risk_free=self._risk_free_) if self._benchmarking_ else None
         if not (self._reporting_ or self._exporting_ or self._plotting_): return
         trades = trade_view(portfolio.Trades)
         tables = {

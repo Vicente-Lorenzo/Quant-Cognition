@@ -387,7 +387,7 @@ class BacktestingAPI(SystemAPI):
         self._journal_.append(fields)
 
     def _tracked_(self) -> list:
-        return self.portfolio.EquityTrack if getattr(self.portfolio, "EquityTrack", None) else []
+        return self.portfolio.EquityCurve.Track if self.portfolio is not None else []
 
     def _stitch_(self, fold: int, label: str, window: tuple, score, equity: Union[list, None] = None,
                  training: Union[float, None] = None, settings: Union[dict, None] = None) -> None:

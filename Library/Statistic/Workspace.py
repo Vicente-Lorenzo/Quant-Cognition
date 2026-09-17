@@ -8,6 +8,7 @@ from typing_extensions import Self
 from Library.Statistic.Metric import align_series
 from Library.Utility.Enumeration import EnumerationAPI
 from Library.Utility.Datetime import datetime_to_timestamp
+from Library.Utility.Typing import MISSING
 
 class SeriesType(EnumerationAPI):
 
@@ -86,15 +87,15 @@ class PointAPI:
         return list(zip(spine, align_series(spine, series)))
 
     @staticmethod
-    def rebase(series: list, anchor=None, base: float = 100.0) -> list:
+    def rebase(series: list, anchor=MISSING, base: float = 100.0) -> list:
         def before(stamp) -> bool:
-            if anchor is None: return False
+            if anchor is MISSING or anchor is None: return False
             return stamp < anchor if isinstance(anchor, datetime) else stamp.date() < anchor
         origin = next((value for stamp, value in series if value and not before(stamp)), None)
         return [(stamp, base * value / origin if origin and value and not before(stamp) else None) for stamp, value in series]
 
     @staticmethod
-    def bound(points: list, lines: list = None):
+    def bound(points: list, lines: list = MISSING):
         extremes = [abs(point["value"]) for point in points if point.get("value") is not None]
         extremes += [abs(line.price if isinstance(line, LineAPI) else line["price"]) for line in lines or ()]
         return max(extremes) or None if extremes else None

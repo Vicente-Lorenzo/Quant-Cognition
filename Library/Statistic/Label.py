@@ -98,10 +98,15 @@ MEANEQUITYRUNUPPERC = "Mean Equity Runup (%)"
 MAXHOLDINGTIME = "Max Holding Time (Days)"
 AVERAGEHOLDINGTIME = "Avg Holding Time (Days)"
 MINHOLDINGTIME = "Min Holding Time (Days)"
-SHARPERATIO = "Sharpe Ratio Annualized"
-SORTINORATIO = "Sortino Ratio Annualized"
-CALMARRATIO = "Calmar Ratio Annualized"
-STERLINGRATIO = "Sterling Ratio Annualized"
+RISKFREERATEPERC = "Risk-free Rate (%)"
+SHARPERATIO = "Sharpe Ratio"
+SHARPERATIOANN = "Sharpe Ratio Annualized"
+SORTINORATIO = "Sortino Ratio"
+SORTINORATIOANN = "Sortino Ratio Annualized"
+CALMARRATIO = "Calmar Ratio"
+CALMARRATIOANN = "Calmar Ratio Annualized"
+STERLINGRATIO = "Sterling Ratio"
+STERLINGRATIOANN = "Sterling Ratio Annualized"
 BENCHMARK_LABEL = "Benchmark"
 BENCHMARK_TOTALRETURN = "Total Return (%)"
 BENCHMARK_ANNUALIZEDRETURN = "Return Annualized (%)"
@@ -218,10 +223,15 @@ __all__ = [
     "MAXHOLDINGTIME",
     "AVERAGEHOLDINGTIME",
     "MINHOLDINGTIME",
+    "RISKFREERATEPERC",
     "SHARPERATIO",
+    "SHARPERATIOANN",
     "SORTINORATIO",
+    "SORTINORATIOANN",
     "CALMARRATIO",
+    "CALMARRATIOANN",
     "STERLINGRATIO",
+    "STERLINGRATIOANN",
     "BENCHMARK_LABEL",
     "BENCHMARK_TOTALRETURN",
     "BENCHMARK_ANNUALIZEDRETURN",

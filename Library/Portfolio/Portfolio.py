@@ -10,6 +10,7 @@ from Library.Database.Query import QueryAPI
 from Library.Market.Price import Direction, PriceAPI
 from Library.Market.Tick import TickAPI
 from Library.Portfolio.PnL import PnLAPI
+from Library.Statistic.Curve import CurveAPI
 from Library.Statistic.Metric import (
     calculate_annualized_log_return,
     calculate_annualized_return,
@@ -21,6 +22,7 @@ from Library.Statistic.Metric import (
     calculate_pnl_difference,
     calculate_pnl_return
 )
+from Library.Utility.Typing import MISSING
 
 if TYPE_CHECKING:
     from Library.Database.Database import DatabaseAPI
@@ -44,22 +46,15 @@ class PortfolioAPI(DatapointAPI):
     _trades_: list[TradeAPI] = field(default_factory=list, init=False)
 
     _initial_balance_: Union[float, None] = field(default=None, init=False)
+    _buy_realized_: float = field(default=0.0, init=False)
+    _sell_realized_: float = field(default=0.0, init=False)
     _equity_peak_: Union[float, None] = field(default=None, init=False)
     _equity_trough_: Union[float, None] = field(default=None, init=False)
-    _equity_curve_: list = field(default_factory=list, init=False)
     _equity_stamp_: Union[datetime, None] = field(default=None, init=False)
-    _excursion_peak_: Union[float, None] = field(default=None, init=False)
-    _excursion_trough_: Union[float, None] = field(default=None, init=False)
-    _max_drawdown_: float = field(default=0.0, init=False)
-    _max_drawdown_value_: float = field(default=0.0, init=False)
-    _max_runup_: float = field(default=0.0, init=False)
-    _max_runup_value_: float = field(default=0.0, init=False)
-    _drawdown_sum_: float = field(default=0.0, init=False)
-    _drawdown_value_sum_: float = field(default=0.0, init=False)
-    _runup_sum_: float = field(default=0.0, init=False)
-    _runup_value_sum_: float = field(default=0.0, init=False)
-    _excursion_count_: int = field(default=0, init=False)
     _excursion_stamp_: Union[datetime, None] = field(default=None, init=False)
+    _equity_curve_: CurveAPI = field(default_factory=CurveAPI, init=False)
+    _buy_equity_curve_: CurveAPI = field(default_factory=CurveAPI, init=False)
+    _sell_equity_curve_: CurveAPI = field(default_factory=CurveAPI, init=False)
     _last_conversion_: float = field(default=1.0, init=False)
 
     def __post_init__(self,
@@ -102,7 +97,7 @@ class PortfolioAPI(DatapointAPI):
         from Library.Portfolio.Trade import TradeAPI
         db.upsert(schema=TradeAPI.Schema, table=TradeAPI.Table, data=data, key=["UID"])
 
-    def init_data(self, account: AccountAPI, orders: list[OrderAPI] = None, positions: list[PositionAPI] = None, trades: list[TradeAPI] = None) -> None:
+    def init_data(self, account: AccountAPI, orders: list[OrderAPI] = MISSING, positions: list[PositionAPI] = MISSING, trades: list[TradeAPI] = MISSING) -> None:
         self._account_ = account
         if orders:
             for o in orders: self._orders_[o.UID] = o
@@ -110,37 +105,26 @@ class PortfolioAPI(DatapointAPI):
             for p in positions: self._positions_[p.UID] = p
         if trades:
             self._trades_.extend(trades)
+            for trade in trades: self._realize_(trade)
         self._initial_balance_ = account.Balance if account and account.Balance is not None else 0.0
         self._equity_peak_ = self.Equity
         self._equity_trough_ = self.Equity
 
-    def _track_equity_(self) -> None:
-        equity = self.Equity
+    def _realize_(self, trade: TradeAPI) -> None:
+        net = trade.NetPnL.PnL if trade.NetPnL and trade.NetPnL.PnL is not None else 0.0
+        if trade.IsLong: self._buy_realized_ += net
+        elif trade.IsShort: self._sell_realized_ += net
+
+    def _track_equity_(self, equity: float) -> None:
         if self._equity_peak_ is None or equity > self._equity_peak_: self._equity_peak_ = equity
         if self._equity_trough_ is None or equity < self._equity_trough_: self._equity_trough_ = equity
 
-    def _record_equity_(self) -> None:
+    def _record_equity_(self, equity: float) -> None:
         if self._equity_stamp_ is None: return
-        equity = self.Equity
-        if self._equity_curve_ and self._equity_curve_[-1][0] == self._equity_stamp_: self._equity_curve_[-1] = (self._equity_stamp_, equity)
-        else: self._equity_curve_.append((self._equity_stamp_, equity))
-
-    def _accumulate_excursion_(self, equity: float) -> None:
-        if self._excursion_peak_ is None or equity > self._excursion_peak_: self._excursion_peak_ = equity
-        if self._excursion_trough_ is None or equity < self._excursion_trough_: self._excursion_trough_ = equity
-        drawdown_value = self._excursion_peak_ - equity
-        runup_value = equity - self._excursion_trough_
-        drawdown = drawdown_value / self._excursion_peak_ if self._excursion_peak_ else 0.0
-        runup = runup_value / self._excursion_trough_ if self._excursion_trough_ else 0.0
-        if drawdown > self._max_drawdown_: self._max_drawdown_ = drawdown
-        if drawdown_value > self._max_drawdown_value_: self._max_drawdown_value_ = drawdown_value
-        if runup > self._max_runup_: self._max_runup_ = runup
-        if runup_value > self._max_runup_value_: self._max_runup_value_ = runup_value
-        self._drawdown_sum_ += drawdown
-        self._drawdown_value_sum_ += drawdown_value
-        self._runup_sum_ += runup
-        self._runup_value_sum_ += runup_value
-        self._excursion_count_ += 1
+        origin = self._initial_balance_ or 0.0
+        self._equity_curve_.record(self._equity_stamp_, equity)
+        self._buy_equity_curve_.record(self._equity_stamp_, origin + self._buy_realized_ + self.BuyUnrealizedPnL)
+        self._sell_equity_curve_.record(self._equity_stamp_, origin + self._sell_realized_ + self.SellUnrealizedPnL)
 
     @staticmethod
     def _conversion_(ask: Union[PriceAPI, None], bid: Union[PriceAPI, None]) -> float:
@@ -164,63 +148,86 @@ class PortfolioAPI(DatapointAPI):
             conversion = self._conversion_(data.CloseTick.AskQuoteConversion, data.CloseTick.BidQuoteConversion)
         self._last_conversion_ = conversion
         high_pnl = low_pnl = 0.0
+        buy_pnl = buy_high_pnl = buy_low_pnl = 0.0
+        sell_pnl = sell_high_pnl = sell_low_pnl = 0.0
+        balance = self._account_.Balance if self._account_ else None
         for pos in self._positions_.values():
-            if pos.NetPnL is None or pos.EntryPrice is None: continue
-            current_price = bid if pos.IsLong else ask
-            best_price = high_bid if pos.IsLong else low_ask
-            worst_price = low_bid if pos.IsLong else high_ask
-            entry_price = pos.EntryPrice.Price
-            comm = pos.CommissionPnL.PnL if pos.CommissionPnL else 0.0
-            swap = pos.SwapPnL.PnL if pos.SwapPnL else 0.0
-            pnl_diff = calculate_pnl_difference(current_price, entry_price, pos.IsLong)
-            if pos.GrossPnL: pos.GrossPnL.PnL = calculate_gross_pnl(pnl_diff, pos.Volume, conversion)
-            pos.NetPnL.PnL = calculate_net_pnl(pos.GrossPnL.PnL if pos.GrossPnL else 0.0, comm, swap)
-            if pos.EntryTimestamp:
-                duration_sec = (timestamp - pos.EntryTimestamp.DateTime).total_seconds()
-                pos.NetPnL.Duration = duration_sec if duration_sec > 0 else None
-            if self._account_ and self._account_.Balance: pos.NetPnL.Reference = self._account_.Balance
-            ref_balance = pos.NetPnL.Reference
-            duration = pos.NetPnL.Duration
-            contract = pos.Security.Contract if pos.Security else None
-            best_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(best_price, entry_price, pos.IsLong), pos.Volume, conversion), comm, swap)
-            worst_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(worst_price, entry_price, pos.IsLong), pos.Volume, conversion), comm, swap)
-            high_pnl += best_pnl if pos.IsLong else worst_pnl
-            low_pnl += worst_pnl if pos.IsLong else best_pnl
-            if pos._max_equity_drawdown_price_ is None:
-                pos._max_equity_drawdown_price_ = PriceAPI(Price=worst_price, Reference=entry_price, Contract=contract)
-            elif (pos.IsLong and worst_price < pos._max_equity_drawdown_price_.Price) or (pos.IsShort and worst_price > pos._max_equity_drawdown_price_.Price):
-                pos._max_equity_drawdown_price_.Price = worst_price
-            if pos._max_equity_runup_price_ is None:
-                pos._max_equity_runup_price_ = PriceAPI(Price=best_price, Reference=entry_price, Contract=contract)
-            elif (pos.IsLong and best_price > pos._max_equity_runup_price_.Price) or (pos.IsShort and best_price < pos._max_equity_runup_price_.Price):
-                pos._max_equity_runup_price_.Price = best_price
-            if pos._max_equity_drawdown_pnl_ is None:
+            net, entry = pos.NetPnL, pos.EntryPrice
+            if net is None or entry is None: continue
+            is_long, is_short = pos.IsLong, pos.IsShort
+            gross, commission, swapped, opened, volume = pos.GrossPnL, pos.CommissionPnL, pos.SwapPnL, pos.EntryTimestamp, pos.Volume
+            current_price = bid if is_long else ask
+            best_price = high_bid if is_long else low_ask
+            worst_price = low_bid if is_long else high_ask
+            entry_price = entry.Price
+            comm = commission.PnL if commission else 0.0
+            swap = swapped.PnL if swapped else 0.0
+            pnl_diff = calculate_pnl_difference(current_price, entry_price, is_long)
+            if gross: gross.PnL = calculate_gross_pnl(pnl_diff, volume, conversion)
+            net.PnL = calculate_net_pnl(gross.PnL if gross else 0.0, comm, swap)
+            if opened:
+                duration_sec = (timestamp - opened.DateTime).total_seconds()
+                net.Duration = duration_sec if duration_sec > 0 else None
+            if balance: net.Reference = balance
+            ref_balance, duration = net.Reference, net.Duration
+            best_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(best_price, entry_price, is_long), volume, conversion), comm, swap)
+            worst_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(worst_price, entry_price, is_long), volume, conversion), comm, swap)
+            if is_long:
+                high_pnl += best_pnl
+                low_pnl += worst_pnl
+                buy_pnl += net.PnL
+                buy_high_pnl += best_pnl
+                buy_low_pnl += worst_pnl
+            else:
+                high_pnl += worst_pnl
+                low_pnl += best_pnl
+                if is_short:
+                    sell_pnl += net.PnL
+                    sell_high_pnl += worst_pnl
+                    sell_low_pnl += best_pnl
+            drawdown_price, runup_price = pos._max_equity_drawdown_price_, pos._max_equity_runup_price_
+            if drawdown_price is None:
+                pos._max_equity_drawdown_price_ = PriceAPI(Price=worst_price, Reference=entry_price, Contract=pos.Security.Contract if pos.Security else None)
+            elif (is_long and worst_price < drawdown_price.Price) or (is_short and worst_price > drawdown_price.Price):
+                drawdown_price.Price = worst_price
+            if runup_price is None:
+                pos._max_equity_runup_price_ = PriceAPI(Price=best_price, Reference=entry_price, Contract=pos.Security.Contract if pos.Security else None)
+            elif (is_long and best_price > runup_price.Price) or (is_short and best_price < runup_price.Price):
+                runup_price.Price = best_price
+            drawdown_pnl, runup_pnl = pos._max_equity_drawdown_pnl_, pos._max_equity_runup_pnl_
+            if drawdown_pnl is None:
                 pos._max_equity_drawdown_pnl_ = PnLAPI(PnL=worst_pnl, Reference=ref_balance, Duration=duration)
-            elif worst_pnl < pos._max_equity_drawdown_pnl_.PnL:
-                pos._max_equity_drawdown_pnl_.PnL = worst_pnl
-                pos._max_equity_drawdown_pnl_.Reference = ref_balance
-                pos._max_equity_drawdown_pnl_.Duration = duration
-            if pos._max_equity_runup_pnl_ is None:
+            elif worst_pnl < drawdown_pnl.PnL:
+                drawdown_pnl.PnL = worst_pnl
+                drawdown_pnl.Reference = ref_balance
+                drawdown_pnl.Duration = duration
+            if runup_pnl is None:
                 pos._max_equity_runup_pnl_ = PnLAPI(PnL=best_pnl, Reference=ref_balance, Duration=duration)
-            elif best_pnl > pos._max_equity_runup_pnl_.PnL:
-                pos._max_equity_runup_pnl_.PnL = best_pnl
-                pos._max_equity_runup_pnl_.Reference = ref_balance
-                pos._max_equity_runup_pnl_.Duration = duration
-        self._track_equity_()
-        if not isinstance(data, TickAPI):
-            self._equity_stamp_ = timestamp
-            self._record_equity_()
-            if timestamp != self._excursion_stamp_:
-                self._excursion_stamp_ = timestamp
-                base = self._account_.Balance if (self._account_ and self._account_.Balance is not None) else 0.0
-                high, low = data.HighTick, data.LowTick
-                if high is not None and low is not None and high.Timestamp is not None and low.Timestamp is not None and high.Timestamp.DateTime <= low.Timestamp.DateTime:
-                    first, second = base + high_pnl, base + low_pnl
-                else:
-                    first, second = base + low_pnl, base + high_pnl
-                self._accumulate_excursion_(first)
-                self._accumulate_excursion_(second)
-                self._accumulate_excursion_(self.Equity)
+            elif best_pnl > runup_pnl.PnL:
+                runup_pnl.PnL = best_pnl
+                runup_pnl.Reference = ref_balance
+                runup_pnl.Duration = duration
+        equity = self.Equity
+        self._track_equity_(equity)
+        if isinstance(data, TickAPI): return
+        self._equity_stamp_ = timestamp
+        origin = self._initial_balance_ or 0.0
+        buy_base, sell_base = origin + self._buy_realized_, origin + self._sell_realized_
+        self._equity_curve_.record(timestamp, equity)
+        self._buy_equity_curve_.record(timestamp, buy_base + buy_pnl)
+        self._sell_equity_curve_.record(timestamp, sell_base + sell_pnl)
+        if timestamp == self._excursion_stamp_: return
+        self._excursion_stamp_ = timestamp
+        base = self._account_.Balance if (self._account_ and self._account_.Balance is not None) else 0.0
+        high, low = data.HighTick, data.LowTick
+        if high is not None and low is not None and high.Timestamp is not None and low.Timestamp is not None and high.Timestamp.DateTime <= low.Timestamp.DateTime:
+            self._equity_curve_.observe(base + high_pnl, base + low_pnl, equity)
+            self._buy_equity_curve_.observe(buy_base + buy_high_pnl, buy_base + buy_low_pnl, buy_base + buy_pnl)
+            self._sell_equity_curve_.observe(sell_base + sell_high_pnl, sell_base + sell_low_pnl, sell_base + sell_pnl)
+        else:
+            self._equity_curve_.observe(base + low_pnl, base + high_pnl, equity)
+            self._buy_equity_curve_.observe(buy_base + buy_low_pnl, buy_base + buy_high_pnl, buy_base + buy_pnl)
+            self._sell_equity_curve_.observe(sell_base + sell_low_pnl, sell_base + sell_high_pnl, sell_base + sell_pnl)
 
     def open_order(self, order: OrderAPI) -> None:
         self._orders_[order.UID] = order
@@ -338,13 +345,17 @@ class PortfolioAPI(DatapointAPI):
             else:
                 del self._positions_[position_uid]
         self._trades_.append(trade)
-        self._track_equity_()
-        self._record_equity_()
+        self._realize_(trade)
+        equity = self.Equity
+        self._track_equity_(equity)
+        self._record_equity_(equity)
 
-    def calculate_statistics(self, start: datetime, stop: datetime) -> pl.DataFrame:
+    def calculate_statistics(self, start: datetime = MISSING, stop: datetime = MISSING) -> pl.DataFrame:
         from Library.Portfolio.Statistic import generate_net_report
         if not self._account_: return pl.DataFrame()
-        return generate_net_report(self.Positions, self.Trades, self._account_, start, stop, self.EquityCurve, self.Excursions)
+        start = start or self._equity_curve_.Start
+        stop = stop or self._equity_curve_.Stop
+        return generate_net_report(self.Positions, self.Trades, self._account_, start, stop, (self._buy_equity_curve_, self._sell_equity_curve_, self._equity_curve_))
 
     @property
     def Account(self) -> Union[AccountAPI, None]:
@@ -398,12 +409,46 @@ class PortfolioAPI(DatapointAPI):
         return [t for t in self._trades_ if t.IsShort]
 
     @property
+    def RiskFree(self) -> float:
+        return self._equity_curve_.RiskFree
+
+    @RiskFree.setter
+    def RiskFree(self, risk_free: float) -> None:
+        self._equity_curve_.RiskFree = risk_free
+        self._buy_equity_curve_.RiskFree = risk_free
+        self._sell_equity_curve_.RiskFree = risk_free
+
+    @property
+    def BuyRealizedPnL(self) -> float:
+        return self._buy_realized_
+
+    @property
+    def SellRealizedPnL(self) -> float:
+        return self._sell_realized_
+
+    @property
     def RealizedPnL(self) -> float:
-        return sum((t.NetPnL.PnL or 0.0) for t in self._trades_ if t.NetPnL)
+        return self._buy_realized_ + self._sell_realized_
+
+    @property
+    def BuyUnrealizedPnL(self) -> float:
+        return sum((p.NetPnL.PnL or 0.0) for p in self._positions_.values() if p.NetPnL and p.IsLong)
+
+    @property
+    def SellUnrealizedPnL(self) -> float:
+        return sum((p.NetPnL.PnL or 0.0) for p in self._positions_.values() if p.NetPnL and p.IsShort)
 
     @property
     def UnrealizedPnL(self) -> float:
         return sum((p.NetPnL.PnL or 0.0) for p in self._positions_.values() if p.NetPnL)
+
+    @property
+    def BuyNetPnL(self) -> float:
+        return self._buy_realized_ + self.BuyUnrealizedPnL
+
+    @property
+    def SellNetPnL(self) -> float:
+        return self._sell_realized_ + self.SellUnrealizedPnL
 
     @property
     def NetPnL(self) -> float:
@@ -435,38 +480,16 @@ class PortfolioAPI(DatapointAPI):
         return self.Equity / self._equity_trough_ - 1.0 if self._equity_trough_ else 0.0
 
     @property
-    def EquityCurve(self) -> list:
-        return [equity for _, equity in self._equity_curve_]
+    def BuyEquityCurve(self) -> CurveAPI:
+        return self._buy_equity_curve_
 
     @property
-    def EquityTrack(self) -> list:
-        return list(self._equity_curve_)
+    def SellEquityCurve(self) -> CurveAPI:
+        return self._sell_equity_curve_
 
     @property
-    def MaxDrawdown(self) -> float:
-        return self._max_drawdown_
-
-    @property
-    def MeanDrawdown(self) -> float:
-        return self._drawdown_sum_ / self._excursion_count_ if self._excursion_count_ else 0.0
-
-    @property
-    def MaxRunup(self) -> float:
-        return self._max_runup_
-
-    @property
-    def MeanRunup(self) -> float:
-        return self._runup_sum_ / self._excursion_count_ if self._excursion_count_ else 0.0
-
-    @property
-    def Excursions(self) -> dict:
-        count = self._excursion_count_ or 1
-        return {
-            "max_drawdown": self._max_drawdown_, "mean_drawdown": self.MeanDrawdown,
-            "max_runup": self._max_runup_, "mean_runup": self.MeanRunup,
-            "max_drawdown_value": self._max_drawdown_value_, "mean_drawdown_value": self._drawdown_value_sum_ / count,
-            "max_runup_value": self._max_runup_value_, "mean_runup_value": self._runup_value_sum_ / count
-        }
+    def EquityCurve(self) -> CurveAPI:
+        return self._equity_curve_
 
     @property
     def Direction(self) -> Direction:
@@ -474,8 +497,7 @@ class PortfolioAPI(DatapointAPI):
 
     @property
     def Return(self) -> Union[float, None]:
-        if not self._account_ or not self._account_.Balance: return None
-        return calculate_pnl_return(self.NetPnL, self._account_.Balance)
+        return calculate_pnl_return(self.NetPnL, self._initial_balance_)
 
     @property
     def LogReturn(self) -> Union[float, None]:
@@ -489,29 +511,15 @@ class PortfolioAPI(DatapointAPI):
     def LogPercentage(self) -> Union[float, None]:
         return calculate_log_percentage(self.LogReturn)
 
-    def _first_entry_(self) -> Union[datetime, None]:
-        timestamps = [p.EntryTimestamp.DateTime for p in self._positions_.values() if p.EntryTimestamp]
-        timestamps.extend(t.EntryTimestamp.DateTime for t in self._trades_ if t.EntryTimestamp)
-        return min(timestamps) if timestamps else None
-
-    def _duration_(self) -> Union[float, None]:
-        first, last = self._first_entry_(), self._equity_stamp_
-        if not first or last is None: return None
-        return (last - first).total_seconds()
-
     @property
     def AnnualizedReturn(self) -> Union[float, None]:
         ret = self.Return
-        if ret is None: return None
-        duration = self._duration_()
-        return calculate_annualized_return(ret, duration) if duration is not None else None
+        return calculate_annualized_return(ret, self._equity_curve_.Duration) if ret is not None else None
 
     @property
     def AnnualizedLogReturn(self) -> Union[float, None]:
         log_ret = self.LogReturn
-        if log_ret is None: return None
-        duration = self._duration_()
-        return calculate_annualized_log_return(log_ret, duration) if duration is not None else None
+        return calculate_annualized_log_return(log_ret, self._equity_curve_.Duration) if log_ret is not None else None
 
     @property
     def AnnualizedPercentage(self) -> Union[float, None]:

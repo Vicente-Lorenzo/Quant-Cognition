@@ -324,6 +324,28 @@ def test_portfolio_aggregate_realized_unrealized_net(env):
     assert pf.NetPnL == pytest.approx(pf.RealizedPnL + pf.UnrealizedPnL)
     assert unrealized_open != 0
 
+def test_side_equity_curves_decompose_the_account_curve(env):
+    pf = env["portfolio"]
+    pf.Account = env["account"]
+    pf._initial_balance_ = env["account"].Balance
+    buy = make_position(env, uid=1001, direction=Direction.Buy, entry=1.0500)
+    sell = make_position(env, uid=1002, direction=Direction.Sell, entry=1.0600)
+    pf.open_position(0, buy)
+    pf.open_position(0, sell)
+    pf.update_data(make_bar(env, ENTRY_DT + timedelta(hours=1), 1.0510, 1.0508, 1.0580, 1.0578, 1.0490, 1.0488, 1.0550, 1.0548))
+    pf.update_data(make_bar(env, ENTRY_DT + timedelta(hours=2), 1.0550, 1.0548, 1.0620, 1.0618, 1.0530, 1.0528, 1.0600, 1.0598))
+    pf.close_position(buy.UID, None, make_trade(env, uid=2001, direction=Direction.Buy, exit_price=1.0598, net=978.0))
+    pf.update_data(make_bar(env, ENTRY_DT + timedelta(hours=3), 1.0600, 1.0598, 1.0650, 1.0648, 1.0560, 1.0558, 1.0570, 1.0568))
+    origin = pf.InitialBalance
+    total, long, short = pf.EquityCurve.Values, pf.BuyEquityCurve.Values, pf.SellEquityCurve.Values
+    assert len(total) == len(long) == len(short) == 3
+    assert all(abs(first + second - origin - value) < 1e-9 for first, second, value in zip(long, short, total))
+    points = zip(pf.BuyEquityCurve._points_, pf.SellEquityCurve._points_, pf.EquityCurve._points_)
+    assert all(abs(first + second - origin - value) < 1e-9 for first, second, value in points)
+    assert pf.BuyRealizedPnL == 978.0 and pf.SellRealizedPnL == 0.0
+    assert pf.SellEquityCurve.MaxDrawdownValue > 0.0 and pf.BuyEquityCurve.MaxRunupValue > 0.0
+    assert pf.EquityCurve.MaxDrawdownValue <= pf.SellEquityCurve.MaxDrawdownValue + pf.BuyEquityCurve.MaxDrawdownValue
+
 def test_position_annualized_metrics_via_netpnl(env):
     pf = env["portfolio"]
     pos = make_position(env, direction=Direction.Buy, entry=1.0500)

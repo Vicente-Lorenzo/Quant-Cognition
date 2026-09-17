@@ -21,7 +21,7 @@
 > **`Online/*/net.csv` predates the 2026-09-11 `generate_net_report` fix** and still carries the four
 > defects recorded below — aggregation disabled, holding time collapsed, the wrong drawdown denominator.
 > Regenerating it needs a cTrader session, and `net.csv` is outside the gate, so the files stand as the
-> evidence that found the defects rather than as corrected output. `Offline/*/net.csv` is post-fix for those defects, but its return rows (Net · Winning · Losing Return and their annualized and ratio rows) predate the 2026-09-17 redefinition of "Net Return (%)" as Σ NetPnL / opening balance — regenerate before quoting them. No number below depends on those rows.
+> evidence that found the defects rather than as corrected output. `Offline/*/net.csv` is post-fix, and was regenerated on 2026-09-17 for the redefinition of "Net Return (%)" as Σ NetPnL / opening balance (13 return and ratio rows changed; the four byte-gated exports replayed identically), and again the same day when every equity row moved onto per-column curves (Buy and Sell equity drawdown, volatility and ratios; the per-bar ratios and `Risk-free Rate (%)` rows added, 90 rows in all). No number below depends on those rows.
 
 The five runs defined in `PLAN.md` §0.1, their artifacts, and the measured residual against cTrader.
 This file exists so the runs never have to be repeated. Each folder holds `Run.json`,

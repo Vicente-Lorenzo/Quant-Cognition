@@ -9,6 +9,7 @@ from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Query import QueryAPI
 from Library.Market.Price import PriceMode
 from Library.Market.Series import SeriesAPI
+from Library.Utility.Typing import MISSING
 
 if TYPE_CHECKING:
     from Library.Database.Database import DatabaseAPI
@@ -58,7 +59,7 @@ class MarketAPI(DatapointAPI):
             self.Ticks.init_data(self._data_)
 
     @staticmethod
-    def pull_ticks(db: DatabaseAPI, security: int, start: datetime, stop: datetime, columns: Union[list[str], None] = None) -> pl.DataFrame:
+    def pull_ticks(db: DatabaseAPI, security: int, start: datetime, stop: datetime, columns: list[str] = MISSING) -> pl.DataFrame:
         from Library.Market.Tick import TickAPI
         lo, hi = TickAPI.encode(security, start), TickAPI.encode(security, stop)
         projection = ", ".join(f'"{column}"' for column in columns) if columns else "*"
@@ -92,7 +93,7 @@ class MarketAPI(DatapointAPI):
         db.upsert(schema=TickAPI.Schema, table=TickAPI.Table, data=data, key=[str(TickAPI.ID.UID)])
 
     @staticmethod
-    def pull_bars(db: DatabaseAPI, security: int, timeframe: str, start: Union[datetime, None] = None, stop: Union[datetime, None] = None, limit: Union[int, None] = None) -> pl.DataFrame:
+    def pull_bars(db: DatabaseAPI, security: int, timeframe: str, start: Union[datetime, None] = None, stop: Union[datetime, None] = None, limit: int = MISSING) -> pl.DataFrame:
         from Library.Market.Bar import BarAPI
         from Library.Market.Tick import TickAPI
         select = f'''
@@ -111,7 +112,7 @@ class MarketAPI(DatapointAPI):
         LEFT JOIN "{TickAPI.Schema}"."{TickAPI.Table}" l ON b."{BarAPI.ID.LowTick}"   = l."{TickAPI.ID.UID}"
         LEFT JOIN "{TickAPI.Schema}"."{TickAPI.Table}" c ON b."{BarAPI.ID.CloseTick}" = c."{TickAPI.ID.UID}"
         '''
-        if limit is not None:
+        if limit is not MISSING:
             sql = select + f'''
         WHERE b."{BarAPI.ID.Security}" = :security: AND b."{BarAPI.ID.Timeframe}" = :timeframe:
           AND b."{BarAPI.ID.Timestamp}" < :stop:
@@ -136,11 +137,11 @@ class MarketAPI(DatapointAPI):
         if self._data_ is None: return pl.DataFrame()
         return self._data_
 
-    def head(self, n: Union[int, None] = None) -> pl.DataFrame:
-        return self.dataframe().head(n)
+    def head(self, n: int = MISSING) -> pl.DataFrame:
+        return self.dataframe().head(n) if n is not MISSING else self.dataframe()
 
-    def tail(self, n: Union[int, None] = None) -> pl.DataFrame:
-        return self.dataframe().tail(n)
+    def tail(self, n: int = MISSING) -> pl.DataFrame:
+        return self.dataframe().tail(n) if n is not MISSING else self.dataframe()
 
     def last(self, shift: int = 0) -> pl.DataFrame:
         return self.dataframe()[-(self._offset_ + shift)]

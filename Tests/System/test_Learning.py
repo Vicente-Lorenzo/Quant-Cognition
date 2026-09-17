@@ -6,10 +6,11 @@ from types import SimpleNamespace
 
 from Library.Database.Dataframe import pl
 from Library.Model.Split import SplitAPI
+from Library.Statistic.Curve import CurveAPI
 from Library.Strategy.Hybrid.DDPG import DDPGStrategyAPI
 from Library.Utility.Parameter import Parameter
 from Library.Statistic.Label import (
-    CALMARRATIO,
+    CALMARRATIOANN,
     NETRETURNANNPERC,
     NET_BUY_AGGREGATED,
     NET_SELL_AGGREGATED,
@@ -79,7 +80,7 @@ class _Harness_(LearningAPI):
         exposure = getattr(self, "_exposure_script_", None)
         longs, shorts = exposure.pop(0) if exposure and not training else (1000000.0, 1000000.0)
         self.strategy = SimpleNamespace(_agent_=agent, save=lambda: _persist_(agent), load=agent.load, _observation_=SimpleNamespace(shape=lambda: 23), _sizing_mode_=SimpleNamespace(name="Percentage"), _risk_percentage_=1.0, _atr_scale_=1.5, DirectionalEntryThreshold=Threshold(-0.4, 0.4), DirectionalExitThreshold=Threshold(-0.1, 0.1), _long_bars_=longs, _short_bars_=shorts)
-        self.portfolio = SimpleNamespace(Equity=10000.0, InitialBalance=10000.0)
+        self.portfolio = SimpleNamespace(Equity=10000.0, InitialBalance=10000.0, EquityCurve=CurveAPI())
         return self._script_.pop(0) if self._script_ else 0.0
 
     def _trades_(self):
@@ -252,7 +253,7 @@ def test_manifest_records_configuration(tmp_path):
     assert manifest["Episodes"] == 2 and manifest["Epochs"] == 3 and manifest["Training"] == 24
     assert manifest["TrainFrequency"] == 2 and manifest["GradientSteps"] == 3
     assert manifest["Validation"] == 0 and manifest["Testing"] == 0 and manifest["Seeds"] == 1
-    assert manifest["Fitness"] == CALMARRATIO and manifest["Best"] == 0.05 and len(manifest["Results"]) == 1
+    assert manifest["Fitness"] == CALMARRATIOANN and manifest["Best"] == 0.05 and len(manifest["Results"]) == 1
     assert manifest["RiskPercentage"] == 1.0 and manifest["ATRScale"] == 1.5
     assert manifest["DirectionalEntryThreshold"] == [-0.4, 0.4] and manifest["DirectionalExitThreshold"] == [-0.1, 0.1]
 
@@ -299,7 +300,7 @@ def test_restores_training_flag(tmp_path):
 def test_fitness_reads_metric_then_falls_back(tmp_path):
     _reset_(tmp_path)
     harness = _make_(episodes=1)
-    harness.portfolio = SimpleNamespace(Equity=10500.0, InitialBalance=10000.0)
+    harness.portfolio = SimpleNamespace(Equity=10500.0, InitialBalance=10000.0, EquityCurve=CurveAPI())
     harness.statistics = pl.DataFrame({STATISTICS_METRICS_LABEL: [NETRETURNANNPERC], NET_TOTAL_AGGREGATED: [0.07]})
     assert abs(harness._fitness_() - 0.07) < 1e-9
     harness.statistics = None
@@ -367,7 +368,7 @@ def test_balance_floor_requires_both_directions(tmp_path):
 def test_metric_reads_buy_and_sell_columns(tmp_path):
     _reset_(tmp_path)
     harness = _make_(episodes=1)
-    harness.portfolio = SimpleNamespace(Equity=10000.0, InitialBalance=10000.0)
+    harness.portfolio = SimpleNamespace(Equity=10000.0, InitialBalance=10000.0, EquityCurve=CurveAPI())
     harness.statistics = pl.DataFrame({STATISTICS_METRICS_LABEL: [TOTALTRADESVALUE], NET_BUY_AGGREGATED: [7.0], NET_SELL_AGGREGATED: [5.0], NET_TOTAL_AGGREGATED: [12.0]})
     assert harness._metric_(TOTALTRADESVALUE, NET_BUY_AGGREGATED) == 7.0
     assert harness._metric_(TOTALTRADESVALUE, NET_SELL_AGGREGATED) == 5.0

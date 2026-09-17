@@ -12,14 +12,14 @@ from typing import Union, TYPE_CHECKING
 from Library.Database.Dataframe import np, pl
 from Library.Market.Bar import BarAPI
 from Library.Statistic.Label import (
-    CALMARRATIO,
+    CALMARRATIOANN,
     MAXEQUITYDRAWDOWNPERC,
     NETRETURNANNPERC,
     NETRETURNPERC,
     NET_BUY_AGGREGATED,
     NET_SELL_AGGREGATED,
-    SHARPERATIO,
-    SORTINORATIO,
+    SHARPERATIOANN,
+    SORTINORATIOANN,
     TOTALTRADESVALUE
 )
 from Library.Strategy.Hybrid.DDPG import DDPGStrategyAPI
@@ -308,9 +308,9 @@ class LearningAPI(BacktestingAPI):
             "NetReturn": self._net_return_(),
             "AccountReturn": self._account_return_() * 100.0 if self.portfolio is not None and self.portfolio.InitialBalance else None,
             "AnnualizedReturn": self._metric_(NETRETURNANNPERC),
-            "Sharpe": self._metric_(SHARPERATIO),
-            "Sortino": self._metric_(SORTINORATIO),
-            "Calmar": self._metric_(CALMARRATIO),
+            "Sharpe": self._metric_(SHARPERATIOANN),
+            "Sortino": self._metric_(SORTINORATIOANN),
+            "Calmar": self._metric_(CALMARRATIOANN),
             "MaxDrawdown": self._metric_(MAXEQUITYDRAWDOWNPERC),
             "Trades": self._metric_(TOTALTRADESVALUE),
             "BuyTrades": self._metric_(TOTALTRADESVALUE, NET_BUY_AGGREGATED),

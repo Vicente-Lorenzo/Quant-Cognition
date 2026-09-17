@@ -1,16 +1,16 @@
 from statistics import fmean, median
 from typing import Any, Callable, Union
 
-from Library.Statistic.Label import CALMARRATIO, NETRETURNANNPERC, SHARPERATIO, SORTINORATIO, STERLINGRATIO
+from Library.Statistic.Label import CALMARRATIOANN, NETRETURNANNPERC, SHARPERATIOANN, SORTINORATIOANN, STERLINGRATIOANN
 from Library.Utility.Enumeration import EnumerationAPI
 
 class FitnessType(EnumerationAPI):
 
     AnnualizedReturn = NETRETURNANNPERC
-    SharpeRatio = SHARPERATIO
-    SortinoRatio = SORTINORATIO
-    CalmarRatio = CALMARRATIO
-    SterlingRatio = STERLINGRATIO
+    SharpeRatio = SHARPERATIOANN
+    SortinoRatio = SORTINORATIOANN
+    CalmarRatio = CALMARRATIOANN
+    SterlingRatio = STERLINGRATIOANN
     AccountReturn = "Account Return"
 
 class SelectionMode(EnumerationAPI):

@@ -180,3 +180,10 @@ def test_market_update_data():
     market.update_data(tick)
 
     assert market.Ticks.Ask.last() == 1.2
+
+def test_head_and_tail_without_a_count_return_every_row():
+    market = MarketAPI()
+    market.init_data(pl.DataFrame({"Timestamp": [datetime(2020, 1, 1), datetime(2020, 1, 2)], "Bid": [1.0, 1.1]}))
+    assert market.head().height == 2 and market.tail().height == 2
+    assert market.head(1)["Bid"].to_list() == [1.0] and market.tail(1)["Bid"].to_list() == [1.1]
+    assert market.Ticks.Bid.tail().to_list() == [1.0, 1.1]

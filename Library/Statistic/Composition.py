@@ -8,15 +8,15 @@ from Library.Statistic.Label import (
     BENCHMARK_BETA,
     BENCHMARK_CORRELATION,
     BENCHMARK_INFORMATIONRATIO,
-    CALMARRATIO,
+    CALMARRATIOANN,
     MAXEQUITYDRAWDOWNPERC,
     NETRETURNANNPERC,
     NETRETURNPERC,
     NETVOLATILITYANNPERC,
     NET_TOTAL_INDIVIDUAL,
     PROFITFACTOR,
-    SHARPERATIO,
-    SORTINORATIO,
+    SHARPERATIOANN,
+    SORTINORATIOANN,
     TOTALTRADESVALUE,
     WINNINGRATEPERC
 )
@@ -48,6 +48,7 @@ from Library.Statistic.Workspace import (
     SpanAPI,
     WorkspaceAPI
 )
+from Library.Utility.Typing import MISSING
 
 def excursion(bars: list, trades: list) -> list:
     if not bars or not trades: return []
@@ -75,9 +76,9 @@ _COMPARED_ = (
     NETRETURNPERC,
     NETRETURNANNPERC,
     NETVOLATILITYANNPERC,
-    SHARPERATIO,
-    SORTINORATIO,
-    CALMARRATIO,
+    SHARPERATIOANN,
+    SORTINORATIOANN,
+    CALMARRATIOANN,
     MAXEQUITYDRAWDOWNPERC,
     PROFITFACTOR,
     TOTALTRADESVALUE,
@@ -94,7 +95,7 @@ _BENCHMARKED_ = (
 
 _TINTS_ = ("equity", "benchmark0", "benchmark1", "benchmark2", "benchmark3", "balance", "long", "short")
 
-def walkforward(folds: list, elected: list = None) -> tuple[list, list]:
+def walkforward(folds: list, elected: list = MISSING) -> tuple[list, list]:
     curve, marks = stitch(folds)
     if not curve: return [], []
     series = [SeriesAPI(key="rolling", name="Rolling Refit", color="equity", width=2, data=PointAPI.line(curve))]
@@ -287,7 +288,7 @@ def compare(entries: list, title: str = "Run Comparison") -> WorkspaceAPI:
     sheets = [SheetAPI.frame(name="Metrics", columns=["Metric", *labels], rows=rows, key="Metric")]
     return WorkspaceAPI(title=title, panes=panes, sheets=sheets)
 
-def searchspace(*, workspace: WorkspaceAPI, journal: list, folds: list, elected: list = None) -> WorkspaceAPI:
+def searchspace(*, workspace: WorkspaceAPI, journal: list, folds: list, elected: list = MISSING) -> WorkspaceAPI:
     walked, folded = walkforward(folds or [], elected)
     panes, sheets = analysis(journal or [], folds or [])
     timed = [pane for pane in (*walked, *panes, *workspace.panes) if pane.scale == "time"]
@@ -297,9 +298,9 @@ def searchspace(*, workspace: WorkspaceAPI, journal: list, folds: list, elected:
     if walked: workspace.headline = "walkforward"
     return workspace
 
-def backtest(*, title: str, description: str = None, currency: str = "", anchor=None,
+def backtest(*, title: str, description: str = None, currency: str = "", anchor=MISSING,
              bars: list, equity: list, balance: list, signals=(), trades=(),
-             benchmarks: dict = None, directional=None, volumetric=None, sheets: dict = None,
+             benchmarks: dict = MISSING, directional: tuple = MISSING, volumetric: tuple = MISSING, sheets: dict = MISSING,
              markers: bool = False, dealmap: bool = True, deals: int = 400, rows: int = 500) -> WorkspaceAPI:
     spine = [bar[0] for bar in bars]
     spans = {str(uid): SpanAPI(direction=direction, entry=entry, exit=exit, entryPrice=entry_price, exitPrice=exit_price, net=net)
@@ -400,7 +401,7 @@ def backtest(*, title: str, description: str = None, currency: str = "", anchor=
 
     sharpes, volatilities = rolling(equity)
     if sharpes:
-        trailing = [SeriesAPI(key="rsharpe", name="Rolling Sharpe", color="equity", width=2, data=PointAPI.line(PointAPI.conform(sharpes, spine))),
+        trailing = [SeriesAPI(key="rsharpe", name="Rolling Sharpe Ratio", color="equity", width=2, data=PointAPI.line(PointAPI.conform(sharpes, spine))),
                     SeriesAPI(key="rvol", name="Rolling Volatility (%)", color="band", width=2, axis=AxisType.Left,
                               data=PointAPI.line(PointAPI.conform(volatilities, spine)))]
         for index, (name, series) in enumerate((benchmarks or {}).items()):
@@ -408,7 +409,7 @@ def backtest(*, title: str, description: str = None, currency: str = "", anchor=
             if not betas: continue
             trailing.append(SeriesAPI(key=f"rbeta{index}", name=f"Rolling Beta vs {name}", color=f"benchmark{index % 4}", width=2,
                                       axis=AxisType.Left, data=PointAPI.line(PointAPI.conform(betas, spine))))
-        panes.append(PaneAPI(id="rolling", title="Rolling Sharpe · Volatility · Beta (63 bar window)", flex=15, format=FormatType.Value, datum=0.0, series=trailing))
+        panes.append(PaneAPI(id="rolling", title="Rolling Sharpe Ratio · Volatility · Beta (63 bar window)", flex=15, format=FormatType.Value, datum=0.0, series=trailing))
 
     spread = distribution(equity)
     if spread:

@@ -26,10 +26,10 @@ def test_equity_includes_unrealized():
 def test_peak_holds_and_trough_tracks_drawdown():
     portfolio = _portfolio_(10000.0)
     portfolio._positions_[1] = _position_(500.0)
-    portfolio._track_equity_()
+    portfolio._track_equity_(portfolio.Equity)
     assert portfolio.EquityPeak == 10500.0
     portfolio._positions_[1] = _position_(-300.0)
-    portfolio._track_equity_()
+    portfolio._track_equity_(portfolio.Equity)
     assert portfolio.EquityPeak == 10500.0
     assert portfolio.EquityTrough == 9700.0
     assert abs(portfolio.EquityDrawdown - (9700.0 / 10500.0 - 1.0)) < 1e-12
@@ -38,38 +38,59 @@ def test_peak_holds_and_trough_tracks_drawdown():
 def test_runup_measures_recovery_from_trough():
     portfolio = _portfolio_(10000.0)
     portfolio._positions_[1] = _position_(-400.0)
-    portfolio._track_equity_()
+    portfolio._track_equity_(portfolio.Equity)
     assert portfolio.EquityTrough == 9600.0
     portfolio._positions_[1] = _position_(200.0)
-    portfolio._track_equity_()
+    portfolio._track_equity_(portfolio.Equity)
     assert abs(portfolio.EquityRunup - (10200.0 / 9600.0 - 1.0)) < 1e-12
     assert abs(portfolio.EquityDrawdown - (10200.0 / 10200.0 - 1.0)) < 1e-12
 
 def test_equity_curve_appends_one_point_per_bar_timestamp():
     portfolio = _portfolio_(10000.0)
     portfolio._equity_stamp_ = datetime(2021, 1, 1)
-    portfolio._record_equity_()
+    portfolio._record_equity_(portfolio.Equity)
     portfolio._equity_stamp_ = datetime(2021, 1, 2)
     portfolio._positions_[1] = _position_(50.0)
-    portfolio._record_equity_()
-    assert portfolio.EquityCurve == [10000.0, 10050.0]
+    portfolio._positions_[2] = _position_(-20.0, long=False)
+    portfolio._record_equity_(portfolio.Equity)
+    assert portfolio.EquityCurve.Values == [10000.0, 10030.0]
+    assert portfolio.BuyEquityCurve.Values == [10000.0, 10050.0]
+    assert portfolio.SellEquityCurve.Values == [10000.0, 9980.0]
 
 def test_equity_curve_restamps_realized_pnl_on_close():
     portfolio = _portfolio_(10000.0)
     portfolio._equity_stamp_ = datetime(2021, 1, 1)
     portfolio._positions_[1] = _position_(100.0)
-    portfolio._record_equity_()
-    assert portfolio.EquityCurve == [10100.0]
+    portfolio._record_equity_(portfolio.Equity)
+    assert portfolio.EquityCurve.Values == [10100.0]
     del portfolio._positions_[1]
     portfolio._account_.Balance += 60.0
-    portfolio._record_equity_()
-    assert portfolio.EquityCurve == [10060.0]
+    portfolio._realize_(SimpleNamespace(IsLong=True, IsShort=False, NetPnL=SimpleNamespace(PnL=60.0)))
+    portfolio._record_equity_(portfolio.Equity)
+    assert portfolio.EquityCurve.Values == [10060.0]
+    assert portfolio.BuyEquityCurve.Values == [10060.0] and portfolio.BuyRealizedPnL == 60.0
 
-def test_excursion_accumulates_drawdown_and_runup():
+def test_account_return_is_measured_on_the_opening_balance():
     portfolio = _portfolio_(10000.0)
-    for equity in (10000.0, 10200.0, 9900.0, 10100.0):
-        portfolio._accumulate_excursion_(equity)
-    assert abs(portfolio.MaxDrawdown - 300.0 / 10200.0) < 1e-12
-    assert abs(portfolio.MeanDrawdown - (300.0 / 10200.0 + 100.0 / 10200.0) / 4.0) < 1e-12
-    assert abs(portfolio.MaxRunup - 200.0 / 9900.0) < 1e-12
-    assert abs(portfolio.MeanRunup - (200.0 / 10000.0 + 200.0 / 9900.0) / 4.0) < 1e-12
+    portfolio._account_.Balance += 500.0
+    portfolio._realize_(SimpleNamespace(IsLong=False, IsShort=True, NetPnL=SimpleNamespace(PnL=500.0)))
+    portfolio._positions_[1] = _position_(500.0)
+    assert abs(portfolio.Return - 0.10) < 1e-12
+    assert portfolio.SellNetPnL == 500.0 and portfolio.BuyNetPnL == 500.0 and portfolio.NetPnL == 1000.0
+
+def test_risk_free_reaches_every_curve():
+    portfolio = _portfolio_(10000.0)
+    portfolio.RiskFree = 0.02
+    assert portfolio.EquityCurve.RiskFree == portfolio.BuyEquityCurve.RiskFree == portfolio.SellEquityCurve.RiskFree == 0.02
+
+def test_statistics_default_to_the_recorded_window():
+    portfolio = _portfolio_(10000.0)
+    portfolio._equity_stamp_ = datetime(2021, 1, 1)
+    portfolio._record_equity_(portfolio.Equity)
+    portfolio._equity_stamp_ = datetime(2022, 1, 1)
+    portfolio._account_.Balance += 1000.0
+    portfolio._realize_(SimpleNamespace(IsLong=True, IsShort=False, NetPnL=SimpleNamespace(PnL=1000.0)))
+    portfolio._record_equity_(portfolio.Equity)
+    report = portfolio.calculate_statistics()
+    assert report.height == 90
+    assert abs(portfolio.AnnualizedReturn - 0.10) < 1e-12 and abs(portfolio.EquityCurve.AnnualizedReturn - 0.10) < 1e-12

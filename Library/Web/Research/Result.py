@@ -20,7 +20,7 @@ from Library.Statistic import (
     BENCHMARK_LABEL,
     BENCHMARK_TRACKINGERROR,
     BENCHMARK_UPSIDECAPTURE,
-    CALMARRATIO,
+    CALMARRATIOANN,
     COMMISSIONSPNLVALUE,
     DOWNSIDEVOLATILITYANNPERC,
     EXPECTEDTRADE,
@@ -43,9 +43,9 @@ from Library.Statistic import (
     NET_TOTAL_INDIVIDUAL,
     PROFITFACTOR,
     RISKTOREWARDRATIO,
-    SHARPERATIO,
-    SORTINORATIO,
-    STERLINGRATIO,
+    SHARPERATIOANN,
+    SORTINORATIOANN,
+    STERLINGRATIOANN,
     SWAPSPNLVALUE,
     TOTALTRADESVALUE,
     UPSIDEVOLATILITYANNPERC,
@@ -290,8 +290,8 @@ class ResultPageAPI(ResultBaseAPI, RefreshAPI):
                               (MEANEQUITYDRAWDOWNPERC, "Mean DD (%)"),
                               (MAXBALANCERUNUPPERC, "Balance Runup (%)"), (MAXEQUITYRUNUPPERC, "Equity Runup (%)"),
                               (MEANEQUITYRUNUPPERC, "Mean Runup (%)"))),
-        ("Ratios", ((SHARPERATIO, "Sharpe"), (SORTINORATIO, "Sortino"),
-                    (CALMARRATIO, "Calmar"), (STERLINGRATIO, "Sterling"),
+        ("Ratios", ((SHARPERATIOANN, SHARPERATIOANN), (SORTINORATIOANN, SORTINORATIOANN),
+                    (CALMARRATIOANN, CALMARRATIOANN), (STERLINGRATIOANN, STERLINGRATIOANN),
                     (PROFITFACTOR, PROFITFACTOR), (RISKTOREWARDRATIO, "Risk / Reward"))),
         (BENCHMARK_LABEL, ((BENCHMARK_ALPHA, "Alpha (%)"), (BENCHMARK_BETA, BENCHMARK_BETA),
                        (BENCHMARK_ALPHASIGNIFICANCE, "Alpha t-Stat"), (BENCHMARK_INFORMATIONRATIO, BENCHMARK_INFORMATIONRATIO),
@@ -300,7 +300,7 @@ class ResultPageAPI(ResultBaseAPI, RefreshAPI):
     )
     _SIGNED_ = frozenset({
         NETRETURNPERC, "Annualized (%)", "Gross P/L", "Net P/L", "Expectancy",
-        "Sharpe", "Sortino", "Calmar", "Sterling",
+        SHARPERATIOANN, SORTINORATIOANN, CALMARRATIOANN, STERLINGRATIOANN,
         "Alpha (%)", "Alpha t-Stat", BENCHMARK_INFORMATIONRATIO,
     })
     _NUMBER_ = re.compile(r"-?\d[\d,]*(?:\.\d+)?")

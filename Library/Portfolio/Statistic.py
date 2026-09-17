@@ -9,25 +9,20 @@ from Library.Market.Price import Direction
 from Library.Portfolio.Order import OrderAPI
 from Library.Portfolio.Position import PositionAPI
 from Library.Portfolio.Trade import TradeAPI
+from Library.Statistic.Curve import CurveAPI
 from Library.Statistic.Label import *
 from Library.Statistic.Metric import (
     align_series,
     calculate_annualized_return,
     calculate_annualized_volatility,
     calculate_average,
-    calculate_calmar,
     calculate_duration_seconds,
     calculate_expected,
     calculate_profit_factor,
     calculate_rate_perc,
     calculate_risk_to_reward,
-    calculate_sharpe,
-    calculate_sortino,
-    calculate_sterling,
     calculate_years,
     daily_series,
-    equity_curve_ratios,
-    equity_excursion,
     relative_metrics,
     standalone_metrics
 )
@@ -121,10 +116,15 @@ Metrics = [
     MAXHOLDINGTIME,
     AVERAGEHOLDINGTIME,
     MINHOLDINGTIME,
+    RISKFREERATEPERC,
     SHARPERATIO,
+    SHARPERATIOANN,
     SORTINORATIO,
+    SORTINORATIOANN,
     CALMARRATIO,
-    STERLINGRATIO
+    CALMARRATIOANN,
+    STERLINGRATIO,
+    STERLINGRATIOANN
 ]
 
 OrderView = {
@@ -217,17 +217,6 @@ DealView = {
     str(TradeAPI.ID.NetPnL): pl.Float64()
 }
 
-_EQUITY_ZERO_ = {
-    MAXEQUITYDRAWDOWNVALUE: 0.0,
-    MAXEQUITYDRAWDOWNPERC: 0.0,
-    MEANEQUITYDRAWDOWNVALUE: 0.0,
-    MEANEQUITYDRAWDOWNPERC: 0.0,
-    MAXEQUITYRUNUPVALUE: 0.0,
-    MAXEQUITYRUNUPPERC: 0.0,
-    MEANEQUITYRUNUPVALUE: 0.0,
-    MEANEQUITYRUNUPPERC: 0.0
-}
-
 if TYPE_CHECKING:
     from Library.Portfolio.Account import AccountAPI
 
@@ -251,6 +240,12 @@ def sort_items(df: pl.DataFrame) -> pl.DataFrame:
     entry_ts = str(PositionAPI.ID.EntryTimestamp)
     if df.is_empty() or entry_ts not in df.columns: return df
     return df.sort(by=entry_ts, descending=False)
+
+def realize_items(df: pl.DataFrame) -> pl.DataFrame:
+    exit_ts = str(TradeAPI.ID.ExitTimestamp)
+    entry_ts = str(PositionAPI.ID.EntryTimestamp)
+    if df.is_empty() or exit_ts not in df.columns or entry_ts not in df.columns: return sort_items(df)
+    return df.sort(by=[exit_ts, entry_ts], nulls_last=True, maintain_order=True)
 
 def aggregate_items(df: pl.DataFrame) -> pl.DataFrame:
     position = str(TradeAPI.ID.Position)
@@ -294,7 +289,7 @@ def aggregate_items(df: pl.DataFrame) -> pl.DataFrame:
             pl.col(str(TradeAPI.ID.ExitPrice)).last(),
             _take_(str(TradeAPI.ID.ExitBalance), lambda x: x.last()),
         ])
-    return df.group_by(position).agg(agg_exprs)
+    return df.group_by(position, maintain_order=True).agg(agg_exprs)
 
 def aggregate_trades(df: pl.DataFrame) -> pl.DataFrame:
     return sort_items(aggregate_items(df))
@@ -328,13 +323,10 @@ def calculate_return(initial_balance: float, df: pl.DataFrame) -> tuple[float, f
     tot_ret_pct = calculate_sum(df, net_pnl) / initial_balance * 100.0
     return calculate_average(tot_ret_pct, calculate_total(df)), tot_ret_pct
 
-def calculate_volatility(df: pl.DataFrame, upside: bool = False, downside: bool = False) -> float:
+def calculate_volatility(df: pl.DataFrame) -> float:
     log_ret = str(PositionAPI.ID.LogReturn)
     if df.is_empty() or log_ret not in df.columns: return 0.0
-    series = df[log_ret].cast(pl.Float64)
-    if downside: dev_log = math.sqrt(((series.clip(upper_bound=0.0)) ** 2).mean() or 0.0)
-    elif upside: dev_log = math.sqrt(((series.clip(lower_bound=0.0)) ** 2).mean() or 0.0)
-    else: dev_log = series.std() or 0.0
+    dev_log = df[log_ret].cast(pl.Float64).std() or 0.0
     return math.sqrt(math.exp(dev_log ** 2) - 1.0) * 100.0 if dev_log else 0.0
 
 def calculate_excursion(initial_balance: float, df: pl.DataFrame, drawdown: bool) -> tuple[float, float, float, float]:
@@ -366,7 +358,7 @@ def calculate_holding_times(df: pl.DataFrame, stop: date) -> tuple[float, float,
     def _days_(value) -> float: return float(value) / 86400.0 if value is not None else 0.0
     return _days_(seconds.max()), _days_(seconds.mean()), _days_(seconds.min())
 
-def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.DataFrame, risk_free: float = 0.0) -> dict:
+def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.DataFrame) -> dict:
     points = str(PositionAPI.ID.Points)
     pips = str(PositionAPI.ID.Pips)
     net_pnl = str(PositionAPI.ID.NetPnL)
@@ -409,10 +401,6 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
     exp_loss_ret_pct, loss_ret_pct = calculate_return(initial_balance, loss_df)
     loss_vol_pct = calculate_volatility(loss_df)
     exp_net_ret_pct, net_ret_pct = calculate_return(initial_balance, df)
-    net_vol_pct = calculate_volatility(df)
-
-    up_vol_pct = calculate_volatility(df, upside=True)
-    down_vol_pct = calculate_volatility(df, downside=True)
 
     duration_seconds = calculate_duration_seconds(start, stop)
     years = calculate_years(start, stop)
@@ -422,9 +410,6 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
     loss_ret_annualized_pct = loss_ret_pct / years if years else 0.0
     loss_vol_annualized_pct = calculate_annualized_volatility(loss_vol_pct, loss_n, duration_seconds, pct=True)
     net_ret_annualized_pct = calculate_annualized_return(net_ret_pct, duration_seconds, pct=True)
-    up_vol_annualized_pct = calculate_annualized_volatility(up_vol_pct, total_n, duration_seconds, pct=True)
-    down_vol_annualized_pct = calculate_annualized_volatility(down_vol_pct, total_n, duration_seconds, pct=True)
-    net_vol_annualized_pct = calculate_annualized_volatility(net_vol_pct, total_n, duration_seconds, pct=True)
 
     avg_trade = calculate_average(total_pnl, total_n)
     avg_points = calculate_average(total_points, total_n)
@@ -441,12 +426,6 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
     max_ru_val, max_ru_pct, mean_ru_val, mean_ru_pct = calculate_runup(initial_balance, df)
 
     max_hold, avg_hold, min_hold = calculate_holding_times(df, stop)
-
-    rfr = risk_free * 100.0
-    sharpe = calculate_sharpe(net_ret_annualized_pct, net_vol_annualized_pct, rfr)
-    sortino = calculate_sortino(net_ret_annualized_pct, down_vol_annualized_pct, rfr)
-    calmar = calculate_calmar(net_ret_annualized_pct, max_dd_pct, rfr)
-    sterling = calculate_sterling(net_ret_annualized_pct, mean_dd_pct, rfr)
 
     return {
         TOTALTRADESVALUE: total_n,
@@ -505,12 +484,6 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
         EXPECTEDNETRETURNPERC: exp_net_ret_pct,
         NETRETURNPERC: net_ret_pct,
         NETRETURNANNPERC: net_ret_annualized_pct,
-        UPSIDEVOLATILITYPERC: up_vol_pct,
-        UPSIDEVOLATILITYANNPERC: up_vol_annualized_pct,
-        DOWNSIDEVOLATILITYPERC: down_vol_pct,
-        DOWNSIDEVOLATILITYANNPERC: down_vol_annualized_pct,
-        NETVOLATILITYPERC: net_vol_pct,
-        NETVOLATILITYANNPERC: net_vol_annualized_pct,
 
         PROFITFACTOR: profit_factor,
         RISKTOREWARDRATIO: rr_ratio,
@@ -524,19 +497,15 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
         MEANBALANCERUNUPPERC: mean_ru_pct,
         MAXHOLDINGTIME: max_hold,
         AVERAGEHOLDINGTIME: avg_hold,
-        MINHOLDINGTIME: min_hold,
-        SHARPERATIO: sharpe,
-        SORTINORATIO: sortino,
-        CALMARRATIO: calmar,
-        STERLINGRATIO: sterling
+        MINHOLDINGTIME: min_hold
     }
 
-def dependent_metrics(initial_balance: float, start: date, stop: date, df: pl.DataFrame, buy_col: str, sell_col: str, total_col: str, equity: Union[dict, None] = None, ratios: Union[dict, None] = None, override: Union[dict, None] = None, risk_free: float = 0.0) -> pl.DataFrame:
+def dependent_metrics(initial_balance: float, start: date, stop: date, df: pl.DataFrame, buy_col: str, sell_col: str, total_col: str, curves: tuple = MISSING) -> pl.DataFrame:
     net_pnl = str(PositionAPI.ID.NetPnL)
     buy_df, sell_df = split_buy_sell(df)
-    buy_metrics = independent_metrics(initial_balance, start, stop, buy_df, risk_free)
-    sell_metrics = independent_metrics(initial_balance, start, stop, sell_df, risk_free)
-    total_metrics = independent_metrics(initial_balance, start, stop, df, risk_free)
+    buy_metrics = independent_metrics(initial_balance, start, stop, buy_df)
+    sell_metrics = independent_metrics(initial_balance, start, stop, sell_df)
+    total_metrics = independent_metrics(initial_balance, start, stop, df)
 
     cur_win_streak = cur_loss_streak = 0
     max_win_streak = max_loss_streak = 0
@@ -577,11 +546,10 @@ def dependent_metrics(initial_balance: float, start: date, stop: date, df: pl.Da
         sell_metrics[MAXLOSINGSTREAK] = 0
         total_metrics[MAXLOSINGSTREAK] = 0
 
-    for metrics in (buy_metrics, sell_metrics, total_metrics):
-        metrics.update(_EQUITY_ZERO_)
-        if equity: metrics.update(equity)
-    if ratios: total_metrics.update(ratios)
-    if override: total_metrics.update(override)
+    buy_curve, sell_curve, total_curve = curves if curves else (CurveAPI(), CurveAPI(), CurveAPI())
+    buy_metrics.update(buy_curve.metrics(start, stop))
+    sell_metrics.update(sell_curve.metrics(start, stop))
+    total_metrics.update(total_curve.metrics(start, stop))
 
     return pl.DataFrame({
         buy_col: [buy_metrics[k] for k in Metrics],
@@ -607,56 +575,24 @@ def _safe_df_(df: pl.DataFrame) -> pl.DataFrame:
     schema[str(PositionAPI.ID.Direction)] = pl.String()
     return pl.DataFrame(schema=schema)
 
-def _balance_(account: Union[AccountAPI, None], equity_curve: list = MISSING) -> float:
-    return (equity_curve[0] if equity_curve else None) or (account.Balance if account is not None else 0.0) or 0.0
+def _balance_(account: Union[AccountAPI, None], curves: tuple = MISSING) -> float:
+    return (curves[2].Origin if curves else None) or (account.Balance if account is not None else 0.0) or 0.0
 
-def _report_(initial_balance: float, start: date, stop: date, individual: pl.DataFrame, aggregated: pl.DataFrame, columns: tuple, equity: Union[dict, None] = None, ratios: Union[dict, None] = None, override: Union[dict, None] = None, risk_free: float = 0.0) -> pl.DataFrame:
-    ind_df = dependent_metrics(initial_balance, start, stop, individual, *columns[:3], equity, ratios, override, risk_free)
-    agg_df = dependent_metrics(initial_balance, start, stop, aggregated, *columns[3:], equity, ratios, override, risk_free)
+def _report_(initial_balance: float, start: date, stop: date, individual: pl.DataFrame, aggregated: pl.DataFrame, columns: tuple, curves: tuple = MISSING) -> pl.DataFrame:
+    ind_df = dependent_metrics(initial_balance, start, stop, individual, *columns[:3], curves)
+    agg_df = dependent_metrics(initial_balance, start, stop, aggregated, *columns[3:], curves)
     labels_df = pl.DataFrame({STATISTICS_METRICS_LABEL: Metrics})
     return pl.concat([labels_df, ind_df, agg_df], how="horizontal_extend")
 
 def generate_realized_report(trades_df: pl.DataFrame, account: AccountAPI, start: date, stop: date) -> pl.DataFrame:
     safe_trades = _safe_df_(trades_df)
     columns = (REALIZED_BUY_INDIVIDUAL, REALIZED_SELL_INDIVIDUAL, REALIZED_TOTAL_INDIVIDUAL, REALIZED_BUY_AGGREGATED, REALIZED_SELL_AGGREGATED, REALIZED_TOTAL_AGGREGATED)
-    return _report_(_balance_(account), start, stop, sort_items(safe_trades), sort_items(aggregate_items(safe_trades)), columns)
+    return _report_(_balance_(account), start, stop, realize_items(safe_trades), realize_items(aggregate_items(safe_trades)), columns)
 
 def generate_unrealized_report(positions_df: pl.DataFrame, account: AccountAPI, start: date, stop: date) -> pl.DataFrame:
     safe_positions = _safe_df_(positions_df)
     columns = (UNREALIZED_BUY_INDIVIDUAL, UNREALIZED_SELL_INDIVIDUAL, UNREALIZED_TOTAL_INDIVIDUAL, UNREALIZED_BUY_AGGREGATED, UNREALIZED_SELL_AGGREGATED, UNREALIZED_TOTAL_AGGREGATED)
-    return _report_(_balance_(account), start, stop, sort_items(safe_positions), sort_items(aggregate_items(safe_positions)), columns)
-
-def equity_metrics(initial_balance: float, deals: pl.DataFrame) -> dict:
-    entry_bal, mid_bal = str(PositionAPI.ID.EntryBalance), str(PositionAPI.ID.MidBalance)
-    ddr, rur = str(PositionAPI.ID.MaxEquityDrawdownReturn), str(PositionAPI.ID.MaxEquityRunupReturn)
-    if deals.is_empty() or entry_bal not in deals.columns: return dict(_EQUITY_ZERO_)
-    points = []
-    for row in deals.iter_rows(named=True):
-        opened = row.get(entry_bal) or initial_balance
-        points.append(opened)
-        points.append(opened + (row.get(rur) or 0.0) * opened)
-        points.append(opened + (row.get(ddr) or 0.0) * opened)
-        if row.get(mid_bal) is not None: points.append(row.get(mid_bal))
-    peak = trough = points[0]
-    max_dd = max_ru = drawdown_sum = runup_sum = 0.0
-    for value in points:
-        peak = max(peak, value)
-        trough = min(trough, value)
-        max_dd = max(max_dd, peak - value)
-        max_ru = max(max_ru, value - trough)
-        drawdown_sum += peak - value
-        runup_sum += value - trough
-    mean_dd, mean_ru = drawdown_sum / len(points), runup_sum / len(points)
-    return {
-        MAXEQUITYDRAWDOWNVALUE: max_dd,
-        MAXEQUITYDRAWDOWNPERC: (max_dd / peak) * 100.0 if peak else 0.0,
-        MEANEQUITYDRAWDOWNVALUE: mean_dd,
-        MEANEQUITYDRAWDOWNPERC: (mean_dd / peak) * 100.0 if peak else 0.0,
-        MAXEQUITYRUNUPVALUE: max_ru,
-        MAXEQUITYRUNUPPERC: (max_ru / trough) * 100.0 if trough else 0.0,
-        MEANEQUITYRUNUPVALUE: mean_ru,
-        MEANEQUITYRUNUPPERC: (mean_ru / trough) * 100.0 if trough else 0.0
-    }
+    return _report_(_balance_(account), start, stop, realize_items(safe_positions), realize_items(aggregate_items(safe_positions)), columns)
 
 def _aligned_positions_(positions: pl.DataFrame, trades: pl.DataFrame) -> pl.DataFrame:
     uid = str(PositionAPI.ID.UID)
@@ -668,8 +604,8 @@ def _aligned_positions_(positions: pl.DataFrame, trades: pl.DataFrame) -> pl.Dat
         positions = positions.with_columns(pl.lit(None).cast(trades.schema[exit_timestamp]).alias(exit_timestamp))
     return positions
 
-def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, account: Union[AccountAPI, None], start: date, stop: date, equity_curve: Union[list, None] = None, excursions: Union[dict, None] = None, risk_free: float = 0.0) -> pl.DataFrame:
-    initial_balance = _balance_(account, equity_curve)
+def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, account: Union[AccountAPI, None], start: date, stop: date, curves: tuple = MISSING) -> pl.DataFrame:
+    initial_balance = _balance_(account, curves)
     safe_positions = _safe_df_(positions_df)
     safe_trades = _safe_df_(trades_df)
     if not safe_trades.is_empty() and not safe_positions.is_empty():
@@ -680,15 +616,8 @@ def generate_net_report(positions_df: pl.DataFrame, trades_df: pl.DataFrame, acc
         net_df = safe_trades
     else:
         net_df = safe_positions
-    ind = sort_items(net_df)
-    agg = sort_items(aggregate_items(net_df))
-    equity = equity_metrics(initial_balance, agg)
-    max_drawdown = excursions["max_drawdown"] if excursions else None
-    mean_drawdown = excursions["mean_drawdown"] if excursions else None
-    ratios = equity_curve_ratios(equity_curve, start, stop, max_drawdown=max_drawdown, mean_drawdown=mean_drawdown)
-    override = equity_excursion(excursions) if excursions else None
     columns = (NET_BUY_INDIVIDUAL, NET_SELL_INDIVIDUAL, NET_TOTAL_INDIVIDUAL, NET_BUY_AGGREGATED, NET_SELL_AGGREGATED, NET_TOTAL_AGGREGATED)
-    return _report_(initial_balance, start, stop, ind, agg, columns, equity, ratios, override, risk_free)
+    return _report_(initial_balance, start, stop, realize_items(net_df), realize_items(aggregate_items(net_df)), columns, curves)
 
 def generate_benchmark_report(equity: Union[list, None], benchmarks: Union[dict, None], start: date, stop: date, trading_days: int = 365, risk_free: float = 0.0) -> pl.DataFrame:
     if not equity or len(equity) < 2: return pl.DataFrame()
@@ -698,7 +627,7 @@ def generate_benchmark_report(equity: Union[list, None], benchmarks: Union[dict,
     strategy = standalone_metrics(values, start, stop, trading_days, risk_free)
     if not strategy: return pl.DataFrame()
     columns = [BENCHMARK_TOTALRETURN, BENCHMARK_ANNUALIZEDRETURN, BENCHMARK_VOLATILITY, BENCHMARK_MAXDRAWDOWN,
-               SHARPERATIO, SORTINORATIO, CALMARRATIO, STERLINGRATIO,
+               SHARPERATIOANN, SORTINORATIOANN, CALMARRATIOANN, STERLINGRATIOANN,
                BENCHMARK_CORRELATION, BENCHMARK_ALPHA, BENCHMARK_ALPHASIGNIFICANCE, BENCHMARK_BETA,
                BENCHMARK_TRACKINGERROR, BENCHMARK_INFORMATIONRATIO,
                BENCHMARK_EXCESSRETURN, BENCHMARK_UPSIDECAPTURE, BENCHMARK_DOWNSIDECAPTURE]

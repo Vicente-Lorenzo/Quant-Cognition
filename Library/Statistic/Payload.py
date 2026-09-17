@@ -1,6 +1,8 @@
+from Library.Utility.Typing import MISSING
+
 STRIDE = 86400
 
-def tabulate(payload: dict, name: str, column: str = None) -> dict:
+def tabulate(payload: dict, name: str, column: str = MISSING) -> dict:
     sheet = next((entry for entry in payload.get("sheets") or [] if entry.get("name") == name), None)
     if sheet is None: return {}
     names = [entry.get("name") for entry in sheet.get("columns") or []]

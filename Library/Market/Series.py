@@ -4,6 +4,7 @@ from typing import Union, TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
 from Library.Market.Price import PriceMode
+from Library.Utility.Typing import MISSING
 
 if TYPE_CHECKING:
     from Library.Market.Tick import TickAPI
@@ -92,13 +93,13 @@ class SeriesAPI:
         if df.is_empty(): return None
         return self._tick_(df.to_dicts()[0], self._prefix_)
 
-    def tail(self, n: Union[int, None] = None, dataframe: bool = False):
+    def tail(self, n: int = MISSING, dataframe: bool = False):
         if not self._multiple_:
             s = self.dataframe()
             if isinstance(s, pl.DataFrame) or s.is_empty(): return pl.Series(self._prefix_, dtype=pl.Float64)
             end = s.len() - self._offset_ + 1
-            return pl.Series(self._prefix_, dtype=pl.Float64) if end <= 0 else s[(0 if n is None else max(0, end - n)):end]
-        df = self._slice_(0, n if n is not None else (self._data_.height if self._data_ is not None else 0))
+            return pl.Series(self._prefix_, dtype=pl.Float64) if end <= 0 else s[(0 if n is MISSING else max(0, end - n)):end]
+        df = self._slice_(0, n if n is not MISSING else (self._data_.height if self._data_ is not None else 0))
         if dataframe: return df
         if df.is_empty(): return []
         return [self._tick_(r, self._prefix_) for r in df.to_dicts()]

@@ -16,10 +16,10 @@ from Library.Statistic.Label import (
     BENCHMARK_TRACKINGERROR,
     BENCHMARK_UPSIDECAPTURE,
     BENCHMARK_VOLATILITY,
-    CALMARRATIO,
-    SHARPERATIO,
-    SORTINORATIO,
-    STERLINGRATIO
+    CALMARRATIOANN,
+    SHARPERATIOANN,
+    SORTINORATIOANN,
+    STERLINGRATIOANN
 )
 from Library.Statistic.Metric import (
     align_series,
@@ -96,7 +96,7 @@ def test_column_order_groups_returns_ratios_then_relative():
     report = generate_benchmark_report(_series_([100.0, 110.0, 105.0, 120.0]), {"Market": _series_([100.0, 104.0, 102.0, 109.0])}, date(2020, 1, 1), date(2020, 1, 5))
     assert report.columns == [
         BENCHMARK_LABEL, BENCHMARK_TOTALRETURN, BENCHMARK_ANNUALIZEDRETURN, BENCHMARK_VOLATILITY, BENCHMARK_MAXDRAWDOWN,
-        SHARPERATIO, SORTINORATIO, CALMARRATIO, STERLINGRATIO,
+        SHARPERATIOANN, SORTINORATIOANN, CALMARRATIOANN, STERLINGRATIOANN,
         BENCHMARK_CORRELATION, BENCHMARK_ALPHA, BENCHMARK_ALPHASIGNIFICANCE, BENCHMARK_BETA,
         BENCHMARK_TRACKINGERROR, BENCHMARK_INFORMATIONRATIO,
         BENCHMARK_EXCESSRETURN, BENCHMARK_UPSIDECAPTURE, BENCHMARK_DOWNSIDECAPTURE]
@@ -104,9 +104,9 @@ def test_column_order_groups_returns_ratios_then_relative():
 def test_all_four_ratios_are_populated():
     report = generate_benchmark_report(_series_([100.0, 110.0, 105.0, 120.0, 112.0, 130.0]), {}, date(2020, 1, 1), date(2020, 1, 7))
     row = report.rows(named=True)[0]
-    assert all(isinstance(row[column], float) and math.isfinite(row[column]) for column in (SHARPERATIO, SORTINORATIO, CALMARRATIO, STERLINGRATIO))
-    assert row[SORTINORATIO] > row[SHARPERATIO]
-    assert row[STERLINGRATIO] > row[CALMARRATIO]
+    assert all(isinstance(row[column], float) and math.isfinite(row[column]) for column in (SHARPERATIOANN, SORTINORATIOANN, CALMARRATIOANN, STERLINGRATIOANN))
+    assert row[SORTINORATIOANN] > row[SHARPERATIOANN]
+    assert row[STERLINGRATIOANN] > row[CALMARRATIOANN]
 
 def test_benchmark_without_overlap_is_reported_as_nulls():
     report = generate_benchmark_report(_series_([100.0, 101.0, 102.0]), {"Late": [(datetime(2021, 6, 1), 5.0)]}, date(2020, 1, 1), date(2020, 1, 4))

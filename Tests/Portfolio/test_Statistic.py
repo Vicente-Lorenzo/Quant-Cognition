@@ -1,15 +1,17 @@
 import math
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from Library.Database.Dataframe import pl
+from Library.Statistic.Curve import CurveAPI
 from Library.Statistic.Label import (
-    CALMARRATIO,
+    CALMARRATIOANN,
     EXPECTEDLOSINGRETURNPERC,
     EXPECTEDNETRETURNPERC,
     EXPECTEDWINNINGRETURNPERC,
     LOSINGRETURNANNPERC,
     LOSINGRETURNPERC,
     MAXBALANCEDRAWDOWNPERC,
+    MAXEQUITYDRAWDOWNPERC,
     MAXHOLDINGTIME,
     NET_BUY_AGGREGATED,
     NET_BUY_INDIVIDUAL,
@@ -19,22 +21,20 @@ from Library.Statistic.Label import (
     NET_TOTAL_INDIVIDUAL,
     NETRETURNANNPERC,
     NETRETURNPERC,
+    NETVOLATILITYPERC,
+    RISKFREERATEPERC,
     SHARPERATIO,
-    SORTINORATIO,
+    SHARPERATIOANN,
+    SORTINORATIOANN,
     STATISTICS_METRICS_LABEL,
-    STERLINGRATIO,
+    STERLINGRATIOANN,
     TOTALTRADESVALUE,
     WINNINGRETURNANNPERC,
     WINNINGRETURNPERC
 )
-from Library.Statistic.Metric import (
-    calculate_annualized_return,
-    calculate_annualized_volatility,
-    calculate_calmar,
-    calculate_sortino,
-    equity_curve_ratios
-)
+from Library.Statistic.Metric import calculate_annualized_return, calculate_annualized_volatility
 from Library.Portfolio.Statistic import (
+    Metrics,
     _aligned_positions_,
     calculate_drawdown,
     calculate_return,
@@ -47,15 +47,20 @@ from Library.Portfolio.Trade import TradeAPI
 LOG = str(PositionAPI.ID.LogReturn)
 PNL = str(PositionAPI.ID.NetPnL)
 
-def test_downside_deviation_uses_all_trades_below_zero():
-    df = pl.DataFrame({LOG: [0.02, -0.01, 0.03, -0.01]})
-    expected_log = math.sqrt((0.0 + 0.01 ** 2 + 0.0 + 0.01 ** 2) / 4)
-    expected = math.sqrt(math.exp(expected_log ** 2) - 1.0) * 100.0
-    assert abs(calculate_volatility(df, downside=True) - expected) < 1e-9
+def _curve_(values, risk_free=0.0):
+    curve = CurveAPI(risk_free=risk_free)
+    for index, value in enumerate(values):
+        curve.record(datetime(2021, 1, 1) + timedelta(days=365) / max(len(values) - 1, 1) * index, value)
+        curve.observe(value)
+    return curve
 
-def test_downside_deviation_no_explosion_on_identical_losses():
-    df = pl.DataFrame({LOG: [-0.01, -0.01]})
-    assert calculate_volatility(df, downside=True) > 0.9
+def _curves_(total, buy=None, sell=None, risk_free=0.0):
+    return (_curve_(buy or total, risk_free), _curve_(sell or total, risk_free), _curve_(total, risk_free))
+
+def test_trade_volatility_is_the_lognormal_dispersion_of_trade_returns():
+    df = pl.DataFrame({LOG: [0.02, -0.01, 0.03, -0.01]})
+    deviation = pl.Series([0.02, -0.01, 0.03, -0.01]).std()
+    assert abs(calculate_volatility(df) - math.sqrt(math.exp(deviation ** 2) - 1.0) * 100.0) < 1e-9
 
 def test_annualized_volatility_scales_with_trade_frequency():
     year_seconds = 365 * 86400.0
@@ -69,52 +74,36 @@ def test_max_drawdown_pct_uses_concurrent_peak():
     _, max_dd_pct, _, _ = calculate_drawdown(10000.0, df)
     assert abs(max_dd_pct - 20.0) < 1e-9
 
-def test_sortino_and_calmar_floor_but_finite():
-    assert calculate_sortino(5.0, 2.5) == 2.0
-    assert calculate_sortino(5.0, 0.0) == 500.0
-    assert calculate_calmar(10.0, 20.0) == 0.5
-
 def test_volatility_survives_all_null_log_returns():
-    df = pl.DataFrame({LOG: [None, None]})
-    assert calculate_volatility(df) == 0.0
-    assert calculate_volatility(df, upside=True) == 0.0
-    assert calculate_volatility(df, downside=True) == 0.0
+    assert calculate_volatility(pl.DataFrame({LOG: [None, None]})) == 0.0
 
-def test_upside_deviation_mirrors_downside():
-    df = pl.DataFrame({LOG: [0.02, -0.01, 0.03, -0.01]})
-    up = calculate_volatility(df, upside=True)
-    down = calculate_volatility(df, downside=True)
-    expected_up_log = math.sqrt((0.02 ** 2 + 0.03 ** 2) / 4)
-    assert abs(up - math.sqrt(math.exp(expected_up_log ** 2) - 1.0) * 100.0) < 1e-9
-    assert up > down
-
-def test_equity_curve_ratios_none_on_empty_or_flat():
-    assert equity_curve_ratios(None, date(2021, 1, 1), date(2022, 1, 1)) is None
-    assert equity_curve_ratios([100.0], date(2021, 1, 1), date(2022, 1, 1)) is None
-    flat = equity_curve_ratios([100.0, 100.0, 100.0], date(2021, 1, 1), date(2022, 1, 1))
-    assert flat[SHARPERATIO] == 0.0 and flat[SORTINORATIO] == 0.0 and flat[CALMARRATIO] == 0.0
-
-def test_equity_curve_ratios_exact_one_year():
-    ratios = equity_curve_ratios([100.0, 80.0, 160.0], date(2021, 1, 1), date(2022, 1, 1))
-    assert abs(ratios[CALMARRATIO] - 3.0) < 1e-9
-    assert abs(ratios[SORTINORATIO] - 4.0) < 1e-9
-    assert abs(ratios[SHARPERATIO] - 2.0 / 3.0) < 1e-9
-    assert abs(ratios[STERLINGRATIO] - 9.0) < 1e-9
-
-def test_equity_curve_ratios_uses_supplied_drawdowns():
-    ratios = equity_curve_ratios([100.0, 160.0], date(2021, 1, 1), date(2022, 1, 1), max_drawdown=0.30, mean_drawdown=0.10)
-    assert abs(ratios[CALMARRATIO] - 2.0) < 1e-9
-    assert abs(ratios[STERLINGRATIO] - 6.0) < 1e-9
-
-def test_net_report_overrides_total_ratios_with_bar_curve():
-    account = SimpleNamespace(Balance=100.0)
+def test_every_column_reads_its_own_curve():
     empty = pl.DataFrame()
-    report = generate_net_report(empty, empty, account, date(2021, 1, 1), date(2022, 1, 1), [100.0, 80.0, 160.0])
-    def _cell_(label): return report.filter(pl.col(STATISTICS_METRICS_LABEL) == label)[NET_TOTAL_AGGREGATED].item()
-    assert abs(_cell_(CALMARRATIO) - 3.0) < 1e-9
-    assert abs(_cell_(SORTINORATIO) - 4.0) < 1e-9
-    assert abs(_cell_(SHARPERATIO) - 2.0 / 3.0) < 1e-9
-    assert abs(_cell_(STERLINGRATIO) - 9.0) < 1e-9
+    curves = _curves_([100.0, 80.0, 160.0], buy=[100.0, 90.0, 120.0], sell=[100.0, 90.0, 140.0])
+    report = generate_net_report(empty, empty, SimpleNamespace(Balance=100.0), date(2021, 1, 1), date(2022, 1, 1), curves)
+    def _cell_(label, column): return report.filter(pl.col(STATISTICS_METRICS_LABEL) == label)[column].item()
+    for column in (NET_TOTAL_INDIVIDUAL, NET_TOTAL_AGGREGATED):
+        assert abs(_cell_(CALMARRATIOANN, column) - 3.0) < 1e-9
+        assert abs(_cell_(SORTINORATIOANN, column) - 4.0) < 1e-9
+        assert abs(_cell_(SHARPERATIOANN, column) - 2.0 / 3.0) < 1e-9
+        assert abs(_cell_(STERLINGRATIOANN, column) - 9.0) < 1e-9
+    for column in (NET_BUY_INDIVIDUAL, NET_BUY_AGGREGATED):
+        assert abs(_cell_(MAXEQUITYDRAWDOWNPERC, column) - 10.0) < 1e-9
+        assert abs(_cell_(CALMARRATIOANN, column) - 2.0) < 1e-9
+    for column in (NET_SELL_INDIVIDUAL, NET_SELL_AGGREGATED):
+        assert abs(_cell_(CALMARRATIOANN, column) - 4.0) < 1e-9
+
+def test_the_report_keeps_every_row_and_adds_the_risk_free_rate():
+    empty = pl.DataFrame()
+    report = generate_net_report(empty, empty, SimpleNamespace(Balance=100.0), date(2021, 1, 1), date(2022, 1, 1), _curves_([100.0, 110.0], risk_free=0.03))
+    assert report[STATISTICS_METRICS_LABEL].to_list() == Metrics and len(Metrics) == 90
+    assert report.filter(pl.col(STATISTICS_METRICS_LABEL) == RISKFREERATEPERC).row(0)[1:] == (3.0,) * 6
+
+def test_a_report_without_curves_leaves_the_curve_rows_at_zero():
+    trades, positions = _frames_()
+    report = generate_net_report(positions, trades, SimpleNamespace(Balance=10000.0), date(2023, 1, 1), date(2023, 2, 1))
+    for label in (SHARPERATIO, SHARPERATIOANN, NETVOLATILITYPERC, MAXEQUITYDRAWDOWNPERC):
+        assert report.filter(pl.col(STATISTICS_METRICS_LABEL) == label).row(0)[1:] == (0.0,) * 6
 
 def _frames_():
     trades = pl.DataFrame({
@@ -157,7 +146,7 @@ def test_open_position_does_not_disable_aggregation():
 def test_balance_drawdown_uses_the_opening_balance_not_the_closing_one():
     trades = pl.DataFrame({str(PositionAPI.ID.Direction): ["Buy", "Buy"], PNL: [-3000.0, 0.0]})
     empty = pl.DataFrame()
-    report = generate_net_report(empty, trades, SimpleNamespace(Balance=7000.0), date(2023, 1, 1), date(2024, 1, 1), [10000.0, 7000.0])
+    report = generate_net_report(empty, trades, SimpleNamespace(Balance=7000.0), date(2023, 1, 1), date(2024, 1, 1), _curves_([10000.0, 7000.0]))
     percentage = report.filter(pl.col(STATISTICS_METRICS_LABEL) == MAXBALANCEDRAWDOWNPERC)[NET_TOTAL_INDIVIDUAL].item()
     assert abs(percentage - 30.0) < 1e-9
 
@@ -169,7 +158,7 @@ def test_holding_time_measures_entry_to_exit_with_a_position_open():
 
 def _returns_(start: date, stop: date):
     trades, positions = _frames_()
-    report = generate_net_report(positions, trades, SimpleNamespace(Balance=10030.0), start, stop, [10000.0, 10035.0])
+    report = generate_net_report(positions, trades, SimpleNamespace(Balance=10030.0), start, stop, _curves_([10000.0, 10035.0]))
     def _cell_(label, column): return report.filter(pl.col(STATISTICS_METRICS_LABEL) == label)[column].item()
     return _cell_
 
@@ -215,3 +204,23 @@ def test_annualized_return_floors_a_loss_beyond_the_balance():
     assert calculate_annualized_return(-150.0, two_years, pct=True) == -100.0
     assert calculate_annualized_return(-100.0, two_years, pct=True) == -100.0
     assert abs(calculate_annualized_return(21.0, two_years, pct=True) - 10.0) < 1e-9
+
+def test_annualized_return_saturates_instead_of_overflowing():
+    assert calculate_annualized_return(0.10, 3600.0) == math.inf
+
+def test_the_balance_path_follows_realization_not_entry_order():
+    entry = datetime(2023, 1, 2, 8)
+    trades = pl.DataFrame({
+        str(TradeAPI.ID.UID): [1, 2],
+        str(TradeAPI.ID.Position): [10, 11],
+        str(PositionAPI.ID.Direction): ["Buy", "Buy"],
+        str(PositionAPI.ID.Volume): [1000.0, 1000.0],
+        str(PositionAPI.ID.EntryTimestamp): [entry, entry],
+        str(TradeAPI.ID.ExitTimestamp): [entry + timedelta(hours=9), entry + timedelta(hours=1)],
+        str(PositionAPI.ID.EntryPrice): [1.1, 1.1],
+        str(TradeAPI.ID.ExitPrice): [1.07, 1.15],
+        PNL: [-3000.0, 5000.0]
+    })
+    report = generate_net_report(pl.DataFrame(), trades, SimpleNamespace(Balance=12000.0), date(2023, 1, 1), date(2024, 1, 1), _curves_([10000.0, 12000.0]))
+    for column in (NET_TOTAL_INDIVIDUAL, NET_TOTAL_AGGREGATED):
+        assert abs(report.filter(pl.col(STATISTICS_METRICS_LABEL) == MAXBALANCEDRAWDOWNPERC)[column].item() - 20.0) < 1e-9

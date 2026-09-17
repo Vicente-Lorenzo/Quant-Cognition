@@ -7,7 +7,7 @@ from Library.Statistic import (
     NET_TOTAL_AGGREGATED,
     NET_TOTAL_INDIVIDUAL,
     PROFITFACTOR,
-    SHARPERATIO,
+    SHARPERATIOANN,
     STATISTICS_METRICS_LABEL,
     TOTALTRADESVALUE,
     compare,
@@ -388,13 +388,13 @@ def test_compare_prefers_net_metrics_over_a_benchmark_of_the_same_name():
                                                       "data": [{"time": 0, "value": 100.0}]}]}],
                "sheets": [{"name": "Net",
                            "columns": [{"name": STATISTICS_METRICS_LABEL}, {"name": NET_TOTAL_INDIVIDUAL}],
-                           "rows": [[SHARPERATIO, "0.9"]]},
+                           "rows": [[SHARPERATIOANN, "0.9"]]},
                           {"name": BENCHMARK_LABEL,
-                           "columns": [{"name": BENCHMARK_LABEL}, {"name": SHARPERATIO}, {"name": BENCHMARK_BETA}],
+                           "columns": [{"name": BENCHMARK_LABEL}, {"name": SHARPERATIOANN}, {"name": BENCHMARK_BETA}],
                            "rows": [["Strategy", "", ""], ["Buy & Hold", "-0.3", "0.13"]]}]}
     sheet = compare([("Run A", payload)]).sheets[0]
     values = {row[0]: row[1] for row in sheet.rows}
-    assert values[SHARPERATIO] == "0.9"
+    assert values[SHARPERATIOANN] == "0.9"
     assert values[BENCHMARK_BETA] == "0.13"
 
 def _fold_(index: int, opening: float, closing: float, month: int) -> dict:
