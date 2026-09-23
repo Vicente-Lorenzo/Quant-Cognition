@@ -3,7 +3,7 @@ import pytest
 from datetime import datetime, timedelta
 
 from Library.Auth import AuthAPI, RoleAPI, UserAPI
-from Library.Credential import CredentialAPI, CredentialKind, CredentialManagerAPI, LayoutAPI, SecretAPI
+from Library.Credential import CredentialAPI, CredentialHealth, CredentialKind, CredentialManagerAPI, LayoutAPI, SecretAPI
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Database.Query import QueryAPI
 from Library.Utility.Datetime import utc_now
@@ -29,12 +29,11 @@ def manager():
         admin.disconnect()
     with PostgresDatabaseAPI(database=DATABASE) as db:
         db.executeone(QueryAPI('DROP SCHEMA IF EXISTS "Credential" CASCADE'))
-        db.executeone(QueryAPI('DROP SCHEMA IF EXISTS "Auth" CASCADE'))
         setup_auth(db)
         setup_credential(db)
     auth = AuthAPI(database=DATABASE)
     for username, role in ((ADMIN, RoleAPI.Administrator), (MODERATOR, RoleAPI.Moderator), (EDITOR, RoleAPI.Editor), (VIEWER, RoleAPI.Viewer), (OTHER, RoleAPI.Viewer)):
-        auth.create(username=username, email=username, name=username, password="secret", role=role)
+        if auth.find(username) is None: auth.create(username=username, email=username, name=username, password="secret", role=role)
     return CredentialManagerAPI(database=DATABASE)
 
 @pytest.fixture
@@ -279,8 +278,16 @@ def test_an_unchanged_threshold_above_the_editor_survives_an_edit(manager, store
         manager.update(credential.UID, by=EDITOR, ViewRole=RoleAPI.Moderator.name)
 
 def test_health_reads_the_expiry_against_the_refresh_margin():
-    now = datetime(2026, 9, 23, 12)
-    assert CredentialManagerAPI.health(None, now) == CredentialManagerAPI.NEVER
-    assert CredentialManagerAPI.health(now - timedelta(seconds=1), now) == CredentialManagerAPI.EXPIRED
-    assert CredentialManagerAPI.health(now + timedelta(days=3), now) == CredentialManagerAPI.EXPIRING
-    assert CredentialManagerAPI.health(now + timedelta(days=30), now) == CredentialManagerAPI.HEALTHY
+    now, manager = datetime(2026, 9, 23, 12), CredentialManagerAPI(database=DATABASE)
+    assert manager.health(None, now) is CredentialHealth.Never
+    assert manager.health(now - timedelta(seconds=1), now) is CredentialHealth.Expired
+    assert manager.health(now + timedelta(days=3), now) is CredentialHealth.Expiring
+    assert manager.health(now + timedelta(days=30), now) is CredentialHealth.Healthy
+    assert CredentialManagerAPI(database=DATABASE, margin=86400).health(now + timedelta(days=3), now) is CredentialHealth.Healthy
+
+def test_a_refresher_is_given_to_the_manager_not_registered_globally(manager, stored):
+    credential = manager.store(by=ADMIN, Service="Rotating", Name="Token", Kind=CredentialKind.OAuth2.name, Secret=CredentialAPI.pack({"AccessToken": "old"}), ExpiresAt=utc_now())
+    assert manager.rotate(credential.UID) is False
+    rotating = CredentialManagerAPI(database=DATABASE, refreshers={"Rotating": lambda values: ({"AccessToken": "new"}, utc_now() + timedelta(days=30))})
+    assert rotating.rotate(credential.UID) is True
+    assert manager.reveal(credential.UID, by=ADMIN) == {"AccessToken": "new"}

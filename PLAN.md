@@ -104,7 +104,7 @@ on.
 - **The accounts.** `ProtoOAGetAccountListByAccessTokenReq` (already called in `Spotware/Portfolio.py`)
   lists the `ctidTraderAccountId`s the token reaches; store the EUR and USD demo accounts of 5.13's checklist.
 - **Refresh** — the `refresh_token` grant or `ProtoOARefreshTokenReq`, registered with
-  `CredentialManagerAPI.refresher("Spotware", ...)` so the daily `Environment.Credential` task rotates it.
+  `CredentialManagerAPI(refreshers={"Spotware": ...})` inside the daily `Environment.Credential` task, which rotates it.
 - **Test** — a connection check the credential page runs on demand, so a wrong or expired token
   surfaces on the page rather than in a failed overnight run.
 
