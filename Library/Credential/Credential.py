@@ -12,6 +12,14 @@ from Library.Credential.Secret import SecretAPI
 from Library.Database.Dataframe import pl
 from Library.Database.Database import PrimaryKey, ForeignKey
 from Library.Database.Datapoint import DatapointAPI
+from Library.Utility.Enumeration import EnumerationAPI
+
+class CredentialHealth(EnumerationAPI):
+
+    Never = 0
+    Healthy = 1
+    Expiring = 2
+    Expired = 3
 
 @dataclass
 class CredentialAPI(DatapointAPI):
