@@ -60,10 +60,9 @@ class PortfolioAPI(DatapointAPI):
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],
                       migrate: bool,
-                      autosave: bool,
                       autoload: bool,
                       autooverload: bool) -> None:
-        super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
 
     @staticmethod
     def pull_accounts(db: DatabaseAPI) -> pl.DataFrame:
@@ -106,7 +105,8 @@ class PortfolioAPI(DatapointAPI):
         if trades:
             self._trades_.extend(trades)
             for trade in trades: self._realize_(trade)
-        self._initial_balance_ = account.Balance if account and account.Balance is not None else 0.0
+        balance = account.Balance if account and account.Balance is not None else 0.0
+        self._initial_balance_ = balance - self._buy_realized_ - self._sell_realized_
         self._equity_peak_ = self.Equity
         self._equity_trough_ = self.Equity
 
@@ -338,6 +338,7 @@ class PortfolioAPI(DatapointAPI):
             trade.MidBalance = new_mid
             setattr(trade, 'ExitBalance', new_mid)
             if self._account_: self._account_.Balance += net
+            self._realize_(trade)
             if position is not None:
                 self._inherit_position_state_(old_pos, position)
                 position.MidBalance = new_mid
@@ -345,7 +346,6 @@ class PortfolioAPI(DatapointAPI):
             else:
                 del self._positions_[position_uid]
         self._trades_.append(trade)
-        self._realize_(trade)
         equity = self.Equity
         self._track_equity_(equity)
         self._record_equity_(equity)
@@ -355,6 +355,7 @@ class PortfolioAPI(DatapointAPI):
         if not self._account_: return pl.DataFrame()
         start = start or self._equity_curve_.Start
         stop = stop or self._equity_curve_.Stop
+        if not start or not stop: return pl.DataFrame()
         return generate_net_report(self.Positions, self.Trades, self._account_, start, stop, (self._buy_equity_curve_, self._sell_equity_curve_, self._equity_curve_))
 
     @property

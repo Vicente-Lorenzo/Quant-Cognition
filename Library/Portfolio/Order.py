@@ -136,7 +136,6 @@ class OrderAPI(DatapointAPI):
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],
                       migrate: bool,
-                      autosave: bool,
                       autoload: bool,
                       autooverload: bool,
                       session: Union[str, SessionAPI, None],
@@ -178,8 +177,8 @@ class OrderAPI(DatapointAPI):
 
         self._session_ = self._relate_(session, SessionAPI, db=db, autoload=True)
         self._account_ = self._relate_(account, AccountAPI, db=db, autoload=True)
-        self._position_ = self._relate_(position, PositionAPI, db=db, migrate=migrate, autosave=autosave, autoload=False, autooverload=False)
-        self._security_ = self._relate_(security, SecurityAPI, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        self._position_ = self._relate_(position, PositionAPI, db=db, migrate=migrate, autoload=False, autooverload=False)
+        self._security_ = self._relate_(security, SecurityAPI, db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
         self._direction_ = Direction.parse(direction) if direction is not MISSING else None
         self._order_type_ = OrderType.parse(order_type) if order_type is not MISSING else None
         self._order_status_ = OrderStatus.parse(order_status) if order_status is not MISSING else None
@@ -195,7 +194,7 @@ class OrderAPI(DatapointAPI):
         self._entry_timestamp_ = TimestampAPI.assign(None, entry_timestamp)
         self._expiration_timestamp_ = TimestampAPI.assign(None, expiration_timestamp)
         self._last_update_timestamp_ = TimestampAPI.assign(None, last_update_timestamp)
-        super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
         row = super()._pull_(overload=overload)

@@ -90,7 +90,6 @@ class AccountAPI(DatapointAPI):
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],
                       migrate: bool,
-                      autosave: bool,
                       autoload: bool,
                       autooverload: bool,
                       session: Union[str, SessionAPI, None],
@@ -105,11 +104,11 @@ class AccountAPI(DatapointAPI):
         account_type = coerce(account_type)
         margin_mode = coerce(margin_mode)
         self._session_ = self._relate_(session, SessionAPI, db=db, autoload=True)
-        self._provider_ = self._relate_(provider, ProviderAPI, normalize=ProviderAPI.normalize, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        self._provider_ = self._relate_(provider, ProviderAPI, normalize=ProviderAPI.normalize, db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
         self._environment_ = Environment.parse(environment) if environment is not MISSING else None
         self._account_type_ = AccountType.parse(account_type) if account_type is not MISSING else None
         self._margin_mode_ = MarginMode.parse(margin_mode) if margin_mode is not MISSING else None
-        super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
         row = super()._pull_(overload=overload)

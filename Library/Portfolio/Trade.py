@@ -73,7 +73,6 @@ class TradeAPI(PositionAPI):
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],
                       migrate: bool,
-                      autosave: bool,
                       autoload: bool,
                       autooverload: bool,
                       session: Union[str, SessionAPI, None],
@@ -110,7 +109,6 @@ class TradeAPI(PositionAPI):
         self._exit_balance_ = exit_balance if exit_balance is not MISSING else None
         super().__post_init__(db=db,
                               migrate=migrate,
-                              autosave=autosave,
                               autoload=autoload,
                               autooverload=autooverload,
                               session=session,

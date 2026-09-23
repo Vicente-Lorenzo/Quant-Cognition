@@ -285,7 +285,7 @@ def aggregate_items(df: pl.DataFrame) -> pl.DataFrame:
     exit_ts = str(TradeAPI.ID.ExitTimestamp)
     if exit_ts in df.columns:
         agg_exprs.extend([
-            pl.col(exit_ts).max(),
+            pl.when(pl.col(exit_ts).null_count() > 0).then(None).otherwise(pl.col(exit_ts).max()).alias(exit_ts),
             pl.col(str(TradeAPI.ID.ExitPrice)).last(),
             _take_(str(TradeAPI.ID.ExitBalance), lambda x: x.last()),
         ])

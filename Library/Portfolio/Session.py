@@ -56,7 +56,6 @@ class SessionAPI(DatapointAPI):
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],
                       migrate: bool,
-                      autosave: bool,
                       autoload: bool,
                       autooverload: bool,
                       type: Union[SystemType, str, None],
@@ -75,7 +74,7 @@ class SessionAPI(DatapointAPI):
         self._final_account_ = self._relate_(final_account, AccountAPI, db=db, autoload=False, autooverload=False)
         if self.UID is None:
             self.UID = self._generate_uid_(self._type_)
-        super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
         if self.StartTimestamp is None:
             self.StartTimestamp = utc_now()
 
