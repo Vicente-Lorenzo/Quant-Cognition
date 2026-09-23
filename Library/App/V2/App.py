@@ -34,9 +34,6 @@ class AppAPI(ShellAPI, RouterAPI):
     Theme = [dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP]
     Launchpad: type = LaunchpadPageAPI
     Assets = traceback_current_module(resolve=True) / "Assets"
-    _APPLICATION_ = "/_application"
-    _META_ = [{"name": "viewport", "content": "width=device-width, initial-scale=1, viewport-fit=cover"},
-              {"name": "color-scheme", "content": "light dark"}]
 
     GLOBAL_NOT_FOUND_LAYOUT: Component
     GLOBAL_LOADING_LAYOUT: Component
@@ -145,23 +142,28 @@ class AppAPI(ShellAPI, RouterAPI):
         page.attach(parent=intermediate_parent)
         page._init_()
 
+    @staticmethod
+    def _overlay_(path: str) -> str:
+        return f"/_application/{path}"
+
     def _serve_(self, app: dash.Dash) -> None:
         assets = self._assets_
         def _view_(filename): return flask.send_from_directory(assets, filename)
-        app.server.add_url_rule(f"{self._APPLICATION_}/<path:filename>", endpoint=f"application_{id(self)}", view_func=_view_)
+        app.server.add_url_rule(self._overlay_("<path:filename>"), endpoint=f"application_{id(self)}", view_func=_view_)
 
     def _compose_(self) -> dash.Dash:
         overlay = self._assets_.exists() and self._assets_ != self.Assets
         if not overlay: self._assets_ = self.Assets
         external = list(self.Theme)
-        if overlay: external += [f"{self._APPLICATION_}/{sheet.relative_to(self._assets_).as_posix()}" for sheet in sorted(self._assets_.rglob("*.css"))]
-        app = dash.Dash(self.__class__.__name__, assets_folder=str(self.Assets), external_stylesheets=external, suppress_callback_exceptions=True, title=self._title_, update_title=None, meta_tags=self._META_)
+        if overlay: external += [self._overlay_(sheet.relative_to(self._assets_).as_posix()) for sheet in sorted(self._assets_.rglob("*.css"))]
+        meta = [{"name": "viewport", "content": "width=device-width, initial-scale=1, viewport-fit=cover"}, {"name": "color-scheme", "content": "light dark"}]
+        app = dash.Dash(self.__class__.__name__, assets_folder=str(self.Assets), assets_path_ignore=["^Callbacks$"], external_stylesheets=external, suppress_callback_exceptions=True, title=self._title_, update_title=None, meta_tags=meta)
         if overlay: self._serve_(app)
         return app
 
     def asset(self, path: str, url: bool = True) -> str:
         if self._assets_ != self.Assets and (self._assets_ / path).exists():
-            return f"{self._APPLICATION_}/{path}" if url else self._read_(self._assets_ / path)
+            return self._overlay_(path) if url else self._read_(self._assets_ / path)
         if (self.Assets / path).exists():
             return self.app.get_asset_url(path) if url else self._read_(self.Assets / path)
         raise RuntimeError(f"Asset Operation: Failed · Due to Missing Asset ({path})")
@@ -353,13 +355,11 @@ class AppAPI(ShellAPI, RouterAPI):
     def _global_async_import_snapshot_callback_(self):
         return self.asset("Callbacks/Import.js", url=False)
 
-    _PORTABLES_ = ("data", "value", "input", "filter", "date", "checked", "start_date", "end_date", "options", "disabled", "is_open", "active_tab")
-
     @clientside_callback(
         Output(GlobalAPI.GLOBAL_EXPORT_DOWNLOAD_ID, "data"),
         Input(GlobalAPI.GLOBAL_EXPORT_ID, "n_clicks"),
         State(GlobalAPI.GLOBAL_LOCATION_ID, "pathname"),
-        *[State({"app": dash.ALL, "page": dash.ALL, "type": dash.ALL, "name": dash.ALL, "portable": portable}, portable) for portable in _PORTABLES_]
+        *[State({"app": dash.ALL, "page": dash.ALL, "type": dash.ALL, "name": dash.ALL, "portable": portable}, portable) for portable in ("data", "value", "input", "filter", "date", "checked", "start_date", "end_date", "options", "disabled", "is_open", "active_tab")]
     )
     def _global_async_export_snapshot_callback_(self):
         return self.asset("Callbacks/Export.js", url=False)
