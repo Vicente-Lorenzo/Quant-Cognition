@@ -46,6 +46,7 @@ class OptimizationAPI(BacktestingAPI):
                  continuous: bool = False,
                  workers: int = 1,
                  risk_free: float = 0.0,
+                 benchmark: Union[str, list, None] = None,
                  report: bool = False,
                  export: bool = False,
                  plot: bool = False,
@@ -64,6 +65,7 @@ class OptimizationAPI(BacktestingAPI):
             commission=commission,
             swap=swap,
             risk_free=risk_free,
+            benchmark=benchmark,
             report=False,
             export=False,
             plot=False,
@@ -95,7 +97,6 @@ class OptimizationAPI(BacktestingAPI):
             **self._dispatch_(self._baseline_, start, stop),
             "resolution": self._resolution_arg_.UID if isinstance(self._resolution_arg_, TimeframeAPI) else (self._resolution_arg_ if isinstance(self._resolution_arg_, str) else None),
             "fitness": self._fitness_label_,
-            "risk_free": self._risk_free_,
         }
 
     def _sweep_(self, grid: list, start, stop, tracker) -> list:

@@ -162,6 +162,7 @@ class BacktestingAPI(SystemAPI):
             self._assemble_()
             self._netting_ = self._position_mode_() == PositionMode.Netting
             self._contract_ = self._security_.Contract
+            self._record_contract_()
             self._digits_ = int(self._contract_.Digits) if getattr(self._contract_, "Digits", None) else 5
             ticker = self._security_.Ticker
             self._base_asset_ = ticker.BaseAsset if ticker else None
@@ -290,7 +291,7 @@ class BacktestingAPI(SystemAPI):
             else:
                 tick_ts, tick_ask, tick_bid = np.empty(0, dtype="int64"), np.empty(0, dtype="float64"), np.empty(0, dtype="float64")
             if self._needs_conversion_ and tick_frame.height:
-                tick_conversions = tuple(tick_frame[str(column)].to_numpy().astype("float64") for column in self._CONVERSION_COLUMNS_)
+                tick_conversions = tuple(tick_frame[str(column)].to_numpy().astype("float64", copy=False) for column in self._CONVERSION_COLUMNS_)
             else:
                 tick_conversions = None
         intra_levels, intra_bars = [], {}
@@ -449,12 +450,15 @@ class BacktestingAPI(SystemAPI):
             "spread": (self._spread_type_, self._spread_value_),
             "commission": (self._commission_type_, self._commission_value_),
             "swap": (self._swap_type_, self._swap_long_, self._swap_short_),
+            "contract": self._security_.Contract.snapshot() if self._security_.Contract is not None else None,
+            "risk_free": self._risk_free_,
         }
 
     @staticmethod
     def _resolve_(payload: dict) -> tuple:
         with PostgresDatabaseAPI(database="Quant") as db:
             security = SecurityAPI(Provider=payload["provider"], Ticker=payload["ticker"], db=db, autoload=True)
+            if payload.get("contract") is not None: security.Contract.pin(payload["contract"])
             return security, TimeframeAPI(UID=payload["timeframe"], db=db, autoload=True)
 
     @classmethod
@@ -477,7 +481,7 @@ class BacktestingAPI(SystemAPI):
         self._log_.info(lambda: f"Phase Preload: {outcome} · {watch.result()} · {ticks} Ticks · Intra {intra}")
 
     @staticmethod
-    def _symbol_rate_(tick: TickAPI) -> float:
+    def _mid_rate_(tick: TickAPI) -> float:
         return (tick.Ask.Price + tick.Bid.Price) / 2.0
 
     def _base_conversion_(self, rate: float) -> float:
@@ -593,7 +597,7 @@ class BacktestingAPI(SystemAPI):
     def _build_position_(self, direction: Direction, position_type: PositionType, volume: float, tick: TickAPI, sl_price: Union[float, None], tp_price: Union[float, None]) -> PositionAPI:
         ask, bid = self._ask_bid_(tick)
         entry_price = ask if direction == Direction.Buy else bid
-        rate = self._symbol_rate_(tick)
+        rate = self._mid_rate_(tick)
         base_conversion, quote_conversion = self._conversions_(tick)
         gross = (bid - ask) * volume * quote_conversion
         commission = truncate(self._commission_(volume, rate, base_conversion, quote_conversion))
@@ -620,7 +624,7 @@ class BacktestingAPI(SystemAPI):
 
     def _build_trade_(self, position: PositionAPI, volume: float, tick: TickAPI, exit_price: float) -> TradeAPI:
         direction = position.Direction
-        rate = self._symbol_rate_(tick)
+        rate = self._mid_rate_(tick)
         base_conversion, quote_conversion = self._conversions_(tick)
         entry = position.EntryPrice.Price
         delta = (exit_price - entry) if direction == Direction.Buy else (entry - exit_price)
@@ -670,7 +674,7 @@ class BacktestingAPI(SystemAPI):
     def _emit_increase_(self, position: PositionAPI, direction: Direction, volume: float) -> None:
         ask, bid = self._ask_bid_(self._tick_)
         fill = ask if direction == Direction.Buy else bid
-        rate = self._symbol_rate_(self._tick_)
+        rate = self._mid_rate_(self._tick_)
         base_conversion, quote_conversion = self._conversions_(self._tick_)
         total = position.Volume + volume
         position.EntryPrice.Price = self._round_((position.EntryPrice.Price * position.Volume + fill * volume) / total)
@@ -982,10 +986,10 @@ class BacktestingAPI(SystemAPI):
                 frame[str(BarAPI.OID.CloseTick.Timestamp)].dt.epoch("us").to_numpy(),
                 frame[str(BarAPI.OID.HighTick.Timestamp)].dt.epoch("us").to_numpy(),
                 frame[str(BarAPI.OID.LowTick.Timestamp)].dt.epoch("us").to_numpy(),
-                frame[str(BarAPI.OID.OpenTick.Ask)].to_numpy().astype("float64"), frame[str(BarAPI.OID.OpenTick.Bid)].to_numpy().astype("float64"),
-                frame[str(BarAPI.OID.HighTick.Ask)].to_numpy().astype("float64"), frame[str(BarAPI.OID.HighTick.Bid)].to_numpy().astype("float64"),
-                frame[str(BarAPI.OID.LowTick.Ask)].to_numpy().astype("float64"), frame[str(BarAPI.OID.LowTick.Bid)].to_numpy().astype("float64"),
-                frame[str(BarAPI.OID.CloseTick.Ask)].to_numpy().astype("float64"), frame[str(BarAPI.OID.CloseTick.Bid)].to_numpy().astype("float64")
+                frame[str(BarAPI.OID.OpenTick.Ask)].to_numpy().astype("float64", copy=False), frame[str(BarAPI.OID.OpenTick.Bid)].to_numpy().astype("float64", copy=False),
+                frame[str(BarAPI.OID.HighTick.Ask)].to_numpy().astype("float64", copy=False), frame[str(BarAPI.OID.HighTick.Bid)].to_numpy().astype("float64", copy=False),
+                frame[str(BarAPI.OID.LowTick.Ask)].to_numpy().astype("float64", copy=False), frame[str(BarAPI.OID.LowTick.Bid)].to_numpy().astype("float64", copy=False),
+                frame[str(BarAPI.OID.CloseTick.Ask)].to_numpy().astype("float64", copy=False), frame[str(BarAPI.OID.CloseTick.Bid)].to_numpy().astype("float64", copy=False)
             )
         return arrays
 

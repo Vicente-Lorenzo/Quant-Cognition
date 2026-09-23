@@ -39,9 +39,11 @@ if TYPE_CHECKING:
 class RealtimeAPI(SystemAPI):
 
     _MARKET_CLOSURE_ = timedelta(days=4)
+    _CONNECTOR_ = "Connector"
 
     _DIRECTION_ = {0: Direction.Buy, 1: Direction.Sell}
     _ORDER_TYPE_ = {0: OrderType.Limit, 1: OrderType.Stop, 2: OrderType.StopLimit}
+    _WEEKDAY_ = {0: Weekday.Sunday, 1: Weekday.Monday, 2: Weekday.Tuesday, 3: Weekday.Wednesday, 4: Weekday.Thursday, 5: Weekday.Friday, 6: Weekday.Saturday}
 
     _binary_init_ = BinaryAPI('i')
     _binary_denied_ = BinaryAPI('B', 's')
@@ -197,7 +199,6 @@ class RealtimeAPI(SystemAPI):
          volume_min, volume_max, volume_step, commission, commission_type,
          swap_long, swap_short, swap_calculation_type, swap_3_days_rollover
         ) = self._binary_security_.unpack(self._last_update_data_, 1)
-        day_of_week = {0: Weekday.Sunday, 1: Weekday.Monday, 2: Weekday.Tuesday, 3: Weekday.Wednesday, 4: Weekday.Thursday, 5: Weekday.Friday, 6: Weekday.Saturday}
         if self._security_:
             if self._security_.Ticker:
                 self._security_.Ticker.BaseAsset = base_asset
@@ -215,7 +216,10 @@ class RealtimeAPI(SystemAPI):
                 self._security_.Contract.SwapLong = swap_long
                 self._security_.Contract.SwapShort = swap_short
                 self._security_.Contract.SwapMode = SwapMode(swap_calculation_type)
-                self._security_.Contract.SwapExtraDay = day_of_week.get(swap_3_days_rollover, Weekday.Wednesday)
+                self._security_.Contract.SwapExtraDay = self._WEEKDAY_.get(swap_3_days_rollover, Weekday.Wednesday)
+                self._security_.Contract.UpdatedAt = utc_now()
+                self._security_.Contract.UpdatedBy = self._CONNECTOR_
+            self._record_contract_()
         return self._security_
 
     def receive_update_order(self, offset: int = _bar_payload_) -> OrderAPI:

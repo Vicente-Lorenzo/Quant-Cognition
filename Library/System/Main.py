@@ -16,7 +16,7 @@ from Library.System import BacktestingAPI, ElectionMode, FitnessType, LearningAP
 from Library.Universe import CommissionType, SecurityAPI, SpreadType, SwapType, TimeframeAPI
 from Library.Utility import MISSING, Missing, Parameter, inspect_temporary, profiler, timer
 from Library.Utility.Datetime import utc_now
-from Library.Utility.IO import mkdir, write_text, write_yaml
+from Library.Utility.IO import mkdir, read_yaml, write_text, write_yaml
 from Library.Utility.Runtime import join_arguments
 
 def _parse_() -> Namespace:
@@ -34,6 +34,7 @@ def _parse_() -> Namespace:
 
     parameter_parser = ArgumentParser(add_help=False)
     parameter_parser.add_argument("--parameters", type=str, default=MISSING, metavar="PATH")
+    parameter_parser.add_argument("--contract", type=str, default=MISSING, metavar="PATH")
 
     output_parser = ArgumentParser(add_help=False)
     output_parser.add_argument("--risk-free", type=float, default=0.0)
@@ -43,6 +44,7 @@ def _parse_() -> Namespace:
     output_parser.add_argument("--plot", nargs="?", const=True, default=False, metavar="PATH")
     output_parser.add_argument("--run", type=str, default=None, metavar="FOLDER")
     output_parser.add_argument("--description", type=str, default=None)
+    output_parser.add_argument("--user", type=str, default=None)
     output_parser.add_argument("--profile", nargs="?", const=True, default=False, metavar="PATH")
 
     period_parser = ArgumentParser(add_help=False)
@@ -232,6 +234,7 @@ def _system_(args: Namespace, strategy: type[StrategyAPI], security: SecurityAPI
                 continuous=args.continuous,
                 workers=args.workers,
                 risk_free=args.risk_free,
+                benchmark=args.benchmark,
                 report=args.report,
                 export=args.export,
                 plot=args.plot,
@@ -277,6 +280,7 @@ def _system_(args: Namespace, strategy: type[StrategyAPI], security: SecurityAPI
                 seeds=args.seeds,
                 workers=args.workers,
                 threads=args.threads,
+                risk_free=args.risk_free,
                 benchmark=args.benchmark,
                 report=args.report,
                 export=args.export,
@@ -290,6 +294,11 @@ def _parameters_(ladder: LadderAPI, strategy: type[StrategyAPI], rungs: tuple, t
     else: parameters, trails[kind] = ladder.pin(strategy, kind, pinned, folder / SystemAPI.INPUT / SystemAPI.PARAMETERS)
     return parameters
 
+def _contract_(security: SecurityAPI, pinned: Union[str, Missing] = MISSING) -> None:
+    if pinned is MISSING: return
+    if security.Contract is None: raise ValueError(f"Contract Pin: Failed · Due to {security.Ticker.UID if security.Ticker else 'the security'} having no contract")
+    security.Contract.pin(read_yaml(Path(pinned), safe=False))
+
 def _scope_(provider, category, ticker, timeframe) -> tuple:
     return (provider.UID, category.UID, ticker.UID, TimeframeAPI.normalize(timeframe.UID))
 
@@ -300,11 +309,13 @@ def _snapshot_(folder: Path, args: Namespace, parameters, log: LoggingAPI, trail
         data = getattr(parameters, "data", None)
         if data is not None: write_yaml(entry / SystemAPI.PARAMETERS, data, safe=False)
         start, stop = getattr(args, "start", None), getattr(args, "stop", None)
+        contract = getattr(args, "contract", MISSING)
         manifest = {"System": args.system, "Strategy": args.strategy, "Provider": args.provider, "Ticker": args.ticker,
                     "Timeframe": args.timeframe, "Start": None if start is None else str(start), "Stop": None if stop is None else str(stop),
-                    "Description": args.description, "StartedAt": utc_now().isoformat(),
+                    "Description": args.description, "User": args.user, "StartedAt": utc_now().isoformat(),
                     "Command": join_arguments(sys.argv[1:]),
                     "Parameters": trails or None,
+                    "Contract": contract if contract is not MISSING else None,
                     "Scope": list(rungs) or None}
         write_text(folder / SystemAPI.MANIFEST, json.dumps({key: value for key, value in manifest.items() if value is not None}, indent=2), safe=False)
     except Exception as error:
@@ -333,6 +344,7 @@ def main() -> None:
     def run() -> None:
         with PostgresDatabaseAPI(database="Quant") as db:
             security = SecurityAPI(Provider=args.provider, Ticker=args.ticker, db=db, autoload=True)
+            _contract_(security, getattr(args, "contract", MISSING))
             timeframe = TimeframeAPI(UID=TimeframeAPI.normalize(args.timeframe), db=db, autoload=True)
             category = security.Category
             if category is None: raise ValueError(f"Security {security.Provider.UID} {security.Ticker.UID}: Failed · Due to missing Category")

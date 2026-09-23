@@ -120,13 +120,14 @@ class LearningAPI(BacktestingAPI):
                  seeds: int = 1,
                  workers: int = 1,
                  threads: Union[int, None] = None,
+                 risk_free: float = 0.0,
                  benchmark: Union[str, list, None] = None,
                  report: bool = True,
                  export: bool = True,
                  plot: bool = False,
                  run: Union[str, Path, None] = None,
                  description: Union[str, None] = None) -> None:
-        super().__init__(strategy=strategy, security=security, timeframe=timeframe, resolution=timeframe, parameters=parameters, start=start, stop=stop, account=account, spread=spread, commission=commission, swap=swap, benchmark=benchmark, report=False, export=False, plot=False, run=run, description=description)
+        super().__init__(strategy=strategy, security=security, timeframe=timeframe, resolution=timeframe, parameters=parameters, start=start, stop=stop, account=account, spread=spread, commission=commission, swap=swap, risk_free=risk_free, benchmark=benchmark, report=False, export=False, plot=False, run=run, description=description)
         self._walk_forward_(deliverables=(report, export, plot), fitness=fitness, selection=selection, election=election, training=training, validation=validation, testing=testing, rolling=rolling, continuous=continuous, purge=purge, embargo=embargo)
         self._reward_type_: RewardType = RewardType.parse(reward)
         self._episodes_: int = episodes
@@ -502,7 +503,7 @@ class LearningAPI(BacktestingAPI):
         log = LoggingAPI("Worker")
         log.file.set_level(VerboseLevel.Debug)
         security, timeframe = LearningAPI._worker_(payload, log)
-        learner = LearningAPI(strategy=payload["strategy"], security=security, timeframe=timeframe, parameters=Parameter(payload["parameters"], "."), start=payload["start"], stop=payload["stop"], account=payload["account"], spread=payload["spread"], commission=payload["commission"], swap=payload["swap"], reward=payload["reward"], episodes=payload["episodes"], epochs=payload["epochs"], train_frequency=payload["train_frequency"], gradient_steps=payload["gradient_steps"], training=payload["training"], validation=payload["validation"], testing=payload["testing"], rolling=payload["rolling"], continuous=payload["continuous"], fitness=payload["fitness"], patience=payload["patience"], activity=payload.get("activity", 0), balance=payload.get("balance", 0), ratio=payload.get("ratio", 0.0), mirror=payload.get("mirror", False), mirror_ratio=payload.get("mirror_ratio", 0.5), final=payload.get("final", False), seed=payload["seed"], seeds=1, workers=1, report=False, export=False)
+        learner = LearningAPI(strategy=payload["strategy"], security=security, timeframe=timeframe, parameters=Parameter(payload["parameters"], "."), start=payload["start"], stop=payload["stop"], account=payload["account"], spread=payload["spread"], commission=payload["commission"], swap=payload["swap"], reward=payload["reward"], episodes=payload["episodes"], epochs=payload["epochs"], train_frequency=payload["train_frequency"], gradient_steps=payload["gradient_steps"], training=payload["training"], validation=payload["validation"], testing=payload["testing"], rolling=payload["rolling"], continuous=payload["continuous"], fitness=payload["fitness"], patience=payload["patience"], activity=payload.get("activity", 0), balance=payload.get("balance", 0), ratio=payload.get("ratio", 0.0), mirror=payload.get("mirror", False), mirror_ratio=payload.get("mirror_ratio", 0.5), final=payload.get("final", False), seed=payload["seed"], seeds=1, workers=1, risk_free=payload["risk_free"], report=False, export=False)
         try:
             return learner._train_seed_(payload["seed"], Path(payload["weights"]), payload["folds"], payload["test"])
         finally:

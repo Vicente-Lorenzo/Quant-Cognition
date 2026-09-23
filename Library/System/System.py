@@ -22,7 +22,7 @@ from Library.Portfolio.Order import OrderAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.Position import PositionAPI, PositionStatus
 from Library.Portfolio.Session import SessionAPI
-from Library.Portfolio.Statistic import generate_benchmark_report, generate_net_report, order_view, position_view, trade_view, deal_view
+from Library.Portfolio.Statistic import aggregate_trades, generate_benchmark_report, generate_net_report, order_view, position_view, trade_view, deal_view
 from Library.Portfolio.Trade import TradeAPI
 from Library.Protocol.Action import ActionAPI, ActionID, CompleteActionAPI, ShutdownActionAPI
 from Library.Protocol.Update import (
@@ -145,6 +145,7 @@ class SystemAPI(ServiceAPI, ABC):
     RESULT: str = "Result.json"
     MANIFEST: str = "Run.json"
     PARAMETERS: str = "Parameters.yml"
+    CONTRACT: str = "Contract.yml"
 
     def __init__(self,
                  strategy: type[StrategyAPI],
@@ -176,6 +177,7 @@ class SystemAPI(ServiceAPI, ABC):
         self._security_: SecurityAPI = security
         self._timeframe_: TimeframeAPI = timeframe
         self._parameters_: Parameter = parameters
+        self._contract_snapshot_: Union[dict, None] = None
 
         self.account: Union[AccountAPI, None] = None
         self.security: SecurityAPI = security
@@ -275,6 +277,19 @@ class SystemAPI(ServiceAPI, ABC):
         except Exception as error:
             self._log_.warning(lambda error=error: f"Publish Operation: Failed · {error}")
             return None
+
+    def _record_contract_(self) -> None:
+        contract = self._security_.Contract if self._security_ is not None else None
+        if self._run_ is None or contract is None: return
+        snapshot = contract.snapshot()
+        if snapshot == self._contract_snapshot_: return
+        path = self._run_ / self.INPUT / self.CONTRACT
+        try:
+            write_yaml(path, snapshot, safe=False)
+            self._contract_snapshot_ = snapshot
+            self._log_.debug(lambda: f"Contract Snapshot: Saved · {path}")
+        except Exception as error:
+            self._log_.warning(lambda error=error: f"Contract Snapshot: Failed · {error}")
 
     def _destination_(self, request, temporary: str, scoped: str = "") -> Union[Path, None]:
         if request is None or request is False: return None
@@ -435,25 +450,27 @@ class SystemAPI(ServiceAPI, ABC):
 
     def _report_(self, portfolio: PortfolioAPI, account: Union[AccountAPI, None], start, stop) -> None:
         if portfolio is None: return
-        net = generate_net_report(portfolio.Positions, portfolio.Trades, account, start, stop, (portfolio.BuyEquityCurve, portfolio.SellEquityCurve, portfolio.EquityCurve))
+        positions, trades = portfolio.Positions, portfolio.Trades
+        net = generate_net_report(positions, trades, account, start, stop, (portfolio.BuyEquityCurve, portfolio.SellEquityCurve, portfolio.EquityCurve))
         self.statistics = net
+        self.benchmarks = None
+        if not (self._reporting_ or self._exporting_ or self._plotting_): return
         bars, benchmarks = [], {}
         try:
             bars = self._bars_()
             benchmarks = self._benchmarks_(start, stop, bars)
         except Exception as error: self._log_.error(lambda error=error: f"Benchmark Operation: Failed · {error}")
-        self.benchmarks = generate_benchmark_report(portfolio.EquityCurve.Track, benchmarks, start, stop, risk_free=self._risk_free_) if self._benchmarking_ else None
-        if not (self._reporting_ or self._exporting_ or self._plotting_): return
-        trades = trade_view(portfolio.Trades)
+        if self._benchmarking_: self.benchmarks = generate_benchmark_report(portfolio.EquityCurve.Track, benchmarks, start, stop, risk_free=self._risk_free_)
+        view = trade_view(trades)
         tables = {
             "Orders": order_view(portfolio.Orders),
-            "Positions": position_view(portfolio.Positions),
-            "Trades": trades,
-            "Deals": deal_view(portfolio.Deals),
+            "Positions": position_view(positions),
+            "Trades": view,
+            "Deals": deal_view(trades if trades.is_empty() else aggregate_trades(trades)),
             "Net": net,
         }
         if self.benchmarks is not None and not self.benchmarks.is_empty(): tables[BENCHMARK_LABEL] = self.benchmarks
-        try: self._plot_(portfolio, account, start, stop, benchmarks, tables, bars, trades)
+        try: self._plot_(portfolio, account, start, stop, benchmarks, tables, bars, view)
         except Exception as error:
             self._log_.error(lambda error=error: f"Plot Operation: Failed · {error}")
             self._failures_.append(f"Plot: {error}")
@@ -789,7 +806,7 @@ class SystemAPI(ServiceAPI, ABC):
 
     def deploy(self) -> None:
         if self.strategy is None: return
-        self._strategy_.Recording = self._plotting_
+        self.strategy.Recording = self._plotting_
         self.strategy.Signals = []
         self.strategy._long_bars_ = 0
         self.strategy._short_bars_ = 0
