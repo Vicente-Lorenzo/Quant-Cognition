@@ -35,7 +35,10 @@ class ExecutorAPI:
     Folder: str = "Runs"
     Runs: str = str(inspect_temporary(Folder))
     Kept: str = str(inspect_persistent(Folder))
+    CONSOLE: str = "Console.log"
+    RECORD: str = "Run.log"
     _SCOPE_: str = "--run"
+    _USER_: str = "--user"
     _STORAGE_: str = "--storage"
     _LOGGED_ = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[.,]\d+ - ")
 
@@ -90,7 +93,7 @@ class ExecutorAPI:
     def _rescue_(self, folder: Path, escaped: list) -> None:
         if not escaped: return
         try:
-            with open(folder / "Run.log", "a", encoding="utf-8", newline="\n") as sink:
+            with open(folder / self.RECORD, "a", encoding="utf-8", newline="\n") as sink:
                 sink.write(f"\n--- Escaped Output: {len(escaped)} Lines · Bypassed The Logger ---\n")
                 sink.write("\n".join(escaped) + "\n")
             self._log_.warning(lambda: f"Run Output: Escaped · {len(escaped)} Lines · Appended To Run.log")
@@ -111,11 +114,12 @@ class ExecutorAPI:
             self._log_.debug(lambda error=error: f"Run Log Stop: Failed · {error}")
 
     @classmethod
-    def _scoped_(cls, arguments: str, folder: str) -> str:
+    def _scoped_(cls, arguments: str, folder: str, owner: Union[str, None] = None) -> str:
         if not arguments: return arguments
         tokens = shlex.split(arguments, posix=False)
-        if cls._SCOPE_ in tokens: return arguments
-        return " ".join([*tokens, cls._SCOPE_, f'"{folder}"'])
+        if cls._SCOPE_ not in tokens: tokens += [cls._SCOPE_, f'"{folder}"']
+        if owner: tokens += [cls._USER_, f'"{owner}"']
+        return " ".join(tokens)
 
     @staticmethod
     def _command_(kind: TaskType, path: str, arguments: str = None) -> list[str]:
@@ -133,9 +137,10 @@ class ExecutorAPI:
         return environment
 
     @staticmethod
-    def spawn(tid: str, *, database: str = "Quant", cycle: Union[str, None] = None, retry: int = 0, manual: bool = False, arguments: Union[str, None] = None) -> subprocess.Popen:
+    def spawn(tid: str, *, database: str = "Quant", cycle: Union[str, None] = None, retry: int = 0, manual: bool = False, arguments: Union[str, None] = None, auditor: Union[str, None] = None) -> subprocess.Popen:
         command = [sys.executable, "-m", "Library.Scheduler.Runner", tid, "--database", database]
         if arguments: command += ["--arguments", arguments]
+        if auditor: command += ["--auditor", auditor]
         if cycle is not None: command += ["--cycle", cycle]
         if retry: command += ["--retry", str(retry)]
         if manual: command += ["--manual"]
@@ -184,12 +189,12 @@ class ExecutorAPI:
         except Exception:
             return offset
 
-    def run(self, task: TaskAPI, *, cycle: Union[str, None] = None, retry: int = 0, manual: bool = False, arguments: Union[str, None] = None) -> RunAPI:
+    def run(self, task: TaskAPI, *, cycle: Union[str, None] = None, retry: int = 0, manual: bool = False, arguments: Union[str, None] = None, auditor: Union[str, None] = None) -> RunAPI:
         artifact = TaskType.parse(task.Type)
         label = artifact.name if isinstance(artifact, TaskType) else str(task.Type)
         kind = Kind.Service.name if Kind.parse(task.Kind) is Kind.Service else Kind.Manual.name if manual else Kind.Scheduled.name
         arguments = arguments if arguments is not None else task.Arguments
-        run = RunAPI(UID=uuid.uuid4().hex, CID=cycle, TID=task.UID, Kind=kind, Status=RunStatus.Waiting.name, Retry=retry, Arguments=arguments, Heartbeat=utc_now())
+        run = RunAPI(UID=uuid.uuid4().hex, CID=cycle, TID=task.UID, Kind=kind, Status=RunStatus.Waiting.name, Retry=retry, Arguments=arguments, Auditor=auditor, Heartbeat=utc_now())
         self._persist_(run)
         started, clock = utc_now(), time.monotonic()
         run.Status, run.StartedAt, run.Heartbeat = RunStatus.Running.name, started, started
@@ -197,11 +202,11 @@ class ExecutorAPI:
         self._log_.info(lambda: f"Run Launch: Started ({task.Name}) · {label} · {task.Path}")
         folder = Path(self.Runs) / run.UID
         mkdir(folder, safe=False)
-        log = str(folder / "Console.log")
+        log = str(folder / self.CONSOLE)
         run.LID = self._open_log_(run, task, log)
         peak, beat = 0, clock
         with open(log, "wb") as sink:
-            process = subprocess.Popen(self._command_(artifact, task.Path, self._scoped_(arguments, str(folder))), cwd=self._ROOT_, env=self._environment_(), stdout=sink, stderr=subprocess.STDOUT, **windowless())
+            process = subprocess.Popen(self._command_(artifact, task.Path, self._scoped_(arguments, str(folder), task.Owner)), cwd=self._ROOT_, env=self._environment_(), stdout=sink, stderr=subprocess.STDOUT, **windowless())
             run.PID = os.getpid()
             try: monitor = psutil.Process(process.pid)
             except psutil.Error: monitor = None

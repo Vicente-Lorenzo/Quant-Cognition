@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Union, ClassVar
 
+from Library.Auth.Role import RoleAPI
 from Library.Auth.User import UserAPI
 from Library.Scheduler.Workflow import WorkflowAPI, Kind
 from Library.Utility.Enumeration import EnumerationAPI
@@ -19,7 +20,7 @@ class TaskAPI(DatapointAPI):
 
     Schema: ClassVar[str] = WorkflowAPI.Schema
     Table: ClassVar[str] = "Task"
-    Enums: ClassVar[dict] = {"Type": TaskType, "Kind": Kind}
+    Enums: ClassVar[dict] = {"Type": TaskType, "Kind": Kind, "RunRole": RoleAPI, "EditRole": RoleAPI}
 
     Defaults: ClassVar[dict] = {"Enabled": True, "Kind": Kind.Scheduled.name, "Type": TaskType.Python.name, "RequiresApproval": False, "RequiresReview": False, "MaxRetry": 0, "RetryDelay": 0, "Waits": True, "Tolerates": True}
 
@@ -27,6 +28,8 @@ class TaskAPI(DatapointAPI):
     WID: Union[str, None] = None
     Name: Union[str, None] = None
     Owner: Union[str, None] = None
+    RunRole: Union[str, RoleAPI, None] = None
+    EditRole: Union[str, RoleAPI, None] = None
     Enabled: Union[bool, None] = None
     Kind: Union[str, Kind, None] = None
     Type: Union[str, TaskType, None] = None
@@ -48,6 +51,8 @@ class TaskAPI(DatapointAPI):
             self.ID.WID: ForeignKey(pl.String, reference=WorkflowAPI.reference()),
             self.ID.Name: pl.String(),
             self.ID.Owner: ForeignKey(pl.String, reference=UserAPI.reference()),
+            self.ID.RunRole: pl.String(),
+            self.ID.EditRole: pl.String(),
             self.ID.Enabled: pl.Boolean(),
             self.ID.Kind: pl.String(),
             self.ID.Type: pl.String(),
