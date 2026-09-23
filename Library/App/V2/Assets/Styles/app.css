@@ -579,6 +579,20 @@ html, body { height: 100%; margin: 0; overflow-x: hidden; }
 
 .scheduler-detail-val { color: var(--bs-body-color); word-break: break-word; }
 
+.credential-panel { max-width: none; padding: 0.75rem 1rem; margin: 0 0 0.75rem; }
+
+.credential-panel .panel-title { margin-bottom: 0.35rem; font-size: 0.95rem; }
+
+.credential-secret { display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.85rem; }
+
+.credential-hidden { color: var(--bs-secondary-color); letter-spacing: 0.15em; }
+
+.credential-row summary { cursor: pointer; color: var(--bs-secondary-color); min-height: 1.75rem; }
+
+.credential-row[open] summary { color: var(--bs-body-color); }
+
+.credential-value { display: block; margin: 0.2rem 0 0.35rem 1.1rem; font-family: var(--bs-font-monospace, monospace); word-break: break-all; user-select: all; }
+
 .scheduler-log { max-height: 55vh; overflow: auto; margin: 0; padding: 0.9rem 1rem; font-family: var(--bs-font-monospace, monospace); font-size: 0.78rem; line-height: 1.5; color: var(--bs-body-color); background: var(--bs-tertiary-bg); border: 1px solid var(--bs-border-color); border-radius: 6px; white-space: pre-wrap; }
 
 .icon-primary { color: var(--bs-primary); }

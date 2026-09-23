@@ -128,7 +128,7 @@ class TableAPI(RefreshAPI, PageAPI):
             selection=self.STATE_STORE_ID,
             edition=self.EDIT_STORE_ID if self._EDITABLE_ else MISSING,
             workspace=self.endpoint,
-            payload=self._workspace_(),
+            payload=self._workspace_(rows=[]),
             stylename="lightweight-fill"
         )
         elements = [

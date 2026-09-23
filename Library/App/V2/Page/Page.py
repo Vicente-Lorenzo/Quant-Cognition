@@ -128,9 +128,13 @@ class PageAPI(Generic[AppType]):
         return keys
 
     def _tally_(self, keys: list, action: Callable, done: str, blocked: str = MISSING):
-        count = sum(1 for key in keys if action(key))
+        count, failure = 0, None
+        for key in keys:
+            try: count += 1 if action(key) else 0
+            except Exception as error: failure = str(error)
+        if failure: self.app.notify.error(failure, header="Action Failed")
         if not count:
-            if blocked: self.app.notify.warning(blocked, header="No Action")
+            if blocked and not failure: self.app.notify.warning(blocked, header="No Action")
             return dash.no_update
         self.app.notify.success(f"{count} {done}", header="Done")
         return RefreshAPI.token()
