@@ -85,7 +85,7 @@ class TechnicalAPI:
         return TechnicalAPI._nulls_(len(series))
 
     def _scalar_(self, value: Union[float, None]) -> pl.DataFrame:
-        return pl.DataFrame({self.Name: pl.Series([value], dtype=pl.Float64)})
+        return pl.Series(self.Name, [value], dtype=pl.Float64).to_frame()
 
     def _pad_(self) -> pl.DataFrame:
         return self._scalar_(None)

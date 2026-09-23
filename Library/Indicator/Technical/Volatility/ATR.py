@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
 from Library.Indicator.Technical.Technical import NeutralSignalAPI, TechnicalAPI, TechnicalType
@@ -13,14 +13,14 @@ class AverageTrueRangeAPI(NeutralSignalAPI):
     Type = TechnicalType.Volatility
     Parameters = (TechnicalAPI.PERIOD, TechnicalAPI.MODE)
 
-    def _extract_(self, market: MarketAPI) -> Union[pl.Series, pl.DataFrame]:
-        return pl.DataFrame({
+    def _extract_(self, market: MarketAPI) -> dict[str, pl.Series]:
+        return {
             "High": market.HighTicks.Price.tail(),
             "Low": market.LowTicks.Price.tail(),
             "Close": market.CloseTicks.Price.tail()
-        })
+        }
 
-    def batch(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
+    def batch(self, data: dict[str, pl.Series]) -> pl.DataFrame:
         highs = data["High"]
         lows = data["Low"]
         closes = data["Close"]
@@ -33,7 +33,7 @@ class AverageTrueRangeAPI(NeutralSignalAPI):
         atr = self._mask_(tr.ewm_mean(alpha=1.0 / self.Window, adjust=False), self.Window)
         return pl.DataFrame({self.Name: atr})
 
-    def stream(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:
+    def stream(self, data: dict[str, pl.Series]) -> pl.DataFrame:
         prev_atr = self.Result.last()
         highs = data["High"]
         lows = data["Low"]

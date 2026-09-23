@@ -181,7 +181,7 @@ class CalendarAPI(DatapointAPI):
     @classmethod
     def download(cls, db: DatabaseAPI, start: datetime, stop: datetime, by: str = "Calendar", delay: float = 3.0) -> int:
         log = LoggingAPI()
-        cls(db=db, migrate=True, autosave=False, autoload=False)
+        cls(db=db, migrate=True, autoload=False)
         total, week = 0, start - timedelta(days=start.weekday())
         while week <= stop:
             rows = cls._week_(week)
