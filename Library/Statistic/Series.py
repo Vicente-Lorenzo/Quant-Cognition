@@ -1,5 +1,4 @@
-from itertools import accumulate
-
+from Library.Database.Dataframe import np
 from Library.Statistic.Metric import series_returns
 from Library.Utility.Math import EPSILON
 
@@ -49,23 +48,22 @@ def periodic(equity: list) -> list:
         rows.append(row)
     return rows
 
+def _windows_(values: list, window: int, chunk: int = 16384):
+    array = np.asarray(values, dtype=np.float64)
+    for offset in range(0, array.size - window + 1, chunk):
+        yield offset, np.lib.stride_tricks.sliding_window_view(array[offset:offset + chunk + window - 1], window)
+
 def rolling(equity: list, window: int = 63, periods: float = 252.0) -> tuple:
     values = [(stamp, value) for stamp, value in equity if value is not None]
     if len(values) <= window: return [], []
     returns = [(values[index][0], values[index][1] / values[index - 1][1] - 1.0)
                for index in range(1, len(values)) if values[index - 1][1]]
-    sums = list(accumulate((value for _, value in returns), initial=0.0))
-    squares = list(accumulate((value * value for _, value in returns), initial=0.0))
     scale = periods ** 0.5
     sharpes, volatilities = [], []
-    for index in range(window, len(returns) + 1):
-        stamp = returns[index - 1][0]
-        total = sums[index] - sums[index - window]
-        mean = total / window
-        variance = (squares[index] - squares[index - window] - total * mean) / (window - 1)
-        deviation = variance ** 0.5 if variance > 0.0 else 0.0
-        volatilities.append((stamp, deviation * scale * 100.0))
-        sharpes.append((stamp, (mean / deviation) * scale if deviation > EPSILON else 0.0))
+    for offset, block in _windows_([value for _, value in returns], window):
+        for index, (mean, deviation) in enumerate(zip(block.mean(axis=1).tolist(), block.std(axis=1, ddof=1).tolist()), start=offset + window - 1):
+            volatilities.append((returns[index][0], deviation * scale * 100.0))
+            sharpes.append((returns[index][0], (mean / deviation) * scale if deviation > EPSILON else 0.0))
     return sharpes, volatilities
 
 def covariant(equity: list, benchmark: list, window: int = 63) -> list:
@@ -78,16 +76,13 @@ def covariant(equity: list, benchmark: list, window: int = 63) -> list:
         previous, current = paired[index - 1], paired[index]
         if not previous[1] or not previous[2]: continue
         returns.append((current[0], current[1] / previous[1] - 1.0, current[2] / previous[2] - 1.0))
-    mine = list(accumulate((value for _, value, _ in returns), initial=0.0))
-    theirs = list(accumulate((value for _, _, value in returns), initial=0.0))
-    products = list(accumulate((first * second for _, first, second in returns), initial=0.0))
-    squares = list(accumulate((second * second for _, _, second in returns), initial=0.0))
     betas = []
-    for index in range(window, len(returns) + 1):
-        total, other = mine[index] - mine[index - window], theirs[index] - theirs[index - window]
-        covariance = products[index] - products[index - window] - total * other / window
-        variance = squares[index] - squares[index - window] - other * other / window
-        betas.append((returns[index - 1][0], covariance / variance if variance > EPSILON * EPSILON else 0.0))
+    for (offset, mine), (_, theirs) in zip(_windows_([first for _, first, _ in returns], window), _windows_([second for _, _, second in returns], window)):
+        mine = mine - mine.mean(axis=1, keepdims=True)
+        theirs = theirs - theirs.mean(axis=1, keepdims=True)
+        covariances, variances = (mine * theirs).sum(axis=1).tolist(), (theirs * theirs).sum(axis=1).tolist()
+        for index, (covariance, variance) in enumerate(zip(covariances, variances), start=offset + window - 1):
+            betas.append((returns[index][0], covariance / variance if variance > EPSILON * EPSILON else 0.0))
     return betas
 
 def distribution(equity: list, buckets: int = 41) -> list:

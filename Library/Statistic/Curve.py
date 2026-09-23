@@ -44,6 +44,7 @@ class CurveAPI:
         self._values_: array = array("d")
         self._points_: array = array("d")
         self._observed_: int = 0
+        self._counted_: int = 0
         self._peak_: Union[float, None] = None
         self._trough_: Union[float, None] = None
         self._max_drawdown_: float = 0.0
@@ -74,6 +75,8 @@ class CurveAPI:
         return numerator / denominator if denominator > EPSILON else 0.0
 
     def _accumulate_(self, value: float) -> None:
+        if not math.isfinite(value): return
+        self._counted_ += 1
         if self._peak_ is None or value > self._peak_: self._peak_ = value
         if self._trough_ is None or value < self._trough_: self._trough_ = value
         drawdown_value = self._peak_ - value
@@ -91,6 +94,9 @@ class CurveAPI:
 
     def _vectorize_(self, count: int) -> None:
         points = np.frombuffer(self._points_[self._observed_:count], dtype=np.float64)
+        points = points[np.isfinite(points)]
+        if not points.size: return
+        self._counted_ += points.size
         peaks, troughs = np.maximum.accumulate(points), np.minimum.accumulate(points)
         if self._peak_ is not None:
             np.maximum(peaks, self._peak_, out=peaks)
@@ -266,12 +272,12 @@ class CurveAPI:
     @property
     def MeanDrawdown(self) -> float:
         self._excurse_()
-        return self._drawdown_sum_ / self._observed_ if self._observed_ else 0.0
+        return self._drawdown_sum_ / self._counted_ if self._counted_ else 0.0
 
     @property
     def MeanDrawdownValue(self) -> float:
         self._excurse_()
-        return self._drawdown_value_sum_ / self._observed_ if self._observed_ else 0.0
+        return self._drawdown_value_sum_ / self._counted_ if self._counted_ else 0.0
 
     @property
     def MaxRunup(self) -> float:
@@ -286,12 +292,12 @@ class CurveAPI:
     @property
     def MeanRunup(self) -> float:
         self._excurse_()
-        return self._runup_sum_ / self._observed_ if self._observed_ else 0.0
+        return self._runup_sum_ / self._counted_ if self._counted_ else 0.0
 
     @property
     def MeanRunupValue(self) -> float:
         self._excurse_()
-        return self._runup_value_sum_ / self._observed_ if self._observed_ else 0.0
+        return self._runup_value_sum_ / self._counted_ if self._counted_ else 0.0
 
     @property
     def Periods(self) -> float:
