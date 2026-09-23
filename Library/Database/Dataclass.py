@@ -131,29 +131,27 @@ class DataclassAPI:
                     properties.append((attr_name, getattr(attr.fget, "_overridefield_", False)))
         return tuple(fields), tuple(properties)
 
+    @staticmethod
+    @functools.cache
+    def _names_(cls, include_fields, include_initvar_fields, include_hidden_fields, include_override_fields, include_properties) -> tuple:
+        fields, properties = DataclassAPI._plan_(cls)
+        names = []
+        if include_fields: names += [name for name, initvar, visible in fields if (include_initvar_fields if initvar else include_hidden_fields or visible)]
+        if include_override_fields or include_properties: names += [name for name, override in properties if (include_override_fields if override else include_properties)]
+        return tuple(names)
+
     def data(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, include_missing_fields=False, flatten=False):
-        result = []
-        def _emit_(name):
-            val = self._parse_(name, flatten=flatten)
-            if not include_missing_fields and val is MISSING:
-                return
-            if flatten and isinstance(val, DataclassAPI):
-                result.extend((f"{name}.{sub_k}", sub_v) for sub_k, sub_v in val.data(include_fields, include_initvar_fields, include_hidden_fields, include_override_fields, include_properties, include_missing_fields, flatten))
-            else:
-                result.append((name, val))
-        fields, properties = self._plan_(type(self))
-        if include_fields:
-            for f_name, is_initvar, repr_ in fields:
-                if is_initvar:
-                    if include_initvar_fields: _emit_(f_name)
-                elif include_hidden_fields or repr_:
-                    _emit_(f_name)
-        if include_override_fields or include_properties:
-            for attr_name, is_override in properties:
-                if is_override:
-                    if include_override_fields: _emit_(attr_name)
-                elif include_properties:
-                    _emit_(attr_name)
+        result, nested = [], self._flatten_ if flatten else ()
+        for name in self._names_(type(self), include_fields, include_initvar_fields, include_hidden_fields, include_override_fields, include_properties):
+            value = getattr(self, name)
+            if isinstance(value, DataclassAPI):
+                if name not in nested and (uid := value.UID) is not MISSING: value = uid
+                elif flatten:
+                    result.extend((f"{name}.{key}", item) for key, item in value.data(include_fields, include_initvar_fields, include_hidden_fields, include_override_fields, include_properties, include_missing_fields, flatten))
+                    continue
+            elif isinstance(value, Enum): value = value.name
+            elif value is MISSING and not include_missing_fields: continue
+            result.append((name, value))
         return result
 
     def tuple(self, include_fields=True, include_initvar_fields=False, include_hidden_fields=False, include_override_fields=True, include_properties=False, include_missing_fields=False, flatten=False):

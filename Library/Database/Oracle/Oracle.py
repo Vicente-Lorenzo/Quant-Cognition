@@ -42,6 +42,7 @@ class OracleDatabaseAPI(DatabaseAPI):
         pl.Date: "DATE",
         pl.Time: "INTERVAL DAY TO SECOND",
         pl.Datetime: "TIMESTAMP",
+        pl.Datetime(time_zone="UTC"): "TIMESTAMP WITH TIME ZONE",
         pl.Duration: "INTERVAL DAY TO SECOND",
 
         pl.List: "VARCHAR2",
@@ -78,6 +79,7 @@ class OracleDatabaseAPI(DatabaseAPI):
         pl.Date: "DATE",
         pl.Time: "INTERVAL DAY TO SECOND",
         pl.Datetime: "TIMESTAMP",
+        pl.Datetime(time_zone="UTC"): "TIMESTAMP WITH TIME ZONE",
         pl.Duration: "INTERVAL DAY TO SECOND",
 
         pl.List: "VARCHAR2(4000)",

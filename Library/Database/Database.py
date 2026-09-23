@@ -220,6 +220,11 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         if isinstance(dtype, pl.DataType): return dtype.__class__
         raise TypeError(f"Not a valid Structure dtype: {dtype}")
 
+    @classmethod
+    def _mapped_(cls, mapping: dict, dtype) -> str:
+        inner = dtype.dtype if isinstance(dtype, (IdentityKey, PrimaryKey, ForeignKey)) else dtype
+        return mapping[inner] if isinstance(inner, pl.Datetime) and inner.time_zone else mapping[cls._normalize_(dtype)]
+
     def _target_(self, schema: str, table: str) -> str:
         ql, qr = self._quote_
         return f"{ql}{schema}{qr}.{ql}{table}{qr}"
@@ -314,10 +319,10 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
 
     def _check_(self, structure: Union[dict, None] = None) -> str:
         structure = structure if structure is not None else self._STRUCTURE_
-        return self._CHECK_SEPARATOR_.join(self._row_(name, self._CHECK_DATATYPE_MAPPING_[self._normalize_(dtype)], int(self.primary(dtype)), int(isinstance(dtype, ForeignKey))) for name, dtype in structure.items())
+        return self._CHECK_SEPARATOR_.join(self._row_(name, self._mapped_(self._CHECK_DATATYPE_MAPPING_, dtype), int(self.primary(dtype)), int(isinstance(dtype, ForeignKey))) for name, dtype in structure.items())
 
     def _datatype_(self, dtype, *, indexed: bool = False) -> str:
-        return self._CREATE_DATATYPE_MAPPING_[self._normalize_(dtype)]
+        return self._mapped_(self._CREATE_DATATYPE_MAPPING_, dtype)
 
     def _identity_(self) -> str:
         return " GENERATED ALWAYS AS IDENTITY"

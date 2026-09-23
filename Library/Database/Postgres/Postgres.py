@@ -3,6 +3,7 @@ import psycopg
 from typing import Union, Callable, Any
 from typing_extensions import Self
 from collections.abc import Sequence
+from psycopg.types.datetime import TimestampBinaryLoader, TimestampLoader
 
 from Library.Database.Dataframe import pl
 from Library.Database.Database import DatabaseAPI
@@ -41,6 +42,7 @@ class PostgresDatabaseAPI(DatabaseAPI):
         pl.Date: "date",
         pl.Time: "time without time zone",
         pl.Datetime: "timestamp without time zone",
+        pl.Datetime(time_zone="UTC"): "timestamp with time zone",
         pl.Duration: "interval",
 
         pl.List: "character varying",
@@ -77,6 +79,7 @@ class PostgresDatabaseAPI(DatabaseAPI):
         pl.Date: "DATE",
         pl.Time: "TIME",
         pl.Datetime: "TIMESTAMP",
+        pl.Datetime(time_zone="UTC"): "TIMESTAMPTZ",
         pl.Duration: "INTERVAL",
 
         pl.List: "VARCHAR",
@@ -143,8 +146,11 @@ class PostgresDatabaseAPI(DatabaseAPI):
             port=self._port_,
             user=self._user_,
             password=self._password_,
-            dbname=database
+            dbname=database,
+            options="-c TimeZone=UTC"
         )
+        connection.adapters.register_loader("timestamptz", TimestampLoader)
+        connection.adapters.register_loader("timestamptz", TimestampBinaryLoader)
         connection.autocommit = self._autocommit_
         return connection
 

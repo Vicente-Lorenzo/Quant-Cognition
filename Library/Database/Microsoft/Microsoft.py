@@ -42,6 +42,7 @@ class MicrosoftDatabaseAPI(DatabaseAPI):
         pl.Date: "date",
         pl.Time: "time",
         pl.Datetime: "datetime2",
+        pl.Datetime(time_zone="UTC"): "datetimeoffset",
         pl.Duration: "bigint",
 
         pl.List: "nvarchar",
@@ -78,6 +79,7 @@ class MicrosoftDatabaseAPI(DatabaseAPI):
         pl.Date: "DATE",
         pl.Time: "TIME",
         pl.Datetime: "DATETIME2",
+        pl.Datetime(time_zone="UTC"): "DATETIMEOFFSET",
         pl.Duration: "BIGINT",
 
         pl.List: "NVARCHAR(MAX)",
@@ -196,7 +198,7 @@ class MicrosoftDatabaseAPI(DatabaseAPI):
         return re.sub(r"(?i)^SELECT\s+(?:DISTINCT\s+|ALL\s+)?", lambda m: f"{m.group(0)}TOP {limit} ", sql.strip(), count=1)
 
     def _datatype_(self, dtype, *, indexed: bool = False) -> str:
-        datatype = self._CREATE_DATATYPE_MAPPING_[self._normalize_(dtype)]
+        datatype = self._mapped_(self._CREATE_DATATYPE_MAPPING_, dtype)
         return "NVARCHAR(450)" if indexed and datatype == "NVARCHAR(MAX)" else datatype
 
     def _identity_(self) -> str:
