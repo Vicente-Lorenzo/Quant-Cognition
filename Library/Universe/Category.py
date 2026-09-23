@@ -34,12 +34,11 @@ class CategoryAPI(DatapointAPI):
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],
                       migrate: bool,
-                      autosave: bool,
                       autoload: bool,
                       autooverload: bool) -> None:
         if not self.UID and self.Primary and self.Secondary:
             self.UID = f"{self.Primary}({self.Secondary})"
-        super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
         if self._db_ is None: return None

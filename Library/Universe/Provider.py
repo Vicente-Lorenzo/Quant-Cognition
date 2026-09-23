@@ -60,13 +60,12 @@ class ProviderAPI(DatapointAPI):
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],
                       migrate: bool,
-                      autosave: bool,
                       autoload: bool,
                       autooverload: bool) -> None:
         self.Platform = Platform.parse(self.Platform)
         if self.Abbreviation and self.Platform and not self.UID:
             self.UID = f"{self.Abbreviation}({self.Platform.name})"
-        super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
         clauses, params = [], {}

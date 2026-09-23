@@ -70,6 +70,16 @@ def read_text(path: Path, *, safe: bool = True, encoding: str = "utf-8", errors:
             return ""
         raise
 
+def tail_text(path: Path, size: int, *, safe: bool = True, encoding: str = "utf-8", errors: str = "replace") -> str:
+    try:
+        with open(path, "rb") as handle:
+            handle.seek(max(0, handle.seek(0, 2) - size))
+            return handle.read().decode(encoding, errors=errors)
+    except Exception:
+        if safe:
+            return ""
+        raise
+
 def write_text(path: Path, text: str, *, safe: bool = True, encoding: str = "utf-8") -> bool:
     try:
         mkdir(path.parent, safe=True)

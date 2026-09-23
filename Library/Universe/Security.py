@@ -46,7 +46,6 @@ class SecurityAPI(UniverseAPI):
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],
                       migrate: bool,
-                      autosave: bool,
                       autoload: bool,
                       autooverload: bool,
                       provider: Union[str, ProviderAPI, None],
@@ -57,22 +56,22 @@ class SecurityAPI(UniverseAPI):
         category = coerce(category)
         ticker = coerce(ticker)
         contract = coerce(contract)
-        self._provider_ = self._relate_(provider, ProviderAPI, normalize=ProviderAPI.normalize, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
-        self._ticker_ = self._relate_(ticker, TickerAPI, normalize=TickerAPI.normalize, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
-        self._category_ = self._relate_(category, CategoryAPI, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        self._provider_ = self._relate_(provider, ProviderAPI, normalize=ProviderAPI.normalize, db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
+        self._ticker_ = self._relate_(ticker, TickerAPI, normalize=TickerAPI.normalize, db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
+        self._category_ = self._relate_(category, CategoryAPI, db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
         if self._category_ is None and self._ticker_: self._category_ = self._ticker_.Category
         if isinstance(contract, ContractAPI): self._contract_ = contract
         elif contract is not MISSING and contract is not None:
             if isinstance(contract, int):
-                self._contract_ = ContractAPI(UID=contract, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+                self._contract_ = ContractAPI(UID=contract, db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
             else:
                 tuid = self._ticker_.UID if self._ticker_ else None
                 puid = self._provider_.UID if self._provider_ else None
-                if tuid and puid: self._contract_ = ContractAPI(Ticker=tuid, Provider=puid, Type=contract, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+                if tuid and puid: self._contract_ = ContractAPI(Ticker=tuid, Provider=puid, Type=contract, db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
         elif self._ticker_ and self._provider_:
             ct = TickerAPI.detect(self._ticker_.UID)
-            self._contract_ = ContractAPI(Ticker=self._ticker_.UID, Provider=self._provider_.UID, Type=ct, db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
-        super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+            self._contract_ = ContractAPI(Ticker=self._ticker_.UID, Provider=self._provider_.UID, Type=ct, db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
         row = super()._pull_(overload=overload)

@@ -1,10 +1,13 @@
 import os
+import re
 import sys
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Union
 from functools import lru_cache
+
+_ARGUMENT_ = re.compile(r"\"[^\"]*\"?|'[^']*'?|[^ \t\r\n]+")
 
 def find_user():
     import getpass
@@ -157,8 +160,8 @@ def find_host() -> str:
     except OSError: return "Unknown"
 
 def split_arguments(arguments: Union[str, None]) -> list[str]:
-    import shlex
-    tokens = shlex.split(arguments, posix=False) if arguments else []
+    tokens = _ARGUMENT_.findall(arguments) if arguments else []
+    if any(token[0] in "\"'" and (len(token) == 1 or token[-1] != token[0]) for token in tokens): raise ValueError("No closing quotation")
     return [token[1:-1] if len(token) > 1 and token[0] == token[-1] and token[0] in "\"'" else token for token in tokens]
 
 def join_arguments(parts) -> str:

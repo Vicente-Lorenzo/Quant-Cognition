@@ -11,6 +11,7 @@ EPOCH: Final[datetime] = datetime(1970, 1, 1)
 MILLISECOND: Final[timedelta] = timedelta(milliseconds=1)
 MICROSECOND: Final[timedelta] = timedelta(microseconds=1)
 STAMP: Final[str] = "%Y-%m-%d %H-%M-%S"
+INSTANT: Final[str] = "%Y-%m-%d %H:%M:%S"
 
 class Weekday(EnumerationAPI):
 
