@@ -147,6 +147,7 @@ class ContractAPI(UniverseAPI):
                       migrate: bool,
                       autoload: bool,
                       autooverload: bool,
+                      autosave: bool,
                       ticker: Union[str, TickerAPI, None],
                       provider: Union[str, ProviderAPI, None]) -> None:
         ticker = coerce(ticker)
@@ -155,7 +156,7 @@ class ContractAPI(UniverseAPI):
         self._provider_ = self._relate_(provider, ProviderAPI, normalize=ProviderAPI.normalize, db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
         if self.Type is None and self._ticker_ is not None and self._ticker_.UID:
             self.Type = TickerAPI.detect(self._ticker_.UID)
-        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload, autosave=autosave)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
         row = super()._pull_(overload=overload)

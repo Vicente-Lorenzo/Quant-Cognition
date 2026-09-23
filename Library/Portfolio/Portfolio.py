@@ -61,8 +61,9 @@ class PortfolioAPI(DatapointAPI):
                       db: Union[DatabaseAPI, None],
                       migrate: bool,
                       autoload: bool,
-                      autooverload: bool) -> None:
-        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
+                      autooverload: bool,
+                      autosave: bool) -> None:
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload, autosave=autosave)
 
     @staticmethod
     def pull_accounts(db: DatabaseAPI) -> pl.DataFrame:

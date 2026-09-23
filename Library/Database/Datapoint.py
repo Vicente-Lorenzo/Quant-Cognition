@@ -26,15 +26,15 @@ class DatapointAPI(DataclassAPI):
 
     db: InitVar[Union[DatabaseAPI, None]] = field(default=None, kw_only=True)
     migrate: InitVar[bool] = field(default=False, kw_only=True)
-    autosave: InitVar[bool] = field(default=False, kw_only=True)
     autoload: InitVar[bool] = field(default=False, kw_only=True)
     autooverload: InitVar[bool] = field(default=False, kw_only=True)
+    autosave: InitVar[bool] = field(default=False, kw_only=True)
 
     _db_: Union[DatabaseAPI, None] = field(default=None, init=False, repr=False)
     _migrate_: bool = field(default=False, init=False, repr=False)
-    _autosave_: bool = field(default=False, init=False, repr=False)
     _autoload_: bool = field(default=False, init=False, repr=False)
     _autooverload_: bool = field(default=False, init=False, repr=False)
+    _autosave_: bool = field(default=False, init=False, repr=False)
 
     @property
     def Structure(self) -> dict:
@@ -46,23 +46,32 @@ class DatapointAPI(DataclassAPI):
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],
                       migrate: bool,
-                      autosave: bool,
                       autoload: bool,
-                      autooverload: bool) -> None:
+                      autooverload: bool,
+                      autosave: bool) -> None:
         if self.Enums:
             for name, enumeration in self.Enums.items(): setattr(self, name, enumeration.parse(getattr(self, name)))
-        self._db_, self._migrate_, self._autosave_, self._autoload_, self._autooverload_ = db, migrate, autosave, autoload, autooverload
+        self._db_, self._migrate_, self._autoload_, self._autooverload_ = db, migrate, autoload, autooverload
         if self._db_ is not None:
             if self._migrate_: self._db_.migrate(schema=self.Schema, table=self.Table, structure=self.Structure)
             if self._autooverload_: self.overload()
             elif self._autoload_: self.load()
+        if autosave: self._arm_()
 
-    def __setattr__(self, name: str, value: Any) -> None:
+    def _autosaving_(self, name: str, value: Any) -> None:
         object.__setattr__(self, name, value)
-        if self._autosave_ and name and name[0].isupper():
-            try: self.save()
-            except Exception as e:
-                if self._db_ is not None: self._db_._log_.debug(lambda: f"Autosave {type(self).__name__}: Failed · {e}")
+        state = self.__dict__
+        if not name[0].isupper() or not state.get("_autosave_"): return
+        state["_autosave_"] = False
+        try: self.save()
+        except Exception as error:
+            if self._db_ is not None: self._db_._log_.warning(lambda error=error: f"Autosave {type(self).__name__}: Failed · {error}")
+        finally: state["_autosave_"] = True
+
+    def _arm_(self) -> None:
+        kind = type(self)
+        if kind.__setattr__ is not DatapointAPI._autosaving_: kind.__setattr__ = DatapointAPI._autosaving_
+        self.__dict__["_autosave_"] = True
 
     @staticmethod
     def _relate_(value: Any, kind: type, normalize: Callable = MISSING, **kwargs) -> Any:
@@ -103,30 +112,31 @@ class DatapointAPI(DataclassAPI):
 
     def _push_(self, by: str) -> None:
         if self._db_ is None: return
-        save_state = self._autosave_
-        try:
-            self._autosave_ = False
-            self._stamp_(by)
-            natural_key = self.natural_keys()
-            identity_cols = self.identity_keys()
-            data = {k: v for k, v in self.dict(include_fields=True, include_initvar_fields=False, include_properties=False, include_override_fields=True).items() if v is not None and v is not MISSING and k[0].isupper()}
-            if natural_key and all(data.get(k) is not None for k in natural_key):
-                insert_data = {k: v for k, v in data.items() if k not in identity_cols}
-                result = self._db_.upsert(schema=self.Schema, table=self.Table, data=insert_data, key=natural_key, returning=identity_cols if identity_cols else None)
-                if identity_cols and hasattr(result, "is_empty") and not result.is_empty():
-                    row = result.row(0, named=True)
-                    for col in identity_cols:
-                        if row.get(col) is not None: setattr(self, col, row[col])
-            elif identity_cols and all(data.get(k) is not None for k in identity_cols):
-                update_data = {k: v for k, v in data.items() if k not in identity_cols}
-                if update_data:
-                    condition, parameters = self._db_.where(**{k: data[k] for k in identity_cols})
-                    self._db_.update(schema=self.Schema, table=self.Table, data=update_data, condition=condition, parameters=parameters)
-            else:
-                fallback_key = identity_cols or natural_key or list(self.Structure.keys())[:1]
-                self._db_.upsert(schema=self.Schema, table=self.Table, data=data, key=fallback_key)
-        finally:
-            self._autosave_ = save_state
+        state = self.__dict__
+        armed, state["_autosave_"] = state.get("_autosave_", False), False
+        try: self._execute_(by)
+        finally: state["_autosave_"] = armed
+
+    def _execute_(self, by: str) -> None:
+        self._stamp_(by)
+        natural_key = self.natural_keys()
+        identity_cols = self.identity_keys()
+        data = {k: v for k, v in self.dict(include_fields=True, include_initvar_fields=False, include_properties=False, include_override_fields=True).items() if v is not None and v is not MISSING and k[0].isupper()}
+        if natural_key and all(data.get(k) is not None for k in natural_key):
+            insert_data = {k: v for k, v in data.items() if k not in identity_cols}
+            result = self._db_.upsert(schema=self.Schema, table=self.Table, data=insert_data, key=natural_key, returning=identity_cols if identity_cols else None)
+            if identity_cols and hasattr(result, "is_empty") and not result.is_empty():
+                row = result.row(0, named=True)
+                for col in identity_cols:
+                    if row.get(col) is not None: setattr(self, col, row[col])
+        elif identity_cols and all(data.get(k) is not None for k in identity_cols):
+            update_data = {k: v for k, v in data.items() if k not in identity_cols}
+            if update_data:
+                condition, parameters = self._db_.where(**{k: data[k] for k in identity_cols})
+                self._db_.update(schema=self.Schema, table=self.Table, data=update_data, condition=condition, parameters=parameters)
+        else:
+            fallback_key = identity_cols or natural_key or list(self.Structure.keys())[:1]
+            self._db_.upsert(schema=self.Schema, table=self.Table, data=data, key=fallback_key)
 
     def save(self, by: str = "Autosave") -> None:
         self._push_(by=by)
@@ -145,13 +155,14 @@ class DatapointAPI(DataclassAPI):
         try:
             row = self._db_.first(schema=self.Schema, table=self.Table, condition=condition, parameters=parameters)
             if row is None: return None
-            save_state, self._autosave_ = self._autosave_, False
+            state = self.__dict__
+            armed, state["_autosave_"] = state.get("_autosave_", False), False
             try:
                 for k, v in row.items():
                     if hasattr(self, k) and v is not None:
                         if overload or getattr(self, k) is None or getattr(self, k) is MISSING:
                             setattr(self, k, v)
-            finally: self._autosave_ = save_state
+            finally: state["_autosave_"] = armed
             return row
         finally: loading.discard(key)
 

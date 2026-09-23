@@ -2,7 +2,7 @@ import dash
 import pytest
 
 from Library.Auth import AccessAPI, RoleAPI
-from Library.Credential import CredentialAPI, CredentialKind, SecretAPI
+from Library.Credential import CredentialAPI, CredentialType, SecretAPI
 
 @pytest.fixture(scope="module")
 def page(application):
@@ -13,7 +13,7 @@ def test_the_page_is_a_viewer_page(page):
     assert page.endpoint == "/framework/credential/"
 
 def test_the_grid_masks_every_secret(page):
-    row = page._row_({"UID": "x", "Service": "Spotware", "Name": "Demo", "Kind": CredentialKind.OAuth2.name,
+    row = page._row_({"UID": "x", "Service": "Spotware", "Name": "Demo", "Kind": CredentialType.OAuth2.name,
                       "Username": CredentialAPI.pack({"ClientId": "cid"}),
                       "Secret": CredentialAPI.pack({"ClientSecret": SecretAPI.MASK}),
                       "Owner": "vicente", "ViewRole": RoleAPI.Viewer.name, "EditRole": RoleAPI.Editor.name})
@@ -22,7 +22,7 @@ def test_the_grid_masks_every_secret(page):
     assert row["View"] == "Viewer" and row["Edit"] == "Editor"
 
 def test_a_null_threshold_reads_as_owner_only(page):
-    row = page._row_({"UID": "x", "Service": "Framework", "Name": "Private", "Kind": CredentialKind.Password.name,
+    row = page._row_({"UID": "x", "Service": "Framework", "Name": "Private", "Kind": CredentialType.Password.name,
                       "Username": None, "Secret": None, "Owner": "vicente", "ViewRole": None, "EditRole": None})
     assert row["View"] == AccessAPI.label(None) and row["Edit"] == AccessAPI.label(None)
     assert row["Secret"] == SecretAPI.MASK
@@ -34,14 +34,14 @@ def test_the_role_choices_offer_owner_only_and_never_public(page):
 
 def test_a_refused_reveal_notifies_instead_of_silently_stopping(page, monkeypatch):
     messages = []
-    monkeypatch.setattr(page._manager_, "reveal", lambda uid, by=None: None)
+    monkeypatch.setattr(page._vault_, "reveal", lambda uid, by=None: None)
     monkeypatch.setattr(page, "_actor_", lambda: "viewer@test.com")
     monkeypatch.setattr(page.app.notify, "error", lambda message, **kwargs: messages.append(message))
     assert page._reveal_(1, {"selected": ["some-uid"]}) is dash.no_update
     assert messages == ["You may not reveal this credential"]
 
 def test_a_reveal_renders_one_row_per_secret(page, monkeypatch):
-    monkeypatch.setattr(page._manager_, "reveal", lambda uid, by=None: {"ClientSecret": "cs", "AccessToken": "at"})
+    monkeypatch.setattr(page._vault_, "reveal", lambda uid, by=None: {"ClientSecret": "cs", "AccessToken": "at"})
     monkeypatch.setattr(page, "_actor_", lambda: "admin@test.com")
     rendered = page._reveal_(1, {"selected": ["some-uid"]})
     assert [child.children[0].children for child in rendered] == ["ClientSecret", "AccessToken"]
@@ -55,10 +55,10 @@ def test_the_grid_carries_the_readers_access(page):
     assert page._row_({"UID": "x", "Service": "S", "Name": "N", "Kind": "Password", "Access": "View"})["Access"] == "View"
 
 def test_editing_never_prefills_the_secret(page, monkeypatch):
-    row = {"UID": "x", "Service": "Spotware", "Name": "Demo", "Kind": CredentialKind.OAuth2.name, "Username": CredentialAPI.pack({"ClientId": "cid"}),
+    row = {"UID": "x", "Service": "Spotware", "Name": "Demo", "Kind": CredentialType.OAuth2.name, "Username": CredentialAPI.pack({"ClientId": "cid"}),
            "Secret": CredentialAPI.pack({"ClientSecret": SecretAPI.MASK}), "Fields": None, "ExpiresAt": None, "Parent": None, "Owner": "owner@test.com",
            "ViewRole": RoleAPI.Viewer.name, "EditRole": None, "Access": "Edit"}
-    monkeypatch.setattr(page._manager_, "credential", lambda uid, by=None: row)
+    monkeypatch.setattr(page._vault_, "credential", lambda uid, by=None: row)
     monkeypatch.setattr(page, "_actor_", lambda: "owner@test.com")
     opened = dict(zip(["open", "mode", "title", *[entry.name for entry in page._FIELDS_]], page._open_(1, {"selected": ["x"]})))
     assert opened["secret"] == "" and opened["username"] == CredentialAPI.pack({"ClientId": "cid"})
@@ -66,7 +66,7 @@ def test_editing_never_prefills_the_secret(page, monkeypatch):
 
 def test_a_view_only_row_cannot_be_opened_for_edit(page, monkeypatch):
     messages = []
-    monkeypatch.setattr(page._manager_, "credential", lambda uid, by=None: {"UID": "x", "Access": "View"})
+    monkeypatch.setattr(page._vault_, "credential", lambda uid, by=None: {"UID": "x", "Access": "View"})
     monkeypatch.setattr(page, "_actor_", lambda: "viewer@test.com")
     monkeypatch.setattr(page.app.notify, "error", lambda message, **kwargs: messages.append(message))
     assert page._open_(1, {"selected": ["x"]})[0] is dash.no_update
@@ -74,7 +74,7 @@ def test_a_view_only_row_cannot_be_opened_for_edit(page, monkeypatch):
 
 def test_saving_parses_values_and_leaves_an_empty_secret_alone(page, monkeypatch):
     calls = []
-    monkeypatch.setattr(page._manager_, "update", lambda uid, by=None, **fields: calls.append(fields) or fields)
+    monkeypatch.setattr(page._vault_, "update", lambda uid, by=None, **fields: calls.append(fields) or fields)
     monkeypatch.setattr(page, "_actor_", lambda: "owner@test.com")
     monkeypatch.setattr(page.app.notify, "success", lambda message, **kwargs: None)
     values = (" Spotware ", "Demo", "OAuth2", '{"ClientId": "cid"}', "", '{"Host": "demo.ctraderapi.com"}', "2026-12-31 00:00:00", "", "owner@test.com", "Viewer", "Editor")
@@ -99,7 +99,7 @@ def test_fields_must_be_a_json_object(page, monkeypatch):
 def test_a_refused_store_is_reported(page, monkeypatch):
     messages = []
     def refuse(by=None, **fields): raise PermissionError("Access Owner: Failed · Only an Administrator may assign x as owner")
-    monkeypatch.setattr(page._manager_, "store", refuse)
+    monkeypatch.setattr(page._vault_, "store", refuse)
     monkeypatch.setattr(page, "_actor_", lambda: "editor@test.com")
     monkeypatch.setattr(page.app.notify, "error", lambda message, **kwargs: messages.append(message))
     values = ("Spotware", "Demo", "Password", "", "x", "", "", "", "x", "", "")
@@ -113,12 +113,12 @@ def test_expiry_renders_in_the_display_format(page):
 def test_a_new_selection_conceals_a_revealed_secret(page):
     assert page._conceal_({"selected": ["y"]}).children == SecretAPI.MASK
 
-def test_health_is_an_icon_and_a_label(page):
-    badge = page._health_(None)
-    assert "led-none" in badge and "Never" in badge
-    assert "Health" in page._markdown_columns_()
+def test_validity_is_an_icon_and_a_label(page):
+    badge = page._validity_(None)
+    assert "led-none" in badge and "Permanent" in badge
+    assert "Validity" in page._markdown_columns_()
 
 def test_the_kind_drives_the_key_templates(page):
-    username, secret = page._template_(CredentialKind.OAuth2.name)
+    username, secret = page._template_(CredentialType.OAuth2.name)
     assert CredentialAPI.unpack(username) == {"ClientId": "", "AccountId": ""}
     assert CredentialAPI.unpack(secret) == {"ClientSecret": "", "AccessToken": "", "RefreshToken": ""}

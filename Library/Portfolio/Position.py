@@ -140,6 +140,7 @@ class PositionAPI(DatapointAPI):
                       migrate: bool,
                       autoload: bool,
                       autooverload: bool,
+                      autosave: bool,
                       session: Union[str, SessionAPI, None],
                       account: Union[int, AccountAPI, None],
                       order: Union[int, OrderAPI, None],
@@ -214,7 +215,7 @@ class PositionAPI(DatapointAPI):
         self._commission_pnl_ = self._make_pnl_(commission_pnl, reference=eb)
         self._swap_pnl_ = self._make_pnl_(swap_pnl, reference=eb)
         self._net_pnl_ = self._make_pnl_(net_pnl, reference=eb)
-        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload, autosave=autosave)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
         row = super()._pull_(overload=overload)

@@ -34,7 +34,7 @@ def test_every_argument_is_accepted(name):
     if system is None: pytest.skip(f"{name} is not importable from Main")
     accepted = set(inspect.signature(system.__init__).parameters) - {"self"}
     passed = constructed()[name]
-    assert not (passed - accepted), f"{name} is handed {sorted(passed - accepted)} by Main._system_ but does not accept it"
+    assert not (passed - accepted), f"{name} is handed {sorted(passed - accepted)} by SystemCommandAPI._system_ but does not accept it"
 
 @pytest.mark.parametrize("name", sorted(constructed()))
 def test_every_system_forwards_the_shared_surface(name):
@@ -59,12 +59,12 @@ class _Rung_:
 
 @pytest.mark.parametrize("spelling", ["Hour", "HOUR", "hourly", "H", "1H", "H1", "60"])
 def test_every_spelling_of_a_timeframe_lands_on_one_ladder_scope(spelling):
-    from Library.System.Main import _scope_ as scope
+    scope = Main.SystemCommandAPI._scope_
     rungs = scope(_Rung_("Spotware(cTrader)"), _Rung_("Forex(Major)"), _Rung_("EURUSD"), _Rung_(spelling))
     assert rungs == ("Spotware(cTrader)", "Forex(Major)", "EURUSD", "H1")
 
 def test_distinct_timeframes_get_distinct_scopes():
-    from Library.System.Main import _scope_ as scope
+    scope = Main.SystemCommandAPI._scope_
     made = {scope(_Rung_("P"), _Rung_("C"), _Rung_("T"), _Rung_(uid))[-1] for uid in ("Hour", "Daily", "H4", "M15", "Monthly")}
     assert made == {"H1", "D1", "H4", "M15", "MN1"}
 
@@ -76,7 +76,7 @@ class _Args_:
         for name, value in fields.items(): setattr(self, name, value)
 
 def test_snapshot_writes_the_manifest_without_a_period(tmp_path):
-    from Library.System.Main import _snapshot_ as snapshot
+    snapshot = Main.SystemCommandAPI._snapshot_
     snapshot(tmp_path, _Args_(description="Golden 1"), None, LoggingAPI())
     manifest = json.loads((tmp_path / "Run.json").read_text(encoding="utf-8"))
     assert manifest["System"] == "Simulation"
@@ -84,12 +84,12 @@ def test_snapshot_writes_the_manifest_without_a_period(tmp_path):
     assert "Start" not in manifest and "Stop" not in manifest and "User" not in manifest
 
 def test_snapshot_records_who_the_run_acts_as(tmp_path):
-    from Library.System.Main import _snapshot_ as snapshot
+    snapshot = Main.SystemCommandAPI._snapshot_
     snapshot(tmp_path, _Args_(user="owner@test.com"), None, LoggingAPI())
     assert json.loads((tmp_path / "Run.json").read_text(encoding="utf-8"))["User"] == "owner@test.com"
 
 def test_snapshot_keeps_the_period_when_one_is_supplied(tmp_path):
-    from Library.System.Main import _snapshot_ as snapshot
+    snapshot = Main.SystemCommandAPI._snapshot_
     snapshot(tmp_path, _Args_(system="Backtesting", start="2023-01-01", stop="2024-01-01"), None, LoggingAPI())
     manifest = json.loads((tmp_path / "Run.json").read_text(encoding="utf-8"))
     assert manifest["Start"] == "2023-01-01" and manifest["Stop"] == "2024-01-01"
@@ -97,16 +97,16 @@ def test_snapshot_keeps_the_period_when_one_is_supplied(tmp_path):
 @pytest.mark.parametrize("system", ["Backtesting", "Optimization", "Learning"])
 def test_every_offline_system_accepts_pinned_parameters(system, monkeypatch):
     monkeypatch.setattr("sys.argv", ["Main.py", system, "--start", "2020-01-01", "--stop", "2021-01-01", "--parameters", "Pinned.yml"])
-    assert Main._parse_().parameters == "Pinned.yml"
+    assert Main.SystemCommandAPI().parse().parameters == "Pinned.yml"
 
 def test_realtime_systems_do_not_take_pinned_parameters(monkeypatch):
     monkeypatch.setattr("sys.argv", ["Main.py", "Simulation", "--parameters", "Pinned.yml"])
     with pytest.raises(SystemExit):
-        Main._parse_()
+        Main.SystemCommandAPI().parse()
 
 def test_parameters_default_to_the_ladder_when_nothing_is_pinned(monkeypatch):
     monkeypatch.setattr("sys.argv", ["Main.py", "Backtesting", "--start", "2020-01-01", "--stop", "2021-01-01"])
-    assert Main._parse_().parameters is Main.MISSING
+    assert Main.SystemCommandAPI().parse().parameters is Main.MISSING
 
 class _Ladder_:
 
@@ -118,20 +118,20 @@ class _Ladder_:
 
 def test_a_pinned_path_bypasses_the_ladder_and_targets_the_run_folder(tmp_path):
     trails = {}
-    pinned = Main._parameters_(_Ladder_(), None, (), trails, tmp_path, "Backtesting", "Pinned.yml")
+    pinned = Main.SystemCommandAPI._parameters_(_Ladder_(), None, (), trails, tmp_path, "Backtesting", "Pinned.yml")
     assert pinned == ("Pinned", "Pinned.yml", tmp_path / "Input" / "Parameters.yml")
     assert trails["Backtesting"] == ["Defaults", "Pinned.yml"]
-    assert Main._parameters_(_Ladder_(), None, (), trails, tmp_path, "Optimization") == "Ladder"
+    assert Main.SystemCommandAPI._parameters_(_Ladder_(), None, (), trails, tmp_path, "Optimization") == "Ladder"
 
 @pytest.mark.parametrize("system", ["Backtesting", "Optimization", "Learning"])
 @pytest.mark.parametrize("given", [[], ["--start", "2020-01-01"], ["--stop", "2021-01-01"]])
 def test_every_offline_system_requires_both_ends_of_the_period(system, given, monkeypatch):
     monkeypatch.setattr("sys.argv", ["Main.py", system, *given])
     with pytest.raises(SystemExit):
-        Main._parse_()
+        Main.SystemCommandAPI().parse()
 
 def test_snapshot_records_a_command_that_splits_back_into_the_same_arguments(tmp_path, monkeypatch):
-    from Library.System.Main import _snapshot_ as snapshot
+    snapshot = Main.SystemCommandAPI._snapshot_
     from Library.Utility.Runtime import split_arguments
     arguments = ["Backtesting", "--description", "Golden with spaces", "--run", str(tmp_path / "Offline Golden 1")]
     monkeypatch.setattr("sys.argv", ["Main.py", *arguments])
@@ -141,12 +141,12 @@ def test_snapshot_records_a_command_that_splits_back_into_the_same_arguments(tmp
 @pytest.mark.parametrize("system", ["Backtesting", "Optimization", "Learning"])
 def test_every_offline_system_accepts_a_pinned_contract(system, monkeypatch):
     monkeypatch.setattr("sys.argv", ["Main.py", system, "--start", "2020-01-01", "--stop", "2021-01-01", "--contract", "Contract.yml"])
-    assert Main._parse_().contract == "Contract.yml"
+    assert Main.SystemCommandAPI().parse().contract == "Contract.yml"
 
 def test_realtime_systems_take_their_contract_from_the_wire(monkeypatch):
     monkeypatch.setattr("sys.argv", ["Main.py", "Simulation", "--contract", "Contract.yml"])
     with pytest.raises(SystemExit):
-        Main._parse_()
+        Main.SystemCommandAPI().parse()
 
 def test_a_pinned_contract_replaces_the_stored_terms_in_memory(tmp_path):
     from types import SimpleNamespace
@@ -157,13 +157,13 @@ def test_a_pinned_contract_replaces_the_stored_terms_in_memory(tmp_path):
     pinned = ContractAPI(Ticker="EURUSD", Provider="Spotware(cTrader)", Type=ContractType.Spot, SwapLong=-9.0)
     write_yaml(tmp_path / "Contract.yml", pinned.snapshot(), safe=False)
     security = SimpleNamespace(Contract=stored, Ticker=SimpleNamespace(UID="EURUSD"))
-    Main._contract_(security, Main.MISSING)
+    Main.SystemCommandAPI._contract_(security, Main.MISSING)
     assert stored.SwapLong == -2.445
-    Main._contract_(security, str(tmp_path / "Contract.yml"))
+    Main.SystemCommandAPI._contract_(security, str(tmp_path / "Contract.yml"))
     assert stored.SwapLong == -9.0 and stored._db_ is None
 
 def test_snapshot_records_where_the_contract_came_from(tmp_path):
-    from Library.System.Main import _snapshot_ as snapshot
+    snapshot = Main.SystemCommandAPI._snapshot_
     snapshot(tmp_path, _Args_(system="Backtesting", contract="Pinned/Contract.yml"), None, LoggingAPI())
     assert json.loads((tmp_path / "Run.json").read_text(encoding="utf-8"))["Contract"] == "Pinned/Contract.yml"
     snapshot(tmp_path, _Args_(system="Simulation"), None, LoggingAPI())

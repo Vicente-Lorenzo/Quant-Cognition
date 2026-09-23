@@ -5,15 +5,15 @@ from typing import Callable, Union
 from Library.Auth.Access import AccessLevel, AccessAPI
 from Library.Auth.Role import RoleAPI
 from Library.Auth.User import UserAPI
-from Library.Credential.Credential import CredentialHealth, CredentialAPI
-from Library.Credential.Kind import LayoutAPI
+from Library.Credential.Credential import Validity, CredentialAPI
+from Library.Credential.Type import LayoutAPI
 from Library.Credential.Secret import SecretAPI
 from Library.Database import PostgresDatabaseAPI
 from Library.Logging import LoggingAPI
 from Library.Utility.Datetime import INSTANT, utc_now
 from Library.Utility.Typing import MISSING, Missing
 
-class CredentialManagerAPI:
+class VaultAPI:
 
     def __init__(self, *, database: str = "Quant", margin: int = 7 * 86400, refreshers: Union[dict[str, Callable], Missing] = MISSING) -> None:
         self._database_ = database
@@ -28,11 +28,11 @@ class CredentialManagerAPI:
     def scope(self):
         return PostgresDatabaseAPI.scope(database=self._database_)
 
-    def health(self, expires: Union[datetime, None], now: Union[datetime, None] = None) -> CredentialHealth:
-        if expires is None: return CredentialHealth.Never
+    def validity(self, expires: Union[datetime, None], now: Union[datetime, None] = None) -> Validity:
+        if expires is None: return Validity.Permanent
         now = now or utc_now()
-        if expires <= now: return CredentialHealth.Expired
-        return CredentialHealth.Expiring if expires <= now + timedelta(seconds=self._margin_) else CredentialHealth.Healthy
+        if expires <= now: return Validity.Expired
+        return Validity.Expiring if expires <= now + timedelta(seconds=self._margin_) else Validity.Valid
 
     @staticmethod
     def _clean_(fields: dict) -> dict:

@@ -7,17 +7,17 @@ from typing import Any, ClassVar, Union
 
 from Library.Auth.Role import RoleAPI
 from Library.Auth.User import UserAPI
-from Library.Credential.Kind import CredentialKind, LayoutAPI
+from Library.Credential.Type import CredentialType, LayoutAPI
 from Library.Credential.Secret import SecretAPI
 from Library.Database.Dataframe import pl
 from Library.Database.Database import PrimaryKey, ForeignKey
 from Library.Database.Datapoint import DatapointAPI
 from Library.Utility.Enumeration import EnumerationAPI
 
-class CredentialHealth(EnumerationAPI):
+class Validity(EnumerationAPI):
 
-    Never = 0
-    Healthy = 1
+    Permanent = 0
+    Valid = 1
     Expiring = 2
     Expired = 3
 
@@ -26,16 +26,16 @@ class CredentialAPI(DatapointAPI):
 
     Schema: ClassVar[str] = "Credential"
     Table: ClassVar[str] = "Credential"
-    Enums: ClassVar[dict] = {"Kind": CredentialKind, "ViewRole": RoleAPI, "EditRole": RoleAPI}
+    Enums: ClassVar[dict] = {"Kind": CredentialType, "ViewRole": RoleAPI, "EditRole": RoleAPI}
 
-    Defaults: ClassVar[dict] = {"Kind": CredentialKind.Password.name}
+    Defaults: ClassVar[dict] = {"Kind": CredentialType.Password.name}
 
     Nullable: ClassVar[tuple] = ("ViewRole", "EditRole", "Parent", "ExpiresAt")
 
     UID: Union[str, None] = None
     Service: Union[str, None] = None
     Name: Union[str, None] = None
-    Kind: Union[str, CredentialKind, None] = None
+    Kind: Union[str, CredentialType, None] = None
     Username: Union[str, None] = None
     Secret: Union[str, None] = None
     Fields: Union[str, None] = None

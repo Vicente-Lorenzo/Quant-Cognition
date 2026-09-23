@@ -67,6 +67,7 @@ class TickAPI(DatapointAPI):
                       migrate: bool,
                       autoload: bool,
                       autooverload: bool,
+                      autosave: bool,
                       security: Union[int, str, SecurityAPI, None],
                       timestamp: Union[datetime, TimestampAPI, None],
                       ask: Union[float, PriceAPI, None],
@@ -101,7 +102,7 @@ class TickAPI(DatapointAPI):
         self._ask_quote_conversion_ = PriceAPI(Price=ask_quote_conversion, Reference=None, Contract=contract) if isinstance(ask_quote_conversion, float) else PriceAPI.assign(None, ask_quote_conversion, None, contract)
         self._bid_quote_conversion_ = PriceAPI(Price=bid_quote_conversion, Reference=None, Contract=contract) if isinstance(bid_quote_conversion, float) else PriceAPI.assign(None, bid_quote_conversion, None, contract)
         self._encode_uid_()
-        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload, autosave=autosave)
 
     @classmethod
     def encode(cls, value: Union[int, pl.DataFrame], timestamp: Union[datetime, None] = None) -> Union[int, pl.DataFrame]:

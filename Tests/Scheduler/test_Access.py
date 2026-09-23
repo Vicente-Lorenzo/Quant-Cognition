@@ -1,10 +1,12 @@
 import sys
+import time
 
+import psutil
 import pytest
 
 from Library.Auth import AccessLevel, RoleAPI, UserAPI
 from Library.Scheduler import WorkflowAPI, TaskAPI, DependencyAPI, CycleAPI, RunAPI, TaskType, Kind, RunStatus, ExecutorAPI, ManagerAPI
-from Library.Scheduler.Main import _fields_, _parse_
+from Library.Scheduler.Main import SchedulerCommandAPI
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Database.Query import QueryAPI
 from Script.Setup.Auth import setup_auth
@@ -169,8 +171,30 @@ def test_the_executor_appends_the_owner_only_to_argument_runs():
 
 def test_the_cli_carries_the_user_and_thresholds(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["Scheduler", "--user", EDITOR, "task", "update", "--uid", "t", "--run-role", "Owner", "--edit-role", "Editor"])
-    args = _parse_()
+    args = SchedulerCommandAPI().parse()
     assert args.user == EDITOR
-    assert _fields_(args, TaskAPI) == {"UID": "t", "RunRole": None, "EditRole": "Editor"}
+    assert SchedulerCommandAPI._fields_(args, TaskAPI) == {"UID": "t", "RunRole": None, "EditRole": "Editor"}
     monkeypatch.setattr(sys, "argv", ["Scheduler", "workflow", "update", "--uid", "w"])
-    assert _fields_(_parse_(), WorkflowAPI) == {"UID": "w"}
+    assert SchedulerCommandAPI._fields_(SchedulerCommandAPI().parse(), WorkflowAPI) == {"UID": "w"}
+
+def test_a_missed_heartbeat_does_not_end_the_run(manager, clean):
+    executor = ExecutorAPI(database="NoSuchDatabase")
+    run = RunAPI(UID="beat-probe", TID="none")
+    executor._beat_(run)
+    assert run.Heartbeat is not None
+
+def test_a_runner_that_fails_takes_its_child_with_it(manager, clean, tmp_path, monkeypatch):
+    script, marker = tmp_path / "sleeper.py", tmp_path / "pid.txt"
+    script.write_text("; ".join(["import os, time", f"open(r'{marker}', 'w').write(str(os.getpid()))", "time.sleep(120)"]))
+    created = task(manager, "t-sleeper", by=ADMIN, Path=str(script))
+    executor = ExecutorAPI(database=DATABASE)
+    def failing(log, cursor, run):
+        if marker.exists() and marker.read_text(): raise RuntimeError("Probe failure")
+        return cursor
+    monkeypatch.setattr(executor, "_follow_", failing)
+    with pytest.raises(RuntimeError, match="Probe failure"):
+        executor.run(created)
+    child = int(marker.read_text())
+    deadline = time.monotonic() + 10
+    while psutil.pid_exists(child) and time.monotonic() < deadline: time.sleep(0.1)
+    assert not psutil.pid_exists(child)

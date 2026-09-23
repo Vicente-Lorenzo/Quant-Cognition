@@ -48,6 +48,7 @@ class SecurityAPI(UniverseAPI):
                       migrate: bool,
                       autoload: bool,
                       autooverload: bool,
+                      autosave: bool,
                       provider: Union[str, ProviderAPI, None],
                       category: Union[str, CategoryAPI, None],
                       ticker: Union[str, TickerAPI, None],
@@ -71,7 +72,7 @@ class SecurityAPI(UniverseAPI):
         elif self._ticker_ and self._provider_:
             ct = TickerAPI.detect(self._ticker_.UID)
             self._contract_ = ContractAPI(Ticker=self._ticker_.UID, Provider=self._provider_.UID, Type=ct, db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
-        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload, autosave=autosave)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
         row = super()._pull_(overload=overload)

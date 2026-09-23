@@ -30,7 +30,8 @@ class MarketAPI(DatapointAPI):
                       db: Union[DatabaseAPI, None],
                       migrate: bool,
                       autoload: bool,
-                      autooverload: bool) -> None:
+                      autooverload: bool,
+                      autosave: bool) -> None:
         self.Ticks = SeriesAPI("", multiple=True, mode=self.mode)
         self.GapTicks = SeriesAPI("GapTick", multiple=True, mode=self.mode)
         self.OpenTicks = SeriesAPI("OpenTick", multiple=True, mode=self.mode)
@@ -38,7 +39,7 @@ class MarketAPI(DatapointAPI):
         self.LowTicks = SeriesAPI("LowTick", multiple=True, mode=self.mode)
         self.CloseTicks = SeriesAPI("CloseTick", multiple=True, mode=self.mode)
         self.Volume = SeriesAPI("Volume", multiple=False, mode=self.mode)
-        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload, autosave=autosave)
 
     @staticmethod
     def _project_(alias: str, name: str) -> str:

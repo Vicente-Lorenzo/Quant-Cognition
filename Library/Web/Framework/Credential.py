@@ -3,12 +3,12 @@ from dash import html
 
 from Library.App.V2 import FieldAPI, RefreshAPI, TableAPI, TextAPI, ContainerAPI, ComponentID, Output, Input, State, InjectionType, serverside_callback, clientside_callback, modal_callbacks, ButtonAPI, ModalAPI, StorageAPI
 from Library.Auth import AccessLevel, AccessAPI
-from Library.Credential import CredentialAPI, CredentialHealth, CredentialKind, CredentialManagerAPI, LayoutAPI, SecretAPI
+from Library.Credential import CredentialAPI, Validity, CredentialType, VaultAPI, LayoutAPI, SecretAPI
 from Library.Utility.Datetime import INSTANT
 
 class CredentialPageAPI(TableAPI):
 
-    _COLUMNS_ = ["Service", "Name", "Kind", "Username", "Secret", "Owner", "View", "Edit", "Access", "Health", "Expires", "Used"]
+    _COLUMNS_ = ["Service", "Name", "Kind", "Username", "Secret", "Owner", "View", "Edit", "Access", "Validity", "Expires", "Used"]
     _ROW_KEY_ = "UID"
     _SHEET_ = "Credentials"
     _NAVIGABLE_ = False
@@ -17,7 +17,7 @@ class CredentialPageAPI(TableAPI):
     _FIELDS_ = (
         FieldAPI(name="service", required=True, placeholder="Spotware", help="System the credential belongs to · one row per connection"),
         FieldAPI(name="name", required=True, placeholder="Demo account EUR", help="What distinguishes this credential from the others of the same service"),
-        FieldAPI(name="kind", control="select", default=CredentialKind.Password.name, options=FieldAPI.choices(CredentialKind.names()), help="Declares which keys the credential carries and which of them are secret"),
+        FieldAPI(name="kind", control="select", default=CredentialType.Password.name, options=FieldAPI.choices(CredentialType.names()), help="Declares which keys the credential carries and which of them are secret"),
         FieldAPI(name="username", control="textarea", help="One value, or a JSON object for several · always visible"),
         FieldAPI(name="secret", control="textarea", help="One value, or a JSON object for several · never shown here · on edit empty keeps it, a JSON object changes only the keys it names and a null removes one"),
         FieldAPI(name="fields", control="textarea", help="JSON object of accessory values that are not secret"),
@@ -43,7 +43,7 @@ class CredentialPageAPI(TableAPI):
 
     def __init__(self, *, app) -> None:
         super().__init__(app=app, path="/framework/credential", button="Credentials", icon="bi bi-key", description="Store the secrets every external API needs, with the roles allowed to use and to change each one")
-        self._manager_ = CredentialManagerAPI(database=app.Database)
+        self._vault_ = VaultAPI(database=app.Database)
 
     def ids(self) -> None:
         super().ids()
@@ -87,13 +87,13 @@ class CredentialPageAPI(TableAPI):
         if decoded is None: return ""
         return decoded if isinstance(decoded, str) else " · ".join(f"{name}: {item}" for name, item in decoded.items())
 
-    def _health_(self, expires) -> str:
-        health = self._manager_.health(expires)
-        led = {CredentialHealth.Never: "none", CredentialHealth.Healthy: "success", CredentialHealth.Expiring: "approving", CredentialHealth.Expired: "failure"}[health]
-        return f'<span class="led-tag"><span class="led led-{led}"></span>{health.name}</span>'
+    def _validity_(self, expires) -> str:
+        validity = self._vault_.validity(expires)
+        led = {Validity.Permanent: "none", Validity.Valid: "success", Validity.Expiring: "approving", Validity.Expired: "failure"}[validity]
+        return f'<span class="led-tag"><span class="led led-{led}"></span>{validity.name}</span>'
 
     def _markdown_columns_(self) -> set:
-        return {"Health"}
+        return {"Validity"}
 
     @staticmethod
     def _stamp_(value) -> str:
@@ -111,7 +111,7 @@ class CredentialPageAPI(TableAPI):
             "View": self._label_(row.get("ViewRole")),
             "Edit": self._label_(row.get("EditRole")),
             "Access": row.get("Access"),
-            "Health": self._health_(row.get("ExpiresAt")),
+            "Validity": self._validity_(row.get("ExpiresAt")),
             "Expires": self._stamp_(row.get("ExpiresAt")),
             "Used": self._stamp_(row.get("UsedAt"))
         }
@@ -120,7 +120,7 @@ class CredentialPageAPI(TableAPI):
         return self._COLUMNS_
 
     def _rows_(self) -> list:
-        return [self._row_(row) for row in self._manager_.credentials(by=self._actor_())]
+        return [self._row_(row) for row in self._vault_.credentials(by=self._actor_())]
 
     def _actions_(self) -> list:
         return [
@@ -165,7 +165,7 @@ class CredentialPageAPI(TableAPI):
         on_enter=InjectionType.Hidden,
     )
     def _options_(self):
-        parents = [{"label": "(none)", "value": ""}] + [{"label": f"{row['Service']} · {row['Name']}", "value": row["UID"]} for row in self._manager_.credentials(by=self._actor_())]
+        parents = [{"label": "(none)", "value": ""}] + [{"label": f"{row['Service']} · {row['Name']}", "value": row["UID"]} for row in self._vault_.credentials(by=self._actor_())]
         return self._roles_(), self._roles_(), parents
 
     _discard_, = modal_callbacks(MODAL_ID, closer=DISCARD_BTN)
@@ -212,7 +212,7 @@ class CredentialPageAPI(TableAPI):
         if len(keys) != 1:
             self.app.notify.warning("Select a single credential first", header="Selection")
             return None
-        row = self._manager_.credential(keys[0], by=self._actor_())
+        row = self._vault_.credential(keys[0], by=self._actor_())
         if row is None or (action != "view" and row.get("Access") != AccessLevel.Edit.name):
             self.app.notify.error(f"You may not {action} this credential", header="Forbidden")
             return None
@@ -239,8 +239,8 @@ class CredentialPageAPI(TableAPI):
                 "ExpiresAt": expires or None, "Parent": parent or None, "Owner": (owner or "").strip() or None,
                 "ViewRole": self._threshold_(view), "EditRole": self._threshold_(edit)
             }
-            if update: saved = self._manager_.update(mode["uid"], by=self._actor_(), **payload)
-            else: saved = self._manager_.store(by=self._actor_(), **payload)
+            if update: saved = self._vault_.update(mode["uid"], by=self._actor_(), **payload)
+            else: saved = self._vault_.store(by=self._actor_(), **payload)
         except (ValueError, PermissionError) as error:
             self.app.notify.error(str(error), header="Refused")
             return dash.no_update, dash.no_update
@@ -259,7 +259,7 @@ class CredentialPageAPI(TableAPI):
     def _delete_(self, clicks, state):
         keys = self._selection_(state, "Select a credential first")
         if not keys: return dash.no_update
-        return self._tally_(keys, lambda key: self._manager_.delete(key, by=self._actor_()), "credential(s) deleted", "You may not delete the selected credential")
+        return self._tally_(keys, lambda key: self._vault_.delete(key, by=self._actor_()), "credential(s) deleted", "You may not delete the selected credential")
 
     @serverside_callback(
         Output(SECRET_ID, "children"),
@@ -272,7 +272,7 @@ class CredentialPageAPI(TableAPI):
         if len(keys) != 1:
             self.app.notify.warning("Select a single credential first", header="Selection")
             return dash.no_update
-        values = self._manager_.reveal(keys[0], by=self._actor_())
+        values = self._vault_.reveal(keys[0], by=self._actor_())
         if values is None:
             self.app.notify.error("You may not reveal this credential", header="Forbidden")
             return dash.no_update

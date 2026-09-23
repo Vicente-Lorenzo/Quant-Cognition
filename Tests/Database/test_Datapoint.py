@@ -24,8 +24,8 @@ class MockDatapoint(DatapointAPI):
             **super().Structure
         }
 
-    def __post_init__(self, db, migrate, autoload, autooverload):
-        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
+    def __post_init__(self, db, migrate, autoload, autooverload, autosave):
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload, autosave=autosave)
 
 @pytest.fixture
 def test_db(db):
@@ -65,3 +65,39 @@ def test_assigning_a_field_never_writes_to_the_database(test_db):
     check_obj = MockDatapoint(TestID=3, db=test_db)
     check_obj.load()
     assert check_obj.Value == "Initial"
+
+@dataclass
+class QuietDatapoint(MockDatapoint):
+
+    Table = "QuietDatapoint"
+
+def test_autosave_writes_every_public_assignment(test_db):
+    obj = MockDatapoint(TestID=7, Value="First", db=test_db, migrate=True, autosave=True)
+    obj.Value = "Second"
+    loaded = MockDatapoint(TestID=7, db=test_db, autoload=True)
+    assert loaded.Value == "Second" and loaded.UpdatedBy == "Autosave"
+
+def test_autosave_is_armed_only_on_the_class_that_asks(test_db):
+    from Library.Market.Tick import TickAPI
+    MockDatapoint(TestID=8, db=test_db, migrate=True, autosave=True)
+    assert MockDatapoint.__setattr__ is DatapointAPI._autosaving_
+    assert QuietDatapoint.__setattr__ is DatapointAPI._autosaving_
+    assert TickAPI.__setattr__ is object.__setattr__ and DatapointAPI.__setattr__ is object.__setattr__
+
+def test_an_armed_class_saves_only_the_instances_that_asked(test_db, monkeypatch):
+    MockDatapoint(TestID=9, db=test_db, migrate=True, autosave=True)
+    writes = []
+    monkeypatch.setattr(MockDatapoint, "_execute_", lambda self, by: writes.append(self.TestID))
+    silent = MockDatapoint(TestID=10, db=test_db)
+    silent.Value = "Unsaved"
+    armed = MockDatapoint(TestID=11, db=test_db, autosave=True)
+    armed.Value = "Saved"
+    armed.save(by="Tester")
+    assert writes == [11, 11]
+
+def test_loading_an_armed_instance_writes_nothing(test_db, monkeypatch):
+    MockDatapoint(TestID=12, Value="Stored", db=test_db, migrate=True).save(by="Tester")
+    writes = []
+    monkeypatch.setattr(MockDatapoint, "_execute_", lambda self, by: writes.append(self.TestID))
+    loaded = MockDatapoint(TestID=12, db=test_db, autoload=True, autosave=True)
+    assert loaded.Value == "Stored" and writes == []

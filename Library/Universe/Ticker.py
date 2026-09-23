@@ -80,11 +80,12 @@ class TickerAPI(UniverseAPI):
                       migrate: bool,
                       autoload: bool,
                       autooverload: bool,
+                      autosave: bool,
                       category: Union[str, CategoryAPI, None]) -> None:
         if self.UID: self.UID = self.normalize(self.UID)
         category = coerce(category)
         self._category_ = self._relate_(category, CategoryAPI, db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
-        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload, autosave=autosave)
 
     @property
     @overridefield

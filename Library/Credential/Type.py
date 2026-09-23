@@ -1,6 +1,6 @@
 from Library.Utility.Enumeration import EnumerationAPI
 
-class CredentialKind(EnumerationAPI):
+class CredentialType(EnumerationAPI):
 
     Password = 0
     ApiKey = 1
@@ -10,15 +10,15 @@ class CredentialKind(EnumerationAPI):
 class LayoutAPI:
 
     _LAYOUTS_ = {
-        CredentialKind.Password: (("Username",), ("Password",)),
-        CredentialKind.ApiKey: (("Identifier",), ("Key",)),
-        CredentialKind.OAuth2: (("ClientId", "AccountId"), ("ClientSecret", "AccessToken", "RefreshToken")),
-        CredentialKind.Certificate: (("Subject",), ("PrivateKey", "Passphrase"))
+        CredentialType.Password: (("Username",), ("Password",)),
+        CredentialType.ApiKey: (("Identifier",), ("Key",)),
+        CredentialType.OAuth2: (("ClientId", "AccountId"), ("ClientSecret", "AccessToken", "RefreshToken")),
+        CredentialType.Certificate: (("Subject",), ("PrivateKey", "Passphrase"))
     }
 
     @classmethod
     def layout(cls, kind) -> tuple:
-        return cls._LAYOUTS_.get(CredentialKind.parse(kind), (("Username",), ("Secret",)))
+        return cls._LAYOUTS_.get(CredentialType.parse(kind), (("Username",), ("Secret",)))
 
     @classmethod
     def usernames(cls, kind) -> tuple:

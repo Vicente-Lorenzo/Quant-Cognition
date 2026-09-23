@@ -9,7 +9,7 @@ from Library.Auth.Role import RoleAPI
 from Library.Auth.Team import TeamAPI
 from Library.Auth.Office import OfficeAPI
 from Library.Auth.User import UserAPI
-from Library.Credential import CredentialAPI, CredentialKind, CredentialManagerAPI
+from Library.Credential import CredentialAPI, CredentialType, VaultAPI
 from Library.Database import PostgresDatabaseAPI
 from Library.Logging import LoggingAPI
 from Script.Setup.Credential import setup_credential
@@ -30,8 +30,8 @@ def seed_admin(auth, *, username=ADMIN, email=ADMIN, name="Vicente Lorenzo", pas
 def store_admin(secret, *, database="Quant", username=ADMIN):
     with PostgresDatabaseAPI(database=database) as db:
         setup_credential(db)
-    manager = CredentialManagerAPI(database=database)
-    manager.ensure(service="Framework", name="Administrator", secret={"Password": secret}, by=username, Kind=CredentialKind.Password.name, Username=CredentialAPI.pack(username), Owner=username)
+    vault = VaultAPI(database=database)
+    vault.ensure(service="Framework", name="Administrator", secret={"Password": secret}, by=username, Kind=CredentialType.Password.name, Username=CredentialAPI.pack(username), Owner=username)
     return f"{CredentialAPI.Schema} Framework · Administrator"
 
 def install_auth(database="Quant"):

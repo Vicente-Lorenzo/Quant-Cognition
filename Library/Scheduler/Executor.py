@@ -20,7 +20,7 @@ from Library.Utility.Path import inspect_persistent, inspect_temporary, tracebac
 from Library.Utility.File import PruneAPI
 from Library.Utility.IO import mkdir, read_text, remove
 from Library.Utility.Memory import memory_to_string
-from Library.Utility.Runtime import split_arguments, windowless
+from Library.Utility.Runtime import release, split_arguments, terminate, tether, windowless
 from Library.Scheduler.Workflow import Kind
 from Library.Scheduler.Task import TaskAPI, TaskType
 from Library.Scheduler.Run import RunAPI, RunStatus
@@ -165,9 +165,12 @@ class ExecutorAPI:
 
     def _beat_(self, run: RunAPI) -> None:
         run.Heartbeat = utc_now()
-        with PostgresDatabaseAPI(database=self._database_) as db:
-            sql = f'UPDATE {db._target_(run.Schema, run.Table)} SET "Heartbeat" = :heartbeat:, "Progress" = :progress:, "Stage" = :stage:, "Remaining" = :remaining: WHERE "UID" = :uid:'
-            db.execute(QueryAPI(sql), [{"heartbeat": run.Heartbeat, "progress": run.Progress, "stage": run.Stage, "remaining": run.Remaining, "uid": run.UID}])
+        try:
+            with PostgresDatabaseAPI(database=self._database_) as db:
+                sql = f'UPDATE {db._target_(run.Schema, run.Table)} SET "Heartbeat" = :heartbeat:, "Progress" = :progress:, "Stage" = :stage:, "Remaining" = :remaining: WHERE "UID" = :uid:'
+                db.execute(QueryAPI(sql), [{"heartbeat": run.Heartbeat, "progress": run.Progress, "stage": run.Stage, "remaining": run.Remaining, "uid": run.UID}])
+        except Exception as error:
+            self._log_.warning(lambda error=error: f"Run Heartbeat: Missed ({run.UID}) · {error}")
 
     def _follow_(self, path: str, offset: int, run: RunAPI) -> int:
         try:
@@ -207,21 +210,26 @@ class ExecutorAPI:
         peak, beat = 0, clock
         with open(log, "wb") as sink:
             process = subprocess.Popen(self._command_(artifact, task.Path, self._scoped_(arguments, str(folder), task.Owner)), cwd=self._ROOT_, env=self._environment_(), stdout=sink, stderr=subprocess.STDOUT, **windowless())
-            run.PID = os.getpid()
-            try: monitor = psutil.Process(process.pid)
-            except psutil.Error: monitor = None
-            self._persist_(run)
-            cursor, pulse, seen = 0, clock, None
-            while process.poll() is None:
+            job = tether(process)
+            try:
+                run.PID = os.getpid()
+                try: monitor = psutil.Process(process.pid)
+                except psutil.Error: monitor = None
+                self._persist_(run)
+                cursor, pulse, seen = 0, clock, None
+                while process.poll() is None:
+                    if monitor is not None: peak = self._sample_(monitor, peak)
+                    now = time.monotonic()
+                    cursor = self._follow_(log, cursor, run)
+                    moved = run.Progress != seen
+                    if now - beat >= self._HEARTBEAT_ or (moved and now - pulse >= self._PULSE_):
+                        self._beat_(run)
+                        beat, pulse, seen = now, now, run.Progress
+                    time.sleep(self._POLL_)
                 if monitor is not None: peak = self._sample_(monitor, peak)
-                now = time.monotonic()
-                cursor = self._follow_(log, cursor, run)
-                moved = run.Progress != seen
-                if now - beat >= self._HEARTBEAT_ or (moved and now - pulse >= self._PULSE_):
-                    self._beat_(run)
-                    beat, pulse, seen = now, now, run.Progress
-                time.sleep(self._POLL_)
-            if monitor is not None: peak = self._sample_(monitor, peak)
+            finally:
+                if process.poll() is None: terminate(process.pid)
+                release(job)
         exit_code = process.returncode
         stopped, duration = utc_now(), time.monotonic() - clock
         status = RunAPI.outcome(failure=exit_code != 0, approval=task.RequiresApproval, review=task.RequiresReview, retriable=retry < (task.MaxRetry or 0))

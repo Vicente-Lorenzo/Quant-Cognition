@@ -138,6 +138,7 @@ class OrderAPI(DatapointAPI):
                       migrate: bool,
                       autoload: bool,
                       autooverload: bool,
+                      autosave: bool,
                       session: Union[str, SessionAPI, None],
                       account: Union[int, AccountAPI, None],
                       position: Union[int, PositionAPI, None],
@@ -194,7 +195,7 @@ class OrderAPI(DatapointAPI):
         self._entry_timestamp_ = TimestampAPI.assign(None, entry_timestamp)
         self._expiration_timestamp_ = TimestampAPI.assign(None, expiration_timestamp)
         self._last_update_timestamp_ = TimestampAPI.assign(None, last_update_timestamp)
-        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload, autosave=autosave)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
         row = super()._pull_(overload=overload)

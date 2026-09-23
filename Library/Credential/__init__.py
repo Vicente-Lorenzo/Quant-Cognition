@@ -1,15 +1,15 @@
-from Library.Credential.Kind import CredentialKind, LayoutAPI
+from Library.Credential.Type import CredentialType, LayoutAPI
 from Library.Credential.Secret import SecretAPI
-from Library.Credential.Credential import CredentialHealth, CredentialAPI
+from Library.Credential.Credential import Validity, CredentialAPI
 from Library.Credential.Session import SessionAPI
-from Library.Credential.Manager import CredentialManagerAPI
+from Library.Credential.Vault import VaultAPI
 
 __all__ = [
-    "CredentialKind",
+    "CredentialType",
     "LayoutAPI",
     "SecretAPI",
-    "CredentialHealth",
+    "Validity",
     "CredentialAPI",
     "SessionAPI",
-    "CredentialManagerAPI"
+    "VaultAPI"
 ]

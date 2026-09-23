@@ -9,10 +9,10 @@ from datetime import datetime, timedelta, timezone
 from Library.Utility.Datetime import utc_now, utc_to_local
 from Library.Auth import UserAPI
 from Library.Scheduler import WorkflowAPI, TaskAPI, DependencyAPI, CycleAPI, RunAPI, TaskType, Kind, RunStatus, RunEvent, ExecutorAPI, CoordinatorAPI, ManagerAPI, SchedulerAPI
-from Library.Scheduler.Main import _fields_, _parse_
+from Library.Scheduler.Main import SchedulerCommandAPI
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Database.Query import QueryAPI
-from Library.Scheduler.Runner import load
+from Library.Scheduler.Runner import RunnerCommandAPI
 from Script.Setup.Auth import setup_auth
 from Script.Setup.Scheduler import setup_scheduler
 
@@ -163,7 +163,7 @@ def test_runner_load_roundtrip(scheduler, tmp_path):
     script.write_text("import sys\nsys.exit(0)\n")
     task = TaskAPI(UID="task-loaded", Name="Loaded", Owner="owner", Type=TaskType.Python, Kind=Kind.Scheduled, Path=str(script), Enabled=True, RequiresApproval=False, RequiresReview=False)
     persist(task)
-    loaded = load(DATABASE, "task-loaded")
+    loaded = RunnerCommandAPI.load(DATABASE, "task-loaded")
     assert isinstance(loaded.Type, str)
     run = ExecutorAPI(database=DATABASE).run(loaded)
     assert run.Status == RunStatus.Success.name and run.ExitCode == 0
@@ -246,9 +246,9 @@ def test_manager_rejects_an_unknown_zone():
 
 def test_cli_carries_the_workflow_zone(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["Scheduler", "workflow", "update", "--uid", "wf-zone", "--zone", "Asia/Tokyo"])
-    assert _fields_(_parse_(), WorkflowAPI) == {"UID": "wf-zone", "Zone": "Asia/Tokyo"}
+    assert SchedulerCommandAPI._fields_(SchedulerCommandAPI().parse(), WorkflowAPI) == {"UID": "wf-zone", "Zone": "Asia/Tokyo"}
     monkeypatch.setattr(sys, "argv", ["Scheduler", "workflow", "create", "--uid", "wf-zone", "--name", "Zone", "--owner", "owner"])
-    assert _fields_(_parse_(), WorkflowAPI)["Zone"] is None
+    assert SchedulerCommandAPI._fields_(SchedulerCommandAPI().parse(), WorkflowAPI)["Zone"] is None
 
 def _repeated_(zone):
     for minute in range(15, 36 * 60, 15):

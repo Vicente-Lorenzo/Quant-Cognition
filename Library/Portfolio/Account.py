@@ -92,6 +92,7 @@ class AccountAPI(DatapointAPI):
                       migrate: bool,
                       autoload: bool,
                       autooverload: bool,
+                      autosave: bool,
                       session: Union[str, SessionAPI, None],
                       provider: Union[str, ProviderAPI, None],
                       environment: Union[Environment, str, None],
@@ -108,7 +109,7 @@ class AccountAPI(DatapointAPI):
         self._environment_ = Environment.parse(environment) if environment is not MISSING else None
         self._account_type_ = AccountType.parse(account_type) if account_type is not MISSING else None
         self._margin_mode_ = MarginMode.parse(margin_mode) if margin_mode is not MISSING else None
-        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload, autosave=autosave)
 
     def _pull_(self, overload: bool) -> Union[dict, None]:
         row = super()._pull_(overload=overload)

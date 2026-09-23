@@ -67,9 +67,10 @@ class TimeframeAPI(UniverseAPI):
                       db: Union[DatabaseAPI, None],
                       migrate: bool,
                       autoload: bool,
-                      autooverload: bool) -> None:
+                      autooverload: bool,
+                      autosave: bool) -> None:
         if self.UID: self.UID = self.normalize(self.UID)
-        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload, autosave=autosave)
         if not self.Unit: self._infer_()
 
     def _infer_(self) -> None:
