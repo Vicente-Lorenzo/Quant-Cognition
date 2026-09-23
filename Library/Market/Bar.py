@@ -62,7 +62,6 @@ class BarAPI(DatapointAPI):
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],
                       migrate: bool,
-                      autosave: bool,
                       autoload: bool,
                       autooverload: bool,
                       security: Union[int, SecurityAPI, None],
@@ -89,7 +88,7 @@ class BarAPI(DatapointAPI):
         self._high_tick_ = self._relate_(high_tick, TickAPI, db=db, autoload=autoload)
         self._low_tick_ = self._relate_(low_tick, TickAPI, db=db, autoload=autoload)
         self._close_tick_ = self._relate_(close_tick, TickAPI, db=db, autoload=autoload)
-        super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
 
     def save(self, by: str = "Autosave") -> None:
         for t in (self._gap_tick_, self._open_tick_, self._high_tick_, self._low_tick_, self._close_tick_):

@@ -29,7 +29,6 @@ class MarketAPI(DatapointAPI):
     def __post_init__(self,
                       db: Union[DatabaseAPI, None],
                       migrate: bool,
-                      autosave: bool,
                       autoload: bool,
                       autooverload: bool) -> None:
         self.Ticks = SeriesAPI("", multiple=True, mode=self.mode)
@@ -39,7 +38,7 @@ class MarketAPI(DatapointAPI):
         self.LowTicks = SeriesAPI("LowTick", multiple=True, mode=self.mode)
         self.CloseTicks = SeriesAPI("CloseTick", multiple=True, mode=self.mode)
         self.Volume = SeriesAPI("Volume", multiple=False, mode=self.mode)
-        super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
 
     @staticmethod
     def _project_(alias: str, name: str) -> str:
@@ -159,9 +158,9 @@ class MarketAPI(DatapointAPI):
             df, bar = pl.DataFrame([data.dict(flatten=True)], strict=False), isinstance(data, BarAPI)
         if self._data_ is None or self._data_.width == 0:
             self._data_ = df.rechunk()
+            self._bind_(bar)
         else:
             self._data_.extend(df)
-        self._bind_(bar)
 
     def update_offset(self, offset: int = 1) -> None:
         self._offset_ = offset
