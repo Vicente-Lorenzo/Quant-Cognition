@@ -1,0 +1,26 @@
+Provider: Spotware(cTrader)
+Ticker: USDJPY
+Type: Spot
+Digits: 3
+PointSize: 0.001
+PipSize: 0.01
+LotSize: 100000
+VolumeMin: 1000.0
+VolumeMax: 10000000.0
+VolumeStep: 1000.0
+CommissionMode: BaseAssetPerMillionVolume
+Commission: 45.0
+SwapMode: Pips
+SwapLong: -0.345
+SwapShort: -2.295
+SwapPeriod: 24
+SwapExtraDay: Wednesday
+SwapSummerTime: 22
+SwapWinterTime: 21
+Variant: null
+Payoff: Trivial
+Strike: null
+Maturity: null
+Exercise: null
+UpdatedAt: 2026-09-10 18:26:33.922232
+UpdatedBy: Autosave

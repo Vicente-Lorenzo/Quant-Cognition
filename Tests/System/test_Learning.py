@@ -107,7 +107,7 @@ def _make_(**kwargs) -> _Harness_:
     defaults.update(kwargs)
     return _Harness_(
         strategy=_FakeStrategy_,
-        security=SimpleNamespace(UID="EURUSD", _provider_=SimpleNamespace(UID="Spotware(cTrader)"), _ticker_=SimpleNamespace(UID="EURUSD")),
+        security=SimpleNamespace(UID="EURUSD", _provider_=SimpleNamespace(UID="Spotware(cTrader)"), _ticker_=SimpleNamespace(UID="EURUSD"), Contract=None),
         timeframe=SimpleNamespace(UID="D1"),
         parameters=Parameter({}, "."),
         start="2020-01-01",

@@ -40,9 +40,10 @@ def prepared():
     return DATABASE
 
 def test_register_is_idempotent(prepared):
-    register(ManagerAPI(database=DATABASE))
-    register(ManagerAPI(database=DATABASE))
     manager = ManagerAPI(database=DATABASE)
+    with manager.scope():
+        register(manager)
+        register(manager)
     for workflow in WORKFLOWS:
         assert manager.workflow(workflow["uid"]) is not None
         assert len(manager.tasks(workflow=workflow["uid"])) == len(workflow["tasks"])

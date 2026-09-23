@@ -92,7 +92,7 @@ def test_push_idempotent():
         "actualBetterWorse": 0, "revisionBetterWorse": 0
     }]}])).with_columns(pl.lit("Test").alias("UpdatedBy"), pl.lit(datetime.now()).alias("UpdatedAt"))
     with PostgresDatabaseAPI(database="Tests") as db:
-        CalendarAPI(db=db, migrate=True, autosave=False, autoload=False)
+        CalendarAPI(db=db, migrate=True, autoload=False)
         try:
             CalendarAPI.push(db, frame)
             CalendarAPI.push(db, frame)

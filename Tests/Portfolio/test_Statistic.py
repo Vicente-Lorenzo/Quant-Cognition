@@ -224,3 +224,18 @@ def test_the_balance_path_follows_realization_not_entry_order():
     report = generate_net_report(pl.DataFrame(), trades, SimpleNamespace(Balance=12000.0), date(2023, 1, 1), date(2024, 1, 1), _curves_([10000.0, 12000.0]))
     for column in (NET_TOTAL_INDIVIDUAL, NET_TOTAL_AGGREGATED):
         assert abs(report.filter(pl.col(STATISTICS_METRICS_LABEL) == MAXBALANCEDRAWDOWNPERC)[column].item() - 20.0) < 1e-9
+
+def test_a_deal_still_open_after_a_partial_close_stays_open_when_aggregated():
+    from Library.Portfolio.Statistic import aggregate_items, calculate_holding_times, realize_items
+    entry = datetime(2023, 1, 2, 8)
+    frame = pl.DataFrame({
+        str(TradeAPI.ID.UID): [1, 2, 10], str(TradeAPI.ID.Position): [10, 11, 10], str(PositionAPI.ID.Direction): ["Buy", "Buy", "Buy"],
+        str(PositionAPI.ID.Volume): [1000.0, 1000.0, 1000.0], str(PositionAPI.ID.EntryTimestamp): [entry, entry + timedelta(hours=2), entry],
+        str(TradeAPI.ID.ExitTimestamp): [entry + timedelta(hours=1), entry + timedelta(hours=5), None],
+        str(PositionAPI.ID.EntryPrice): [1.1, 1.1, 1.1], str(TradeAPI.ID.ExitPrice): [1.11, 1.12, None], PNL: [10.0, 20.0, -50.0]
+    })
+    deals = realize_items(aggregate_items(frame))
+    assert deals[str(TradeAPI.ID.Position)].to_list() == [11, 10]
+    assert deals[str(TradeAPI.ID.ExitTimestamp)].to_list() == [entry + timedelta(hours=5), None]
+    maximum, _, _ = calculate_holding_times(deals, date(2023, 2, 1))
+    assert abs(maximum - (datetime(2023, 2, 1) - entry).total_seconds() / 86400.0) < 1e-9

@@ -48,6 +48,10 @@ def test_every_system_forwards_the_shared_surface(name):
     for parameter in sorted(shared & accepted):
         assert f"{parameter}=" in forwarded, f"{name} accepts {parameter} but never forwards it to SystemAPI"
 
+@pytest.mark.parametrize("name", ["BacktestingAPI", "OptimizationAPI", "LearningAPI"])
+def test_every_offline_system_takes_the_risk_free_rate_and_the_benchmark(name):
+    assert {"risk_free", "benchmark"} <= constructed()[name]
+
 class _Rung_:
 
     def __init__(self, uid: str) -> None:
@@ -68,7 +72,7 @@ class _Args_:
 
     def __init__(self, **fields):
         self.system, self.strategy, self.provider = "Simulation", "Trend", "Spotware"
-        self.ticker, self.timeframe, self.description = "EURUSD", "Hour", None
+        self.ticker, self.timeframe, self.description, self.user = "EURUSD", "Hour", None, None
         for name, value in fields.items(): setattr(self, name, value)
 
 def test_snapshot_writes_the_manifest_without_a_period(tmp_path):
@@ -77,7 +81,12 @@ def test_snapshot_writes_the_manifest_without_a_period(tmp_path):
     manifest = json.loads((tmp_path / "Run.json").read_text(encoding="utf-8"))
     assert manifest["System"] == "Simulation"
     assert manifest["Description"] == "Golden 1"
-    assert "Start" not in manifest and "Stop" not in manifest
+    assert "Start" not in manifest and "Stop" not in manifest and "User" not in manifest
+
+def test_snapshot_records_who_the_run_acts_as(tmp_path):
+    from Library.System.Main import _snapshot_ as snapshot
+    snapshot(tmp_path, _Args_(user="owner@test.com"), None, LoggingAPI())
+    assert json.loads((tmp_path / "Run.json").read_text(encoding="utf-8"))["User"] == "owner@test.com"
 
 def test_snapshot_keeps_the_period_when_one_is_supplied(tmp_path):
     from Library.System.Main import _snapshot_ as snapshot
@@ -128,3 +137,34 @@ def test_snapshot_records_a_command_that_splits_back_into_the_same_arguments(tmp
     monkeypatch.setattr("sys.argv", ["Main.py", *arguments])
     snapshot(tmp_path, _Args_(system="Backtesting"), None, LoggingAPI())
     assert split_arguments(json.loads((tmp_path / "Run.json").read_text(encoding="utf-8"))["Command"]) == arguments
+
+@pytest.mark.parametrize("system", ["Backtesting", "Optimization", "Learning"])
+def test_every_offline_system_accepts_a_pinned_contract(system, monkeypatch):
+    monkeypatch.setattr("sys.argv", ["Main.py", system, "--start", "2020-01-01", "--stop", "2021-01-01", "--contract", "Contract.yml"])
+    assert Main._parse_().contract == "Contract.yml"
+
+def test_realtime_systems_take_their_contract_from_the_wire(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["Main.py", "Simulation", "--contract", "Contract.yml"])
+    with pytest.raises(SystemExit):
+        Main._parse_()
+
+def test_a_pinned_contract_replaces_the_stored_terms_in_memory(tmp_path):
+    from types import SimpleNamespace
+    from Library.Universe.Contract import ContractAPI
+    from Library.Universe.Ticker import ContractType
+    from Library.Utility.IO import write_yaml
+    stored = ContractAPI(Ticker="EURUSD", Provider="Spotware(cTrader)", Type=ContractType.Spot, SwapLong=-2.445)
+    pinned = ContractAPI(Ticker="EURUSD", Provider="Spotware(cTrader)", Type=ContractType.Spot, SwapLong=-9.0)
+    write_yaml(tmp_path / "Contract.yml", pinned.snapshot(), safe=False)
+    security = SimpleNamespace(Contract=stored, Ticker=SimpleNamespace(UID="EURUSD"))
+    Main._contract_(security, Main.MISSING)
+    assert stored.SwapLong == -2.445
+    Main._contract_(security, str(tmp_path / "Contract.yml"))
+    assert stored.SwapLong == -9.0 and stored._db_ is None
+
+def test_snapshot_records_where_the_contract_came_from(tmp_path):
+    from Library.System.Main import _snapshot_ as snapshot
+    snapshot(tmp_path, _Args_(system="Backtesting", contract="Pinned/Contract.yml"), None, LoggingAPI())
+    assert json.loads((tmp_path / "Run.json").read_text(encoding="utf-8"))["Contract"] == "Pinned/Contract.yml"
+    snapshot(tmp_path, _Args_(system="Simulation"), None, LoggingAPI())
+    assert "Contract" not in json.loads((tmp_path / "Run.json").read_text(encoding="utf-8"))

@@ -27,7 +27,7 @@ def test_parse_technical():
     assert tech.LongTMA.TypeMA == MovingAverageType.Simple
 
 def test_sma_calculation():
-    market = MarketAPI(db=None, migrate=False, autosave=False, autoload=False, autooverload=False)
+    market = MarketAPI(db=None, migrate=False, autoload=False, autooverload=False)
 
     df = pl.DataFrame({
         "UID": [1, 2, 3, 4],
@@ -60,7 +60,7 @@ def test_sma_calculation():
     assert tech.ShortSMA.Result.last() == 4.5
 
 def test_macd_calculation_and_padding():
-    market = MarketAPI(db=None, migrate=False, autosave=False, autoload=False, autooverload=False)
+    market = MarketAPI(db=None, migrate=False, autoload=False, autooverload=False)
 
     macd = MovingAverageConvergenceDivergenceAPI(name="MACD", fast_period=3, slow_period=5, signal_period=2, mode=IndicatorMode.Off)
     tech = TechnicalAPI(name="Technical", window=None, mode=IndicatorMode.Off, MACD=macd)

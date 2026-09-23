@@ -250,3 +250,19 @@ def test_exit_drains_buffers_before_closing_stack():
     system.__exit__(None, None, None)
     assert calls.index("market_shutdown") < calls.index("stack_exit")
     assert calls.index("portfolio_shutdown") < calls.index("stack_exit")
+
+def test_a_wire_contract_is_recorded_with_its_own_provenance(tmp_path):
+    from datetime import datetime
+    from types import SimpleNamespace
+    from Library.Universe.Contract import ContractAPI
+    from Library.Universe.Ticker import ContractType
+    from Library.Utility.IO import read_yaml
+    system = _make_system_(run=str(tmp_path))
+    stored = ContractAPI(Ticker="EURUSD", Provider="Spotware(cTrader)", Type=ContractType.Spot, SwapLong=-2.445, SwapShort=-0.105, UpdatedAt=datetime(2026, 9, 10, 18, 30), UpdatedBy="Autosave")
+    system._security_ = SimpleNamespace(Ticker=None, Contract=stored)
+    system._binary_security_ = SimpleNamespace(unpack=lambda data, offset: ("EUR", "USD", 5, 0.00001, 0.0001, 100000, 1000.0, 10000000.0, 1000.0, 45.0, 0, -9.0, -1.0, 0, 3))
+    system._last_update_data_ = b""
+    system.receive_update_security()
+    written = read_yaml(tmp_path / "Input" / "Contract.yml", safe=False)
+    assert (written["SwapLong"], written["SwapShort"], written["UpdatedBy"]) == (-9.0, -1.0, "Connector")
+    assert written["UpdatedAt"] > datetime(2026, 9, 10, 18, 30)

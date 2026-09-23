@@ -37,6 +37,12 @@ def test_library_callbacks_still_resolve_from_the_library(application):
     for name in ("Callbacks/Gate.js", "Callbacks/Sheets.js", "Images/logo.png"):
         assert application.asset(name).startswith("/assets/")
 
+def test_callbacks_are_inlined_and_never_shipped_as_page_scripts(application):
+    with application.app.server.test_request_context("/"):
+        index = application.app.index()
+    assert "/Callbacks/" not in index
+    assert application.asset("Callbacks/Gate.js", url=False).startswith("(function")
+
 def test_overlay_route_is_installed(application):
     routes = {str(rule) for rule in application.app.server.url_map.iter_rules()}
     assert "/_application/<path:filename>" in routes

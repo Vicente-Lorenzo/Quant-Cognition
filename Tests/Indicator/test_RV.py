@@ -8,7 +8,7 @@ from Library.Indicator.Technical.Volatility.RV import RealizedVolatilityAPI
 from Library.Market.Market import MarketAPI
 
 def _market_(closes):
-    market = MarketAPI(db=None, migrate=False, autosave=False, autoload=False, autooverload=False)
+    market = MarketAPI(db=None, migrate=False, autoload=False, autooverload=False)
     n = len(closes)
     df = pl.DataFrame({
         "UID": list(range(1, n + 1)),

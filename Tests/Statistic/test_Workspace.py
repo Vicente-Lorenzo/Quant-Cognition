@@ -445,3 +445,15 @@ def test_walkforward_drops_an_elected_curve_outside_the_folds():
 
 def test_walkforward_of_nothing_is_empty():
     assert walkforward([]) == ([], [])
+
+def test_rolling_statistics_recover_after_an_extreme_return():
+    import math
+    import random
+    generator = random.Random(3)
+    equity = [(index, 0.01 if index == 100 else 10000.0 * (1.0 + generator.gauss(0.0, 0.001))) for index in range(400)]
+    _, volatilities = rolling(equity, window=63, periods=4.0)
+    closes = [value for _, value in equity]
+    returns = [closes[index] / closes[index - 1] - 1.0 for index in range(1, len(closes))][-63:]
+    mean = sum(returns) / 63
+    direct = math.sqrt(sum((value - mean) ** 2 for value in returns) / 62) * 2.0 * 100.0
+    assert abs(volatilities[-1][1] - direct) < 1e-9 * direct

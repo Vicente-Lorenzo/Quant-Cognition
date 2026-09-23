@@ -148,6 +148,16 @@ def test_execute_failure(scheduler, tmp_path):
     assert run.Status == RunStatus.Failure.name
     assert run.ExitCode == 3
 
+def test_a_finished_run_still_shows_its_log(scheduler, tmp_path):
+    script = tmp_path / "chatty.py"
+    script.write_text("print('Chatty Output Line')\n")
+    task = TaskAPI(UID="task-chatty", Name="Chatty", Owner="owner", Type=TaskType.Python, Kind=Kind.Scheduled, Path=str(script), Enabled=True, RequiresApproval=False, RequiresReview=False)
+    persist(task)
+    run = ExecutorAPI(database=DATABASE).run(task)
+    assert not (ExecutorAPI.settle(run.UID) / ExecutorAPI.CONSOLE).exists()
+    assert "Chatty Output Line" in ManagerAPI(database=DATABASE).log(run.UID)
+    assert ManagerAPI(database=DATABASE).log("missing-run") is None
+
 def test_runner_load_roundtrip(scheduler, tmp_path):
     script = tmp_path / "loaded.py"
     script.write_text("import sys\nsys.exit(0)\n")
@@ -481,11 +491,11 @@ def test_manager_approve_reject(scheduler):
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         RunAPI(UID="m-run-approve", TID="m-gate", Status="Approving", db=conn).save(by="Test")
         RunAPI(UID="m-run-review", TID="m-gate", Status="Reviewing", db=conn).save(by="Test")
-    assert manager.approve("m-run-approve", "owner") is True
+    assert manager.approve("m-run-approve", by="owner") is True
     assert manager.run("m-run-approve")["Status"] == RunStatus.Success.name
-    assert manager.reject("m-run-review", "owner") is True
+    assert manager.reject("m-run-review", by="owner") is True
     assert manager.run("m-run-review")["Status"] == RunStatus.Failure.name
-    assert manager.approve("m-run-approve", "owner") is False
+    assert manager.approve("m-run-approve", by="owner") is False
 
 def test_manager_run_task_wait(scheduler, tmp_path):
     manager = ManagerAPI(database=DATABASE)

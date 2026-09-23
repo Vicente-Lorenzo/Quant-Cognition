@@ -137,3 +137,11 @@ def test_bar_statistics_match_a_direct_computation():
     assert abs(curve.Volatility - deviation) < 1e-12
     assert abs(curve.DownsideVolatility - downside) < 1e-12
     assert abs(curve.SharpeRatio - mean / deviation) < 1e-9
+
+def test_non_finite_points_are_skipped_identically_however_they_are_read():
+    rows = _walk_(400, 5)
+    rows[100] = (rows[100][0], rows[100][1], float("nan"), float("inf"))
+    reference = _state_(_replay_(rows, 10 ** 9, 0))
+    assert _state_(_replay_(rows, 0, 0)) == reference
+    assert _state_(_replay_(rows, 64, 1)) == reference
+    assert reference[0] > 0.0 and math.isfinite(reference[2])

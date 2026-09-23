@@ -24,8 +24,8 @@ class MockDatapoint(DatapointAPI):
             **super().Structure
         }
 
-    def __post_init__(self, db, migrate, autosave, autoload, autooverload):
-        super().__post_init__(db=db, migrate=migrate, autosave=autosave, autoload=autoload, autooverload=autooverload)
+    def __post_init__(self, db, migrate, autoload, autooverload):
+        super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
 
 @pytest.fixture
 def test_db(db):
@@ -58,10 +58,10 @@ def test_datapoint_overload(test_db):
     assert overload_obj.Value == "Test2"
     assert overload_obj.Other == 1.0
 
-def test_datapoint_autosave(test_db):
-    obj = MockDatapoint(TestID=3, Value="Initial", db=test_db, migrate=True, autosave=True)
+def test_assigning_a_field_never_writes_to_the_database(test_db):
+    obj = MockDatapoint(TestID=3, Value="Initial", db=test_db, migrate=True)
     obj.save()
-    obj.Value = "Autosaved"
+    obj.Value = "Assigned"
     check_obj = MockDatapoint(TestID=3, db=test_db)
     check_obj.load()
-    assert check_obj.Value == "Autosaved"
+    assert check_obj.Value == "Initial"

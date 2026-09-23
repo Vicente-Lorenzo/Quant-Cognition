@@ -420,3 +420,25 @@ def test_quieted_stays_transparent_while_delivering():
     console, file = engine._log_.console.Level, engine._log_.file.Level
     with engine.quieted():
         assert (engine._log_.console.Level, engine._log_.file.Level) == (console, file)
+
+def test_a_worker_payload_carries_the_contract_and_the_worker_pins_it(monkeypatch):
+    from types import SimpleNamespace
+    from Library.Universe.Contract import ContractAPI
+    from Library.Universe.Ticker import ContractType
+    import Library.System.Backtesting as module
+    parent = ContractAPI(Ticker="EURUSD", Provider="Spotware(cTrader)", Type=ContractType.Spot, SwapLong=-9.0)
+    engine = SimpleNamespace(_strategy_="Trend", _security_=SimpleNamespace(_provider_=parent.Provider, _ticker_=parent.Ticker, Contract=parent), _timeframe_=SimpleNamespace(UID="H1"),
+                             _account_asset_="EUR", _account_balance_=10000.0, _account_leverage_=30.0, _spread_type_=SpreadType.Accurate, _spread_value_=None,
+                             _commission_type_=CommissionType.Accurate, _commission_value_=None, _swap_type_=SwapType.Accurate, _swap_long_=None, _swap_short_=None, _risk_free_=0.02)
+    payload = BacktestingAPI._dispatch_(engine, SimpleNamespace(data={}), datetime(2023, 1, 1), datetime(2024, 1, 1))
+    assert payload["contract"] == parent.snapshot() and payload["risk_free"] == 0.02
+    stored = ContractAPI(Ticker="EURUSD", Provider="Spotware(cTrader)", Type=ContractType.Spot, SwapLong=-2.445)
+    class _Database_:
+        def __init__(self, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *exc): return False
+    monkeypatch.setattr(module, "PostgresDatabaseAPI", _Database_)
+    monkeypatch.setattr(module, "SecurityAPI", lambda **kwargs: SimpleNamespace(Contract=stored))
+    monkeypatch.setattr(module, "TimeframeAPI", lambda **kwargs: SimpleNamespace(UID=kwargs["UID"]))
+    security, timeframe = BacktestingAPI._resolve_(payload)
+    assert security.Contract.SwapLong == -9.0 and timeframe.UID == "H1"

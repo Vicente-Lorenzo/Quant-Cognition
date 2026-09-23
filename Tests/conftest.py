@@ -18,7 +18,7 @@ def pytest_addoption(parser):
     parser.addoption("--golden", action="store_true", default=False, help="Replay every golden under Tests/Golden against the Quant database")
 
 def pytest_ignore_collect(collection_path, config):
-    return collection_path.name == "test_Golden.py" and not config.getoption("--golden")
+    if collection_path.name == "test_Golden.py" and not config.getoption("--golden"): return True
 
 @pytest.fixture(scope="session")
 def db():

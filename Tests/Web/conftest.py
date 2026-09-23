@@ -4,7 +4,9 @@ from Library.Web.App import WebAppAPI
 
 @pytest.fixture(scope="session")
 def application() -> WebAppAPI:
-    return WebAppAPI(name="Quant Cognition", title="Quant Cognition", team="Team", contact="team@quant.test", host="127.0.0.1", port=8098)
+    database, WebAppAPI.Database = WebAppAPI.Database, "Tests"
+    try: yield WebAppAPI(name="Quant Cognition", title="Quant Cognition", team="Team", contact="team@quant.test", host="127.0.0.1", port=8098)
+    finally: WebAppAPI.Database = database
 
 @pytest.fixture(scope="session")
 def owned(application) -> dict:

@@ -378,3 +378,13 @@ def test_close_position_when_position_missing_still_records_trade(env):
     pf.close_position(99999, None, trade)
     assert trade in pf._trades_
     assert env["account"].Balance == 10000.0
+
+def test_a_close_for_a_position_never_opened_moves_neither_the_balance_nor_the_side_curves(env):
+    pf = env["portfolio"]
+    pf.Account = env["account"]
+    pf.update_data(make_bar(env, ENTRY_DT + timedelta(hours=1), 1.0510, 1.0508, 1.0580, 1.0578, 1.0490, 1.0488, 1.0550, 1.0548))
+    pf.close_position(4242, None, make_trade(env, uid=3001, direction=Direction.Buy, exit_price=1.0598, net=500.0))
+    pf.update_data(make_bar(env, ENTRY_DT + timedelta(hours=2), 1.0550, 1.0548, 1.0620, 1.0618, 1.0530, 1.0528, 1.0600, 1.0598))
+    origin = pf.InitialBalance
+    assert env["account"].Balance == 10000.0 and pf.RealizedPnL == 0.0
+    assert all(abs(first + second - origin - value) < 1e-9 for first, second, value in zip(pf.BuyEquityCurve.Values, pf.SellEquityCurve.Values, pf.EquityCurve.Values))

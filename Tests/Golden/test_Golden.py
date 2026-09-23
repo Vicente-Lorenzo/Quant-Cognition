@@ -16,12 +16,13 @@ def _command_(golden) -> list:
     command = json.loads((golden / "Run.json").read_text(encoding="utf-8"))["Command"]
     arguments = split_arguments(command.split(" --run ", 1)[0])
     if "--parameters" not in arguments: arguments += ["--parameters", (golden / "Parameters.yml").relative_to(ROOT).as_posix()]
+    if "--contract" not in arguments: arguments += ["--contract", (golden / "Contract.yml").relative_to(ROOT).as_posix()]
     return arguments
 
 def test_every_golden_folder_is_complete():
     assert GOLDENS
     for golden in GOLDENS:
-        assert all((golden / name).is_file() for name in ("Run.json", "Parameters.yml", *(f"{export}.csv" for export in EXPORTS))), golden
+        assert all((golden / name).is_file() for name in ("Run.json", "Parameters.yml", "Contract.yml", *(f"{export}.csv" for export in EXPORTS))), golden
 
 @pytest.mark.parametrize("golden", GOLDENS, ids=lambda golden: f"{golden.parent.name}/{golden.name}")
 def test_a_golden_replays_byte_identically(golden, tmp_path):

@@ -6,10 +6,11 @@ from Library.Web.Core.Status import StatusAPI
 from Library.Web.Scheduler.Workflow import SchedulerWorkflowAPI
 
 _ACCESS_ = {"/trading": RoleAPI.Administrator, "/framework/database": RoleAPI.Moderator,
-            "/framework": RoleAPI.Viewer, "/framework/hierarchy": RoleAPI.Viewer}
+            "/framework": RoleAPI.Viewer, "/framework/hierarchy": RoleAPI.Viewer,
+            "/framework/credential": RoleAPI.Viewer}
 
 def test_every_declared_page_is_registered(application):
-    assert len(application._pages_) == 25
+    assert len(application._pages_) == 26
 
 def test_endpoints_are_unique(application):
     assert len(set(application._pages_)) == len(application._pages_)
@@ -36,7 +37,7 @@ def test_the_root_launchpad_carries_no_access_gate(owned):
     assert owned["/"].access is None
 
 def test_every_other_owned_page_is_editor(owned):
-    assert len(owned) == 23, f"the owned-page fixture found {len(owned)}"
+    assert len(owned) == 24, f"the owned-page fixture found {len(owned)}"
     for endpoint, page in owned.items():
         if endpoint == "/" or endpoint.rstrip("/") in _ACCESS_: continue
         assert page.access is RoleAPI.Editor, f"{endpoint} is {page.access}"

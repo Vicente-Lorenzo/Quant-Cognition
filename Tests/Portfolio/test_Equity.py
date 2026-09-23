@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from Library.Portfolio.Portfolio import PortfolioAPI
 
 def _portfolio_(balance=10000.0):
-    portfolio = PortfolioAPI(db=None, migrate=False, autosave=False, autoload=False, autooverload=False)
+    portfolio = PortfolioAPI(db=None, migrate=False, autoload=False, autooverload=False)
     portfolio.init_data(account=SimpleNamespace(Balance=balance))
     return portfolio
 
@@ -94,3 +94,16 @@ def test_statistics_default_to_the_recorded_window():
     report = portfolio.calculate_statistics()
     assert report.height == 90
     assert abs(portfolio.AnnualizedReturn - 0.10) < 1e-12 and abs(portfolio.EquityCurve.AnnualizedReturn - 0.10) < 1e-12
+
+def test_trades_known_at_start_are_part_of_the_opening_balance_not_added_twice():
+    portfolio = PortfolioAPI(db=None, migrate=False, autoload=False, autooverload=False)
+    long = SimpleNamespace(IsLong=True, IsShort=False, NetPnL=SimpleNamespace(PnL=500.0))
+    portfolio.init_data(account=SimpleNamespace(Balance=10500.0), trades=[long])
+    assert portfolio.InitialBalance == 10000.0 and portfolio.BuyRealizedPnL == 500.0
+    portfolio._equity_stamp_ = datetime(2021, 1, 1)
+    portfolio._record_equity_(portfolio.Equity)
+    assert portfolio.EquityCurve.Values == [10500.0]
+    assert portfolio.BuyEquityCurve.Values[0] + portfolio.SellEquityCurve.Values[0] - portfolio.InitialBalance == 10500.0
+
+def test_statistics_before_any_bar_are_empty():
+    assert _portfolio_(10000.0).calculate_statistics().is_empty()

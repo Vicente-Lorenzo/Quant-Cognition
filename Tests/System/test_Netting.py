@@ -146,7 +146,7 @@ def test_commission_is_conserved_across_a_partial_close():
     _fill_(engine, Direction.Sell, 500.0)
     trade = _trades_(engine)[-1]
     retained = engine._net_position_().CommissionPnL.PnL
-    charged = truncate(engine._commission_(500.0, engine._symbol_rate_(engine._tick_), *engine._conversions_(engine._tick_)))
+    charged = truncate(engine._commission_(500.0, engine._mid_rate_(engine._tick_), *engine._conversions_(engine._tick_)))
     assert retained + (trade.CommissionPnL.PnL - charged) == pytest.approx(opened, abs=1e-6)
 
 def test_commission_accrues_on_added_volume_only():

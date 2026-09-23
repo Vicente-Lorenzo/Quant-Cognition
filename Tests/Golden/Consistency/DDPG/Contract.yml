@@ -1,0 +1,26 @@
+Provider: Spotware(cTrader)
+Ticker: EURUSD
+Type: Spot
+Digits: 5
+PointSize: 1.0e-05
+PipSize: 0.0001
+LotSize: 100000
+VolumeMin: 1000.0
+VolumeMax: 10000000.0
+VolumeStep: 1000.0
+CommissionMode: BaseAssetPerMillionVolume
+Commission: 45.0
+SwapMode: Pips
+SwapLong: -2.445
+SwapShort: -0.105
+SwapPeriod: 24
+SwapExtraDay: Wednesday
+SwapSummerTime: 22
+SwapWinterTime: 21
+Variant: null
+Payoff: Trivial
+Strike: null
+Maturity: null
+Exercise: null
+UpdatedAt: 2026-09-10 18:30:36.628419
+UpdatedBy: Autosave

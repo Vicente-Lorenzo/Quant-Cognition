@@ -10,10 +10,11 @@
 > places.
 >
 > **`Offline/`** is `Backtesting` — `BacktestingAPI`, which reads its own tick tape from Postgres and
-> computes its own fills, spread, commission, swap and sizing. This is the engine Phase 3 targets, the
+> computes its own fills, spread, commission, swap and sizing. This is the engine Phase 2 targets, the
 > one `Optimization` and `Learning` run on, and the only half whose agreement with cTrader means
-> anything. Run 2026-09-11 with the contract terms in `Contract.json`, verified unchanged since the
-> online half.
+> anything. Run 2026-09-11 with the contract terms then frozen in `Contract.json`, verified unchanged
+> since the online half; since 2026-09-17 each folder carries those terms as its own `Contract.yml`,
+> which the gate pins.
 >
 > Compare `Offline/` against cTrader for accuracy. Compare either against itself across a change for
 > regression.
@@ -107,17 +108,17 @@ equity drawdown (32.51%), which is impossible. **Root cause found, one line:**
 `generate_net_report` sets `initial_balance = account.Balance`, which at report time is the *closing*
 balance, not the opening one. `calculate_excursion` is correct — given the opening balance it returns
 31.6415%, cTrader's figure exactly; given the closing balance it returns 44.2376%, which is what
-`net.csv` prints. Recorded as `PLAN.md` §3.6.1.
+`net.csv` prints. Fixed 2026-09-11 (`PLAN.md` §2.6.1 before the 2026-09-18 renumbering).
 
 **2. Holding time is wrong whenever a position is open at the stop date.** `net.csv` reports avg 181.64
 days for an H1 strategy inside one year where `trades.csv` gives avg 4.85 hours.
 `calculate_holding_times` is correct; the report path hands it a frame with **no `ExitTimestamp`
-column**, so every exit fills with the run stop. Reconstructed exactly. Recorded as §3.6.3.
+column**, so every exit fills with the run stop. Reconstructed exactly. Fixed 2026-09-11 (§2.6.3 before the renumbering).
 
 **3. The Aggregated half of `net.csv` silently degrades to a copy of Individual** whenever a position is
 open — 85 of 85 rows identical in run 1, where the correct Aggregated trade count is 697 not 1025. The
 concat takes the **intersection** of the trades and positions columns, `Position` is not declared on
-`PositionAPI`, and `aggregate_items` returns its input unchanged without it. Recorded as §3.6.
+`PositionAPI`, and `aggregate_items` returns its input unchanged without it. Fixed 2026-09-11 (§2.6 before the renumbering).
 
 None of the three affects the gated files, so all are reporting defects rather than engine defects, and
 the run 1 artifacts remain valid as a baseline.
@@ -226,7 +227,7 @@ and carries its swap to the end of the window.
 24.11 and 1.30 looked like a per-trade residual that changed sign; the directional decomposition shows
 they are one position each. There is no measurable per-trade exit residual in these runs.
 
-Item for Phase 3: value the position open at the stop date at the final tick of the window, and charge
+Item for Phase 2: value the position open at the stop date at the final tick of the window, and charge
 its closing commission and full swap, so the two engines agree on the last mark as well.
 
 ## Balance drawdown, three runs in
@@ -244,18 +245,18 @@ in how a partial close is written to the balance series.**
 
 ## Run 4 — USDJPY h1 2023, EUR 1 000 000
 
-Folder `Golden 4`, run uid `dd8cd8e3`. The run that decides item 3.2.
+Folder `Golden 4`, run uid `dd8cd8e3`. The run that decides item 2.2.
 
-**Run 4 does not decide item 3.2, and it corroborates the defect rather than clearing it.** In
+**Run 4 does not decide item 2.2, and it corroborates the defect rather than clearing it.** In
 `Simulation` the volume is computed by *our* sizer and sent to cTrader to execute, so agreement on
 volumes is tautological exactly as it is for fees — cTrader executes what it is given. What run 4 does
 show is the distribution: at a million the `VolumeMin` clamp stops binding and **68 distinct volumes
 from 5 000 to 81 000 appear, only 4 of 1017 at the floor**, against run 2's single clamped size.
 
-Those magnitudes are consistent with §3.2's diagnosis. At `RiskPercentage` 1.0 on a 1 000 000 balance,
+Those magnitudes are consistent with §5.2's diagnosis. At `RiskPercentage` 1.0 on a 1 000 000 balance,
 a genuine 1% risk with a stop of roughly 50 pips on USDJPY implies volumes in the millions of units;
 the sizer produced tens of thousands, two orders of magnitude smaller, which is the `1/price` factor
-§3.2 predicts. **Item 3.2 still stands and still needs fixing.** Deciding it requires a
+§5.2 predicts. **Item 5.2 still stands and still needs fixing.** Deciding it requires a
 `BacktestingAPI` run where our sizer's output can be checked against intended risk directly, not a
 `Simulation` run where cTrader merely executes our number.
 
@@ -387,8 +388,9 @@ every number downstream, not just `SwapPnL`. Runs 1 and 3 demonstrate the mechan
 in different account currencies produced different volumes (59 against 61 distinct) purely because the
 balance differed.
 
-The terms in force are frozen in `Contract.json`, which also carries the CLI flags that pin them. A
-golden replayed with `Auto` will not reproduce; it must be replayed with the pinned values.
+The terms in force were frozen in `Contract.json` until 2026-09-17, when each golden folder took its
+own `Contract.yml` and the gate began replaying with `--contract`. A golden replayed against a drifted
+`Universe.Contract` row without that pin will not reproduce.
 ---
 
 # The offline half — `BacktestingAPI` against cTrader
@@ -511,7 +513,7 @@ the online half (32.926M against 30.967M) where run 4's match to 0.01%.
 the wrong factor.
 
 This is direct empirical support for dropping the hardcoded conversion columns from the `Tick` table
-(Phase 2.6) and for the generic account currency work (3.4). It is the largest single accuracy defect
+(`PLAN.md` §3.6) and for the generic account currency work (§5.4). It is the largest single accuracy defect
 the golden set has found.
 
 ## Structural notes
