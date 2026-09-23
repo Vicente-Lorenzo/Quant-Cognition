@@ -95,7 +95,7 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
 
     def _universe_(self) -> tuple:
         try:
-            with PostgresDatabaseAPI(database=self.app.Database) as db:
+            with PostgresDatabaseAPI.attach(database=self.app.Database) as db:
                 frame = db.executeone(QueryAPI('''
                     SELECT DISTINCT p."UID" AS provider, c."UID" AS category, t."UID" AS ticker
                     FROM "Universe"."Security" s

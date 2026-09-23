@@ -18,7 +18,9 @@ class SchedulerTaskAPI(SchedulerEntityAPI):
     _FIELDS_ = (
         FieldAPI(name="uid", label="UID", identity=True, placeholder="unique-task-id", help="Unique identifier of the task · immutable once created"),
         FieldAPI(name="name", required=True, help="Human-readable display name shown across the app"),
-        FieldAPI(name="owner", required=True, default=lambda page: page.app.actor(), help="Account responsible for the task · used for auditing"),
+        FieldAPI(name="owner", required=True, default=lambda page: page.app.actor(), help="Account that owns the task · its runs use this account's credentials · only the owner or an Administrator may hand it over"),
+        FieldAPI(name="runrole", label="Run Role", column="RunRole", control="select", group="access", default="", options=SchedulerEntityAPI._THRESHOLDS_, help="Lowest role that may run, skip, cancel and resolve it · Owner only keeps it to the owner · never above your own role"),
+        FieldAPI(name="editrole", label="Edit Role", column="EditRole", control="select", group="access", default="", options=SchedulerEntityAPI._THRESHOLDS_, help="Lowest role that may change, enable and delete it · never below Run Role · anyone who can change a task can make it use its owner's credentials"),
         FieldAPI(name="type", control="select", group="kind", default=TaskAPI.Defaults["Type"], options=FieldAPI.choices(TaskType.names()), help="Artifact interpreter · Batch runs a Windows batch file · Shell runs a shell command · Python runs a Python script"),
         FieldAPI(name="kind", control="select", group="kind", default=TaskAPI.Defaults["Kind"], options=FieldAPI.choices(Kind.names()), help="Execution style · Manual runs only on demand · Scheduled runs to completion when triggered · Service is kept always-on and respawned if it dies"),
         FieldAPI(name="path", required=True, placeholder="Script/Example.py", wrapper="scheduler-path-row", suffix=lambda page: page._browse_(), help="Artifact the runner executes · stored absolute unless Relative is on"),
@@ -149,7 +151,8 @@ class SchedulerTaskPageAPI(SchedulerTaskAPI, SchedulerEntityPageAPI, TableAPI):
 
     def _rows_(self) -> list:
         latest = self._manager_.latest()
-        return [self._task_row_(task, latest.get(task.get("UID"))) for task in self._manager_.tasks()]
+        principal = self._manager_.principal(self.app.actor())
+        return [self._task_row_(task, latest.get(task.get("UID")), principal) for task in self._manager_.tasks()]
 
     def _fingerprint_(self):
         return self._manager_.fingerprint("Scheduler", "Task")

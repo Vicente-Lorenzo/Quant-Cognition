@@ -3,6 +3,7 @@ from dash import html
 from dash.exceptions import PreventUpdate
 
 from Library.App.V2 import FieldAPI, RefreshAPI, TableAPI, ComponentID, Output, Input, State, InjectionType, serverside_callback, clientside_callback, modal_callbacks, ButtonAPI, ModalAPI, ChoiceAPI, SegmentAPI, StorageAPI
+from Library.Auth import AccessLevel, AccessAPI
 from Library.Web.Scheduler.Base import SchedulerBaseAPI, SchedulerSelectionAPI
 
 class SchedulerEntityAPI(SegmentAPI, SchedulerBaseAPI):
@@ -11,6 +12,8 @@ class SchedulerEntityAPI(SegmentAPI, SchedulerBaseAPI):
         ChoiceAPI(value="Enabled", label="Enabled", icon="bi bi-check-circle", state="Yes", tooltip="Let the daemon schedule the selected rows"),
         ChoiceAPI(value="Disabled", label="Disabled", icon="bi bi-x-circle", state="No", tooltip="Hold the selected rows back · the daemon skips them"),
     )
+
+    _THRESHOLDS_ = [{"label": AccessAPI.label(None), "value": ""}] + FieldAPI.choices(AccessAPI.roles())
 
     _entity_ = ""
     _FIELDS_: tuple = ()
@@ -112,8 +115,8 @@ class SchedulerEntityAPI(SegmentAPI, SchedulerBaseAPI):
             return dash.no_update, dash.no_update
         def save():
             fields = FieldAPI.payload(self._FIELDS_, values)
-            if update: getattr(self._manager_, f"update_{self._entity_}")(mode["uid"], **fields)
-            else: getattr(self._manager_, f"create_{self._entity_}")(UID=identity, Enabled=True, **fields)
+            if update: getattr(self._manager_, f"update_{self._entity_}")(mode["uid"], by=self.app.actor(), **fields)
+            else: getattr(self._manager_, f"create_{self._entity_}")(UID=identity, Enabled=True, by=self.app.actor(), **fields)
         if not self._trial_(save, "Save Failed"): return dash.no_update, dash.no_update
         self.app.notify.success(f"{entity} '{mode['uid'] if update else identity}' {'updated' if update else 'created'}", header="Saved")
         return False, RefreshAPI.token()
@@ -175,6 +178,7 @@ class SchedulerEntityAPI(SegmentAPI, SchedulerBaseAPI):
     )
     def _gate_segment_(self, state):
         disabled, active = self._segment_state_(state, "Enabled")
+        if any(row.get("Access", AccessLevel.Edit.name) != AccessLevel.Edit.name for row in (state or {}).get("rows") or []): disabled = [True for _ in disabled]
         return (*disabled, *active)
 
     @serverside_callback(

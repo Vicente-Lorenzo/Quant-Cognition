@@ -1,6 +1,7 @@
 import dash
 
-from Library.App.V2 import GlobalAPI, CrumbAPI, BreadcrumbAPI, RefreshAPI, TableAPI, WorkspaceAPI, ComponentID, Output, Input, State, InjectionType, clientside_callback, StorageAPI, NetworkAPI
+from Library.App.V2 import GlobalAPI, CrumbAPI, BreadcrumbAPI, RefreshAPI, TableAPI, WorkspaceAPI, ComponentID, Output, Input, State, InjectionType, clientside_callback, StorageAPI, NetworkAPI, ControlType
+from Library.Auth import AccessAPI
 from Library.Web.Core.Managed import ManagedPageAPI
 from Library.Utility.Typing import MISSING
 
@@ -10,8 +11,8 @@ class SchedulerBaseAPI(ManagedPageAPI):
     BREADCRUMB_ID: ComponentID | dict = ComponentID()
     FIELDS_ID: ComponentID | dict = ComponentID()
 
-    _WORKFLOW_COLUMNS_ = ["Status", "UID", "Name", "Owner", "Enabled", "Kind", "Waits", "Schedule", "Zone"]
-    _TASK_COLUMNS_ = ["Status", "UID", "Name", "Type", "Kind", "Enabled", "Waits", "Tolerates", "Schedule", "WID", "MaxRetry"]
+    _WORKFLOW_COLUMNS_ = ["Status", "UID", "Name", "Owner", "Run", "Edit", "Access", "Enabled", "Kind", "Waits", "Schedule", "Zone"]
+    _TASK_COLUMNS_ = ["Status", "UID", "Name", "Owner", "Run", "Edit", "Access", "Type", "Kind", "Enabled", "Waits", "Tolerates", "Schedule", "WID", "MaxRetry"]
     _MEMBER_COLUMNS_ = ["Status", "UID", "Name", "Type", "Kind", "Enabled"]
     _RUN_COLUMNS_ = ["Status", "UID", "CID", "TID", "Kind", "Retry", "StartedAt", "StoppedAt", "Duration", "ExitCode", "PID", "Auditor"]
     _TASK_RUN_COLUMNS_ = ["Status", "UID", "Kind", "Retry", "StartedAt", "StoppedAt", "Duration", "ExitCode", "PID", "Auditor"]
@@ -41,7 +42,7 @@ class SchedulerBaseAPI(ManagedPageAPI):
         done, error = [], None
         for uid in uids:
             try:
-                getattr(self._manager_, f"{verb}_{entity}")(uid)
+                getattr(self._manager_, f"{verb}_{entity}")(uid, by=self.app.actor())
                 done.append(uid)
             except Exception as reason:
                 error = str(reason)
@@ -51,12 +52,17 @@ class SchedulerBaseAPI(ManagedPageAPI):
         self.app.notify.success(f"{detail} {self._VERBS_[verb]}", header="Done")
         return RefreshAPI.token()
 
-    def _task_row_(self, task: dict, status) -> dict:
+    def _guarded_(self, row: dict, entity: dict, principal) -> dict:
+        row["Run"], row["Edit"] = AccessAPI.label(entity.get("RunRole")), AccessAPI.label(entity.get("EditRole"))
+        row["Access"] = self._manager_.access(entity, principal).name
+        return row
+
+    def _task_row_(self, task: dict, status, principal=None) -> dict:
         row = {column: task.get(column) for column in self._TASK_COLUMNS_}
         row["Status"] = self._led_(status)
         row["Waits"] = task.get("Waits") is not False
         row["Tolerates"] = task.get("Tolerates") is not False
-        return row
+        return self._guarded_(row, task, principal)
 
     def _run_row_(self, run: dict) -> dict:
         row = {}
@@ -68,11 +74,11 @@ class SchedulerBaseAPI(ManagedPageAPI):
         row["Status"] = self._led_(run.get("Status"))
         return row
 
-    def _workflow_row_(self, workflow: dict, status=None) -> dict:
+    def _workflow_row_(self, workflow: dict, status=None, principal=None) -> dict:
         row = {column: workflow.get(column) for column in self._WORKFLOW_COLUMNS_}
         row["Status"] = self._led_(status)
         row["Waits"] = workflow.get("Waits") is not False
-        return row
+        return self._guarded_(row, workflow, principal)
 
     def _cycle_row_(self, cycle: dict) -> dict:
         row = {column: cycle.get(column) for column in self._CYCLE_COLUMNS_}
@@ -83,8 +89,13 @@ class SchedulerBaseAPI(ManagedPageAPI):
         parts = self.segments(pathname)
         return parts[0] if parts else None
 
+    def _shown_(self, entry, row: dict):
+        value = entry.read(row, self)
+        if entry.control is not ControlType.Select: return value
+        return next((option["label"] for option in entry.options if option["value"] == value), value)
+
     def _pairs_(self, row: dict, fields, extra: list = None) -> list:
-        pairs = [(entry.label, entry.read(row, self)) for entry in fields if not entry.identity and entry.stored]
+        pairs = [(entry.label, self._shown_(entry, row)) for entry in fields if not entry.identity and entry.stored]
         return pairs + (extra or []) + [("Updated", self._stamp_(row.get("UpdatedAt")))]
 
     def _label_(self, row: dict, uid: str) -> str:

@@ -45,7 +45,7 @@ class SchedulerRunAPI(SchedulerBaseAPI):
         uids = self._selection_(uids, "Select a run first")
         if not uids: return dash.no_update
         by, action = self.app.actor(), self._manager_.approve if verb == "approve" else self._manager_.reject
-        return self._tally_(uids, lambda uid: action(uid, by), f"run(s) {verb}d", "No selected run is awaiting approval or review")
+        return self._tally_(uids, lambda uid: action(uid, by=by), f"run(s) {verb}d", "No selected run is awaiting approval or review")
 
     @clientside_callback(
         Output(APPROVE_BTN, "disabled"),
@@ -131,20 +131,6 @@ class SchedulerRunDetailPageAPI(SchedulerRunAPI, SchedulerDetailAPI):
     _ANSI_ = re.compile(r"\x1b\[([0-9;]*)m")
     _BASICS_ = ("#000000", "#cd3131", "#0dbc79", "#e5e510", "#2472c8", "#bc3fbc", "#11a8cd", "#e5e5e5", "#666666", "#f14c4c", "#23d18b", "#f5f543", "#3b8eea", "#d670d6", "#29b8db", "#ffffff")
 
-    @staticmethod
-    def _tail_(path):
-        if not path: return "(no log)"
-        try:
-            with open(path, "rb") as handle:
-                raw = handle.read()
-        except OSError:
-            return "(log unavailable)"
-        try:
-            data = raw.decode("utf-8")
-        except UnicodeDecodeError:
-            data = raw.decode("windows-1252", "replace")
-        return data[-8000:] if data.strip() else "(empty log)"
-
     @classmethod
     def _shade_(cls, code: int) -> str:
         if code < 16: return cls._BASICS_[code]
@@ -188,4 +174,4 @@ class SchedulerRunDetailPageAPI(SchedulerRunAPI, SchedulerDetailAPI):
         memory = memory_to_string(run.get("Memory")) if isinstance(run.get("Memory"), (int, float)) else None
         duration = f"{run.get('Duration'):.2f} s" if isinstance(run.get("Duration"), (int, float)) else None
         pairs = [("Status", self._led_dot_(run.get("Status"))), ("Task", task), ("Kind", run.get("Kind")), ("Retry", run.get("Retry")), ("Exit Code", run.get("ExitCode")), ("Duration", duration), ("Memory", memory), ("PID", run.get("PID")), ("Started", self._stamp_(run.get("StartedAt"))), ("Stopped", self._stamp_(run.get("StoppedAt"))), ("Auditor", run.get("Auditor")), ("Cycle", run.get("CID"))]
-        return self._breadcrumb_(uid, run), [uid], self._details_(pairs), html.Pre(self._paint_(self._tail_(run.get("Log"))), className="scheduler-log")
+        return self._breadcrumb_(uid, run), [uid], self._details_(pairs), html.Pre(self._paint_(self._manager_.log(uid) or "(no log)"), className="scheduler-log")

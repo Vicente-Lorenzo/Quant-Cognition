@@ -3,6 +3,7 @@ from typing_extensions import Self
 
 from Library.App.V2 import AppAPI, LinkAPI, PageAPI
 from Library.Auth import AuthAPI, RoleAPI
+from Library.Credential import SessionAPI
 from Library.Database import PostgresDatabaseAPI
 from Library.Utility.IO import read_text
 from Library.Utility.Path import traceback_root
@@ -10,6 +11,7 @@ from Library.Web.Core import ArtifactAPI
 from Library.Web.Launchpad import WebLaunchpadPageAPI
 from Library.Web.Trading import TradingPageAPI
 from Library.Web.Framework import (
+    CredentialPageAPI,
     DatabasePageAPI,
     HierarchyPageAPI,
     FrameworkPageAPI
@@ -48,7 +50,7 @@ class WebAppAPI(AppAPI):
     _MOTTOS_ = traceback_root() / "MOTTOS.md"
 
     def __init__(self, *, motto: str | list = None, auth: AuthAPI | None = None, access: RoleAPI = RoleAPI.Viewer, **kwargs) -> None:
-        super().__init__(motto=motto if motto is not None else self._mottos_(), auth=auth if auth is not None else AuthAPI(database=self.Database), access=access, **kwargs)
+        super().__init__(motto=motto if motto is not None else self._mottos_(), auth=auth if auth is not None else AuthAPI(database=self.Database, secret=SessionAPI.secret(database=self.Database)), access=access, **kwargs)
         ArtifactAPI.shared().install(self.app.server)
         self._scoped_(self.app.server, self.Database)
 
@@ -99,6 +101,7 @@ class WebAppAPI(AppAPI):
         self._page_(SchedulerTaskDetailPageAPI(app=self), RoleAPI.Editor)
         self._page_(SchedulerRunDetailPageAPI(app=self), RoleAPI.Editor)
         self._page_(FrameworkPageAPI(app=self), RoleAPI.Viewer)
+        self._page_(CredentialPageAPI(app=self), RoleAPI.Viewer)
         self._page_(DatabasePageAPI(app=self), RoleAPI.Moderator)
         self._page_(HierarchyPageAPI(app=self), RoleAPI.Viewer)
 

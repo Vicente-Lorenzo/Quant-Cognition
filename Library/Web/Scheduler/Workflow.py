@@ -15,7 +15,9 @@ class SchedulerWorkflowAPI(SchedulerEntityAPI):
     _FIELDS_ = (
         FieldAPI(name="uid", label="UID", identity=True, placeholder="unique-workflow-id", help="Unique identifier of the workflow · immutable once created"),
         FieldAPI(name="name", required=True, help="Human-readable display name shown across the app"),
-        FieldAPI(name="owner", required=True, default=lambda page: page.app.actor(), help="Account responsible for the workflow · used for auditing"),
+        FieldAPI(name="owner", required=True, default=lambda page: page.app.actor(), help="Account that owns the workflow and always keeps access · only the owner or an Administrator may hand it over"),
+        FieldAPI(name="runrole", label="Run Role", column="RunRole", control="select", group="access", default="", options=SchedulerEntityAPI._THRESHOLDS_, help="Lowest role that may run the workflow and resolve its runs · Owner only keeps it to the owner · never above your own role"),
+        FieldAPI(name="editrole", label="Edit Role", column="EditRole", control="select", group="access", default="", options=SchedulerEntityAPI._THRESHOLDS_, help="Lowest role that may change, link, enable and delete it · never below Run Role · anyone who can change a workflow decides what runs with its owner's credentials"),
         FieldAPI(name="kind", control="select", default="", options=[{"label": "(derive from Schedule)", "value": ""}] + FieldAPI.choices(Kind.names()), help="Lifecycle · Manual opens a cycle only on demand · Scheduled opens a cycle at each cron occurrence · Service keeps one resident always-on cycle and only accepts Service tasks · empty derives from Schedule"),
         FieldAPI(name="schedule", label="Schedule (cron)", column="Schedule", placeholder="0 22 * * 1-5", wrapper="scheduler-cron-row", suffix=lambda page: [page._cron_(page.F_CRON)], help="Cron that opens a new cycle at each occurrence · required for Scheduled and forbidden otherwise"),
         FieldAPI(name="zone", label="Time Zone", column="Zone", control="select", default="", options=[{"label": "(server zone)", "value": ""}] + FieldAPI.choices(zones()), help="Zone the cron is written in · follows that zone's daylight saving · member task schedules use it too · empty uses the server's zone"),
@@ -44,7 +46,8 @@ class SchedulerWorkflowPageAPI(SchedulerWorkflowAPI, SchedulerEntityPageAPI, Tab
 
     def _rows_(self) -> list:
         cycled = self._manager_.cycled()
-        return [self._workflow_row_(workflow, cycled.get(workflow.get("UID"))) for workflow in self._manager_.workflows()]
+        principal = self._manager_.principal(self.app.actor())
+        return [self._workflow_row_(workflow, cycled.get(workflow.get("UID")), principal) for workflow in self._manager_.workflows()]
 
     def _fingerprint_(self):
         return self._manager_.fingerprint("Scheduler", "Workflow")
@@ -160,7 +163,11 @@ class SchedulerWorkflowDetailPageAPI(SchedulerWorkflowAPI, SchedulerGridDetailAP
     def _link_(self, clicks, predecessor, successor, target):
         uid = self._pair_(predecessor, successor, target)
         if uid is None: return dash.no_update
-        if self._manager_.link(uid, predecessor, successor) is None:
+        try: dependency = self._manager_.link(uid, predecessor, successor, by=self.app.actor())
+        except PermissionError as error:
+            self.app.notify.error(str(error), header="Forbidden")
+            return dash.no_update
+        if dependency is None:
             self.app.notify.error("Link rejected — it would create a cycle", header="Invalid Dependency")
             return dash.no_update
         self.app.notify.success(f"Linked {predecessor} → {successor}", header="Done")
@@ -177,6 +184,6 @@ class SchedulerWorkflowDetailPageAPI(SchedulerWorkflowAPI, SchedulerGridDetailAP
     def _unlink_(self, clicks, predecessor, successor, target):
         uid = self._pair_(predecessor, successor, target)
         if uid is None: return dash.no_update
-        self._manager_.unlink(uid, predecessor, successor)
+        if not self._trial_(lambda: self._manager_.unlink(uid, predecessor, successor, by=self.app.actor()), "Unlink Failed"): return dash.no_update
         self.app.notify.success(f"Unlinked {predecessor} → {successor}", header="Done")
         return self.token()
