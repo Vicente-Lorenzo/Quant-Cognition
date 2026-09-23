@@ -1,4 +1,5 @@
 from Library.Auth.Role import RoleAPI
+from Library.Auth.Access import AccessLevel, AccessAPI
 from Library.Auth.Team import TeamAPI
 from Library.Auth.Office import OfficeAPI
 from Library.Auth.User import UserAPI
@@ -9,6 +10,8 @@ from Library.Auth.Auth import AuthAPI
 
 __all__ = [
     "RoleAPI",
+    "AccessLevel",
+    "AccessAPI",
     "TeamAPI",
     "OfficeAPI",
     "UserAPI",
