@@ -1,5 +1,5 @@
 def migrate(db, *datapoints) -> None:
-    for datapoint in datapoints: datapoint(db=db, migrate=True, autosave=False, autoload=False)
+    for datapoint in datapoints: datapoint(db=db, migrate=True, autoload=False)
 
 def attempt(log, name: str, work, *, detail: str = "") -> int:
     try:

@@ -31,10 +31,12 @@ def setup_notify(db):
 
 def setup_index(db):
     schema = WorkflowAPI.Schema
-    db.executeone(QueryAPI(f'CREATE INDEX IF NOT EXISTS "Run_TID_StartedAt_idx" ON "{schema}"."{RunAPI.Table}" ("TID", "StartedAt" DESC)'))
+    db.executeone(QueryAPI(f'DROP INDEX IF EXISTS "{schema}"."Run_TID_StartedAt_idx"'))
+    db.executeone(QueryAPI(f'CREATE INDEX IF NOT EXISTS "Run_TID_StartedAt_Latest_idx" ON "{schema}"."{RunAPI.Table}" ("TID", "StartedAt" DESC NULLS LAST)'))
     db.executeone(QueryAPI(f'CREATE INDEX IF NOT EXISTS "Run_CID_idx" ON "{schema}"."{RunAPI.Table}" ("CID")'))
     db.executeone(QueryAPI(f'CREATE INDEX IF NOT EXISTS "Run_Status_idx" ON "{schema}"."{RunAPI.Table}" ("Status")'))
-    db.executeone(QueryAPI(f'CREATE INDEX IF NOT EXISTS "Cycle_WID_StartedAt_idx" ON "{schema}"."{CycleAPI.Table}" ("WID", "StartedAt" DESC)'))
+    db.executeone(QueryAPI(f'DROP INDEX IF EXISTS "{schema}"."Cycle_WID_StartedAt_idx"'))
+    db.executeone(QueryAPI(f'CREATE INDEX IF NOT EXISTS "Cycle_WID_StartedAt_Latest_idx" ON "{schema}"."{CycleAPI.Table}" ("WID", "StartedAt" DESC NULLS LAST)'))
 
 def migrate_runs(db):
     schema, table = RunAPI.Schema, RunAPI.Table
