@@ -1,3 +1,4 @@
+import os
 import re
 import flask
 import functools
@@ -8,7 +9,6 @@ from typing_extensions import Self
 from Library.Scheduler.Executor import ExecutorAPI
 from Library.System.System import SystemAPI
 from Library.Utility.Datetime import STAMP, string_to_datetime
-from Library.Utility.File import PruneAPI
 from Library.Utility.Profiler import PROFILE
 
 @dataclass(kw_only=True)
@@ -26,8 +26,8 @@ class ArtifactAPI:
         return stamp, match.group(2).strip() or name
 
     @staticmethod
-    def _kind_(path: Path) -> str:
-        if path.is_dir(): return "Export"
+    def _kind_(path: Path, folder: bool) -> str:
+        if folder: return "Export"
         if path.name == SystemAPI.RESULT: return "Result"
         if path.suffix == ".html": return "Plot"
         return "Profile" if path.suffix in (".prof", PROFILE) else "File"
@@ -42,15 +42,14 @@ class ArtifactAPI:
         folder = self._folder_(run)
         if folder is None: return []
         output = folder / SystemAPI.OUTPUT
-        source = output if output.is_dir() else folder
+        source, prefix = (output, f"{SystemAPI.OUTPUT}/") if output.is_dir() else (folder, "")
         rows = []
-        for path in sorted(source.iterdir()):
-            if path.is_file() and path.suffix == ".log": continue
-            kind = self._kind_(path)
-            stamp, label = self._parse_(path.name if path.is_dir() else path.stem)
-            leaf = path.relative_to(folder).as_posix()
-            rows.append({"UID": f"{kind}:{run}/{leaf}", "Kind": kind, "Name": label,
-                         "Stamp": stamp, "Size": PruneAPI.weight(path), "Path": path})
+        for entry in sorted(os.scandir(source), key=lambda entry: os.path.normcase(entry.name)):
+            path, directory = Path(entry.path), entry.is_dir()
+            if not directory and path.suffix == ".log": continue
+            kind = self._kind_(path, directory)
+            stamp, label = self._parse_(path.name if directory else path.stem)
+            rows.append({"UID": f"{kind}:{run}/{prefix}{entry.name}", "Kind": kind, "Name": label, "Stamp": stamp, "Path": path})
         return rows
 
     @staticmethod

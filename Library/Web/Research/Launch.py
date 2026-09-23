@@ -193,7 +193,7 @@ class LaunchAPI:
         return FieldAPI.command([entry for entry, _ in pairs], [value for _, value in pairs], system)
 
     def _queue_(self, task: str, arguments: str) -> None:
-        if self._manager_.run_task(task, arguments=arguments) is None and self._manager_.task(task) is None: raise LookupError(f"Task '{task}' was not found")
+        if self._manager_.run_task(task, arguments=arguments, by=self.app.actor()) is None and self._manager_.task(task) is None: raise LookupError(f"Task '{task}' was not found")
 
     def _dispatch_(self, values) -> tuple:
         system = self._chosen_(values)

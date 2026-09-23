@@ -83,6 +83,7 @@ from Library.App.V2 import (
 
 from Library.Scheduler import RetentionLevel
 from Library.Strategy.Ladder import LadderAPI
+from Library.Utility.File import PruneAPI
 from Library.Utility.IO import read_json, read_text
 from Library.Utility.Typing import MISSING
 from Library.System.System import SystemAPI
@@ -144,16 +145,17 @@ class ResultsPageAPI(SegmentAPI, ResultBaseAPI, TableAPI):
         self.COMPARE_BTN = self.register(type="button", name="compare")
         self._segment_ids_()
 
-    def _row_(self, run: dict, produced: list) -> dict | None:
+    def _row_(self, run: dict, produced: list, fields: dict) -> dict | None:
         return {"Status": self._led_(run.get("Status")), "UID": run.get("UID"),
                 "Retention": self._MARKS_.get(run.get("Retention"), ""), "StartedAt": run.get("StartedAt"),
                 "StoppedAt": run.get("StoppedAt"), "Duration": self._elapsed_(run.get("Duration")),
-                "Artifacts": len(produced), **FieldAPI.parse(self._LAUNCH_, run.get("Arguments"))}
+                "Artifacts": len(produced), **fields}
 
     def _workspace_(self, columns: list = MISSING, rows: list = MISSING) -> WorkspaceAPI:
-        runs = self._runs_() if columns is MISSING or rows is MISSING else []
-        if columns is MISSING: columns = self._COLUMNS_ + list(dict.fromkeys(name for run in runs for name in FieldAPI.parse(self._LAUNCH_, run.get("Arguments"))))
-        if rows is MISSING: rows = [row for row in (self._row_(run, self._produced_(run)) for run in runs) if row is not None]
+        runs = self._runs_() if rows is MISSING else []
+        parsed = [FieldAPI.parse(self._LAUNCH_, run.get("Arguments")) for run in runs]
+        if columns is MISSING: columns = self._COLUMNS_ + list(dict.fromkeys(name for fields in parsed for name in fields))
+        if rows is MISSING: rows = [row for row in (self._row_(run, self._produced_(run), fields) for run, fields in zip(runs, parsed)) if row is not None]
         return super()._workspace_(columns, rows)
 
     def _detail_base_(self):
@@ -174,7 +176,7 @@ class ResultsPageAPI(SegmentAPI, ResultBaseAPI, TableAPI):
     def _mark_(self, state, level: RetentionLevel):
         keys = self._selection_(state, "Select runs first")
         if not keys: return dash.no_update
-        return self._tally_(keys, lambda uid: self._manager_.retain(uid, level=level), f"run(s) marked {level.name}")
+        return self._tally_(keys, lambda uid: self._manager_.retain(uid, level=level, by=self.app.actor()), f"run(s) marked {level.name}")
 
     @clientside_callback(
         Output(CANCEL_BTN, "disabled"),
@@ -569,7 +571,7 @@ class ResultPageAPI(ResultBaseAPI, RefreshAPI):
 
     def _artifacts_(self, produced: list) -> list:
         if not produced: return [TextAPI(text="This run produced no artifacts yet", classname="status-line", builder=html.P)]
-        return [self._details_([(f"{entry['Kind']} · {entry['Name']}", self._weight_(entry["Size"])) for entry in produced])]
+        return [self._details_([(f"{entry['Kind']} · {entry['Name']}", self._weight_(PruneAPI.weight(entry["Path"]))) for entry in produced])]
 
     _open_promote_, _close_promote_ = modal_callbacks(PROMOTE_MODAL_ID, PROMOTE_BTN, PROMOTE_DISCARD_BTN)
 

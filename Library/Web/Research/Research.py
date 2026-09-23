@@ -39,8 +39,8 @@ class ResearchRunPageAPI(ResearchBaseAPI, LaunchedResultsPageAPI):
         button.tooltip = "Configure and dispatch a backtest, optimization or learning run"
         return button
 
-    def _row_(self, run: dict, produced: list) -> dict | None:
-        return {**super()._row_(run, produced), "Research": self._research_(run), "Progress": self._percentage_(run)}
+    def _row_(self, run: dict, produced: list, fields: dict) -> dict | None:
+        return {**super()._row_(run, produced, fields), "Research": self._research_(run), "Progress": self._percentage_(run)}
 
     @staticmethod
     def _percentage_(run: dict) -> str:
@@ -81,9 +81,9 @@ class ResearchComparisonPageAPI(ResearchBaseAPI, ResultsPageAPI):
     def _comparable_(produced: list) -> bool:
         return any(item.get("Kind") == "Plot" for item in produced)
 
-    def _row_(self, run: dict, produced: list) -> dict | None:
+    def _row_(self, run: dict, produced: list, fields: dict) -> dict | None:
         if not self._comparable_(produced): return None
-        return {**super()._row_(run, produced), "Research": self._research_(run)}
+        return {**super()._row_(run, produced, fields), "Research": self._research_(run)}
 
     def _extras_(self) -> list:
         return [html.P("Only runs that stored a plot can be overlaid — a run without one has no curve to draw",
