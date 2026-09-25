@@ -15,9 +15,9 @@ class AverageTrueRangeAPI(NeutralSignalAPI):
 
     def _extract_(self, market: MarketAPI) -> dict[str, pl.Series]:
         return {
-            "High": market.HighTicks.Price.tail(),
-            "Low": market.LowTicks.Price.tail(),
-            "Close": market.CloseTicks.Price.tail()
+            "High": market.HighPoints.Price.tail(),
+            "Low": market.LowPoints.Price.tail(),
+            "Close": market.ClosePoints.Price.tail()
         }
 
     def batch(self, data: dict[str, pl.Series]) -> pl.DataFrame:

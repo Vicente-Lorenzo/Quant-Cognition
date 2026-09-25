@@ -128,6 +128,15 @@ class PortfolioAPI(DatapointAPI):
         self._sell_equity_curve_.record(self._equity_stamp_, origin + self._sell_realized_ + self.SellUnrealizedPnL)
 
     @staticmethod
+    def _high_first_(high: Union[TickAPI, None], low: Union[TickAPI, None]) -> bool:
+        return high is not None and low is not None and high.Timestamp is not None and low.Timestamp is not None and high.Timestamp.DateTime <= low.Timestamp.DateTime
+
+    @staticmethod
+    def _observe_(curve: CurveAPI, high: float, low: float, close: float, high_first: bool) -> None:
+        if high_first: curve.observe(high, low, close)
+        else: curve.observe(low, high, close)
+
+    @staticmethod
     def _conversion_(ask: Union[PriceAPI, None], bid: Union[PriceAPI, None]) -> float:
         a = ask.Price if ask else None
         b = bid.Price if bid else None
@@ -141,14 +150,15 @@ class PortfolioAPI(DatapointAPI):
             high_ask = low_ask = ask
             conversion = self._conversion_(data.AskQuoteConversion, data.BidQuoteConversion)
         else:
-            bid, ask, timestamp = data.CloseTick.Bid.Price, data.CloseTick.Ask.Price, data.Timestamp.DateTime
-            high_bid = data.HighTick.Bid.Price if data.HighTick and data.HighTick.Bid else bid
-            low_bid = data.LowTick.Bid.Price if data.LowTick and data.LowTick.Bid else bid
-            high_ask = data.HighTick.Ask.Price if data.HighTick and data.HighTick.Ask else ask
-            low_ask = data.LowTick.Ask.Price if data.LowTick and data.LowTick.Ask else ask
-            conversion = self._conversion_(data.CloseTick.AskQuoteConversion, data.CloseTick.BidQuoteConversion)
+            bid, ask, timestamp = data.ClosePoint.Bid.Price, data.ClosePoint.Ask.Price, data.Timestamp.DateTime
+            high_bid = data.HighPoint.Bid.Price if data.HighPoint and data.HighPoint.Bid else bid
+            low_bid = data.LowPoint.Bid.Price if data.LowPoint and data.LowPoint.Bid else bid
+            high_ask = data.HighPoint.Ask.Price if data.HighPoint and data.HighPoint.Ask else ask
+            low_ask = data.LowPoint.Ask.Price if data.LowPoint and data.LowPoint.Ask else ask
+            conversion = self._conversion_(data.ClosePoint.BidTick.AskQuoteConversion, data.ClosePoint.BidTick.BidQuoteConversion)
         self._last_conversion_ = conversion
         high_pnl = low_pnl = 0.0
+        longs = False
         buy_pnl = buy_high_pnl = buy_low_pnl = 0.0
         sell_pnl = sell_high_pnl = sell_low_pnl = 0.0
         balance = self._account_.Balance if self._account_ else None
@@ -174,6 +184,7 @@ class PortfolioAPI(DatapointAPI):
             best_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(best_price, entry_price, is_long), volume, conversion), comm, swap)
             worst_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(worst_price, entry_price, is_long), volume, conversion), comm, swap)
             if is_long:
+                longs = True
                 high_pnl += best_pnl
                 low_pnl += worst_pnl
                 buy_pnl += net.PnL
@@ -220,15 +231,11 @@ class PortfolioAPI(DatapointAPI):
         if timestamp == self._excursion_stamp_: return
         self._excursion_stamp_ = timestamp
         base = self._account_.Balance if (self._account_ and self._account_.Balance is not None) else 0.0
-        high, low = data.HighTick, data.LowTick
-        if high is not None and low is not None and high.Timestamp is not None and low.Timestamp is not None and high.Timestamp.DateTime <= low.Timestamp.DateTime:
-            self._equity_curve_.observe(base + high_pnl, base + low_pnl, equity)
-            self._buy_equity_curve_.observe(buy_base + buy_high_pnl, buy_base + buy_low_pnl, buy_base + buy_pnl)
-            self._sell_equity_curve_.observe(sell_base + sell_high_pnl, sell_base + sell_low_pnl, sell_base + sell_pnl)
-        else:
-            self._equity_curve_.observe(base + low_pnl, base + high_pnl, equity)
-            self._buy_equity_curve_.observe(buy_base + buy_low_pnl, buy_base + buy_high_pnl, buy_base + buy_pnl)
-            self._sell_equity_curve_.observe(sell_base + sell_low_pnl, sell_base + sell_high_pnl, sell_base + sell_pnl)
+        bid_first = self._high_first_(data.HighPoint.BidTick if data.HighPoint else None, data.LowPoint.BidTick if data.LowPoint else None)
+        ask_first = self._high_first_(data.HighPoint.AskTick if data.HighPoint else None, data.LowPoint.AskTick if data.LowPoint else None)
+        self._observe_(self._equity_curve_, base + high_pnl, base + low_pnl, equity, bid_first if longs else ask_first)
+        self._observe_(self._buy_equity_curve_, buy_base + buy_high_pnl, buy_base + buy_low_pnl, buy_base + buy_pnl, bid_first)
+        self._observe_(self._sell_equity_curve_, sell_base + sell_high_pnl, sell_base + sell_low_pnl, sell_base + sell_pnl, ask_first)
 
     def open_order(self, order: OrderAPI) -> None:
         self._orders_[order.UID] = order

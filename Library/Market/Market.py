@@ -6,13 +6,16 @@ from typing import Union, ClassVar, TYPE_CHECKING
 
 from Library.Database.Dataframe import pl
 from Library.Database.Datapoint import DatapointAPI
-from Library.Database.Query import QueryAPI
 from Library.Market.Price import PriceMode
 from Library.Market.Series import SeriesAPI
-from Library.Utility.Typing import MISSING
+from Library.Market.Tape import TapeAPI
+from Library.Universe.Timeframe import TimeframeAPI
+from Library.Utility.Datetime import datetime_to_epoch
+from Library.Utility.Typing import MISSING, Missing
 
 if TYPE_CHECKING:
     from Library.Database.Database import DatabaseAPI
+    from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
     from Library.Market.Tick import TickAPI
     from Library.Market.Bar import BarAPI
 
@@ -33,105 +36,38 @@ class MarketAPI(DatapointAPI):
                       autooverload: bool,
                       autosave: bool) -> None:
         self.Ticks = SeriesAPI("", multiple=True, mode=self.mode)
-        self.GapTicks = SeriesAPI("GapTick", multiple=True, mode=self.mode)
-        self.OpenTicks = SeriesAPI("OpenTick", multiple=True, mode=self.mode)
-        self.HighTicks = SeriesAPI("HighTick", multiple=True, mode=self.mode)
-        self.LowTicks = SeriesAPI("LowTick", multiple=True, mode=self.mode)
-        self.CloseTicks = SeriesAPI("CloseTick", multiple=True, mode=self.mode)
+        self.GapPoints = SeriesAPI("GapPoint", point=True, mode=self.mode)
+        self.OpenPoints = SeriesAPI("OpenPoint", point=True, mode=self.mode)
+        self.HighPoints = SeriesAPI("HighPoint", point=True, mode=self.mode)
+        self.LowPoints = SeriesAPI("LowPoint", point=True, mode=self.mode)
+        self.ClosePoints = SeriesAPI("ClosePoint", point=True, mode=self.mode)
         self.Volume = SeriesAPI("Volume", multiple=False, mode=self.mode)
         super().__post_init__(db=db, migrate=migrate, autoload=autoload, autooverload=autooverload, autosave=autosave)
 
-    @staticmethod
-    def _project_(alias: str, name: str) -> str:
-        from Library.Market.Tick import TickAPI
-        columns = (TickAPI.ID.UID, TickAPI.ID.Timestamp, TickAPI.ID.Security, TickAPI.ID.Ask, TickAPI.ID.Mid, TickAPI.ID.Bid, TickAPI.ID.AskBaseConversion, TickAPI.ID.BidBaseConversion, TickAPI.ID.AskQuoteConversion, TickAPI.ID.BidQuoteConversion, TickAPI.ID.Volume)
-        return ", ".join(f'{alias}."{column}" AS "{name}.{column}"' for column in columns)
-
     def _bind_(self, bar: bool) -> None:
         if bar:
-            self.GapTicks.init_data(self._data_)
-            self.OpenTicks.init_data(self._data_)
-            self.HighTicks.init_data(self._data_)
-            self.LowTicks.init_data(self._data_)
-            self.CloseTicks.init_data(self._data_)
+            self.GapPoints.init_data(self._data_)
+            self.OpenPoints.init_data(self._data_)
+            self.HighPoints.init_data(self._data_)
+            self.LowPoints.init_data(self._data_)
+            self.ClosePoints.init_data(self._data_)
             self.Volume.init_data(self._data_)
         else:
             self.Ticks.init_data(self._data_)
 
     @staticmethod
-    def pull_ticks(db: DatabaseAPI, security: int, start: datetime, stop: datetime, columns: list[str] = MISSING) -> pl.DataFrame:
-        from Library.Market.Tick import TickAPI
-        lo, hi = TickAPI.encode(security, start), TickAPI.encode(security, stop)
-        projection = ", ".join(f'"{column}"' for column in columns) if columns else "*"
-        sql = f'''
-        SELECT {projection} FROM "{TickAPI.Schema}"."{TickAPI.Table}"
-        WHERE "{TickAPI.ID.UID}" BETWEEN :lo: AND :hi:
-        ORDER BY "{TickAPI.ID.UID}"
-        '''
-        return db.executeone(QueryAPI(sql), lo=lo, hi=hi, schema=TickAPI.Schema, table=TickAPI.Table).fetchall(legacy=False)
+    def pull_ticks(db: PostgresDatabaseAPI, security: int, start: datetime, stop: datetime) -> pl.DataFrame:
+        return TapeAPI.read(db, security, start, stop).frame()
 
     @staticmethod
-    def count_ticks(db: DatabaseAPI, security: int, start: datetime, stop: datetime) -> int:
-        from Library.Market.Tick import TickAPI
-        lo, hi = TickAPI.encode(security, start), TickAPI.encode(security, stop)
-        sql = f'SELECT COUNT(*) AS "Count" FROM "{TickAPI.Schema}"."{TickAPI.Table}" WHERE "{TickAPI.ID.UID}" BETWEEN :lo: AND :hi:'
-        df = db.executeone(QueryAPI(sql), lo=lo, hi=hi, schema=TickAPI.Schema, table=TickAPI.Table).fetchall(legacy=False)
-        return int(df["Count"][0]) if df.height else 0
-
-    @staticmethod
-    def last_tick_uid(db: DatabaseAPI, security: int, start: datetime, stop: datetime) -> int:
-        from Library.Market.Tick import TickAPI
-        lo, hi = TickAPI.encode(security, start), TickAPI.encode(security, stop)
-        sql = f'SELECT MAX("{TickAPI.ID.UID}") AS "Token" FROM "{TickAPI.Schema}"."{TickAPI.Table}" WHERE "{TickAPI.ID.UID}" BETWEEN :lo: AND :hi:'
-        df = db.executeone(QueryAPI(sql), lo=lo, hi=hi, schema=TickAPI.Schema, table=TickAPI.Table).fetchall(legacy=False)
-        return int(df["Token"][0]) if df.height and df["Token"][0] is not None else 0
-
-    @staticmethod
-    def push_ticks(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
-        from Library.Market.Tick import TickAPI
-        if isinstance(data, pl.DataFrame): data = TickAPI.encode(data)
-        db.upsert(schema=TickAPI.Schema, table=TickAPI.Table, data=data, key=[str(TickAPI.ID.UID)])
-
-    @staticmethod
-    def pull_bars(db: DatabaseAPI, security: int, timeframe: str, start: Union[datetime, None] = None, stop: Union[datetime, None] = None, limit: int = MISSING) -> pl.DataFrame:
-        from Library.Market.Bar import BarAPI
-        from Library.Market.Tick import TickAPI
-        select = f'''
-        SELECT b."{BarAPI.ID.Timestamp}", b."{BarAPI.ID.Security}", b."{BarAPI.ID.Timeframe}",
-               b."{BarAPI.ID.GapTick}", b."{BarAPI.ID.OpenTick}", b."{BarAPI.ID.HighTick}", b."{BarAPI.ID.LowTick}", b."{BarAPI.ID.CloseTick}",
-               b."{BarAPI.ID.Volume}", b."{BarAPI.ID.UpdatedBy}", b."{BarAPI.ID.UpdatedAt}",
-               {MarketAPI._project_("g", BarAPI.ID.GapTick)},
-               {MarketAPI._project_("o", BarAPI.ID.OpenTick)},
-               {MarketAPI._project_("h", BarAPI.ID.HighTick)},
-               {MarketAPI._project_("l", BarAPI.ID.LowTick)},
-               {MarketAPI._project_("c", BarAPI.ID.CloseTick)}
-        FROM "{BarAPI.Schema}"."{BarAPI.Table}" b
-        LEFT JOIN "{TickAPI.Schema}"."{TickAPI.Table}" g ON b."{BarAPI.ID.GapTick}"   = g."{TickAPI.ID.UID}"
-        LEFT JOIN "{TickAPI.Schema}"."{TickAPI.Table}" o ON b."{BarAPI.ID.OpenTick}"  = o."{TickAPI.ID.UID}"
-        LEFT JOIN "{TickAPI.Schema}"."{TickAPI.Table}" h ON b."{BarAPI.ID.HighTick}"  = h."{TickAPI.ID.UID}"
-        LEFT JOIN "{TickAPI.Schema}"."{TickAPI.Table}" l ON b."{BarAPI.ID.LowTick}"   = l."{TickAPI.ID.UID}"
-        LEFT JOIN "{TickAPI.Schema}"."{TickAPI.Table}" c ON b."{BarAPI.ID.CloseTick}" = c."{TickAPI.ID.UID}"
-        '''
+    def pull_bars(db: PostgresDatabaseAPI, security: int, timeframe: Union[str, TimeframeAPI], start: Union[datetime, Missing] = MISSING, stop: Union[datetime, Missing] = MISSING, limit: Union[int, Missing] = MISSING) -> pl.DataFrame:
+        timeframe = timeframe if isinstance(timeframe, TimeframeAPI) else TimeframeAPI(UID=timeframe)
         if limit is not MISSING:
-            sql = select + f'''
-        WHERE b."{BarAPI.ID.Security}" = :security: AND b."{BarAPI.ID.Timeframe}" = :timeframe:
-          AND b."{BarAPI.ID.Timestamp}" < :stop:
-        ORDER BY b."{BarAPI.ID.Timestamp}" DESC
-        LIMIT {int(limit)}
-        '''
-            df = db.executeone(QueryAPI(sql), security=security, timeframe=timeframe, stop=stop, schema=BarAPI.Schema, table=BarAPI.Table).fetchall(legacy=False)
-            return df.reverse() if df.height else df
-        sql = select + f'''
-        WHERE b."{BarAPI.ID.Security}" = :security: AND b."{BarAPI.ID.Timeframe}" = :timeframe:
-          AND b."{BarAPI.ID.Timestamp}" BETWEEN :start: AND :stop:
-        ORDER BY b."{BarAPI.ID.Timestamp}"
-        '''
-        return db.executeone(QueryAPI(sql), security=security, timeframe=timeframe, start=start, stop=stop, schema=BarAPI.Schema, table=BarAPI.Table).fetchall(legacy=False)
-
-    @staticmethod
-    def push_bars(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
-        from Library.Market.Bar import BarAPI
-        db.upsert(schema=BarAPI.Schema, table=BarAPI.Table, data=data, key=[str(BarAPI.ID.Timestamp), str(BarAPI.ID.Security), str(BarAPI.ID.Timeframe)])
+            tape, bars = TapeAPI.before(db, security, timeframe, stop, int(limit))
+        else:
+            tape, bars = TapeAPI.span(db, security, timeframe, start, stop)
+            bars = bars.filter(pl.col("Timestamp") >= datetime_to_epoch(start))
+        return tape.materialize(bars, timeframe)
 
     def dataframe(self) -> pl.DataFrame:
         if self._data_ is None: return pl.DataFrame()
@@ -166,11 +102,11 @@ class MarketAPI(DatapointAPI):
     def update_offset(self, offset: int = 1) -> None:
         self._offset_ = offset
         self.Ticks.update_offset(offset)
-        self.GapTicks.update_offset(offset)
-        self.OpenTicks.update_offset(offset)
-        self.HighTicks.update_offset(offset)
-        self.LowTicks.update_offset(offset)
-        self.CloseTicks.update_offset(offset)
+        self.GapPoints.update_offset(offset)
+        self.OpenPoints.update_offset(offset)
+        self.HighPoints.update_offset(offset)
+        self.LowPoints.update_offset(offset)
+        self.ClosePoints.update_offset(offset)
         self.Volume.update_offset(offset)
 
     def __repr__(self) -> str:

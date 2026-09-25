@@ -73,7 +73,7 @@ class TechnicalAPI:
         return max((ind.Window for ind in self._indicators_ if hasattr(ind, "Window")), default=0)
 
     def _extract_(self, market: MarketAPI) -> Union[pl.Series, pl.DataFrame]:
-        return market.CloseTicks.Price.tail()
+        return market.ClosePoints.Price.tail()
 
     @staticmethod
     def _nulls_(length: int) -> pl.Series:
@@ -136,16 +136,16 @@ class TechnicalAPI:
 class PriceSignalAPI(TechnicalAPI):
 
     def filter_buy(self, market: MarketAPI) -> bool:
-        return bool(market.CloseTicks.Price.over(self.Result))
+        return bool(market.ClosePoints.Price.over(self.Result))
 
     def filter_sell(self, market: MarketAPI) -> bool:
-        return bool(market.CloseTicks.Price.under(self.Result))
+        return bool(market.ClosePoints.Price.under(self.Result))
 
     def signal_buy(self, market: MarketAPI) -> bool:
-        return bool(market.CloseTicks.Price.crossover(self.Result))
+        return bool(market.ClosePoints.Price.crossover(self.Result))
 
     def signal_sell(self, market: MarketAPI) -> bool:
-        return bool(market.CloseTicks.Price.crossunder(self.Result))
+        return bool(market.ClosePoints.Price.crossunder(self.Result))
 
 class NeutralSignalAPI(TechnicalAPI):
 

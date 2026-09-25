@@ -10,6 +10,7 @@ from Library.Market.Timestamp import (
 from Library.Market.Series import SeriesAPI
 from Library.Market.Market import MarketAPI
 from Library.Market.Tick import TickAPI
+from Library.Market.Point import PointAPI
 from Library.Market.Bar import BarAPI
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "PriceMode",
     "MarketAPI",
     "TickAPI",
+    "PointAPI",
     "BarAPI"
 ]
