@@ -365,11 +365,16 @@ class SystemAPI(ServiceAPI, ABC):
         if suffix: parts.append(suffix)
         return " · ".join(parts)
 
+    @staticmethod
+    def _measure_(indicator: IndicatorAPI) -> int:
+        return max(getattr(indicator.Technical, "Window", 0) or 0, getattr(indicator.Fundamental, "Window", 0) or 0, getattr(indicator.Sentimental, "Window", 0) or 0)
+
+    @classmethod
+    def _widest_(cls, parameters: Parameter) -> int:
+        return cls._measure_(IndicatorAPI(technical=parameters.TechnicalManagement, fundamental=parameters.FundamentalManagement, sentimental=parameters.SentimentalManagement))
+
     def _indicator_window_(self) -> int:
-        windows = [getattr(self.indicator.Technical, "Window", 0) or 0,
-                   getattr(self.indicator.Fundamental, "Window", 0) or 0,
-                   getattr(self.indicator.Sentimental, "Window", 0) or 0]
-        return max(windows)
+        return self._measure_(self.indicator)
 
     def _benchmarks_(self, start, stop, bars: list) -> dict:
         benchmarks = {}

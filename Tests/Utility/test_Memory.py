@@ -1,4 +1,11 @@
-from Library.Utility.Memory import memory_to_string
+import pytest
+
+from concurrent.futures import ProcessPoolExecutor
+
+from Library.Utility.Memory import ParcelAPI, memory_to_string
+
+def _received_(handle: tuple) -> int:
+    return len(ParcelAPI.attach(handle)["Rows"])
 
 def test_memory_to_string_keeps_bytes_whole():
     assert memory_to_string(0) == "0 B"
@@ -16,3 +23,21 @@ def test_memory_to_string_treats_missing_as_zero():
 
 def test_memory_to_string_caps_at_the_largest_unit():
     assert memory_to_string(4096 * 1024 ** 5) == "4096.0 PB"
+
+def test_a_parcel_hands_the_same_value_back():
+    value = {"Name": "EURUSD", "Rows": list(range(1000)), "Empty": None}
+    parcel = ParcelAPI(value)
+    try: assert ParcelAPI.attach(parcel.handle()) == value
+    finally: parcel.close()
+
+def test_a_worker_process_receives_a_parcel_larger_than_the_spawn_pipe():
+    parcel = ParcelAPI({"Rows": b"x" * 2_000_000})
+    try:
+        with ProcessPoolExecutor(max_workers=1) as pool: assert pool.submit(_received_, parcel.handle()).result(timeout=120) == 2_000_000
+    finally: parcel.close()
+
+def test_a_closed_parcel_is_gone():
+    parcel = ParcelAPI([1, 2, 3])
+    handle = parcel.handle()
+    parcel.close()
+    with pytest.raises(FileNotFoundError): ParcelAPI.attach(handle)

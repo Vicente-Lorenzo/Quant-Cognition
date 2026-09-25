@@ -150,6 +150,7 @@ class _Engine_(OptimizationAPI):
         self._purge_ = self._embargo_ = None
         self._workers_ = 1
         self._shared_ = None
+        self._pool_ = None
         self._range_start_, self._range_stop_ = datetime(2020, 1, 1), datetime(2023, 1, 1)
         self._stages_, self._ledger_, self._trials_ = [], {}, 0
         self._carried_, self._journal_, self._folded_ = {}, [], []

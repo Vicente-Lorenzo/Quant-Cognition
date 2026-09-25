@@ -152,6 +152,9 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         if admin or origin is None or not self.autocommited() or not origin.connected(): return None
         return origin._connection_ if origin._link_ == self._link_ else None
 
+    def _raw_(self) -> Any:
+        return self._connection_.cursor()
+
     def _connect_(self, admin: bool = False) -> None:
         shared = self._borrow_(admin)
         self._borrowed_ = shared is not None
@@ -544,6 +547,13 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
             return
         with db as opened: yield opened
 
+    def sibling(self) -> Self:
+        """
+        Creates an unconnected instance with the same parameters, for work that needs a connection of its own.
+        :return: A new DatabaseAPI instance.
+        """
+        return self.__class__(**self._params_)
+
     def clone(self, **kwargs) -> Self:
         """
         Creates and returns a clone of the database instance with updated parameters.
@@ -697,6 +707,27 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         else:
             self.executeone(query, *records[0], database=database, schema=schema, table=table, admin=admin, **kwargs)
         return self
+
+    def binary(self, query: QueryAPI, **kwargs) -> Union[tuple, None]:
+        """
+        Executes a query and reads its first row with every binary value as raw bytes, on a cursor each driver
+        prepares for it, so a large blob arrives without a text encoding in between.
+        :param query: The QueryAPI instance to execute.
+        :param kwargs: Query parameters.
+        :return: The first row, or None when the query returns none.
+        """
+        sql, configuration, kwargs = self._query_(query, **kwargs)
+        parameters = query.bind(configuration, **kwargs) if configuration else None
+        def _read_():
+            cursor = self._raw_()
+            try:
+                if parameters is not None: cursor.execute(sql, parameters)
+                else: cursor.execute(sql)
+                return cursor.fetchone()
+            finally: cursor.close()
+        timer, row = self._fetch_(callback=_read_, abort=self.rollback)
+        self._log_.debug(lambda: f"Binary Operation: Fetched ({timer.result()})")
+        return row
 
     def list(self, *,
                database: Union[str, Sequence, None, Missing] = MISSING,

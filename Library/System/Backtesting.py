@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import os
 import math
-import hashlib
 import threading
 import contextlib
 
@@ -25,8 +23,9 @@ from Library.Statistic.Label import (
     STATISTICS_METRICS_LABEL
 )
 from Library.Market.Bar import BarAPI
-from Library.Market.Market import MarketAPI
+from Library.Market.Point import PointAPI
 from Library.Market.Price import Direction, PriceAPI
+from Library.Market.Tape import ShareAPI, TapeAPI
 from Library.Market.Tick import TickAPI
 from Library.Portfolio.Account import AccountAPI, AccountType, Environment, MarginMode
 from Library.Portfolio.Position import PositionAPI, PositionMode, PositionType
@@ -36,10 +35,9 @@ from Library.Protocol.Update import UpdateID, BarUpdateAPI, CompleteUpdateAPI, I
 from Library.Universe.Contract import CommissionMode, CommissionType, SpreadType, SwapMode, SwapType
 from Library.Universe.Security import SecurityAPI
 from Library.Universe.Timeframe import TimeframeAPI
-from Library.Utility.Datetime import MICROSECOND, Weekday, datetime_to_epoch, epoch_to_datetime, is_summer_time, parse_datetime
-from Library.Utility.IO import mkdir, read_json, write_json
+from Library.Utility.Datetime import Weekday, datetime_to_epoch, epoch_to_datetime, parse_datetime
 from Library.Utility.Math import EPSILON, equals, truncate
-from Library.Utility.Path import inspect_cached
+from Library.Utility.Memory import memory_to_string
 from Library.Utility.Progress import ProgressAPI
 from Library.Utility.Profiler import Timer, timer
 from Library.Utility.Typing import MISSING, Missing
@@ -55,32 +53,23 @@ class DatasetAPI:
 
     WarmupBars: Union[pl.DataFrame, None]
     ExecutionBars: list[BarAPI]
-    TickTimestamps: np.ndarray
-    TickAsks: np.ndarray
-    TickBids: np.ndarray
-    TickConversions: Union[tuple[np.ndarray, ...], None]
-    IntraLevels: list[str]
-    IntraBars: dict[str, pl.DataFrame]
+    Ticks: TapeAPI
+    Conversions: tuple
+    Points: Union[TapeAPI, None] = None
     ExecutionRows: Union[pl.DataFrame, None] = None
     IndicatorResults: Union[dict, None] = None
 
 class BacktestingAPI(SystemAPI):
 
-    _CACHE_DIR_: Path = inspect_cached("Preload")
-    _CACHE_FORMAT_ = 2
-    _CONVERSION_COLUMNS_: tuple = (TickAPI.ID.AskBaseConversion, TickAPI.ID.BidBaseConversion, TickAPI.ID.AskQuoteConversion, TickAPI.ID.BidQuoteConversion)
-
     _PRELOAD_CACHE_: dict = {}
     _PRELOAD_LOCK_ = threading.Lock()
     _TAPE_CACHE_: dict = {}
     _TAPE_LOCK_ = threading.Lock()
-    _DISK_CACHE_: bool = True
 
     _db_: DatabaseAPI
     _feed_: Iterator
     _resolution_: TimeframeAPI
     _dataset_: DatasetAPI
-    _intra_arrays_: dict[str, tuple]
     _advance_index_: int
     _uid_queue_: deque
     _arg_queue_: deque
@@ -106,9 +95,18 @@ class BacktestingAPI(SystemAPI):
                  plot: bool = False,
                  run: Union[str, Path, None] = None,
                  description: Union[str, None] = None,
-                 dataset: Union[DatasetAPI, None] = None) -> None:
-        super().__init__(strategy=strategy, security=security, timeframe=timeframe, parameters=parameters, universe=(0, 0.0, 0, 0), market=(0, 0.0, 0, 0), portfolio=(0, 0.0, 0, 0), risk_free=risk_free, benchmark=benchmark, report=report, export=export, plot=plot, run=run, description=description)
+                 dataset: Union[DatasetAPI, None] = None,
+                 readers: int = 32,
+                 shelf: Union[dict, Missing] = MISSING,
+                 history: Union[dict, Missing] = MISSING,
+                 spans: Union[dict, Missing] = MISSING) -> None:
+        super().__init__(strategy=strategy, security=security, timeframe=timeframe, parameters=parameters, universe=(0, 0.0, 0, 0), portfolio=(0, 0.0, 0, 0), risk_free=risk_free, benchmark=benchmark, report=report, export=export, plot=plot, run=run, description=description)
         self._injected_: Union[DatasetAPI, None] = dataset
+        self._readers_: int = max(1, readers)
+        self._shelf_: dict = shelf if shelf is not MISSING else {}
+        self._history_: dict = history if history is not MISSING else {}
+        self._spans_: dict = spans if spans is not MISSING else {}
+        self._shared_: Union[ShareAPI, None] = None
         self._folded_: list = []
         self._journal_: list = []
 
@@ -129,8 +127,8 @@ class BacktestingAPI(SystemAPI):
 
         self._resolution_arg_: Union[str, TimeframeAPI, Missing, None] = resolution
         self._auto_: bool = False
-        self._skipped_bars_: int = 0
-        self._descended_bars_: int = 0
+        self._descended_: int = 0
+        self._skipped_: int = 0
         self._arm_version_: int = 0
         self._rng_: np.random.Generator = np.random.default_rng(spread_seed[0] if spread_seed and isinstance(spread_seed[0], int) else None)
 
@@ -154,6 +152,7 @@ class BacktestingAPI(SystemAPI):
         self._preload_seconds_: float = 0.0
 
     def _connect_(self) -> None:
+        if self._spawns_(): self._publish_()
         stack = contextlib.ExitStack()
         stack.__enter__()
         self._stack_ = stack
@@ -169,13 +168,11 @@ class BacktestingAPI(SystemAPI):
             self._quote_asset_ = ticker.QuoteAsset if ticker else None
             self._needs_conversion_ = self._account_asset_ not in (self._base_asset_, self._quote_asset_)
             self._window_ = self._indicator_window_()
-            if isinstance(self._resolution_arg_, TimeframeAPI):
-                self._resolution_ = self._resolution_arg_
-            elif isinstance(self._resolution_arg_, str) and self._resolution_arg_:
-                self._resolution_ = TimeframeAPI(UID=self._resolution_arg_, db=self._db_)
+            if isinstance(self._resolution_arg_, TimeframeAPI): self._resolution_ = self._resolution_arg_
             else:
-                self._auto_ = True
-                self._resolution_ = TimeframeAPI(UID="T1", db=self._db_)
+                uid = self._resolution_arg_ if isinstance(self._resolution_arg_, str) and self._resolution_arg_ else "Auto"
+                self._auto_ = uid == "Auto"
+                self._resolution_ = TimeframeAPI(UID="T1" if self._auto_ else uid, db=self._db_)
             if self._resolution_ > self._timeframe_:
                 raise ValueError(f"Resolution {self._resolution_.UID}: Failed · Due to source coarser than execution timeframe {self._timeframe_.UID}")
             self.account = self._build_account_()
@@ -183,8 +180,8 @@ class BacktestingAPI(SystemAPI):
         except Exception:
             stack.__exit__(None, None, None)
             raise
-        self._intra_arrays_ = self._build_intra_arrays_()
         self._advance_index_ = 0
+        self._descended_, self._skipped_ = 0, 0
         self._positions_ = {}
         self._ask_above_ = None
         self._ask_below_ = None
@@ -226,129 +223,127 @@ class BacktestingAPI(SystemAPI):
                 Timestamp=row.get(f"{prefix}.Timestamp"),
                 Ask=row.get(f"{prefix}.Ask"),
                 Bid=row.get(f"{prefix}.Bid"),
-                Mid=row.get(f"{prefix}.Mid"),
                 AskBaseConversion=row.get(f"{prefix}.AskBaseConversion"),
                 BidBaseConversion=row.get(f"{prefix}.BidBaseConversion"),
                 AskQuoteConversion=row.get(f"{prefix}.AskQuoteConversion"),
                 BidQuoteConversion=row.get(f"{prefix}.BidQuoteConversion"),
                 Volume=row.get(f"{prefix}.Volume")
             )
+        def point(prefix: str) -> PointAPI:
+            bid = tick(f"{prefix}.BidTick")
+            return PointAPI(AskTick=bid if row[f"{prefix}.AskTick.Timestamp"] == row[f"{prefix}.BidTick.Timestamp"] else tick(f"{prefix}.AskTick"), BidTick=bid)
         return BarAPI(
             Security=self._security_,
             Timeframe=self._timeframe_,
             Timestamp=row.get("Timestamp"),
-            GapTick=tick("GapTick"),
-            OpenTick=tick("OpenTick"),
-            HighTick=tick("HighTick"),
-            LowTick=tick("LowTick"),
-            CloseTick=tick("CloseTick"),
+            GapPoint=point("GapPoint"),
+            OpenPoint=point("OpenPoint"),
+            HighPoint=point("HighPoint"),
+            LowPoint=point("LowPoint"),
+            ClosePoint=point("ClosePoint"),
             Volume=row.get("Volume")
         )
 
+    def _pair_(self, db: PostgresDatabaseAPI, ticker: str) -> Union[int, None]:
+        condition, parameters = db.where(Provider=self._security_.Provider.UID, Ticker=ticker)
+        row = db.first(schema=SecurityAPI.Schema, table=SecurityAPI.Table, condition=condition, parameters=parameters)
+        return row[str(SecurityAPI.ID.UID)] if row else None
+
+    def _route_(self, db: PostgresDatabaseAPI, asset: str) -> Union[tuple[int, bool, str], None]:
+        account = self._account_asset_
+        if asset == account: return None
+        for ticker, inverse in ((f"{asset}{account}", False), (f"{account}{asset}", True)):
+            if ticker == self._security_.Ticker.UID: return self._security_.UID, inverse, ticker
+            security = self._pair_(db, ticker)
+            if security is not None: return security, inverse, ticker
+        raise ValueError(f"Conversion {asset} to {account}: Failed · Due to no direct pair ({asset}{account} or {account}{asset})")
+
+    def _source_(self, asset: str, tape: TapeAPI) -> Union[tuple[TapeAPI, bool], None]:
+        route = self._route_(self._db_, asset)
+        if route is None: return None
+        security, inverse, ticker = route
+        if security == self._security_.UID: return tape, inverse
+        source = TapeAPI.read(self._db_, security, epoch_to_datetime(int(tape.Stamps[0])) - timedelta(days=7), epoch_to_datetime(int(tape.Stamps[-1])), workers=self._readers_, shelf=self._shelf_.get(security, MISSING))
+        if not source.Stamps.size or source.Stamps[0] > tape.Stamps[0]: raise ValueError(f"Conversion {asset} to {self._account_asset_}: Failed · Due to no {ticker} quote before {epoch_to_datetime(int(tape.Stamps[0]))}")
+        return source, inverse
+
+    def _share_(self, start: datetime, stop: datetime) -> ShareAPI:
+        first, last = TapeAPI.reach(start, stop, self._timeframe_)
+        with PostgresDatabaseAPI(database="Quant") as db:
+            securities = {self._security_.UID: first}
+            for asset in (self._security_.Ticker.BaseAsset, self._security_.Ticker.QuoteAsset):
+                route = self._route_(db, asset)
+                if route is not None and route[0] not in securities: securities[route[0]] = first - timedelta(days=7)
+            share = ShareAPI([TapeAPI.read(db, security, begin, last, workers=self._readers_, shared=True) for security, begin in securities.items()])
+        self._log_.debug(lambda: f"Shared Tapes: Published · {len(securities)} Tapes · {memory_to_string(share.size())}")
+        return share
+
+    def _spawns_(self) -> bool:
+        return False
+
+    def _publish_(self) -> ShareAPI:
+        if self._shared_ is None:
+            self._shared_ = self._share_(self._range_start_, self._range_stop_)
+            self._shelf_ = {**self._shelf_, **self._shared_.tapes()}
+        return self._shared_
+
+    def _bars_(self, share: ShareAPI, scopes: list) -> dict:
+        shelf, spans = share.tapes().get(self._security_.UID, MISSING), {}
+        with PostgresDatabaseAPI(database="Quant") as db:
+            for start, stop in dict.fromkeys(scopes): spans[(start, stop)] = TapeAPI.span(db, self._security_.UID, self._timeframe_, start, stop, workers=self._readers_, shelf=shelf)[1]
+        self._log_.debug(lambda: f"Shared Bars: Published · {len(spans)} Scopes · {sum(frame.height for frame in spans.values())} Bars")
+        return spans
+
+    def _histories_(self, share: ShareAPI, starts: list, window: int) -> dict:
+        if window <= 0: return {}
+        shelf, histories = share.tapes().get(self._security_.UID, MISSING), {}
+        with PostgresDatabaseAPI(database="Quant") as db:
+            for start in dict.fromkeys(starts):
+                prior_tape, prior = TapeAPI.before(db, self._security_.UID, self._timeframe_, start, window, workers=self._readers_, shelf=shelf)
+                histories[start] = (prior_tape.materialize(prior, self._timeframe_), window)
+        self._log_.debug(lambda: f"Shared Warmup: Published · {len(histories)} Starts · {window} Bars")
+        return histories
+
+    def _finer_(self) -> bool:
+        return self._resolution_ < self._timeframe_ and not (self._resolution_.IsTick and (self._resolution_.Value or 1) == 1)
+
+    def _walks_ticks_(self) -> bool:
+        return self._auto_ or (self._resolution_.IsTick and (self._resolution_.Value or 1) == 1)
+
     @staticmethod
-    def _clean_(df: pl.DataFrame) -> pl.DataFrame:
-        if df.is_empty(): return df
-        timestamp, open_timestamp = str(BarAPI.ID.Timestamp), str(BarAPI.OID.OpenTick.Timestamp)
-        if timestamp in df.columns and open_timestamp in df.columns:
-            df = df.filter(pl.col(timestamp) != pl.col(open_timestamp))
-        return df.unique(subset=open_timestamp, keep="first", maintain_order=True) if open_timestamp in df.columns else df
+    def _reduce_(source: Union[tuple, None], stamps: np.ndarray) -> Union[tuple, None]:
+        if source is None: return None
+        asks, bids = TapeAPI.rates(stamps, source)
+        return TapeAPI(Security=source[0].Security, Stamps=stamps, Asks=asks, Bids=bids, Volumes=np.zeros(stamps.size)), False
 
-    def _load_bars_(self) -> tuple[Union[pl.DataFrame, None], list[BarAPI], Union[pl.DataFrame, None]]:
-        warmup_df = self._clean_(MarketAPI.pull_bars(self._db_, self._security_.UID, self._timeframe_.UID, stop=self._start_, limit=self._window_))
-        execution_df = self._clean_(MarketAPI.pull_bars(self._db_, self._security_.UID, self._timeframe_.UID, start=self._start_, stop=self._stop_))
-        warmup_bars = [self._row_to_bar_(row) for row in warmup_df.to_dicts()] if warmup_df.height else []
-        execution_bars = [self._row_to_bar_(row) for row in execution_df.to_dicts()] if execution_df.height else []
-        if execution_bars:
-            warmup_bars.append(execution_bars.pop(0))
-        if not warmup_bars and not execution_bars:
-            return pl.DataFrame(), [], None
-        frame = pl.DataFrame([bar.dict(flatten=True) for bar in warmup_bars + execution_bars], strict=False)
-        warmup_frame = frame.slice(0, len(warmup_bars))
-        execution_rows = frame.slice(len(warmup_bars)) if execution_bars else None
-        return warmup_frame, execution_bars, execution_rows
+    def _load_tape_(self) -> tuple:
+        tape, bars = TapeAPI.span(self._db_, self._security_.UID, self._timeframe_, self._start_, self._stop_, workers=self._readers_, shelf=self._shelf_.get(self._security_.UID, MISSING), bars=self._spans_.get((self._start_, self._stop_), MISSING))
+        conversions = (self._source_(self._base_asset_, tape), self._source_(self._quote_asset_, tape)) if tape.Stamps.size else (None, None)
+        start = datetime_to_epoch(self._start_)
+        early = tape.materialize(bars.filter(pl.col("Timestamp") < start), self._timeframe_)
+        executed = bars.filter(pl.col("Timestamp") >= start)
+        rows = tape.materialize(executed, self._timeframe_, *conversions) if executed.height else None
+        if executed.height < 2: return early, (None, None), rows, [], TapeAPI.empty(tape.Security), None, [None]
+        window = tape.slice(int(executed["Open"][1]), int(executed["Close"][-1]))
+        points = self._points_(window, window.bars(self._resolution_, workers=self._readers_)) if self._finer_() else None
+        walked = [self._row_to_bar_(row) for row in rows.slice(1).to_dicts()]
+        if self._walks_ticks_(): return early, conversions, rows, walked, window, points, [None]
+        visited = executed.slice(1)
+        stamps = points.Stamps if points is not None else np.unique(tape.Stamps[np.concatenate((visited["Open"].to_numpy(), visited["HighAsk"].to_numpy(), visited["HighBid"].to_numpy(), visited["LowAsk"].to_numpy(), visited["LowBid"].to_numpy(), visited["Close"].to_numpy()))])
+        return early, (self._reduce_(conversions[0], stamps), self._reduce_(conversions[1], stamps)), rows, walked, TapeAPI.empty(tape.Security), points, [None]
 
-    def _candidate_rungs_(self) -> list[TimeframeAPI]:
-        rungs = [TimeframeAPI(UID=uid, db=self._db_) for uid in ("H1", "M1")]
-        rungs = [rung for rung in rungs if rung < self._timeframe_]
-        rungs.sort(reverse=True)
-        return rungs
-
-    def _load_frames_(self, bars: list[BarAPI]) -> tuple:
-        start = bars[0].OpenTick.Timestamp.DateTime
-        stop = bars[-1].CloseTick.Timestamp.DateTime
-        bar_level = not self._auto_ and not self._resolution_.IsTick and self._resolution_.Seconds == self._timeframe_.Seconds
-        if bar_level and not self._needs_conversion_:
-            tick_ts, tick_ask, tick_bid, tick_conversions = np.empty(0, dtype="int64"), np.empty(0, dtype="float64"), np.empty(0, dtype="float64"), None
-        else:
-            columns = [str(TickAPI.ID.Timestamp), str(TickAPI.ID.Ask), str(TickAPI.ID.Bid)]
-            if self._needs_conversion_:
-                columns += [str(column) for column in self._CONVERSION_COLUMNS_]
-            tick_frame = MarketAPI.pull_ticks(self._db_, self._security_.UID, start, stop, columns=columns)
-            if tick_frame.height:
-                tick_ts = tick_frame[str(TickAPI.ID.Timestamp)].dt.epoch("us").to_numpy()
-                tick_ask = tick_frame[str(TickAPI.ID.Ask)].to_numpy()
-                tick_bid = tick_frame[str(TickAPI.ID.Bid)].to_numpy()
-            else:
-                tick_ts, tick_ask, tick_bid = np.empty(0, dtype="int64"), np.empty(0, dtype="float64"), np.empty(0, dtype="float64")
-            if self._needs_conversion_ and tick_frame.height:
-                tick_conversions = tuple(tick_frame[str(column)].to_numpy().astype("float64", copy=False) for column in self._CONVERSION_COLUMNS_)
-            else:
-                tick_conversions = None
-        intra_levels, intra_bars = [], {}
-        if self._auto_:
-            for rung in self._candidate_rungs_():
-                frame = self._clean_(MarketAPI.pull_bars(self._db_, self._security_.UID, rung.UID, start=start, stop=stop))
-                if not frame.is_empty():
-                    intra_bars[rung.UID] = frame
-                    intra_levels.append(rung.UID)
-        elif not self._resolution_.IsTick and self._resolution_.Seconds != self._timeframe_.Seconds:
-            frame = self._clean_(MarketAPI.pull_bars(self._db_, self._security_.UID, self._resolution_.UID, start=start, stop=stop))
-            if not frame.is_empty():
-                intra_bars[self._resolution_.UID] = frame
-                intra_levels.append(self._resolution_.UID)
-        return tick_ts, tick_ask, tick_bid, tick_conversions, intra_levels, intra_bars
+    def _load_warmup_(self, early: pl.DataFrame, rows: Union[pl.DataFrame, None], history: list) -> pl.DataFrame:
+        count = max(self._window_ - early.height, 0)
+        if history[0] is None: history[0] = self._history_.get(self._start_)
+        if history[0] is None or history[0][1] < count:
+            reach = max(count, 2 * history[0][1] if history[0] is not None else 0)
+            prior_tape, prior = TapeAPI.before(self._db_, self._security_.UID, self._timeframe_, self._start_, reach, workers=self._readers_, shelf=self._shelf_.get(self._security_.UID, MISSING))
+            history[0] = (prior_tape.materialize(prior, self._timeframe_), reach)
+        warmup = pl.concat([history[0][0].tail(count), early]).tail(self._window_)
+        return warmup if rows is None else pl.concat([warmup, rows.head(1)], how="vertical_relaxed")
 
     def _scope_(self) -> tuple:
-        return self._security_.UID, self._start_, self._stop_, self._timeframe_.UID, self._auto_, None if self._auto_ else self._resolution_.UID
-
-    def _cache_signature_(self) -> str:
-        security, start, stop, timeframe, auto, resolution = self._scope_()
-        key = (security, start.isoformat(), stop.isoformat(), timeframe, auto, resolution)
-        return hashlib.md5(repr(key).encode()).hexdigest()
-
-    def _data_token_(self, bars: list[BarAPI]) -> int:
-        return MarketAPI.last_tick_uid(self._db_, self._security_.UID, bars[0].OpenTick.Timestamp.DateTime, bars[-1].CloseTick.Timestamp.DateTime)
-
-    def _read_cache_(self, folder: Path, token: int) -> Union[tuple, None]:
-        info = read_json(folder / "meta.json")
-        if info.get("token") != token or info.get("format") != self._CACHE_FORMAT_ or "levels" not in info: return None
-        ticks = pl.read_parquet(folder / "ticks.parquet")
-        levels = info["levels"]
-        intra_bars = {uid: pl.read_parquet(folder / f"intra_{uid}.parquet") for uid in levels}
-        names = [str(column) for column in self._CONVERSION_COLUMNS_]
-        tick_conversions = tuple(ticks[name].to_numpy() for name in names) if all(name in ticks.columns for name in names) else None
-        try: os.utime(folder / "meta.json", None)
-        except OSError: pass
-        return ticks["ts"].to_numpy(), ticks["ask"].to_numpy(), ticks["bid"].to_numpy(), tick_conversions, levels, intra_bars
-
-    def _write_cache_(self, folder: Path, frames: tuple, token: int) -> None:
-        tick_ts, tick_ask, tick_bid, tick_conversions, intra_levels, intra_bars = frames
-        mkdir(folder)
-        columns = {"ts": tick_ts, "ask": tick_ask, "bid": tick_bid}
-        if tick_conversions is not None:
-            for name, array in zip((str(column) for column in self._CONVERSION_COLUMNS_), tick_conversions): columns[name] = array
-        pl.DataFrame(columns).write_parquet(folder / "ticks.parquet")
-        for uid, frame in intra_bars.items(): frame.write_parquet(folder / f"intra_{uid}.parquet")
-        write_json(folder / "meta.json", {"token": token, "levels": intra_levels, "format": self._CACHE_FORMAT_})
-
-    def _acquire_frames_(self, bars: list[BarAPI]) -> tuple:
-        if not self._DISK_CACHE_: return self._load_frames_(bars)
-        folder, token = self._CACHE_DIR_ / self._cache_signature_(), self._data_token_(bars)
-        cached = self._read_cache_(folder, token)
-        if cached is not None and not (self._needs_conversion_ and cached[3] is None): return cached
-        frames = self._load_frames_(bars)
-        self._write_cache_(folder, frames, token)
-        return frames
+        return self._security_.UID, self._start_, self._stop_, self._timeframe_.UID, self._resolution_.UID, self._account_asset_
 
     def extract(self) -> DatasetAPI:
         return self._dataset_
@@ -365,15 +360,14 @@ class BacktestingAPI(SystemAPI):
                 cache[key] = build()
             return cache[key], reused
 
-    def _tape_(self, bars: list[BarAPI]) -> tuple:
-        return self._memoize_(self._TAPE_CACHE_, self._TAPE_LOCK_, self._scope_(), lambda: self._acquire_frames_(bars))[0]
+    def _tape_(self) -> tuple:
+        return self._memoize_(self._TAPE_CACHE_, self._TAPE_LOCK_, self._scope_(), self._load_tape_)[0]
 
     def _build_dataset_(self) -> DatasetAPI:
-        warmup, bars, rows = self._load_bars_()
-        if not bars:
-            return DatasetAPI(WarmupBars=warmup, ExecutionBars=[], TickTimestamps=np.empty(0, dtype="int64"), TickAsks=np.empty(0, dtype="float64"), TickBids=np.empty(0, dtype="float64"), TickConversions=None, IntraLevels=[], IntraBars={})
-        tick_ts, tick_ask, tick_bid, tick_conversions, intra_levels, intra_bars = self._tape_(bars)
-        return DatasetAPI(WarmupBars=warmup, ExecutionBars=bars, TickTimestamps=tick_ts, TickAsks=tick_ask, TickBids=tick_bid, TickConversions=tick_conversions, IntraLevels=intra_levels, IntraBars=intra_bars, ExecutionRows=rows)
+        early, conversions, rows, executed, window, points, history = self._tape_()
+        warmup = self._load_warmup_(early, rows, history)
+        if not executed: return DatasetAPI(WarmupBars=warmup, ExecutionBars=[], Ticks=window, Conversions=conversions)
+        return DatasetAPI(WarmupBars=warmup, ExecutionBars=executed, Ticks=window, Conversions=conversions, Points=points, ExecutionRows=rows.slice(1))
 
     def _metric_(self, label: str, column: str = NET_TOTAL_AGGREGATED) -> float:
         statistics = self.statistics
@@ -476,9 +470,8 @@ class BacktestingAPI(SystemAPI):
             outcome = "Reused" if reused else "Completed"
         watch.stop()
         self._preload_seconds_ = watch.delta()
-        ticks = self._dataset_.TickTimestamps.size
-        intra = " · ".join(f"{uid}:{self._dataset_.IntraBars[uid].height}" for uid in self._dataset_.IntraLevels) or "Tick"
-        self._log_.info(lambda: f"Phase Preload: {outcome} · {watch.result()} · {ticks} Ticks · Intra {intra}")
+        bars, ticks = len(self._dataset_.ExecutionBars), self._dataset_.Ticks.Stamps.size
+        self._log_.info(lambda: f"Phase Preload: {outcome} · {watch.result()} · {bars} Bars · {ticks} Ticks · Resolution {'Auto' if self._auto_ else self._resolution_.UID}")
 
     @staticmethod
     def _mid_rate_(tick: TickAPI) -> float:
@@ -543,24 +536,12 @@ class BacktestingAPI(SystemAPI):
         return 0.0
 
     def _overnights_(self, entry: datetime, exit: datetime) -> int:
-        if exit <= entry: return 0
-        period = timedelta(hours=self._contract_.SwapPeriod)
-        def rollover(at: datetime, at_isdst: bool) -> tuple[datetime, bool]:
-            to = at + period
-            to_isdst = is_summer_time(to)
-            if at_isdst and not to_isdst: return to.replace(hour=self._contract_.SwapWinterTime), to_isdst
-            if not at_isdst and to_isdst: return to.replace(hour=self._contract_.SwapSummerTime), to_isdst
-            return to, to_isdst
-        rollover_isdst = is_summer_time(entry)
-        rollover_at = datetime(year=entry.year, month=entry.month, day=entry.day, hour=self._contract_.SwapSummerTime if rollover_isdst else self._contract_.SwapWinterTime)
-        while rollover_at < entry: rollover_at, rollover_isdst = rollover(rollover_at, rollover_isdst)
         overnights = 0
-        while rollover_at < exit:
-            match rollover_at.weekday():
+        for rollover in TapeAPI.rollovers(entry, exit):
+            match rollover.weekday():
                 case day if day == self._contract_.SwapExtraDay.value: overnights += 3
                 case day if day in (Weekday.Saturday.value, Weekday.Sunday.value): overnights += 0
                 case _: overnights += 1
-            rollover_at, rollover_isdst = rollover(rollover_at, rollover_isdst)
         return overnights
 
     def _swap_(self, direction: Direction, volume: float, rate: float, entry: datetime, exit: datetime, quote_conversion: Union[float, Missing] = MISSING) -> float:
@@ -788,9 +769,8 @@ class BacktestingAPI(SystemAPI):
 
     @staticmethod
     def _intrabar_(bar: BarAPI) -> list[TickAPI]:
-        high, low = bar.HighTick, bar.LowTick
-        extremes = [high, low] if high.Timestamp.DateTime <= low.Timestamp.DateTime else [low, high]
-        return [bar.OpenTick, *extremes, bar.CloseTick]
+        ticks = {tick.Timestamp.DateTime: tick for tick in (bar.OpenPoint.BidTick, bar.HighPoint.AskTick, bar.HighPoint.BidTick, bar.LowPoint.AskTick, bar.LowPoint.BidTick, bar.ClosePoint.BidTick)}
+        return [ticks[stamp] for stamp in sorted(ticks)]
 
     @staticmethod
     def _stop_level_(position: PositionAPI, ask: float, bid: float) -> tuple[Union[float, None], Union[UpdateID, None]]:
@@ -815,16 +795,17 @@ class BacktestingAPI(SystemAPI):
         self._tick_ = fill
         self._emit_close_(position, fill, update_id)
 
-    def _datetime_(self, timestamp: Union[int, datetime]) -> datetime:
-        return epoch_to_datetime(timestamp, unit=MICROSECOND) if isinstance(timestamp, int) else timestamp
+    @staticmethod
+    def _epoch_(timestamp: Union[int, datetime]) -> int:
+        return timestamp if isinstance(timestamp, int) else datetime_to_epoch(timestamp)
+
+    @staticmethod
+    def _datetime_(timestamp: Union[int, datetime]) -> datetime:
+        return epoch_to_datetime(timestamp) if isinstance(timestamp, int) else timestamp
 
     def _conversion_at_(self, timestamp: Union[int, datetime]) -> tuple:
-        arrays, ts = self._dataset_.TickConversions, self._dataset_.TickTimestamps
-        if arrays is None or ts.size == 0: return None, None, None, None
-        us = timestamp if isinstance(timestamp, int) else datetime_to_epoch(timestamp, unit=MICROSECOND)
-        index = int(np.searchsorted(ts, us, side="right")) - 1
-        if index < 0: return None, None, None, None
-        return tuple(None if math.isnan(array[index]) else float(array[index]) for array in arrays)
+        stamps, (base, quote) = np.array([self._epoch_(timestamp)], dtype=np.int64), self._dataset_.Conversions
+        return tuple(None if math.isnan(rate[0]) else float(rate[0]) for rate in (*TapeAPI.rates(stamps, base), *TapeAPI.rates(stamps, quote)))
 
     def _tick_conversions_(self, timestamp: Union[int, datetime], raw_ask: float, raw_bid: float) -> tuple:
         if self._needs_conversion_: return self._conversion_at_(timestamp)
@@ -858,23 +839,12 @@ class BacktestingAPI(SystemAPI):
             self._tick_ = self._synth_tick_(timestamp, ask, bid, raw_ask, raw_bid)
             self._enqueue_(UpdateID.BidBelowTarget, self._tick_); yield
 
-    @staticmethod
-    def _bounds_(array: np.ndarray, open_ts: Union[int, datetime], close_ts: Union[int, datetime]) -> tuple[int, int]:
+    @classmethod
+    def _bounds_(cls, array: np.ndarray, open_ts: Union[int, datetime], close_ts: Union[int, datetime]) -> tuple[int, int]:
         if array.size == 0: return 0, 0
-        lo = open_ts if isinstance(open_ts, int) else datetime_to_epoch(open_ts, unit=MICROSECOND)
-        hi = close_ts if isinstance(close_ts, int) else datetime_to_epoch(close_ts, unit=MICROSECOND)
-        return int(np.searchsorted(array, lo, side="left")), int(np.searchsorted(array, hi, side="right"))
+        return int(np.searchsorted(array, cls._epoch_(open_ts), side="left")), int(np.searchsorted(array, cls._epoch_(close_ts), side="right"))
 
-    def _slice_ticks_(self, open_ts: datetime, close_ts: datetime) -> tuple[list, list, list]:
-        dataset = self._dataset_
-        start, stop = self._bounds_(dataset.TickTimestamps, open_ts, close_ts)
-        if stop <= start: return [], [], []
-        return dataset.TickTimestamps[start:stop].tolist(), dataset.TickAsks[start:stop].tolist(), dataset.TickBids[start:stop].tolist()
-
-    def _period_ticks_(self, bar: BarAPI) -> tuple[list, list, list]:
-        return self._slice_ticks_(bar.OpenTick.Timestamp.DateTime, bar.CloseTick.Timestamp.DateTime)
-
-    def _effective_bounds_(self, raw_ask: np.ndarray, raw_bid: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def _effective_bounds_(self, raw_ask: Union[float, np.ndarray], raw_bid: Union[float, np.ndarray]) -> tuple:
         match self._spread_type_:
             case SpreadType.Points:
                 ask = raw_bid + (self._spread_value_ or 0.0) * self._contract_.PointSize
@@ -887,146 +857,65 @@ class BacktestingAPI(SystemAPI):
             case _:
                 return raw_bid, raw_ask, raw_ask
 
-    def _candidate_mask_(self, bid: np.ndarray, ask_low: np.ndarray, ask_high: np.ndarray) -> np.ndarray:
-        pad = 10.0 ** -self._digits_
-        mask = np.zeros(bid.shape, dtype=bool)
-        if self._ask_above_ is not None: mask |= ask_high >= self._ask_above_ - pad
-        if self._ask_below_ is not None: mask |= ask_low <= self._ask_below_ + pad
-        if self._bid_above_ is not None: mask |= bid >= self._bid_above_ - pad
-        if self._bid_below_ is not None: mask |= bid <= self._bid_below_ + pad
+    def _reachable_(self, bid_low: Union[float, np.ndarray], bid_high: Union[float, np.ndarray], ask_low: Union[float, np.ndarray], ask_high: Union[float, np.ndarray]) -> Union[bool, np.ndarray]:
+        pad, reach = 10.0 ** -self._digits_, False
+        if self._ask_above_ is not None: reach = reach | (ask_high >= self._ask_above_ - pad)
+        if self._ask_below_ is not None: reach = reach | (ask_low <= self._ask_below_ + pad)
+        if self._bid_above_ is not None: reach = reach | (bid_high >= self._bid_above_ - pad)
+        if self._bid_below_ is not None: reach = reach | (bid_low <= self._bid_below_ + pad)
         for position in self._positions_.values():
             sl = self._stored_(position.StopLossPrice)
             tp = self._stored_(position.TakeProfitPrice)
             if position.Direction == Direction.Buy:
-                if sl is not None: mask |= bid <= sl + pad
-                if tp is not None: mask |= bid >= tp - pad
+                if sl is not None: reach = reach | (bid_low <= sl + pad)
+                if tp is not None: reach = reach | (bid_high >= tp - pad)
             else:
-                if sl is not None: mask |= ask_high >= sl - pad
-                if tp is not None: mask |= ask_low <= tp + pad
-        return mask
+                if sl is not None: reach = reach | (ask_high >= sl - pad)
+                if tp is not None: reach = reach | (ask_low <= tp + pad)
+        return reach
 
-    def _ticks_(self, open_ts: Union[int, datetime], close_ts: Union[int, datetime]) -> Iterator[tuple[int, float, float]]:
-        dataset = self._dataset_
-        start, stop = self._bounds_(dataset.TickTimestamps, open_ts, close_ts)
+    def _gate_(self, bar: BarAPI) -> bool:
+        bid_low, ask_low, _ = self._effective_bounds_(bar.LowPoint.AskTick.Ask.Price, bar.LowPoint.BidTick.Bid.Price)
+        bid_high, _, ask_high = self._effective_bounds_(bar.HighPoint.AskTick.Ask.Price, bar.HighPoint.BidTick.Bid.Price)
+        return bool(self._reachable_(bid_low, bid_high, ask_low, ask_high))
+
+    def _stream_(self, ticks: TapeAPI, bar: BarAPI) -> Iterator[tuple[int, float, float]]:
+        start, stop = self._bounds_(ticks.Stamps, bar.OpenPoint.BidTick.Timestamp.DateTime, bar.ClosePoint.BidTick.Timestamp.DateTime)
         if stop <= start: return
-        times, asks, bids = dataset.TickTimestamps[start:stop], dataset.TickAsks[start:stop], dataset.TickBids[start:stop]
+        times, asks, bids = ticks.Stamps[start:stop], ticks.Asks[start:stop], ticks.Bids[start:stop]
         bid, ask_low, ask_high = self._effective_bounds_(asks, bids)
         size, cursor, version, candidates, pointer = stop - start, 0, None, None, 0
         while cursor < size:
             if version != self._arm_version_:
                 version = self._arm_version_
-                candidates = np.flatnonzero(self._candidate_mask_(bid, ask_low, ask_high))
+                candidates = np.flatnonzero(self._reachable_(bid, bid, ask_low, ask_high))
                 pointer = int(np.searchsorted(candidates, cursor, side="left"))
             if pointer >= candidates.size: return
             index = int(candidates[pointer]); pointer += 1
             yield int(times[index]), float(asks[index]), float(bids[index])
             cursor = index + 1
 
-    def _tick_stream_(self, bar: BarAPI) -> Iterator[tuple[int, float, float]]:
-        yield from self._ticks_(bar.OpenTick.Timestamp.DateTime, bar.CloseTick.Timestamp.DateTime)
-
-    def _tick_bars_(self, bar: BarAPI, n: int) -> Iterator[tuple[Union[int, datetime], float, float]]:
-        timestamps, asks, bids = self._period_ticks_(bar)
-        for start in range(0, len(timestamps), n):
-            ts, ak, bd = timestamps[start:start + n], asks[start:start + n], bids[start:start + n]
-            if not bd: continue
-            last = len(bd) - 1
-            high, low = max(range(len(bd)), key=lambda i: bd[i]), min(range(len(bd)), key=lambda i: bd[i])
-            order, seen = [], set()
-            for i in (0, min(high, low), max(high, low), last):
-                if i not in seen: seen.add(i); order.append(i)
-            for i in order: yield ts[i], ak[i], bd[i]
-
-    def _finer_bars_(self, bar: BarAPI) -> Iterator[tuple[int, float, float]]:
-        arrays = self._intra_arrays_.get(self._resolution_.UID)
-        if arrays is None: return
-        open_ts_array, close_ts_array, high_ts_array, low_ts_array, open_asks, open_bids, high_asks, high_bids, low_asks, low_bids, close_asks, close_bids = arrays
-        start, stop = self._bounds_(open_ts_array, bar.OpenTick.Timestamp.DateTime, bar.CloseTick.Timestamp.DateTime)
-        for index in range(start, stop):
-            yield int(open_ts_array[index]), float(open_asks[index]), float(open_bids[index])
-            if high_ts_array[index] <= low_ts_array[index]:
-                yield int(high_ts_array[index]), float(high_asks[index]), float(high_bids[index])
-                yield int(low_ts_array[index]), float(low_asks[index]), float(low_bids[index])
-            else:
-                yield int(low_ts_array[index]), float(low_asks[index]), float(low_bids[index])
-                yield int(high_ts_array[index]), float(high_asks[index]), float(high_bids[index])
-            yield int(close_ts_array[index]), float(close_asks[index]), float(close_bids[index])
-
-    def _spread_ceiling_(self, bids: tuple, asks: tuple) -> float:
-        raw = max(ask - bid for ask, bid in zip(asks, bids))
-        match self._spread_type_:
-            case SpreadType.Points | SpreadType.Random: return max(raw, (self._spread_value_ or 0.0) * self._contract_.PointSize)
-            case SpreadType.Percentage: return max(raw, (self._spread_value_ or 0.0) / 100.0 * max(bids))
-            case _: return raw
-
-    def _should_descend_(self, bids: tuple, asks: tuple) -> bool:
-        pad = self._spread_ceiling_(bids, asks)
-        low_bid, high_bid = min(bids) - pad, max(bids) + pad
-        low_ask, high_ask = min(asks) - pad, max(asks) + pad
-        if self._ask_above_ is not None and self._ask_above_ <= high_ask: return True
-        if self._ask_below_ is not None and self._ask_below_ >= low_ask: return True
-        if self._bid_above_ is not None and self._bid_above_ <= high_bid: return True
-        if self._bid_below_ is not None and self._bid_below_ >= low_bid: return True
-        for position in self._positions_.values():
-            sl = position.StopLossPrice.Price if position.StopLossPrice else None
-            tp = position.TakeProfitPrice.Price if position.TakeProfitPrice else None
-            if position.Direction == Direction.Buy:
-                if sl is not None and sl >= low_bid: return True
-                if tp is not None and tp <= high_bid: return True
-            else:
-                if sl is not None and sl <= high_ask: return True
-                if tp is not None and tp >= low_ask: return True
-        return False
-
-    def _build_intra_arrays_(self) -> dict[str, tuple]:
-        arrays = {}
-        for uid, frame in self._dataset_.IntraBars.items():
-            arrays[uid] = (
-                frame[str(BarAPI.OID.OpenTick.Timestamp)].dt.epoch("us").to_numpy(),
-                frame[str(BarAPI.OID.CloseTick.Timestamp)].dt.epoch("us").to_numpy(),
-                frame[str(BarAPI.OID.HighTick.Timestamp)].dt.epoch("us").to_numpy(),
-                frame[str(BarAPI.OID.LowTick.Timestamp)].dt.epoch("us").to_numpy(),
-                frame[str(BarAPI.OID.OpenTick.Ask)].to_numpy().astype("float64", copy=False), frame[str(BarAPI.OID.OpenTick.Bid)].to_numpy().astype("float64", copy=False),
-                frame[str(BarAPI.OID.HighTick.Ask)].to_numpy().astype("float64", copy=False), frame[str(BarAPI.OID.HighTick.Bid)].to_numpy().astype("float64", copy=False),
-                frame[str(BarAPI.OID.LowTick.Ask)].to_numpy().astype("float64", copy=False), frame[str(BarAPI.OID.LowTick.Bid)].to_numpy().astype("float64", copy=False),
-                frame[str(BarAPI.OID.CloseTick.Ask)].to_numpy().astype("float64", copy=False), frame[str(BarAPI.OID.CloseTick.Bid)].to_numpy().astype("float64", copy=False)
-            )
-        return arrays
-
-    def _descend_(self, open_ts: Union[int, datetime], close_ts: Union[int, datetime], ladder: list) -> Iterator[tuple[int, float, float]]:
-        if not ladder:
-            yield from self._ticks_(open_ts, close_ts)
-            return
-        head, rest = ladder[0], ladder[1:]
-        arrays = self._intra_arrays_.get(head)
-        if arrays is None: return
-        open_ts_array, close_ts_array, _, _, open_asks, open_bids, high_asks, high_bids, low_asks, low_bids, close_asks, close_bids = arrays
-        start, stop = self._bounds_(open_ts_array, open_ts, close_ts)
-        for index in range(start, stop):
-            bids = (open_bids[index], high_bids[index], low_bids[index], close_bids[index])
-            asks = (open_asks[index], high_asks[index], low_asks[index], close_asks[index])
-            if self._should_descend_(bids, asks):
-                yield from self._descend_(int(open_ts_array[index]), int(close_ts_array[index]), rest)
+    @staticmethod
+    def _points_(tape: TapeAPI, bars: pl.DataFrame) -> TapeAPI:
+        rows = np.sort(np.column_stack((bars["Open"].to_numpy(), bars["HighAsk"].to_numpy(), bars["HighBid"].to_numpy(), bars["LowAsk"].to_numpy(), bars["LowBid"].to_numpy(), bars["Close"].to_numpy())), axis=1)
+        distinct = np.ones(rows.shape, dtype=bool)
+        distinct[:, 1:] = rows[:, 1:] != rows[:, :-1]
+        index = rows[distinct]
+        return TapeAPI(Security=tape.Security, Stamps=tape.Stamps[index], Asks=tape.Asks[index], Bids=tape.Bids[index], Volumes=tape.Volumes[index])
 
     def _intrabar_source_(self, bar: BarAPI) -> Iterator[tuple[Union[int, datetime], float, float]]:
         if self._auto_:
-            bids = (bar.OpenTick.Bid.Price, bar.HighTick.Bid.Price, bar.LowTick.Bid.Price, bar.CloseTick.Bid.Price)
-            asks = (bar.OpenTick.Ask.Price, bar.HighTick.Ask.Price, bar.LowTick.Ask.Price, bar.CloseTick.Ask.Price)
-            if self._should_descend_(bids, asks):
-                self._descended_bars_ += 1
-                yield from self._descend_(bar.OpenTick.Timestamp.DateTime, bar.CloseTick.Timestamp.DateTime, self._dataset_.IntraLevels)
-            else:
-                self._skipped_bars_ += 1
-            return
-        resolution = self._resolution_
-        if not resolution.IsTick and resolution.Seconds == self._timeframe_.Seconds:
-            for t in self._intrabar_(bar): yield t.Timestamp.DateTime, t.Ask.Price, t.Bid.Price
-        elif resolution.IsTick and (resolution.Value or 1) == 1:
-            yield from self._tick_stream_(bar)
-        elif resolution.IsTick:
-            yield from self._tick_bars_(bar, resolution.Value or 1)
+            if not self._gate_(bar):
+                self._skipped_ += 1
+                return
+            self._descended_ += 1
+            yield from self._stream_(self._dataset_.Ticks, bar)
+        elif self._walks_ticks_():
+            yield from self._stream_(self._dataset_.Ticks, bar)
+        elif self._finer_():
+            yield from self._stream_(self._dataset_.Points, bar)
         else:
-            yield from self._finer_bars_(bar)
+            for t in self._intrabar_(bar): yield t.Timestamp.DateTime, t.Ask.Price, t.Bid.Price
 
     def _generate_(self) -> Iterator:
         self._enqueue_(UpdateID.Account, self.account)
@@ -1041,7 +930,7 @@ class BacktestingAPI(SystemAPI):
         for index, bar in enumerate(bars):
             tracker.advance()
             self._bar_ = bar
-            self._tick_ = bars[index + 1].OpenTick if index + 1 < total else bar.CloseTick
+            self._tick_ = bars[index + 1].OpenPoint.BidTick if index + 1 < total else bar.ClosePoint.BidTick
             self._enqueue_(UpdateID.BarClosed, bar)
             yield
             if index + 1 >= total: continue
@@ -1115,8 +1004,7 @@ class BacktestingAPI(SystemAPI):
 
         def report(update: CompleteUpdateAPI):
             self._transition_(self._execution_timer_, "Execution", self._finalization_timer_)
-            if self._auto_:
-                self._log_.info(lambda: f"Phase Resolution: Completed · Auto · {self._skipped_bars_} Skipped · {self._descended_bars_} Descended")
+            if self._auto_: self._log_.debug(lambda: f"Phase Resolution: Completed · Auto · {self._descended_} Descended · {self._skipped_} Skipped")
             self._report_(update.Portfolio, self.account, self._start_.date(), self._stop_.date())
 
         initialization.on(event=UpdateID.Execution, to=execution, action=execute, reason="Market Initialized")

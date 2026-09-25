@@ -161,6 +161,15 @@ class OracleDatabaseAPI(DatabaseAPI):
     def _cast_(self, column: str) -> str:
         return f"TO_CHAR({column})"
 
+    @staticmethod
+    def _bytes_(cursor: Any, metadata: Any) -> Any:
+        return cursor.var(oracledb.DB_TYPE_LONG_RAW, arraysize=cursor.arraysize) if metadata.type_code is oracledb.DB_TYPE_BLOB else None
+
+    def _raw_(self) -> Any:
+        cursor = self._connection_.cursor()
+        cursor.outputtypehandler = self._bytes_
+        return cursor
+
     def listen(self, *, channel: str) -> bool:
         """
         Subscribes this connection to an Oracle alert channel via ``DBMS_ALERT.REGISTER``.

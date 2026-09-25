@@ -4,6 +4,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Union
 
+from Library.Market.Tape import ShareAPI
 from Library.Strategy.Strategy import StrategyAPI
 from Library.System.Backtesting import BacktestingAPI
 from Library.System.Selection import ElectionMode, FitnessType, SelectionMode, elect, select
@@ -11,6 +12,7 @@ from Library.System.Space import CandidateAPI, SpaceAPI
 from Library.Universe.Contract import CommissionType, SpreadType, SwapType
 from Library.Universe.Security import SecurityAPI
 from Library.Universe.Timeframe import TimeframeAPI
+from Library.Utility.Memory import ParcelAPI
 from Library.Utility.Parameter import Parameter
 from Library.Utility.Progress import ProgressAPI
 from Library.Utility.Profiler import timer
@@ -51,7 +53,11 @@ class OptimizationAPI(BacktestingAPI):
                  export: bool = False,
                  plot: bool = False,
                  run: Union[str, Path, None] = None,
-                 description: Union[str, None] = None) -> None:
+                 description: Union[str, None] = None,
+                 readers: int = 32,
+                 shelf: Union[dict, Missing] = MISSING,
+                 history: Union[dict, Missing] = MISSING,
+                 spans: Union[dict, Missing] = MISSING) -> None:
         super().__init__(
             strategy=strategy,
             security=security,
@@ -70,11 +76,16 @@ class OptimizationAPI(BacktestingAPI):
             export=False,
             plot=False,
             run=run,
-            description=description
+            description=description,
+            readers=readers,
+            shelf=shelf,
+            history=history,
+            spans=spans
         )
         self._walk_forward_(deliverables=(report, export, plot), fitness=fitness, selection=selection, election=election, training=training, validation=validation, testing=testing, rolling=rolling, continuous=continuous, purge=purge, embargo=embargo)
         self._space_ = space
         self._workers_ = max(1, int(workers or 1))
+        self._pool_: Union[tuple, None] = None
         self._baseline_ = self._parameters_
         self._stages_: list = []
         self._ledger_: dict = {}
@@ -92,11 +103,15 @@ class OptimizationAPI(BacktestingAPI):
             self._log_.warning(lambda error=error, candidate=candidate: f"Candidate Optimization: Skipped ({candidate.index}) · {error}")
             return None
 
-    def _payload_(self, start, stop) -> dict:
+    def _payload_(self, start, stop, history: dict, spans: dict) -> dict:
         return {
             **self._dispatch_(self._baseline_, start, stop),
             "resolution": self._resolution_arg_.UID if isinstance(self._resolution_arg_, TimeframeAPI) else (self._resolution_arg_ if isinstance(self._resolution_arg_, str) else None),
             "fitness": self._fitness_label_,
+            "readers": max(1, self._readers_ // self._workers_),
+            "shelf": self._shared_.handles() if self._shared_ is not None else [],
+            "history": history,
+            "spans": spans
         }
 
     def _sweep_(self, grid: list, start, stop, tracker) -> list:
@@ -115,25 +130,40 @@ class OptimizationAPI(BacktestingAPI):
             if tracker is not None: tracker.advance()
         return scored
 
-    def _warm_(self, start, stop) -> None:
-        try:
-            self._disconnect_()
-            self._start_, self._stop_ = start, stop
-            self._connect_()
-        except Exception as error:
-            self._log_.warning(lambda error=error: f"Warmup Optimization: Failed · {error}")
+    def _reach_(self, candidate: CandidateAPI) -> int:
+        try: return self._widest_(SpaceAPI.apply_candidate(self._baseline_, candidate))
+        except Exception: return 0
+
+    def _spawns_(self) -> bool:
+        return self._workers_ > 1
+
+    def _release_(self) -> None:
+        if self._pool_ is None: return
+        pool, parcel = self._pool_[0], self._pool_[1]
+        self._pool_ = None
+        try: pool.shutdown(wait=True, cancel_futures=True)
+        finally: parcel.close()
+
+    def _acquire_(self, start, stop, window: int) -> ProcessPoolExecutor:
+        if self._pool_ is not None and self._pool_[2] == (start, stop) and self._pool_[3] >= window: return self._pool_[0]
+        self._release_()
+        shared = self._publish_()
+        parcel = ParcelAPI(self._payload_(start, stop, self._histories_(shared, [start], window), self._bars_(shared, [(start, stop)])))
+        try: pool = ProcessPoolExecutor(max_workers=self._workers_, initializer=OptimizationAPI._prepare_, initargs=(parcel.handle(),))
+        except BaseException:
+            parcel.close()
+            raise
+        self._pool_ = (pool, parcel, (start, stop), window)
+        return pool
 
     def _parallel_(self, grid: list, start, stop, tracker) -> list:
-        workers = min(self._workers_, len(grid))
-        payload = self._payload_(start, stop)
+        self._disconnect_()
+        pool = self._acquire_(start, stop, max(self._reach_(candidate) for candidate in grid))
         ledger = {candidate.index: candidate for candidate in grid}
         scores = {}
-        self._warm_(start, stop)
-        self._disconnect_()
-        with ProcessPoolExecutor(max_workers=workers, initializer=OptimizationAPI._prepare_, initargs=(payload,)) as pool:
-            for index, score in pool.map(OptimizationAPI._score_, [(c.index, c.overrides) for c in grid], chunksize=self._CHUNK_):
-                scores[index] = score
-                if tracker is not None: tracker.advance()
+        for index, score in pool.map(OptimizationAPI._score_, [(c.index, c.overrides) for c in grid], chunksize=max(1, min(self._CHUNK_, -(-len(grid) // self._workers_)))):
+            scores[index] = score
+            if tracker is not None: tracker.advance()
         return [(ledger[index], scores.get(index)) for index in sorted(scores)]
 
     def _stage_(self, fold: int, order: int, stage: dict, winners: list, span: tuple, tracker,
@@ -210,6 +240,8 @@ class OptimizationAPI(BacktestingAPI):
         finally:
             ProgressAPI.mute(False)
             tracker.close()
+            self._release_()
+            if self._shared_ is not None: self._shared_.close()
         self._summarize_(test)
 
     def _elect_(self) -> Union[tuple, None]:
@@ -272,7 +304,8 @@ class OptimizationAPI(BacktestingAPI):
         return self._outcome_
 
     @staticmethod
-    def _prepare_(payload: dict) -> None:
+    def _prepare_(parcel: tuple[str, int]) -> None:
+        payload = ParcelAPI.attach(parcel)
         from Library.Logging import LoggingAPI
         log = LoggingAPI("Worker")
         ProgressAPI.mute()
@@ -292,7 +325,11 @@ class OptimizationAPI(BacktestingAPI):
             swap=payload["swap"],
             fitness=payload["fitness"],
             risk_free=payload["risk_free"],
-            report=False
+            report=False,
+            readers=payload["readers"],
+            shelf=ShareAPI.attach(payload["shelf"]),
+            history=payload["history"],
+            spans=payload["spans"]
         )
 
     @staticmethod

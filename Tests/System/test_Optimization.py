@@ -2,8 +2,10 @@ from concurrent.futures import ProcessPoolExecutor
 
 from Library.Utility.Parameter import Parameter
 from Library.System.Selection import ElectionMode, SelectionMode, select
+from Library.System import Optimization
 from Library.System.Optimization import OptimizationAPI
 from Library.System.Space import CandidateAPI, SpaceAPI
+from Library.Utility.Memory import ParcelAPI
 
 SPACE = {"MoneyManagement": {"RiskPercentage": [[0.5, 1.0]]},
          "TechnicalManagement": {"Baseline": [["SMA", "EMA"], [10, 20]]}}
@@ -182,3 +184,40 @@ def test_ordering_groups_candidates_sharing_technical_parameters():
 def test_score_runs_in_a_spawned_worker_before_the_worker_is_prepared():
     with ProcessPoolExecutor(max_workers=2) as pool:
         assert list(pool.map(OptimizationAPI._score_, [(1, {}), (2, {})])) == [(1, None), (2, None)]
+
+class _Pool_:
+
+    def __init__(self, created: list, released: list, max_workers: int, initializer, initargs: tuple) -> None:
+        self._released_ = released
+        self.chunks = []
+        created.append(self)
+
+    def map(self, function, work: list, chunksize: int) -> list:
+        self.chunks.append(chunksize)
+        return [(index, 1.0) for index, _ in work]
+
+    def shutdown(self, wait: bool, cancel_futures: bool) -> None:
+        self._released_.append(self)
+
+def test_the_rounds_of_a_fold_share_one_pool_until_a_round_needs_a_wider_history(monkeypatch):
+    created, released, windows = [], [], {}
+    monkeypatch.setattr(Optimization, "ProcessPoolExecutor", lambda **kwargs: _Pool_(created, released, **kwargs))
+    engine = object.__new__(OptimizationAPI)
+    engine._workers_, engine._pool_, engine._shared_ = 16, None, object()
+    engine._disconnect_ = lambda: None
+    engine._payload_ = lambda start, stop, history, spans: {"History": history, "Spans": spans}
+    engine._histories_ = lambda share, starts, window: {starts[0]: window}
+    engine._bars_ = lambda share, scopes: {scope: "Bars" for scope in scopes}
+    engine._reach_ = lambda candidate: windows[candidate.index]
+    def grid(*reaches: int) -> list:
+        windows.update({index: reach for index, reach in enumerate(reaches)})
+        return [CandidateAPI(index=index, overrides={}) for index in range(len(reaches))]
+    assert len(engine._parallel_(grid(*[20] * 640), 1, 2, None)) == 640
+    engine._parallel_(grid(10, 20, 15, 5, 20, 20, 20), 1, 2, None)
+    assert len(created) == 1 and not released and created[0].chunks == [8, 1]
+    assert ParcelAPI.attach(engine._pool_[1].handle()) == {"History": {1: 20}, "Spans": {(1, 2): "Bars"}}
+    engine._parallel_(grid(30, 10), 1, 2, None)
+    engine._parallel_(grid(30, 10), 3, 4, None)
+    assert len(created) == 3 and released == created[:2]
+    engine._release_()
+    assert released == created and engine._pool_ is None

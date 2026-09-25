@@ -78,6 +78,26 @@ def _total_(handle: tuple) -> float:
     tape = TapeAPI.attach(handle)
     return float(tape.Stamps.sum() + tape.Asks.sum() + tape.Bids.sum() + tape.Volumes.sum())
 
+def test_a_span_takes_the_bars_it_is_handed_instead_of_building_them(stored):
+    db, security, add = stored
+    for hour in range(3): add(datetime(2024, 2, 5, 10 + hour), 1.1 + hour / 10000, 1.0998 + hour / 10000)
+    tape, bars = TapeAPI.span(db, security, TimeframeAPI(UID="H1"), datetime(2024, 2, 5, 10), datetime(2024, 2, 5, 12))
+    handed = bars.head(1)
+    again, kept = TapeAPI.span(db, security, TimeframeAPI(UID="H1"), datetime(2024, 2, 5, 10), datetime(2024, 2, 5, 12), shelf=tape, bars=handed)
+    assert bars.height == 3 and kept is handed and again.Stamps.tolist() == tape.Stamps.tolist()
+
+def test_a_history_asks_for_the_first_tick_only_when_it_comes_back_short(stored, monkeypatch):
+    db, security, add = stored
+    for day in range(1, 29): add(datetime(2024, 2, day, 12), 1.1 + day / 10000, 1.0998 + day / 10000)
+    firsts, first = [], TapeAPI.first.__func__
+    monkeypatch.setattr(TapeAPI, "first", classmethod(lambda cls, db, security: firsts.append(security) or first(cls, db, security)))
+    tape, bars = TapeAPI.before(db, security, TimeframeAPI(UID="D1"), datetime(2024, 2, 20), 5)
+    assert bars.height == 5 and firsts == [] and tape.Stamps[int(bars["Close"][-1])] == datetime_to_epoch(datetime(2024, 2, 19, 12))
+    tape, bars = TapeAPI.before(db, security, TimeframeAPI(UID="D1"), datetime(2024, 2, 20), 40)
+    assert bars.height == 19 and firsts == [security]
+    tape, bars = TapeAPI.before(db, security, TimeframeAPI(UID="D1"), datetime(2024, 1, 20), 5)
+    assert bars.height == 0 and not tape.Stamps.size
+
 def test_a_shared_tape_reads_the_same_in_another_mapping_and_cannot_be_written(stored):
     db, security, add = stored
     for second in range(40): add(datetime(2024, 1, 3, 10) + timedelta(seconds=second), 1.10000 + (second % 7) / 100000, 1.09998 + (second % 5) / 100000)

@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import os
-
 from typing import Union
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
-from multiprocessing.shared_memory import SharedMemory
 
 from Library.Database.Dataframe import np, pl
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
@@ -15,19 +12,8 @@ from Library.Market.Tick import TickAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Universe.Timeframe import TimeframeAPI
 from Library.Utility.Datetime import datetime_to_epoch, epoch_to_datetime, utc_to_local
+from Library.Utility.Memory import BlockAPI
 from Library.Utility.Typing import MISSING, Missing
-
-class BlockAPI(SharedMemory):
-
-    def __init__(self, name: Union[str, None] = None, create: bool = False, size: int = 0) -> None:
-        super().__init__(name=name, create=create, size=size)
-        if not create and os.name == "posix":
-            from multiprocessing import resource_tracker
-            resource_tracker.unregister(self._name, "shared_memory")
-
-    def __del__(self) -> None:
-        try: self.close()
-        except (BufferError, OSError): pass
 
 @dataclass(frozen=True)
 class TapeAPI:
@@ -339,22 +325,24 @@ class TapeAPI:
         return cls.floor(start, timeframe, zone, roll), stop + cls._length_(timeframe) + timedelta(days=2)
 
     @classmethod
-    def span(cls, db: PostgresDatabaseAPI, security: int, timeframe: TimeframeAPI, start: datetime, stop: datetime, zone: str = "America/New_York", roll: int = 17, workers: int = 32, shelf: Union[TapeAPI, Missing] = MISSING) -> tuple[TapeAPI, pl.DataFrame]:
+    def span(cls, db: PostgresDatabaseAPI, security: int, timeframe: TimeframeAPI, start: datetime, stop: datetime, zone: str = "America/New_York", roll: int = 17, workers: int = 32, shelf: Union[TapeAPI, Missing] = MISSING, bars: Union[pl.DataFrame, Missing] = MISSING) -> tuple[TapeAPI, pl.DataFrame]:
         tape = cls.read(db, security, *cls.reach(start, stop, timeframe, zone, roll), workers, shelf)
-        return tape, tape.bars(timeframe, zone, roll, workers).filter(pl.col("Timestamp") <= datetime_to_epoch(stop))
+        return tape, bars if bars is not MISSING else tape.bars(timeframe, zone, roll, workers).filter(pl.col("Timestamp") <= datetime_to_epoch(stop))
 
     @classmethod
     def before(cls, db: PostgresDatabaseAPI, security: int, timeframe: TimeframeAPI, stop: datetime, count: int, zone: str = "America/New_York", roll: int = 17, workers: int = 32, shelf: Union[TapeAPI, Missing] = MISSING) -> tuple[TapeAPI, pl.DataFrame]:
-        first, stop = cls.first(db, security) if count > 0 else None, cls.floor(stop, timeframe, zone, roll)
-        if first is None or first >= stop:
+        if count <= 0:
             tape = cls.empty(security)
             return tape, tape.bars(timeframe, zone, roll)
+        stop, first = cls.floor(stop, timeframe, zone, roll), MISSING
         reach = cls._length_(timeframe) * count * 1.5 + timedelta(days=4)
         while True:
             begin = cls.floor(stop - reach, timeframe, zone, roll)
             tape = cls.read(db, security, begin, stop - timedelta(milliseconds=1), workers, shelf)
             bars = tape.bars(timeframe, zone, roll, workers)
-            if bars.height >= count or begin <= first: return tape, bars.tail(count)
+            if bars.height >= count: return tape, bars.tail(count)
+            if first is MISSING: first = cls.first(db, security)
+            if first is None or begin <= first: return tape, bars.tail(count)
             reach *= 2
 
     def materialize(self, bars: pl.DataFrame, timeframe: TimeframeAPI, base: Union[tuple, None, Missing] = MISSING, quote: Union[tuple, None, Missing] = MISSING) -> pl.DataFrame:
@@ -379,6 +367,9 @@ class ShareAPI:
 
     def handles(self) -> list[tuple]:
         return [tape.handle() for tape in self._tapes_]
+
+    def tapes(self) -> dict[int, TapeAPI]:
+        return {tape.Security: tape for tape in self._tapes_}
 
     def size(self) -> int:
         return sum(32 * tape.Stamps.size for tape in self._tapes_)

@@ -380,6 +380,44 @@ def test_preload_injects_dataset_without_loading(monkeypatch):
     assert engine._dataset_.ExecutionBars is bars
     assert engine._dataset_.Ticks is ticks
 
+def test_a_run_that_fans_out_publishes_its_tapes_once_and_reads_them_itself(monkeypatch):
+    shares = []
+    class _Share_:
+        def tapes(self) -> dict:
+            return {1: "Shared"}
+    def share(self, start, stop):
+        shares.append((start, stop))
+        return _Share_()
+    monkeypatch.setattr(BacktestingAPI, "_share_", share)
+    engine = _preload_stub_()
+    engine._shared_, engine._shelf_, engine._range_start_, engine._range_stop_ = None, {2: "Conversion"}, engine._start_, engine._stop_
+    assert engine._publish_() is engine._publish_()
+    assert shares == [(engine._start_, engine._stop_)] and engine._shelf_ == {2: "Conversion", 1: "Shared"}
+    assert not BacktestingAPI._spawns_(engine)
+
+def test_a_published_history_serves_every_window_without_a_read(monkeypatch):
+    history = pl.DataFrame({"Timestamp": [1, 2, 3, 4, 5], "Close": [1.0, 2.0, 3.0, 4.0, 5.0]})
+    early = pl.DataFrame({"Timestamp": [6], "Close": [6.0]})
+    monkeypatch.setattr(TapeAPI, "before", classmethod(lambda cls, *args, **kwargs: pytest.fail("Read the database")))
+    engine, cell = _preload_stub_(3), [None]
+    engine._history_ = {engine._start_: (history, 5)}
+    assert engine._load_warmup_(early, None, cell)["Close"].to_list() == [4.0, 5.0, 6.0]
+    engine._window_ = 5
+    assert engine._load_warmup_(early, None, cell)["Close"].to_list() == [2.0, 3.0, 4.0, 5.0, 6.0]
+    assert cell[0][0] is history
+
+def test_a_start_without_a_published_history_reads_its_own(monkeypatch):
+    history = pl.DataFrame({"Timestamp": [4, 5], "Close": [4.0, 5.0]})
+    reads = []
+    def before(cls, db, security, timeframe, stop, count, **kwargs):
+        reads.append((stop, count))
+        return SimpleNamespace(materialize=lambda bars, timeframe: history), None
+    monkeypatch.setattr(TapeAPI, "before", classmethod(before))
+    engine = _preload_stub_(3)
+    engine._history_, engine._db_, engine._readers_, engine._shelf_ = {datetime(2020, 1, 1): (history, 5)}, None, 1, {}
+    assert engine._load_warmup_(pl.DataFrame({"Timestamp": [6], "Close": [6.0]}), None, [None])["Close"].to_list() == [4.0, 5.0, 6.0]
+    assert reads == [(engine._start_, 2)]
+
 def test_extract_inject_round_trips_state():
     ticks = TapeAPI.empty(1)
     bars = [object()]

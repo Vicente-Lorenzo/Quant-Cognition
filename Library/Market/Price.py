@@ -30,7 +30,6 @@ class Direction(EnumerationAPI):
 class PriceMode(EnumerationAPI):
 
     Ask = 0
-    Mid = 1
     Bid = 2
 
 @dataclass(kw_only=True)

@@ -178,6 +178,9 @@ class PostgresDatabaseAPI(DatabaseAPI):
         if columns: frame = frame.select([c for c in columns if c in frame.columns])
         return frame
 
+    def _raw_(self) -> Any:
+        return self._connection_.cursor(binary=True)
+
     def _copy_(self, target: str, frame: pl.DataFrame) -> None:
         buffer = io.BytesIO()
         frame.write_csv(buffer, include_header=False, quote_style="non_numeric", null_value="", datetime_format="%Y-%m-%d %H:%M:%S%.6f")

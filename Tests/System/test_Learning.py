@@ -282,7 +282,7 @@ def test_continuous_recorded_in_manifest_and_payload(tmp_path):
     harness.run()
     manifest = read_json(tmp_path / "_FakeStrategy_ Manifest.json")
     assert manifest["Continuous"] is True
-    payload = harness._payload_(42, tmp_path, [], None, [])
+    payload = harness._payload_(42, tmp_path, [], None, [], {})
     assert payload["continuous"] is True
     _reset_(tmp_path)
     harness = _make_(episodes=1, validation=0, testing=0, seeds=1)
@@ -315,7 +315,7 @@ def test_activity_floor_prefers_active_checkpoints(tmp_path):
     assert _FakeAgent_.saves == 2
     manifest = read_json(tmp_path / "_FakeStrategy_ Manifest.json")
     assert manifest["Best"] == 0.01 and manifest["Activity"] == 5
-    assert harness._payload_(42, tmp_path, [], None, [])["activity"] == 5
+    assert harness._payload_(42, tmp_path, [], None, [], {})["activity"] == 5
 
 def _mirror_frame_():
     ticks = {
@@ -366,7 +366,7 @@ def test_balance_floor_requires_both_directions(tmp_path):
     harness.run()
     manifest = read_json(tmp_path / "_FakeStrategy_ Manifest.json")
     assert manifest["Best"] == 0.01 and manifest["Balance"] == 2
-    assert harness._payload_(42, tmp_path, [], None, [])["balance"] == 2
+    assert harness._payload_(42, tmp_path, [], None, [], {})["balance"] == 2
 
 def test_metric_reads_buy_and_sell_columns(tmp_path):
     _reset_(tmp_path)
@@ -381,7 +381,7 @@ def test_parallel_payload_is_picklable(tmp_path):
     _reset_(tmp_path)
     harness = _make_(episodes=2, training=12, validation=6, testing=12, seeds=4, workers=4, rolling=True)
     folds, test = SplitAPI.walk_forward_folds(harness._range_start_, harness._range_stop_, 12, 6, 12, True)
-    payload = harness._payload_(43, tmp_path / "Seed 43", folds, test, [(7, "Tape", 3, (0, 1))])
+    payload = harness._payload_(43, tmp_path / "Seed 43", folds, test, [(7, "Tape", 3, (0, 1))], {folds[0][0][0]: (pl.DataFrame({"Close": [1.1, 1.2]}), 2)})
     restored = pickle.loads(pickle.dumps(payload))
     assert restored["strategy"] is _FakeStrategy_ and restored["reward"] is RewardType.LogReturn
     assert restored["provider"] == "Spotware(cTrader)" and restored["ticker"] == "EURUSD"
@@ -389,3 +389,13 @@ def test_parallel_payload_is_picklable(tmp_path):
     assert restored["rolling"] is True and restored["folds"] == folds and restored["test"] == test
     assert restored["spread"][1] is None and restored["account"] == ("EUR", 10000.0, 100.0)
     assert restored["shelf"] == [(7, "Tape", 3, (0, 1))]
+    assert restored["history"][folds[0][0][0]][0]["Close"].to_list() == [1.1, 1.2] and restored["history"][folds[0][0][0]][1] == 2
+
+def test_every_scope_a_seed_replays_has_its_history_published():
+    folds = [((datetime(2023, 1, 1), datetime(2023, 5, 1)), (datetime(2023, 5, 1), datetime(2023, 7, 1))), ((datetime(2023, 3, 1), datetime(2023, 7, 1)), None)]
+    assert LearningAPI._starts_(folds, (datetime(2023, 9, 1), datetime(2023, 11, 1))) == [datetime(2023, 1, 1), datetime(2023, 5, 1), datetime(2023, 3, 1), datetime(2023, 9, 1)]
+    assert LearningAPI._starts_([], None) == []
+
+def test_the_widest_window_is_the_one_the_engine_warms_to():
+    parameters = Parameter({"TechnicalManagement": {"Baseline": ["SMA", 20], "Volatility": ["ATR", 14]}}, ".")
+    assert SystemAPI._widest_(parameters) == 20

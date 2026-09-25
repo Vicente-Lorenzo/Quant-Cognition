@@ -8,7 +8,7 @@ earlier item number to its current one.
 **What belongs here:** work not yet done, in the order it will be done, with the evidence that
 justifies it and the condition that closes it. **What does not:** conventions, current state and traps
 (those are `RULES.md`), architecture (`ARCHITECTURE.md`), delivered results
-(`Research/CAMPAIGN-7PAIR.md`, `Research/DDPG-EURUSD-H1/REPRODUCE.md`) and anything git history
+(`CAMPAIGNS.md`) and anything git history
 already records. **A finished phase is reduced to one row of the Done log** — what it was, when it
 closed, where its facts now live — and every detail of it is deleted from this file; a finished item
 inside a live phase keeps one line in that phase's **Done** list until the phase itself closes.
@@ -53,7 +53,7 @@ gone from this file.
 1. **Nothing touches the engine without the goldens.** They exist as of 2026-09-17 —
    `Tests/Golden/Online` and `Tests/Golden/Offline` (runs 1-5 each) plus `Tests/Golden/Consistency/DDPG`.
    `pytest Tests/Golden --golden` replays the six offline-engine goldens byte for byte, each with its own
-   `Parameters.yml` and `Contract.yml` pinned, and `verify_lock.py` section 3 fingerprints `Tests/Golden/`.
+   `Parameters.yml` and `Contract.yml` pinned.
 2. **There is exactly one golden re-baseline, and it is item 5.13.** The switch to the UTC tape (Phase 3)
    and the sizing fixes (5.2, 5.3) change engine output deliberately. Re-baselining after each would cost
    two cTrader sessions and would hide which change moved which number. Everything before 5.13 therefore
@@ -74,8 +74,8 @@ gone from this file.
    store instead of retrofitting it.
 5. **One tape, one writer at a time.** The London-local tape was converted once into `Market.Tick`, in
    UTC — proven identical to what the Open API serves — and the old tables are gone (2026-09-25). From
-   now on the market service is its only writer: its refill replaces the copy pair-day by pair-day, each
-   checked against what it replaces (4.2). Two sources writing one table would move every engine number
+   now on the market service is its only writer: the market data is dropped and refilled from `HORIZON`
+   through the service (4.2). Two sources writing one table would move every engine number
    without raising a single error.
 
 **Why this order, 2026-09-24.** Measured that day: the Open API serves exactly the tape the Download cBot stored,
@@ -172,15 +172,17 @@ follow the `Market.Calendar` pattern:
   weekend-trading security (a crypto pair, an index CFD) must choose between one long bar and two bars
   sharing a label.
 
-### 4.2 The refill — 2014 to today, through the service
+### 4.2 The refill — drop the market data, backfill 2014 to today
 
-Each pair's worker re-fetches its own history from `HORIZON`, pair-day by pair-day, in parallel with the
-others — about two hours for seven pairs at the measured per-connection allowance, resumable from a
-marker — and each pair-day **replaces** the proving
-copy's rows for that day only after its row count and XOR hash agree with them. A disagreement is named,
-never overwritten silently: the 2016 hole has no ticks on either side, and the days after the old tape
-ends (2026-08-13) have nothing to compare with. When the refill completes, every row names the service
-as its source.
+**Decided 2026-09-25:** the Open API serves exactly the cBot's tape (Phase 2), so the refill is not
+compared day by day against the copy. The market data is dropped — `Market.Tick` only; `Auth`,
+`Credential`, `Scheduler`, `Logging` and the rest stay — and each pair's worker backfills its own history
+from `HORIZON`, pair-day by pair-day, in parallel with the others — about two hours for seven pairs at the
+measured per-connection allowance, resumable from a marker — then goes live. The 2016-01-11 → 2016-01-25
+hole comes back empty from the endpoint too and is recorded like any day that stays short (4.1). When the
+refill completes, every row names the service as its source. **Decide at the drop:** the equality was
+proven on 13 sampled windows, not every day, so a dump of `Market.Tick` taken first (about 7 GB) keeps a
+later doubt about one day checkable; without it the old tape is gone for good.
 
 ### 4.3 The calendar service
 
@@ -279,9 +281,28 @@ Mapped 2026-09-24: **about 38 of the Connector's 50 parameters exist only to sto
 **Done when:** the Connector's panel holds only what execution needs — about a dozen parameters — each
 with a reader, the CLI has no flag without one, and a Live and a Simulation run trade exactly as before.
 
+### 4.7 Drop the vendor package — every dependency at its latest
+
+**Proposed 2026-09-25, not yet decided.** Asked: no forced versions in `Quant.yml`. Its two pins,
+`ctrader-open-api==0.9.2` and `service-identity==24.2.0`, are symptoms; the real pins are the vendor's
+own. `ctrader-open-api` 0.9.2 — its latest release — requires exactly Twisted 24.3.0, protobuf 3.20.1,
+pyOpenSSL 24.1.0 (which caps cryptography below 43: 42.0.8 against 50.0.1 released), requests 2.32.3 and
+inputimeout 1.0.4. `service-identity` is pinned because pip would otherwise take 26.1.0, which cannot
+import against cryptography 42 — and Twisted then falls back, with only a warning, to rudimentary hostname
+checks, undoing the TLS verification of 2026-09-24. `Library/Spotware` already replaces the vendor's
+client and sender; what it still imports is the generated protobuf messages, `Client`, `TcpProtocol`,
+`Factory`, `Protobuf` and `EndPoints`. Generate the messages from Spotware's published `.proto` files with
+the current protobuf, write the small Twisted client, protocol and factory the module needs, and drop the
+package: both pins go and every dependency floats. It belongs here because 4.1 builds the service on this
+module and the demo suite exercises it anyway.
+
+**Done when:** `Quant.yml` pins nothing, the offline Spotware suite and the demo suite (`--spotware`)
+pass on the latest Twisted, pyOpenSSL, cryptography, service-identity and protobuf, and a wrong host is
+still refused.
+
 **Phase done when:** both services run 24/7 under the Scheduler — the tape trailing the market by about a
-minute and the calendar's actuals landing within minutes of release — the refill has replaced the proving
-copy with every pair-day verified or named, a Live and a Simulation cBot run leave every table's insert
+minute and the calendar's actuals landing within minutes of release — the market data has been dropped
+and refilled from `HORIZON`, every pair-day stored or named as a gap, a Live and a Simulation cBot run leave every table's insert
 and update counters (`pg_stat_user_tables`) unchanged, neither language mentions Download, and the
 parameters are down to what execution needs.
 
@@ -289,7 +310,7 @@ parameters are down to what execution needs.
 
 The engine already reverse-engineers the cTrader engine byte for byte on the golden protocol and extends
 it. This phase closes the places where that fidelity is incomplete and makes the account currency
-generic. **5.10 to 5.12 are the cBot protocol items** (5.9 went with Download, 4.5); none needs the Open API, but each changes the wire
+generic. **5.10 to 5.12 and 5.14 are the cBot protocol items** (5.9 went with Download, 4.5); none needs the Open API, but each changes the wire
 and must be verified by a live round-trip, so they ship in the same cTrader session as the re-baseline
 (5.13).
 
@@ -307,6 +328,9 @@ and must be verified by a live round-trip, so they ship in the same cTrader sess
 - `net.csv`'s "Net Return (%)" compounded per-trade log returns (38.29 % on the DDPG golden against an
   account return of 34.02 %) — fixed 2026-09-17: it is Σ NetPnL / opening balance, so Buy + Sell = Total,
   and `FitnessType.AnnualizedReturn`, the default `--fitness`, ranks by account CAGR.
+- Optimization and Learning workers share the tapes, the warmup history and the bar index, start together,
+  and keep one pool per fold — closed 2026-09-25: eleven years of D1 at 16 workers 85.2 → 51.0 s, every score
+  identical (`RULES.md`, `Library/System`).
 - Report folder collisions — closed 2026-09-16: every run mints its own folder, and `_export_` suffixes an
   explicit path that exists. The one case left is `--plot PATH` for the same ticker and strategy twice in
   one second.
@@ -408,8 +432,7 @@ Measured 2026-09-11 by `cProfile` on the online hot path — `Trend` on EURUSD H
 measured 2026-09-25:** an Optimization candidate reconnects to Postgres on every replay (22 of 144 s over 654
 D1 candidates, about 34 ms each); `_row_to_bar_` builds every `BarAPI` of the window at load (13 s of a 165 s
 profiled DDPG decade); and the per-bar indicator frames (`Technical.update_data`, 86 of those 165 s) are the
-largest single cost of a model strategy. **Do not** re-attempt the recorded dead
-ends (Appendix A).
+largest single cost of a model strategy. **Do not** re-attempt the recorded dead ends (Appendix A).
 
 ### 5.9 Delay and batch protocol — void
 
@@ -438,17 +461,18 @@ Parse the C# security payload to enrich `SecurityAPI`. Small; ship with 5.11.
 
 ### 5.13 The cTrader session — re-baseline the goldens
 
-**Blocked on you — one cTrader session, the single re-baseline for Phases 3 and 5.** Run the checklist
-below first, then in the same session:
+**Blocked on you — one cTrader session, the single re-baseline for Phases 3 and 5.** The goldens stay
+here, after Phase 4, and run on the refilled tape (decided 2026-09-25). Run the checklist below first,
+then in the same session:
 
 1. **Confirm both `.algo` files load and run** (`Sources/Robots/Connector.algo`,
    `Sources/Indicators/Connector.algo`). They are built by the pinned `cTrader.Automate` on SDK 10;
    everything so far is compile-time evidence, none of it proves the platform accepts the artefact. Do
    it first, so a later wire mismatch can only be the enum change, never the compiler.
-2. **Round-trip 5.10 to 5.12** live, and the cBot of Phase 4 — storing nothing, Download gone.
+2. **Round-trip 5.10 to 5.12 and 5.14** live, and the cBot of Phase 4 — storing nothing, Download gone.
 3. **Regenerate the five `Simulation` runs** below, and the matching `Backtesting` runs, under 5.6's
    change and everything Phase 3, 5.2 and 5.3 moved. Every deviation from the current goldens must already have
-   a written explanation. Compare, accept, commit, and update `verify_lock.py`.
+   a written explanation. Compare, accept and commit.
 
 This is a **versioned** change — the old goldens stay in git history as the pre-fix reference. Never
 absorb a re-baseline into an ordinary refactor. The one declared exception so far is rule 2's
@@ -524,6 +548,21 @@ from columns the cBot filled.
 **Compared:** `trades`, `positions`, `orders` and `deals`, byte for byte. `net.csv` is excluded by
 design. Pass `--run FOLDER` and **commit the folders** — the 2026-07-05 set was lost because it never
 entered git.
+
+### 5.14 Restore `PriceMode.Mid`, exactly
+
+Removed at the Phase 3 switch with the stored `Mid` column; wanted back (2026-09-25) as long as it is
+exact. Gap, open and close mids are exact already (`tick.Mid`: both sides come from one tick). A bar's
+mid high and low are not derivable from its two-sided points — the highest mid can fall on a tick that is
+neither the highest ask nor the highest bid, so `(HighAsk + HighBid) / 2` overstates it. Exact means a
+third tick per extreme point: `TapeAPI.bars` finds `HighMid` and `LowMid` (argmax and argmin of ask + bid,
+first occurrence, summed per work slice so no tape-sized temporary), `PointAPI` gains `MidTick` (the same
+object as the other two on gap, open and close), and `materialize`, `_row_to_bar_` and `SeriesAPI` (`Price`
+in `Mid` mode) follow. The Connector's bar tracks both extremes and sends nine ticks instead of seven, so
+this ships with 5.10-5.12 in the 5.13 session — one rebuild for every wire change. `Mid` returns as 1,
+the slot its removal left (`Ask` 0, `Bid` 2). Nothing selects a `PriceMode` today (`MarketAPI` defaults to
+`Bid`), so decide in the same change how a strategy picks one, and measure the hot-path cost: two more
+ticks per bar in `_row_to_bar_`, two more tick groups in `materialize`.
 
 ---
 
@@ -629,7 +668,9 @@ candidate to the grid's worst-case window (`RULES.md`).
 ### 6.7 Re-run the seven-pair campaign on the corrected engine
 
 The output of Phases 3 and 5, and the input to thesis iteration two. Single-threaded so it is exactly
-reproducible. Compare against `Research/CAMPAIGN-7PAIR.md` pair by pair and write down what moved and why.
+reproducible. Compare against `CAMPAIGNS.md` (section 1.2) pair by pair and write down what moved and why;
+rebuild the evaluation methods it specifies (section 8) in `Library` first, since the campaign's own
+harnesses were deleted with `Research/`.
 **State the tape's sampling eras** (Appendix A): the eleven years span four of them, with tick density
 differing roughly thirty-fold, which a reader of a tick-derived result needs to know.
 
@@ -642,7 +683,7 @@ weaker numbers, that is a finding worth stating, not a result worth hiding.
    --testing 12`, which takes the `training <= 0` branch and produces **one** split: train 2015-01 to
    2024-01, validate 2024-01 to 2025-01, test 2025-01 to 2026-01. Iteration two must pass `training > 0`
    and `--continuous`, and 6.3 says how to elect honestly once it does.
-2. **There was no genuinely held-out evaluation.** `robust_eval.py` scores over the full 2015-01-01 to
+2. **There was no genuinely held-out evaluation.** The campaign's evaluator scored over the full 2015-01-01 to
    2026-01-01, which contains the nine training years. Iteration one states this as a limitation and must
    never sell it as train/validate/test rigour. 6.4 is what fixes it.
 3. **"Ten-plus years of data" is not a differentiator.** Across the 18 surveyed articles, 12 already use
@@ -662,10 +703,9 @@ anti-collapse mechanism; it bounds update norm against exploding gradients. Coll
 scale-*sensitive* reward, since a scale-invariant one collapses the actor to about 3% of available size,
 and by `ActorRegularization` at 0.001.
 
-**The feature bank lives in the run manifest, nowhere else.** `<Data>/Runs/<id>/Input/Parameters.yml`
-holds the 16 indicators actually used. `Research/DDPG-EURUSD-H1/Learning.yml` is a trimmed base carrying
-only the fast half, and `champion_override.py` does not touch `TechnicalManagement`, so neither file is
-authoritative. Always read the manifest.
+**The feature bank lives in the run manifest.** `<Data>/Runs/<id>/Input/Parameters.yml` holds the 16
+indicators actually used, in order — the ten fast ones of the campaign's base file plus the six slow ones its
+override appended (`CAMPAIGNS.md` section 4). Always read the manifest.
 
 ---
 
@@ -685,8 +725,7 @@ exact inputs that produced it.
 
 Target: results in a `Research` schema, weights as rows, one `Run` row tying them together, identical
 CLI behaviour, a thin web UI on top. Parameters are already done — `Library/Strategy/Ladder.py` replaced
-the YAML tree — and the contract snapshot (`Input/Contract.yml`) belongs in the run row beside them. `Library/Research`,
-this module, is distinct from the top-level `Research/` folder.
+the YAML tree — and the contract snapshot (`Input/Contract.yml`) belongs in the run row beside them.
 
 **Layout**
 
@@ -744,8 +783,8 @@ this module, is distinct from the top-level `Research/` folder.
 to Success with result rows and non-null headline metrics; a second run cancelled mid-flight lands
 Cancelled with its process tree dead; a real short backtest produces equity and signal row counts
 matching bar counts; a one-seed one-episode Learning run records episodes, stores its manifest, and
-`promote()` plus `materialize()` round-trips byte-identically in torch; the full suite is green; and
-`verify_lock.py` still reproduces the campaign.
+`promote()` plus `materialize()` round-trips byte-identically in torch; the full suite is green; and the
+DDPG consistency golden still replays.
 
 ### 7.1 Move the pages onto the Research schema
 

@@ -11,6 +11,7 @@ from typing import Union, TYPE_CHECKING
 
 from Library.Database.Dataframe import np, pl
 from Library.Market.Bar import BarAPI
+from Library.Market.Tape import ShareAPI
 from Library.Statistic.Label import (
     CALMARRATIOANN,
     MAXEQUITYDRAWDOWNPERC,
@@ -32,7 +33,7 @@ from Library.Utility.IO import copy, copy_tree, mkdir, remove, write_json
 from Library.Utility.Parameter import Parameter
 from Library.Utility.Progress import ProgressAPI
 from Library.Utility.Profiler import timer
-from Library.Utility.Typing import Missing
+from Library.Utility.Typing import MISSING, Missing
 
 if TYPE_CHECKING:
     from Library.Strategy.Strategy import StrategyAPI
@@ -78,9 +79,6 @@ class _FrozenTechnicalAPI_:
 
 class LearningAPI(BacktestingAPI):
 
-    _MIRROR_TICKS_ = ("GapTick", "OpenTick", "HighTick", "LowTick", "CloseTick")
-    _MIRROR_SWAP_ = {"HighTick": "LowTick", "LowTick": "HighTick"}
-    _MIRROR_CONVERSIONS_ = ("AskBaseConversion", "BidBaseConversion", "AskQuoteConversion", "BidQuoteConversion")
     _RESERVED_ = ("Fold ", "Episode ")
 
     def __init__(self,
@@ -126,8 +124,11 @@ class LearningAPI(BacktestingAPI):
                  export: bool = True,
                  plot: bool = False,
                  run: Union[str, Path, None] = None,
-                 description: Union[str, None] = None) -> None:
-        super().__init__(strategy=strategy, security=security, timeframe=timeframe, resolution=timeframe, parameters=parameters, start=start, stop=stop, account=account, spread=spread, commission=commission, swap=swap, risk_free=risk_free, benchmark=benchmark, report=False, export=False, plot=False, run=run, description=description)
+                 description: Union[str, None] = None,
+                 readers: int = 32,
+                 shelf: Union[dict, Missing] = MISSING,
+                 history: Union[dict, Missing] = MISSING) -> None:
+        super().__init__(strategy=strategy, security=security, timeframe=timeframe, resolution=timeframe, parameters=parameters, start=start, stop=stop, account=account, spread=spread, commission=commission, swap=swap, risk_free=risk_free, benchmark=benchmark, report=False, export=False, plot=False, run=run, description=description, readers=readers, shelf=shelf, history=history)
         self._walk_forward_(deliverables=(report, export, plot), fitness=fitness, selection=selection, election=election, training=training, validation=validation, testing=testing, rolling=rolling, continuous=continuous, purge=purge, embargo=embargo)
         self._reward_type_: RewardType = RewardType.parse(reward)
         self._episodes_: int = episodes
@@ -187,24 +188,24 @@ class LearningAPI(BacktestingAPI):
     @staticmethod
     def _mirror_frame_(frame: Union[pl.DataFrame, None], anchor: float) -> Union[pl.DataFrame, None]:
         if frame is None or frame.is_empty(): return frame
-        columns = []
-        for prefix in LearningAPI._MIRROR_TICKS_:
-            source = LearningAPI._MIRROR_SWAP_.get(prefix, prefix)
-            if f"{prefix}.Ask" not in frame.columns: continue
-            columns.append((anchor / pl.col(f"{source}.Bid")).alias(f"{prefix}.Ask"))
-            columns.append((anchor / pl.col(f"{source}.Ask")).alias(f"{prefix}.Bid"))
-            if f"{prefix}.Mid" in frame.columns: columns.append((anchor / pl.col(f"{source}.Mid")).alias(f"{prefix}.Mid"))
-            columns.append(pl.col(f"{source}.Timestamp").alias(f"{prefix}.Timestamp"))
-            if f"{prefix}.Volume" in frame.columns: columns.append(pl.col(f"{source}.Volume").alias(f"{prefix}.Volume"))
-            for conversion in LearningAPI._MIRROR_CONVERSIONS_:
-                if f"{prefix}.{conversion}" in frame.columns: columns.append(pl.lit(None, dtype=pl.Float64).alias(f"{prefix}.{conversion}"))
+        columns, swap = [], {"HighPoint": "LowPoint", "LowPoint": "HighPoint", "AskTick": "BidTick", "BidTick": "AskTick"}
+        for point in ("GapPoint", "OpenPoint", "HighPoint", "LowPoint", "ClosePoint"):
+            for side in ("AskTick", "BidTick"):
+                prefix, source = f"{point}.{side}", f"{swap.get(point, point)}.{swap[side]}"
+                if f"{prefix}.Ask" not in frame.columns: continue
+                columns.append((anchor / pl.col(f"{source}.Bid")).alias(f"{prefix}.Ask"))
+                columns.append((anchor / pl.col(f"{source}.Ask")).alias(f"{prefix}.Bid"))
+                columns.append(pl.col(f"{source}.Timestamp").alias(f"{prefix}.Timestamp"))
+                if f"{prefix}.Volume" in frame.columns: columns.append(pl.col(f"{source}.Volume").alias(f"{prefix}.Volume"))
+                for conversion in ("AskBaseConversion", "BidBaseConversion", "AskQuoteConversion", "BidQuoteConversion"):
+                    if f"{prefix}.{conversion}" in frame.columns: columns.append(pl.lit(None, dtype=pl.Float64).alias(f"{prefix}.{conversion}"))
         return frame.with_columns(columns)
 
     def _mirror_dataset_(self, dataset: DatasetAPI) -> DatasetAPI:
         rows = dataset.ExecutionRows if dataset.ExecutionRows is not None else None
         warmup = dataset.WarmupBars
         source = warmup if warmup is not None and warmup.height else rows
-        anchor_price = source[str(BarAPI.OID.CloseTick.Bid)][0] if source is not None and source.height else 1.0
+        anchor_price = source[str(BarAPI.OID.ClosePoint.BidTick.Bid)][0] if source is not None and source.height else 1.0
         anchor = anchor_price * anchor_price
         mirrored_warmup = self._mirror_frame_(warmup, anchor)
         mirrored_rows = self._mirror_frame_(rows, anchor)
@@ -267,7 +268,14 @@ class LearningAPI(BacktestingAPI):
         copy_tree(directory, self._weights_, ignore=("Seed *", "Fold *"), merge=True, safe=False)
         self._log_.info(lambda: f"Weights Learning: Exported · To {directory}")
 
-    def _payload_(self, seed: Union[int, None], directory: Path, folds: list, test: Union[tuple, None]) -> dict:
+    @staticmethod
+    def _starts_(folds: list, test: Union[tuple, None]) -> list:
+        return [window[0] for fold in folds for window in fold if window is not None] + ([test[0]] if test is not None else [])
+
+    def _spawns_(self) -> bool:
+        return self._workers_ > 1 and self._seeds_ > 1
+
+    def _payload_(self, seed: Union[int, None], directory: Path, folds: list, test: Union[tuple, None], shelf: list, history: dict) -> dict:
         return {
             **self._dispatch_(self._parameters_, self._range_start_, self._range_stop_),
             "reward": self._reward_type_,
@@ -292,7 +300,10 @@ class LearningAPI(BacktestingAPI):
             "weights": str(directory),
             "folds": folds,
             "test": test,
-            "threads": self._threads_ if self._threads_ else max(1, (os.cpu_count() or self._workers_) // self._workers_)
+            "threads": self._threads_ if self._threads_ else max(1, (os.cpu_count() or self._workers_) // self._workers_),
+            "readers": max(1, self._readers_ // self._workers_),
+            "shelf": shelf,
+            "history": history
         }
 
     def _full_range_(self) -> Union[dict, None]:
@@ -460,9 +471,14 @@ class LearningAPI(BacktestingAPI):
                 self._log_.info(lambda: f"Parallel Learning: Started · {min(self._workers_, len(seeds))} Workers · {len(seeds)} Seeds")
                 directories = {seed: self._weights_ / f"Seed {seed}" for seed in seeds}
                 for directory in directories.values(): mkdir(directory)
-                payloads = [self._payload_(seed, directories[seed], folds, test) for seed in seeds]
-                with ProcessPoolExecutor(max_workers=min(self._workers_, len(seeds))) as pool:
-                    results = list(pool.map(LearningAPI._learn_seed_, payloads))
+                shared = self._publish_()
+                try:
+                    history = self._histories_(shared, [*self._starts_(folds, test), self._range_start_], self._widest_(self._parameters_))
+                    payloads = [self._payload_(seed, directories[seed], folds, test, shared.handles(), history) for seed in seeds]
+                    with ProcessPoolExecutor(max_workers=min(self._workers_, len(seeds))) as pool:
+                        results = list(pool.map(LearningAPI._learn_seed_, payloads))
+                finally:
+                    shared.close()
                 for result in results:
                     self._tracker_.advance()
                     if result["Metric"] is not None and (best_metric is None or result["Metric"] > best_metric):
@@ -503,7 +519,7 @@ class LearningAPI(BacktestingAPI):
         log = LoggingAPI("Worker")
         log.file.set_level(VerboseLevel.Debug)
         security, timeframe = LearningAPI._worker_(payload, log)
-        learner = LearningAPI(strategy=payload["strategy"], security=security, timeframe=timeframe, parameters=Parameter(payload["parameters"], "."), start=payload["start"], stop=payload["stop"], account=payload["account"], spread=payload["spread"], commission=payload["commission"], swap=payload["swap"], reward=payload["reward"], episodes=payload["episodes"], epochs=payload["epochs"], train_frequency=payload["train_frequency"], gradient_steps=payload["gradient_steps"], training=payload["training"], validation=payload["validation"], testing=payload["testing"], rolling=payload["rolling"], continuous=payload["continuous"], fitness=payload["fitness"], patience=payload["patience"], activity=payload.get("activity", 0), balance=payload.get("balance", 0), ratio=payload.get("ratio", 0.0), mirror=payload.get("mirror", False), mirror_ratio=payload.get("mirror_ratio", 0.5), final=payload.get("final", False), seed=payload["seed"], seeds=1, workers=1, risk_free=payload["risk_free"], report=False, export=False)
+        learner = LearningAPI(strategy=payload["strategy"], security=security, timeframe=timeframe, parameters=Parameter(payload["parameters"], "."), start=payload["start"], stop=payload["stop"], account=payload["account"], spread=payload["spread"], commission=payload["commission"], swap=payload["swap"], reward=payload["reward"], episodes=payload["episodes"], epochs=payload["epochs"], train_frequency=payload["train_frequency"], gradient_steps=payload["gradient_steps"], training=payload["training"], validation=payload["validation"], testing=payload["testing"], rolling=payload["rolling"], continuous=payload["continuous"], fitness=payload["fitness"], patience=payload["patience"], activity=payload.get("activity", 0), balance=payload.get("balance", 0), ratio=payload.get("ratio", 0.0), mirror=payload.get("mirror", False), mirror_ratio=payload.get("mirror_ratio", 0.5), final=payload.get("final", False), seed=payload["seed"], seeds=1, workers=1, risk_free=payload["risk_free"], report=False, export=False, readers=payload["readers"], shelf=ShareAPI.attach(payload["shelf"]), history=payload["history"])
         try:
             return learner._train_seed_(payload["seed"], Path(payload["weights"]), payload["folds"], payload["test"])
         finally:
