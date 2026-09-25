@@ -17,10 +17,6 @@ class SchedulerBaseAPI(ManagedPageAPI):
     _RUN_COLUMNS_ = ["Status", "UID", "CID", "TID", "Kind", "Retry", "StartedAt", "StoppedAt", "Duration", "ExitCode", "PID", "Auditor"]
     _TASK_RUN_COLUMNS_ = ["Status", "UID", "Kind", "Retry", "StartedAt", "StoppedAt", "Duration", "ExitCode", "PID", "Auditor"]
     _CYCLE_COLUMNS_ = ["Status", "UID", "Kind", "StartedAt", "StoppedAt"]
-    _IDENTIFIER_COLUMNS_ = {"PID", "ExitCode", "Retry"}
-    _DAG_FLOOR_ = 200
-    _DAG_LANE_ = 78
-    _VERBS_ = {"run": "dispatched", "enable": "enabled", "disable": "disabled", "delete": "deleted", "skip": "skipped", "cancel": "canceled"}
 
     @classmethod
     def _payload_(cls, name: str, columns: list, rows: list, base: str = None, outbound: dict = None) -> WorkspaceAPI:
@@ -30,11 +26,15 @@ class SchedulerBaseAPI(ManagedPageAPI):
     def _grid_(cls, id: dict, carrier: dict, name: str, columns: list, base: str = None, outbound: dict = None, height: str = MISSING) -> list:
         return TableAPI.table(id, name, columns, [], markdown=cls._MARKDOWN_COLUMNS_, base=base, carrier=carrier, selection=outbound if outbound else MISSING, height=height).build()
 
+    @staticmethod
+    def _verb_(verb: str) -> str:
+        return {"run": "dispatched", "enable": "enabled", "disable": "disabled", "delete": "deleted", "skip": "skipped", "cancel": "canceled"}[verb]
+
     def _intervene_(self, entity: str, verb: str, uids, failure, blocked: str):
         uids = self._selection_(uids, f"Select a {entity} first")
         if not uids: return dash.no_update
         by, action = self.app.actor(), getattr(self._manager_, verb)
-        return self._tally_(uids, lambda uid: action(uid, failure=bool(failure), by=by), f"{entity}(s) {self._VERBS_[verb]} as {'Failure' if failure else 'Success'}", blocked)
+        return self._tally_(uids, lambda uid: action(uid, failure=bool(failure), by=by), f"{entity}(s) {self._verb_(verb)} as {'Failure' if failure else 'Success'}", blocked)
 
     def _apply_(self, entity: str, verb: str, uids):
         uids = self._selection_(uids, f"Select a {entity} first")
@@ -49,7 +49,7 @@ class SchedulerBaseAPI(ManagedPageAPI):
         if error: self.app.notify.error(error, header="Action Failed")
         if not done: return dash.no_update
         detail = f"{entity.capitalize()} '{done[0]}'" if len(done) == 1 else f"{len(done)} {entity}s"
-        self.app.notify.success(f"{detail} {self._VERBS_[verb]}", header="Done")
+        self.app.notify.success(f"{detail} {self._verb_(verb)}", header="Done")
         return RefreshAPI.token()
 
     def _guarded_(self, row: dict, entity: dict, principal) -> dict:
@@ -69,7 +69,7 @@ class SchedulerBaseAPI(ManagedPageAPI):
         for column in self._RUN_COLUMNS_:
             value = run.get(column)
             if column == "Duration" and isinstance(value, (int, float)): value = round(value, 2)
-            elif column in self._IDENTIFIER_COLUMNS_ and value is not None: value = str(value)
+            elif column in ("PID", "ExitCode", "Retry") and value is not None: value = str(value)
             row[column] = value
         row["Status"] = self._led_(run.get("Status"))
         return row
@@ -135,9 +135,12 @@ class SchedulerBaseAPI(ManagedPageAPI):
     def _figure_(nodes: list, edges: list, graph):
         return NetworkAPI.render(nodes, edges, placeholder="Workflow has no tasks", graph=graph)
 
+    @staticmethod
+    def _height_(widest: int = 0) -> dict:
+        return {"height": f"{max(200, 80 + widest * 78)}px"}
+
     def _canvas_(self, nodes: list, edges: list, graph) -> dict:
-        widest = NetworkAPI.span(nodes, edges, graph=graph)
-        return {"height": f"{max(self._DAG_FLOOR_, 80 + widest * self._DAG_LANE_)}px"}
+        return self._height_(NetworkAPI.span(nodes, edges, graph=graph))
 
 class SchedulerSelectionAPI:
 

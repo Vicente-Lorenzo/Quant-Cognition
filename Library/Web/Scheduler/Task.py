@@ -13,13 +13,12 @@ from Library.Web.Scheduler.Entity import SchedulerEntityAPI, SchedulerEntityPage
 class SchedulerTaskAPI(SchedulerEntityAPI):
 
     _entity_ = "task"
-    _ROOT_ = traceback_root()
 
     _FIELDS_ = (
         FieldAPI(name="uid", label="UID", identity=True, placeholder="unique-task-id", help="Unique identifier of the task · immutable once created"),
         FieldAPI(name="name", required=True, help="Human-readable display name shown across the app"),
         FieldAPI(name="owner", required=True, default=lambda page: page.app.actor(), help="Account that owns the task · its runs use this account's credentials · only the owner or an Administrator may hand it over"),
-        FieldAPI(name="runrole", label="Run Role", column="RunRole", control="select", group="access", default="", options=SchedulerEntityAPI._THRESHOLDS_, help="Lowest role that may run, skip, cancel and resolve it · Owner only keeps it to the owner · never above your own role"),
+        FieldAPI(name="runrole", label="Run Role", column="RunRole", control="select", group="access", default="", options=SchedulerEntityAPI._THRESHOLDS_, help="Lowest role that may run, skip, cancel and resolve it · Owner keeps it to the owner · never above your own role"),
         FieldAPI(name="editrole", label="Edit Role", column="EditRole", control="select", group="access", default="", options=SchedulerEntityAPI._THRESHOLDS_, help="Lowest role that may change, enable and delete it · never below Run Role · anyone who can change a task can make it use its owner's credentials"),
         FieldAPI(name="type", control="select", group="kind", default=TaskAPI.Defaults["Type"], options=FieldAPI.choices(TaskType.names()), help="Artifact interpreter · Batch runs a Windows batch file · Shell runs a shell command · Python runs a Python script"),
         FieldAPI(name="kind", control="select", group="kind", default=TaskAPI.Defaults["Kind"], options=FieldAPI.choices(Kind.names()), help="Execution style · Manual runs only on demand · Scheduled runs to completion when triggered · Service is kept always-on and respawned if it dies"),
@@ -64,7 +63,7 @@ class SchedulerTaskAPI(SchedulerEntityAPI):
     @classmethod
     def _relative_(cls, path: str) -> str:
         try:
-            return Path(path).resolve().relative_to(cls._ROOT_).as_posix()
+            return Path(path).resolve().relative_to(traceback_root()).as_posix()
         except ValueError:
             return str(Path(path))
 
@@ -72,14 +71,15 @@ class SchedulerTaskAPI(SchedulerEntityAPI):
     def _format_(path: Path, relative) -> str:
         return SchedulerTaskAPI._relative_(str(path)) if relative else str(path)
 
-    @classmethod
-    def _locate_(cls, filename: str) -> Path | None:
+    @staticmethod
+    def _locate_(filename: str) -> Path | None:
+        root = traceback_root()
         for folder in ("Script", "Setup", "Library", "Sources"):
-            base = cls._ROOT_ / folder
+            base = root / folder
             if not base.is_dir(): continue
             matches = [match for match in base.rglob(filename) if "__pycache__" not in match.parts]
             if matches: return min(matches, key=lambda match: len(match.parts))
-        direct = cls._ROOT_ / filename
+        direct = root / filename
         return direct if direct.is_file() else None
 
     def _browse_(self) -> list:
@@ -113,7 +113,7 @@ class SchedulerTaskAPI(SchedulerEntityAPI):
     )
     def _convert_(self, relative, path):
         if not path: raise PreventUpdate
-        chosen = Path(path) if Path(path).is_absolute() else self._ROOT_ / path
+        chosen = Path(path) if Path(path).is_absolute() else traceback_root() / path
         return self._format_(chosen, relative)
 
     @clientside_callback(

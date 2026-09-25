@@ -17,7 +17,7 @@ class LaunchFieldsAPI:
     _ELECTION_ = FieldAPI.choices(ElectionMode.names())
     _SYSTEMS_ = FieldAPI.choices((SystemType.Backtesting.name, SystemType.Optimization.name, SystemType.Learning.name))
     _VERBOSE_ = FieldAPI.choices(VerboseLevel.names())
-    _RESOLUTION_ = FieldAPI.choices(("Auto", "M1", "H1", "D1"))
+    _RESOLUTION_ = FieldAPI.choices(("Auto", "T1", "M1", "H1", "D1"))
     _REWARD_ = FieldAPI.choices(RewardType.names())
     _SPREAD_ = FieldAPI.choices(SpreadType.names())
     _COMMISSION_ = FieldAPI.choices(CommissionType.names())
@@ -30,7 +30,7 @@ class LaunchFieldsAPI:
     VALIDATION = FieldAPI(name="validation", control="number", group="split", default=0, minimum=0, help="Walk-forward validation window in months")
     ROLLING = FieldAPI(name="rolling", control="switch", group="mode", default=False, help="Roll the walk-forward window instead of anchoring it")
     FITNESS = FieldAPI(name="fitness", control="select", group="objective", default=FitnessType.AnnualizedReturn.name, options=_FITNESS_, help="Metric a single run is scored on")
-    RESOLUTION = FieldAPI(name="resolution", control="select", group="resolution", options=_RESOLUTION_, help="Bar resolution the engine steps on · Auto picks the finest available")
+    RESOLUTION = FieldAPI(name="resolution", control="select", group="resolution", options=_RESOLUTION_, help="Price path the engine walks inside each bar · Auto walks the ticks of only the bars where an order can fill and equals T1 exactly · M1 H1 and D1 walk bar extremes")
 
     MARKET = (
         FieldAPI(name="strategy", control="select", group="market", default=StrategyType.Trend.name, options=_STRATEGIES_, help="Trading rules the engine runs"),

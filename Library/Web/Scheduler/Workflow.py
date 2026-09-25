@@ -16,7 +16,7 @@ class SchedulerWorkflowAPI(SchedulerEntityAPI):
         FieldAPI(name="uid", label="UID", identity=True, placeholder="unique-workflow-id", help="Unique identifier of the workflow · immutable once created"),
         FieldAPI(name="name", required=True, help="Human-readable display name shown across the app"),
         FieldAPI(name="owner", required=True, default=lambda page: page.app.actor(), help="Account that owns the workflow and always keeps access · only the owner or an Administrator may hand it over"),
-        FieldAPI(name="runrole", label="Run Role", column="RunRole", control="select", group="access", default="", options=SchedulerEntityAPI._THRESHOLDS_, help="Lowest role that may run the workflow and resolve its runs · Owner only keeps it to the owner · never above your own role"),
+        FieldAPI(name="runrole", label="Run Role", column="RunRole", control="select", group="access", default="", options=SchedulerEntityAPI._THRESHOLDS_, help="Lowest role that may run the workflow and resolve its runs · Owner keeps it to the owner · never above your own role"),
         FieldAPI(name="editrole", label="Edit Role", column="EditRole", control="select", group="access", default="", options=SchedulerEntityAPI._THRESHOLDS_, help="Lowest role that may change, link, enable and delete it · never below Run Role · anyone who can change a workflow decides what runs with its owner's credentials"),
         FieldAPI(name="kind", control="select", default="", options=[{"label": "(derive from Schedule)", "value": ""}] + FieldAPI.choices(Kind.names()), help="Lifecycle · Manual opens a cycle only on demand · Scheduled opens a cycle at each cron occurrence · Service keeps one resident always-on cycle and only accepts Service tasks · empty derives from Schedule"),
         FieldAPI(name="schedule", label="Schedule (cron)", column="Schedule", placeholder="0 22 * * 1-5", wrapper="scheduler-cron-row", suffix=lambda page: [page._cron_(page.F_CRON)], help="Cron that opens a new cycle at each occurrence · required for Scheduled and forbidden otherwise"),
@@ -110,7 +110,7 @@ class SchedulerWorkflowDetailPageAPI(SchedulerWorkflowAPI, SchedulerGridDetailAP
             self.toolbar([self._refresh_button_(), self._open_task_button_()] + self._lifecycle_buttons_(insert=False) + [self._links_()]),
             html.Div([
                 html.Div(id=self.FIELDS_ID, className="scheduler-split-detail"),
-                html.Div(NetworkAPI(id=self.DAG_GRAPH_ID, figure=self._empty_figure_("Loading dependency graph"), anchor="/scheduler/task", style={"height": f"{self._DAG_FLOOR_}px"}).build(), className="scheduler-split-graph scheduler-panel"),
+                html.Div(NetworkAPI(id=self.DAG_GRAPH_ID, figure=self._empty_figure_("Loading dependency graph"), anchor="/scheduler/task", style=self._height_()).build(), className="scheduler-split-graph scheduler-panel"),
             ], className="scheduler-split"),
             *self._grid_(self.SUB_TABLE_ID, self.SUB_CARRIER_ID, "Tasks", self._MEMBER_COLUMNS_, "/scheduler/task", self.SUB_STATE_STORE_ID),
             *self._grid_(self.CYCLE_TABLE_ID, self.CYCLE_CARRIER_ID, "Cycles", self._CYCLE_COLUMNS_),
@@ -139,7 +139,7 @@ class SchedulerWorkflowDetailPageAPI(SchedulerWorkflowAPI, SchedulerGridDetailAP
         workflow = self._manager_.workflow(uid)
         if workflow is None:
             blank = self._payload_("Tasks", self._MEMBER_COLUMNS_, [], "/scheduler/task", self.SUB_STATE_STORE_ID).encode()
-            return self._breadcrumb_(uid, None), [uid], self._details_([("Status", "Workflow not found")]), self._empty_figure_("Workflow not found"), {"height": f"{self._DAG_FLOOR_}px"}, blank, self._payload_("Cycles", self._CYCLE_COLUMNS_, []).encode(), [], []
+            return self._breadcrumb_(uid, None), [uid], self._details_([("Status", "Workflow not found")]), self._empty_figure_("Workflow not found"), self._height_(), blank, self._payload_("Cycles", self._CYCLE_COLUMNS_, []).encode(), [], []
         latest = self._manager_.latest()
         edges = self._edges_(uid)
         members = self._sequenced_(self._manager_.tasks(workflow=uid), latest, edges)

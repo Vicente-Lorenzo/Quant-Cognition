@@ -128,12 +128,9 @@ class SchedulerRunDetailPageAPI(SchedulerRunAPI, SchedulerDetailAPI):
             *self._hidden_(),
         ]
 
-    _ANSI_ = re.compile(r"\x1b\[([0-9;]*)m")
-    _BASICS_ = ("#000000", "#cd3131", "#0dbc79", "#e5e510", "#2472c8", "#bc3fbc", "#11a8cd", "#e5e5e5", "#666666", "#f14c4c", "#23d18b", "#f5f543", "#3b8eea", "#d670d6", "#29b8db", "#ffffff")
-
-    @classmethod
-    def _shade_(cls, code: int) -> str:
-        if code < 16: return cls._BASICS_[code]
+    @staticmethod
+    def _shade_(code: int) -> str:
+        if code < 16: return ("#000000", "#cd3131", "#0dbc79", "#e5e510", "#2472c8", "#bc3fbc", "#11a8cd", "#e5e5e5", "#666666", "#f14c4c", "#23d18b", "#f5f543", "#3b8eea", "#d670d6", "#29b8db", "#ffffff")[code]
         if code < 232:
             code -= 16
             levels = (0, 95, 135, 175, 215, 255)
@@ -144,7 +141,7 @@ class SchedulerRunDetailPageAPI(SchedulerRunAPI, SchedulerDetailAPI):
     @classmethod
     def _paint_(cls, text: str) -> list:
         spans, color, cursor = [], None, 0
-        for match in cls._ANSI_.finditer(text):
+        for match in re.finditer(r"\x1b\[([0-9;]*)m", text):
             if match.start() > cursor:
                 chunk = text[cursor:match.start()]
                 spans.append(html.Span(chunk, style={"color": color}) if color else chunk)

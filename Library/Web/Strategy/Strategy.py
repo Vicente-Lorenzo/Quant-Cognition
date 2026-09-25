@@ -21,8 +21,10 @@ from Library.App.V2 import (
     serverside_callback,
     modal_callbacks
 )
+from Library.Database.Dataframe import pl
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Database.Query import QueryAPI
+from Library.Market.Tape import TapeAPI
 from Library.Strategy.Ladder import LadderAPI
 from Library.Strategy.Catalog import CatalogAPI
 from Library.System.Space import SpaceAPI
@@ -97,14 +99,13 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
         try:
             with PostgresDatabaseAPI.attach(database=self.app.Database) as db:
                 frame = db.executeone(QueryAPI('''
-                    SELECT DISTINCT p."UID" AS provider, c."UID" AS category, t."UID" AS ticker
+                    SELECT s."UID" AS security, p."UID" AS provider, c."UID" AS category, t."UID" AS ticker
                     FROM "Universe"."Security" s
                     JOIN "Universe"."Provider" p ON p."UID" = s."Provider"
                     JOIN "Universe"."Ticker" t ON t."UID" = s."Ticker"
                     JOIN "Universe"."Category" c ON c."UID" = s."Category"
-                    WHERE EXISTS (SELECT 1 FROM "Market"."Bar" b WHERE b."Security" = s."UID")
-                    ORDER BY 1, 3
-                ''')).fetchall()
+                    ORDER BY 2, 4
+                ''')).fetchall(legacy=False).filter(pl.col("security").is_in(TapeAPI.securities(db)))
                 spans = db.executeone(QueryAPI('SELECT "UID" FROM "Universe"."Timeframe"')).fetchall()
         except Exception:
             return {}, []
