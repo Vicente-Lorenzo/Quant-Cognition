@@ -17,16 +17,20 @@ class AccessAPI:
         return [name for name in RoleAPI.names() if name != RoleAPI.Public.name]
 
     @staticmethod
-    def parse(value) -> Union[RoleAPI, None]:
-        if value is None or value == "": return None
-        parsed = RoleAPI.parse(value)
-        if not isinstance(parsed, RoleAPI): raise ValueError(f"Access Threshold: Failed · Unknown role {value} · Expected one of {' · '.join(RoleAPI.names())}")
-        return parsed
-
-    @staticmethod
     def label(value) -> str:
         parsed = RoleAPI.parse(value)
-        return parsed.name if isinstance(parsed, RoleAPI) else "Owner only"
+        return parsed.name if isinstance(parsed, RoleAPI) else "Owner"
+
+    @classmethod
+    def choices(cls) -> list[str]:
+        return [cls.label(None), *cls.roles()]
+
+    @classmethod
+    def parse(cls, value) -> Union[RoleAPI, None]:
+        if value is None or value == "" or value == cls.label(None): return None
+        parsed = RoleAPI.parse(value)
+        if not isinstance(parsed, RoleAPI): raise ValueError(f"Access Threshold: Failed · Unknown role {value} · Expected one of {' · '.join(cls.choices())}")
+        return parsed
 
     @classmethod
     def validate(cls, lower, upper, *, names: tuple, setter: Union[RoleAPI, None] = None, previous: tuple = (None, None)) -> tuple:
@@ -35,7 +39,7 @@ class AccessAPI:
             if value is None: continue
             if value is RoleAPI.Public: raise ValueError(f"Access Threshold: Failed · {name} cannot be Public")
             if setter is not None and value is not RoleAPI.parse(kept) and not setter.grants(value): raise ValueError(f"Access Threshold: Failed · {name} {value.name} is above your own role {setter.name}")
-        if lower is None and upper is not None: raise ValueError(f"Access Threshold: Failed · {names[1]} must be owner only when {names[0]} is owner only")
+        if lower is None and upper is not None: raise ValueError(f"Access Threshold: Failed · {names[1]} must be {cls.label(None)} when {names[0]} is {cls.label(None)}")
         if lower is not None and upper is not None and upper.value < lower.value: raise ValueError(f"Access Threshold: Failed · {names[1]} {upper.name} is below {names[0]} {lower.name}")
         return lower, upper
 
