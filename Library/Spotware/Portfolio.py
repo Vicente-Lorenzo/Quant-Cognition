@@ -1,5 +1,6 @@
 from typing import Union
 from datetime import datetime
+from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOATradeSide
 
 from Library.Database.Dataframe import pd, pl
 from Library.Utility.Datetime import utc_now
@@ -7,8 +8,6 @@ from Library.Utility.Service import ServiceAPI
 from Library.Utility.Typing import MISSING, Missing
 
 class PortfolioAPI(ServiceAPI):
-
-    _WEEK_ = 604800000
 
     def _order_(self, order) -> dict:
         api, trade = self._api_, order.tradeData
@@ -66,7 +65,7 @@ class PortfolioAPI(ServiceAPI):
             "TradeID": deal.dealId,
             "PositionID": deal.positionId,
             "Symbol": deal.symbolId,
-            "Direction": api._named_(deal, "tradeSide"),
+            "Direction": api._label_(ProtoOATradeSide.DESCRIPTOR, ProtoOATradeSide.SELL if deal.tradeSide == ProtoOATradeSide.BUY else ProtoOATradeSide.BUY),
             "Volume": api._units_(close.closedVolume if close.HasField("closedVolume") else deal.filledVolume),
             "EntryPrice": close.entryPrice,
             "ExitPrice": api._optional_(deal, "executionPrice"),
@@ -77,6 +76,17 @@ class PortfolioAPI(ServiceAPI):
             "NetPnL": gross + commission + swap,
             "ExitBalance": close.balance / money
         }
+
+    def _paged_(self, request: str, field: str, key: str, start: datetime, stop: Union[datetime, None], **fields) -> list:
+        api = self._api_
+        lower, upper, found = api._epoch_(start), api._epoch_(stop or utc_now()), {}
+        while True:
+            response = api._request_(request, fromTimestamp=lower, toTimestamp=upper, **fields)
+            items, known = getattr(response, field), len(found)
+            for item in items: found.setdefault(getattr(item, key), item)
+            if not response.hasMore or not items: return list(found.values())
+            upper = min(min(item.utcLastUpdateTimestamp for item in items), upper) - (0 if len(found) > known else 1)
+            if upper < lower: return list(found.values())
 
     def _cashflow_(self, entry) -> dict:
         api, money = self._api_, self._api_._money_(entry)
@@ -103,6 +113,7 @@ class PortfolioAPI(ServiceAPI):
                 "Balance": trader.balance / api._money_(trader),
                 "Leverage": api._units_(trader.leverageInCents),
                 "BrokerName": api._optional_(trader, "brokerName"),
+                "DepositAssetID": trader.depositAssetId,
                 "TraderLogin": api._optional_(trader, "traderLogin"),
                 "MoneyDigits": api._digits_(trader)
             }
@@ -138,9 +149,8 @@ class PortfolioAPI(ServiceAPI):
                legacy: Union[bool, Missing] = MISSING) -> Union[pd.DataFrame, pl.DataFrame]:
         def _fetch_():
             api = self._api_
-            if start is None: response = api._request_("ProtoOAReconcileReq")
-            else: response = api._request_("ProtoOAOrderListReq", fromTimestamp=api._epoch_(start), toTimestamp=api._epoch_(stop or utc_now()))
-            return api.frame([self._order_(order) for order in response.order], legacy=legacy)
+            if start is None: return api.frame([self._order_(order) for order in api._request_("ProtoOAReconcileReq").order], legacy=legacy)
+            return api.frame([self._order_(order) for order in self._paged_("ProtoOAOrderListReq", "order", "orderId", start, stop)], legacy=legacy)
         timer, result = super()._fetch_(callback=_fetch_)
         self._log_.info(lambda: f"Orders Operation: Fetched {len(result)} orders ({timer.result()})")
         return result
@@ -169,9 +179,8 @@ class PortfolioAPI(ServiceAPI):
               stop: Union[datetime, None] = None,
               legacy: Union[bool, Missing] = MISSING) -> Union[pd.DataFrame, pl.DataFrame]:
         def _fetch_():
-            api = self._api_
-            response = api._request_("ProtoOADealListReq", fromTimestamp=api._epoch_(start), toTimestamp=api._epoch_(stop or utc_now()))
-            return api.frame([self._trade_(deal) for deal in response.deal if deal.dealId == int(id) and deal.HasField("closePositionDetail")], legacy=legacy)
+            deals = self._paged_("ProtoOADealListReq", "deal", "dealId", start, stop)
+            return self._api_.frame([self._trade_(deal) for deal in deals if deal.dealId == int(id) and deal.HasField("closePositionDetail")], legacy=legacy)
         timer, result = super()._fetch_(callback=_fetch_)
         self._log_.info(lambda: f"Trade Operation: Fetched trade {id} ({timer.result()})")
         return result
@@ -182,9 +191,8 @@ class PortfolioAPI(ServiceAPI):
                rows: int = 1000,
                legacy: Union[bool, Missing] = MISSING) -> Union[pd.DataFrame, pl.DataFrame]:
         def _fetch_():
-            api = self._api_
-            response = api._request_("ProtoOADealListReq", fromTimestamp=api._epoch_(start), toTimestamp=api._epoch_(stop or utc_now()), maxRows=int(rows))
-            return api.frame([self._trade_(deal) for deal in response.deal if deal.HasField("closePositionDetail")], legacy=legacy)
+            deals = self._paged_("ProtoOADealListReq", "deal", "dealId", start, stop, maxRows=int(rows))
+            return self._api_.frame([self._trade_(deal) for deal in deals if deal.HasField("closePositionDetail")], legacy=legacy)
         timer, result = super()._fetch_(callback=_fetch_)
         self._log_.info(lambda: f"Trades Operation: Fetched {len(result)} trades ({timer.result()})")
         return result
@@ -207,8 +215,8 @@ class PortfolioAPI(ServiceAPI):
             api = self._api_
             lower, upper = api._epoch_(start), api._epoch_(stop or utc_now())
             entries = {}
-            for window in range(lower, upper, self._WEEK_):
-                response = api._request_("ProtoOACashFlowHistoryListReq", fromTimestamp=window, toTimestamp=min(window + self._WEEK_, upper))
+            for window in range(lower, upper, 604800000):
+                response = api._request_("ProtoOACashFlowHistoryListReq", fromTimestamp=window, toTimestamp=min(window + 604800000, upper))
                 entries.update({entry.balanceHistoryId: self._cashflow_(entry) for entry in response.depositWithdraw})
             return api.frame(list(entries.values()), legacy=legacy)
         timer, result = super()._fetch_(callback=_fetch_)

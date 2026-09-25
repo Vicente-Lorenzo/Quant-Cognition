@@ -1,6 +1,5 @@
 from typing import Union
 from datetime import datetime
-from functools import partialmethod
 from collections.abc import Sequence
 from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOAExecutionEvent, ProtoOAOrderErrorEvent
 from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOAOrderType, ProtoOATimeInForce, ProtoOATradeSide
@@ -212,22 +211,21 @@ class ExecutionAPI(ServiceAPI):
                    take_profit: Union[float, Sequence[float], None] = None,
                    time_in_force: Union[str, int, TimeInForce, Sequence[Union[str, int, TimeInForce]], None] = TimeInForce.GoodTillCancel,
                    expiration: Union[datetime, Sequence[datetime], None] = None,
-                   slippage_points: Union[int, Sequence[int], None] = None,
                    label: Union[str, Sequence[str], None] = None,
                    comment: Union[str, Sequence[str], None] = None,
                    client_order_id: Union[str, Sequence[str], None] = None,
                    trailing: Union[bool, Sequence[bool]] = False,
                    guaranteed: Union[bool, Sequence[bool]] = False,
                    legacy: Union[bool, Missing] = MISSING) -> Union[pd.DataFrame, pl.DataFrame]:
-        batches = self._broadcast_(side=side, symbol=symbol, volume=volume, stop_price=price, stop_loss=stop_loss, take_profit=take_profit, time_in_force=time_in_force, expiration=expiration, slippage_points=slippage_points, label=label, comment=comment, client_order_id=client_order_id, trailing=trailing, guaranteed=guaranteed)
+        batches = self._broadcast_(side=side, symbol=symbol, volume=volume, stop_price=price, stop_loss=stop_loss, take_profit=take_profit, time_in_force=time_in_force, expiration=expiration, label=label, comment=comment, client_order_id=client_order_id, trailing=trailing, guaranteed=guaranteed)
         return self._place_("Stop Order", "Stop", batches, legacy)
 
     def stop_limit_order(self,
                          side: Union[str, int, Sequence[Union[str, int]]],
                          symbol: Union[int, Sequence[int]],
                          volume: Union[float, Sequence[float]],
-                         stop_price: Union[float, Sequence[float]],
-                         limit_price: Union[float, Sequence[float]],
+                         price: Union[float, Sequence[float]],
+                         slippage_points: Union[int, Sequence[int]],
                          stop_loss: Union[float, Sequence[float], None] = None,
                          take_profit: Union[float, Sequence[float], None] = None,
                          time_in_force: Union[str, int, TimeInForce, Sequence[Union[str, int, TimeInForce]], None] = TimeInForce.GoodTillCancel,
@@ -238,19 +236,38 @@ class ExecutionAPI(ServiceAPI):
                          trailing: Union[bool, Sequence[bool]] = False,
                          guaranteed: Union[bool, Sequence[bool]] = False,
                          legacy: Union[bool, Missing] = MISSING) -> Union[pd.DataFrame, pl.DataFrame]:
-        batches = self._broadcast_(side=side, symbol=symbol, volume=volume, stop_price=stop_price, limit_price=limit_price, stop_loss=stop_loss, take_profit=take_profit, time_in_force=time_in_force, expiration=expiration, label=label, comment=comment, client_order_id=client_order_id, trailing=trailing, guaranteed=guaranteed)
+        batches = self._broadcast_(side=side, symbol=symbol, volume=volume, stop_price=price, slippage_points=slippage_points, stop_loss=stop_loss, take_profit=take_profit, time_in_force=time_in_force, expiration=expiration, label=label, comment=comment, client_order_id=client_order_id, trailing=trailing, guaranteed=guaranteed)
         return self._place_("Stop Limit Order", "StopLimit", batches, legacy)
 
-    market_buy_order = partialmethod(market_order, side="Buy")
-    market_sell_order = partialmethod(market_order, side="Sell")
-    range_buy_order = partialmethod(range_order, side="Buy")
-    range_sell_order = partialmethod(range_order, side="Sell")
-    limit_buy_order = partialmethod(limit_order, side="Buy")
-    limit_sell_order = partialmethod(limit_order, side="Sell")
-    stop_buy_order = partialmethod(stop_order, side="Buy")
-    stop_sell_order = partialmethod(stop_order, side="Sell")
-    stop_limit_buy_order = partialmethod(stop_limit_order, side="Buy")
-    stop_limit_sell_order = partialmethod(stop_limit_order, side="Sell")
+    def market_buy_order(self, *args, **kwargs) -> Union[pd.DataFrame, pl.DataFrame]:
+        return self.market_order("Buy", *args, **kwargs)
+
+    def market_sell_order(self, *args, **kwargs) -> Union[pd.DataFrame, pl.DataFrame]:
+        return self.market_order("Sell", *args, **kwargs)
+
+    def range_buy_order(self, *args, **kwargs) -> Union[pd.DataFrame, pl.DataFrame]:
+        return self.range_order("Buy", *args, **kwargs)
+
+    def range_sell_order(self, *args, **kwargs) -> Union[pd.DataFrame, pl.DataFrame]:
+        return self.range_order("Sell", *args, **kwargs)
+
+    def limit_buy_order(self, *args, **kwargs) -> Union[pd.DataFrame, pl.DataFrame]:
+        return self.limit_order("Buy", *args, **kwargs)
+
+    def limit_sell_order(self, *args, **kwargs) -> Union[pd.DataFrame, pl.DataFrame]:
+        return self.limit_order("Sell", *args, **kwargs)
+
+    def stop_buy_order(self, *args, **kwargs) -> Union[pd.DataFrame, pl.DataFrame]:
+        return self.stop_order("Buy", *args, **kwargs)
+
+    def stop_sell_order(self, *args, **kwargs) -> Union[pd.DataFrame, pl.DataFrame]:
+        return self.stop_order("Sell", *args, **kwargs)
+
+    def stop_limit_buy_order(self, *args, **kwargs) -> Union[pd.DataFrame, pl.DataFrame]:
+        return self.stop_limit_order("Buy", *args, **kwargs)
+
+    def stop_limit_sell_order(self, *args, **kwargs) -> Union[pd.DataFrame, pl.DataFrame]:
+        return self.stop_limit_order("Sell", *args, **kwargs)
 
     def modify_order(self,
                      order: Union[int, Sequence[int]],

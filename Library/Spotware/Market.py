@@ -1,8 +1,7 @@
 from typing import Union
 from datetime import datetime
 from itertools import accumulate
-from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOADepthEvent
-from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOAQuoteType, ProtoOATrendbarPeriod
+from ctrader_open_api.messages.OpenApiModelMessages_pb2 import PROTO_OA_DEPTH_EVENT, ProtoOAQuoteType, ProtoOATrendbarPeriod
 
 from Library.Database.Dataframe import pd, pl
 from Library.Market.Bar import BarAPI
@@ -14,8 +13,6 @@ from Library.Utility.Typing import MISSING, Missing
 
 class MarketAPI(ServiceAPI):
 
-    _MINUTE_ = 60000
-
     def _period_(self, timeframe: Union[str, int]) -> int:
         return self._api_._code_(ProtoOATrendbarPeriod, TimeframeAPI.normalize(timeframe) if isinstance(timeframe, str) else timeframe)
 
@@ -24,7 +21,7 @@ class MarketAPI(ServiceAPI):
         return {
             "Symbol": symbol,
             "Timeframe": timeframe,
-            str(TickAPI.ID.Timestamp): self._api_._stamp_(bar.utcTimestampInMinutes * self._MINUTE_),
+            str(TickAPI.ID.Timestamp): self._api_._stamp_(bar.utcTimestampInMinutes * 60000),
             "Open": price(bar.low + bar.deltaOpen),
             "High": price(bar.low + bar.deltaHigh),
             "Low": price(bar.low),
@@ -62,9 +59,9 @@ class MarketAPI(ServiceAPI):
                 if not response.hasMore: break
                 earliest = min(stamps[batch:]) - 1
                 if earliest <= lower: break
-                upper = earliest
+                upper = min(earliest, upper - 1)
             frame = pl.DataFrame({stamp: stamps, column: prices}, schema={stamp: pl.Int64, column: pl.Int64})
-            frame = frame.select(pl.lit(sid, dtype=pl.Int64).alias("Symbol"), pl.from_epoch(pl.col(stamp), time_unit="ms"), pl.col(column) / self._api_._PRICE_SCALE_).sort(stamp)
+            frame = frame.select(pl.lit(sid, dtype=pl.Int64).alias("Symbol"), pl.from_epoch(pl.col(stamp), time_unit="ms"), self._api_._price_(pl.col(column))).sort(stamp)
             return frame.to_pandas() if self._api_.legacy(legacy) else frame
         timer, result = super()._fetch_(callback=_fetch_)
         self._log_.info(lambda: f"Ticks Operation: Fetched {len(result)} ticks ({timer.result()})")
@@ -97,13 +94,13 @@ class MarketAPI(ServiceAPI):
         def _fetch_():
             book: dict[int, dict] = {}
             def _decode_(payload) -> list:
-                if not isinstance(payload, ProtoOADepthEvent) or payload.symbolId != sid: return []
+                if payload.symbolId != sid: return []
                 book.update({int(quote.id): self._quote_(sid, quote) for quote in payload.newQuotes})
                 for quote in payload.deletedQuotes: book.pop(int(quote), None)
                 return [book] if book else []
-            subscribe = self._api_._message_("ProtoOASubscribeDepthQuotesReq", symbolId=[sid])
-            unsubscribe = self._api_._message_("ProtoOAUnsubscribeDepthQuotesReq", symbolId=[sid])
-            self._api_._listen_(subscribe, unsubscribe, _decode_, lambda update: None, limit=1, timeout=timeout)
+            subscribe = [self._api_._message_("ProtoOASubscribeDepthQuotesReq", symbolId=[sid])]
+            unsubscribe = [self._api_._message_("ProtoOAUnsubscribeDepthQuotesReq", symbolId=[sid])]
+            self._api_._listen_(subscribe, unsubscribe, PROTO_OA_DEPTH_EVENT, _decode_, lambda update: None, limit=1, timeout=timeout)
             rows = sorted(book.values(), key=lambda row: (row[bid] is None, -(row[bid] or 0), row[ask] or 0))
             return self._api_.frame(rows, legacy=legacy)
         timer, result = super()._fetch_(callback=_fetch_)
