@@ -31,7 +31,8 @@ def store_admin(secret, *, database="Quant", username=ADMIN):
     with PostgresDatabaseAPI(database=database) as db:
         setup_credential(db)
     vault = VaultAPI(database=database)
-    vault.ensure(service="Framework", name="Administrator", secret={"Password": secret}, by=username, Kind=CredentialType.Password.name, Username=CredentialAPI.pack(username), Owner=username)
+    stored = vault.ensure(service="Framework", name="Administrator", secret=secret, by=username, Kind=CredentialType.Password.name, Identifier=CredentialAPI.pack(username), Owner=username)
+    if stored.secrets()["Secret"].Value != secret: vault.update(stored.UID, by=username, Secret=CredentialAPI.pack(secret))
     return f"{CredentialAPI.Schema} Framework · Administrator"
 
 def install_auth(database="Quant"):

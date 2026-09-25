@@ -3,17 +3,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from Library.Market.Bar import BarAPI
-from Library.Market.Tick import TickAPI
 from Library.Logging import LoggingAPI
-from Script.Task import migrate, provision
+from Library.Market.Tape import TapeAPI
+from Script.Task import provision
 
 def populate_market(db):
-    migrate(db, TickAPI, BarAPI)
+    TapeAPI.create(db)
 
 def main(database="Quant"):
     with LoggingAPI() as log:
-        return provision(log, "Market", populate_market, database=database, detail="Schema + 2 Tables")
+        return provision(log, "Market", populate_market, database=database, detail="Schema + Tick Hypertable")
 
 if __name__ == "__main__":
     raise SystemExit(main())

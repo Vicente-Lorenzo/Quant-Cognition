@@ -18,7 +18,7 @@ from Script.Setup.Logging import setup_logging
 from Script.Task import migrate, provision
 
 def setup_notify(db):
-    schema, channel = WorkflowAPI.Schema, SchedulerAPI.Channel
+    schema, channel = WorkflowAPI.Schema, SchedulerAPI.channel()
     db.executeone(QueryAPI(f'CREATE OR REPLACE FUNCTION "{schema}"."Notify"() RETURNS TRIGGER AS $$ BEGIN PERFORM pg_notify(\'{channel}\', \'\'); RETURN NULL; END $$ LANGUAGE plpgsql'))
     for table in (WorkflowAPI.Table, TaskAPI.Table, DependencyAPI.Table):
         db.executeone(QueryAPI(f'DROP TRIGGER IF EXISTS "Notify" ON "{schema}"."{table}"'))

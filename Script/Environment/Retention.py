@@ -18,7 +18,7 @@ _DAYS_: int = PruneAPI.DAYS
 
 def temporaries() -> tuple:
     root = inspect_temporary()
-    declared = tuple(inspect_temporary(name) for name in (FileAPI.Folder, ExecutorAPI.Folder, SystemAPI.Exports, SystemAPI.Plots, PROFILES))
+    declared = tuple(inspect_temporary(name) for name in (FileAPI.Folder, ExecutorAPI.folder(), SystemAPI.Exports, SystemAPI.Plots, PROFILES))
     if not root.is_dir(): return declared
     return tuple(dict.fromkeys((*declared, *(entry for entry in root.iterdir() if entry.is_dir()))))
 
@@ -39,13 +39,13 @@ def main(database: str = "Quant", days: int = _DAYS_) -> int:
             removed, reclaimed = prune_files(days=days)
             log.info(lambda: f"Retention Files: Completed · {removed} Files · {memory_to_string(reclaimed)} · {days} Days")
         except Exception as error:
-            log.exception(lambda: f"Retention Files: Failed · Due to {error}")
+            log.exception(lambda error=error: f"Retention Files: Failed · Due to {error}")
             return 1
         try:
             records = prune_records(database=database, days=days)
             log.info(lambda: f"Retention Records: Completed · {records} Rows · {days} Days")
         except Exception as error:
-            log.warning(lambda: f"Retention Records: Skipped · Due to {error}")
+            log.warning(lambda error=error: f"Retention Records: Skipped · Due to {error}")
         return 0
 
 if __name__ == "__main__":
