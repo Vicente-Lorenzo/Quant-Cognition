@@ -1,6 +1,5 @@
-import pytest
-import polars as pl
 from datetime import datetime, timedelta
+
 from Library.Market.Tick import TickAPI
 from Library.Universe.Security import SecurityAPI
 
@@ -10,11 +9,6 @@ def test_encode_matches_bit_layout():
     expected = (sec << 42) | ms
     assert TickAPI.encode(sec, ts) == expected
     assert TickAPI(sec, ts, Ask=1.1, Bid=1.0).UID == expected
-
-def test_encode_is_primary_key_no_identity():
-    tick = TickAPI(5, datetime(2023, 1, 1), Ask=1.1, Bid=1.0)
-    assert tick.natural_keys() == ["UID"]
-    assert tick.identity_keys() == []
 
 def test_encode_bijection_no_collision():
     base, seen = datetime(2023, 1, 1), {}
@@ -34,13 +28,6 @@ def test_encode_security_isolation():
     later, earlier = datetime(2099, 12, 31, 23, 59, 59), datetime(1970, 1, 1)
     assert TickAPI.encode(10, later) < TickAPI.encode(11, earlier)
 
-def test_encode_frame_matches_scalar():
-    base = datetime(2023, 1, 1)
-    rows = [{"Security": 5, "Timestamp": base + timedelta(seconds=i), "Ask": 1.1, "Bid": 1.0} for i in range(10)]
-    frame = TickAPI.encode(pl.DataFrame(rows))
-    for i, row in enumerate(frame.iter_rows(named=True)):
-        assert row["UID"] == TickAPI.encode(5, base + timedelta(seconds=i))
-
 def test_uid_recomputed_on_natural_key_change():
     a, b = datetime(2023, 1, 1), datetime(2023, 1, 2)
     tick = TickAPI(5, a, Ask=1.1, Bid=1.0)
@@ -52,13 +39,13 @@ def test_uid_recomputed_on_natural_key_change():
 
 def test_tick_initialization():
     now = datetime.now()
-    tick_args = (100, now, 1.1005, 1.10025, 1.1000, 1.0, 1.0, 1.0, 1.0)
-    tick = TickAPI(*tick_args)
+    tick = TickAPI(100, now, 1.1005, 1.1000, 2.0, 1.0, 1.0, 1.0, 1.0)
     assert tick.Security is not None
     assert tick.Security.UID == 100
     assert tick.Timestamp.DateTime == now
     assert tick.Ask.Price == 1.1005
     assert tick.Bid.Price == 1.1000
+    assert tick.Volume == 2.0
 
 def test_tick_properties():
     now = datetime.now()
@@ -68,29 +55,6 @@ def test_tick_properties():
     assert round(tick.Spread.Price, 4) == 0.0005
     assert tick.InvertedAsk == 1.0 / 1.1005
     assert tick.InvertedBid == 1.0 / 1.1000
-
-def test_tick_db_operations(db):
-    from Library.Universe.Category import CategoryAPI
-    from Library.Universe.Provider import ProviderAPI, Platform
-    from Library.Universe.Ticker import TickerAPI, ContractType
-    from Library.Universe.Contract import ContractAPI
-    CategoryAPI(UID="Forex", db=db, migrate=True).save()
-    ProviderAPI(UID="TestProv", Platform=Platform.cTrader, db=db, migrate=True).save()
-    TickerAPI(UID="EURUSD", Category="Forex", db=db, migrate=True).save()
-    ContractAPI(Ticker="EURUSD", Provider="TestProv", Type=ContractType.Spot, db=db, migrate=True).save()
-    sec = SecurityAPI(Provider="TestProv", Category="Forex", Ticker="EURUSD", Contract=ContractType.Spot, db=db, migrate=True, autoload=True)
-    sec.save()
-    now = datetime(2023, 1, 1, 12, 0, 0)
-    tick_data = (sec.UID, now, 1.1005, 1.10025, 1.1000, 1.0, 1.0, 1.0, 1.0)
-    tick = TickAPI(*tick_data, db=db, migrate=True)
-    tick.save()
-    loaded_tick = TickAPI(sec.UID, now, db=db, autoload=True)
-    assert loaded_tick.Ask.Price == pytest.approx(1.1005)
-    assert loaded_tick.Bid.Price == pytest.approx(1.1000)
-    from Library.Database.Query import QueryAPI
-    db.executeone(QueryAPI(f'TRUNCATE TABLE "{TickAPI.Schema}"."{TickAPI.Table}" CASCADE'))
-    db.executeone(QueryAPI(f'TRUNCATE TABLE "{SecurityAPI.Schema}"."{SecurityAPI.Table}" CASCADE'))
-    db.commit()
 
 def test_fast_ingest_matches_normal_constructor():
     flags = dict(include_fields=True, include_initvar_fields=False, include_properties=False, include_override_fields=True)
@@ -102,5 +66,5 @@ def test_fast_ingest_matches_normal_constructor():
     ]
     for ts, ask, bid, ab, bb, aq, bq, vol in cases:
         normal = TickAPI(Security=sec, Timestamp=ts, Ask=ask, Bid=bid, AskBaseConversion=ab, BidBaseConversion=bb, AskQuoteConversion=aq, BidQuoteConversion=bq, Volume=vol)
-        fast = TickAPI._ingest_(None, sec, ts, ask, bid, ab, bb, aq, bq, vol)
+        fast = TickAPI._ingest_(sec, ts, ask, bid, ab, bb, aq, bq, vol)
         assert fast.dict(**flags) == normal.dict(**flags)

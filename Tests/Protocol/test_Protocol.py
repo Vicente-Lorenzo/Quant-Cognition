@@ -30,6 +30,7 @@ from Library.Protocol.Update import (
     TickUpdateAPI
 )
 from Library.Protocol.Binary import BinaryAPI
+from Library.System.Realtime import RealtimeAPI
 
 def test_action_id_enum_values():
     assert ActionID.Init.value == 0
@@ -141,14 +142,14 @@ def test_codec_bar_subtick_round_trip():
     ts = 1706745600000
     tick_values = (ts, 1.08, 1.07, 1.0, 1.0, 1.08, 1.07, 50.0)
     bar_data = struct.pack('<Bq', UpdateID.BarClosed.value, ts)
-    for _ in range(5):
+    for _ in range(7):
         bar_data += tick_codec.pack(*tick_values)
     bar_data += struct.pack('<d', 1000.0)
-    assert len(bar_data) == 337
+    assert len(bar_data) == RealtimeAPI._bar_payload_ == 465
     bar_ts = struct.unpack_from('<q', bar_data, 1)[0]
     assert bar_ts == ts
     off = 9
-    for _ in range(5):
+    for _ in range(7):
         sub_ts, ask, bid, ab, bb, aq, bq, vol = tick_codec.unpack(bar_data, off)
         assert sub_ts == ts
         assert abs(ask - 1.08) < 1e-10

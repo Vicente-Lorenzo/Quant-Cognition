@@ -4,6 +4,7 @@ import Library.Market
 import Library.Portfolio
 from Library.Portfolio.Order import OrderStatus, TimeInForce
 from Library.Spotware import SpotwareAPI, UniverseAPI, MarketAPI, StreamingAPI, PortfolioAPI
+from Library.Utility.Typing import MISSING
 from ctrader_open_api.messages.OpenApiCommonMessages_pb2 import ProtoMessage
 from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOAOrder, ProtoOAOrderType, ProtoOAQuoteType, ProtoOATimeInForce, ProtoOATradeSide, ProtoOATrader
 from ctrader_open_api.messages.OpenApiMessages_pb2 import (
@@ -70,6 +71,24 @@ def test_send_raises_on_error_payload(monkeypatch):
     monkeypatch.setattr("Library.Spotware.Spotware.blockingCallFromThread", lambda reactor, function, *args, **kwargs: wrapped)
     with pytest.raises(RuntimeError, match="BAD · nope"):
         api._send_(object())
+def _throttled_(monkeypatch, answers):
+    api = SpotwareAPI(client_id="x", client_secret="y")
+    api._connection_ = type("Connection", (), {"send": None})()
+    throttle = ProtoOAErrorRes(errorCode="BLOCKED_PAYLOAD_TYPE", description="You are being rate limited")
+    wrapped = ProtoMessage(payloadType=throttle.payloadType, payload=throttle.SerializeToString())
+    replies, slept = iter(wrapped if answer is None else answer for answer in answers), []
+    monkeypatch.setattr("Library.Spotware.Spotware.blockingCallFromThread", lambda reactor, function, *args, **kwargs: next(replies))
+    monkeypatch.setattr("Library.Spotware.Spotware.time.sleep", slept.append)
+    return api, slept
+def test_send_backs_off_on_the_throttle_code_and_retries(monkeypatch):
+    authed = ProtoOAApplicationAuthRes()
+    api, slept = _throttled_(monkeypatch, [None, None, ProtoMessage(payloadType=authed.payloadType, payload=authed.SerializeToString())])
+    assert type(api._send_(object())).__name__ == "ProtoOAApplicationAuthRes" and slept == [1, 2]
+def test_send_gives_up_after_the_last_back_off(monkeypatch):
+    api, slept = _throttled_(monkeypatch, [None] * 5)
+    with pytest.raises(RuntimeError, match="BLOCKED_PAYLOAD_TYPE · You are being rate limited"):
+        api._send_(object())
+    assert slept == [1, 2, 4, 8]
 def test_disconnect_does_not_block_without_a_running_reactor():
     api = SpotwareAPI(client_id="x", client_secret="y")
     api._connection_ = object()
@@ -133,3 +152,27 @@ def test_on_message_swallows_subscriber_exceptions(spotware):
     spotware._subscribe_(good)
     spotware._on_message_(spotware._connection_, "dummy")
     assert calls == ["dummy"]
+def _offline_(monkeypatch):
+    connection = type("Connection", (), {"isConnected": True})()
+    monkeypatch.setattr(SpotwareAPI, "_connect_", lambda self, **kwargs: setattr(self, "_connection_", connection))
+    monkeypatch.setattr(SpotwareAPI, "_disconnect_", lambda self: setattr(self, "_connection_", None))
+def test_of_builds_from_the_uniform_credential_keys():
+    from Library.Credential import SecretAPI
+    api = SpotwareAPI.of({"Identifier": "cid", "Secret": SecretAPI("cs"), "AccessToken": SecretAPI("at"), "Environment": "live"}, account="42")
+    assert (api._client_id_, api._client_secret_, api._access_token_, api._account_id_, api._host_) == ("cid", "cs", "at", 42, "live.ctraderapi.com")
+    assert SpotwareAPI.of({"Identifier": "cid", "Secret": "cs"})._host_ == "demo.ctraderapi.com"
+def test_test_answers_for_the_application_alone_without_a_token(monkeypatch):
+    _offline_(monkeypatch)
+    assert SpotwareAPI.test({"Identifier": "cid", "Secret": "cs"}) == "Application authenticated"
+def test_test_counts_the_accounts_a_token_reaches(monkeypatch):
+    _offline_(monkeypatch)
+    monkeypatch.setattr(PortfolioAPI, "accounts", lambda self, legacy=None: [1, 2])
+    assert SpotwareAPI.test({"Identifier": "cid", "Secret": "cs", "AccessToken": "at"}) == "Application authenticated · Token reaches 2 account(s)"
+def test_a_historical_request_waits_longer_than_the_rest(monkeypatch):
+    api = SpotwareAPI(client_id="x", client_secret="y", account_id=1, timeout=7, historical_timeout=90)
+    api._ready_.set()
+    seen = []
+    monkeypatch.setattr(api, "_send_", lambda request, timeout=MISSING: seen.append(timeout))
+    api._request_("ProtoOAGetTickDataReq", symbolId=1, type=1, fromTimestamp=0, toTimestamp=1)
+    api._request_("ProtoOAVersionReq")
+    assert seen == [90, MISSING]

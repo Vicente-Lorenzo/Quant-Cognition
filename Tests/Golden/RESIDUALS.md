@@ -524,3 +524,46 @@ the extra split is in the scale-out path.
 
 **Run 5's volumes** are 2.6460M against 2.6400M with 14 distinct sizes on both sides — 0.23% apart over
 eleven years, which is the closest sizing agreement in the set.
+
+## The switch — 2026-09-25
+
+The engine moved to the UTC tape (`PLAN.md`, Done log, Phase 3), and the offline goldens tripped, as rule 2
+of the plan expects. Every number below is from a fresh run of the switched code with each golden's own
+`Parameters.yml` and `Contract.yml`, compared with cTrader's own result for the same run
+(`Online/Golden N/trades.csv`, closed trades only, so the open position of 5.6 is outside all three columns).
+
+| Run | cTrader | Before | After | Gap before | Gap after | Trades matching cTrader, before → after |
+|---|---|---|---|---|---|---|
+| 1 EURUSD H1 EUR | -2 940.52 | -2 836.06 | **-2 946.19** | +104.46 | **-5.67** | 584 → **924** of 1 024 |
+| 3 EURUSD H1 USD | -3 198.53 | -2 317.01 | **-3 187.25** | +881.52 | **+11.28** | 154 → **905** of 1 024 |
+| 5 EURUSD D1 EUR | -1 980.35 | -1 981.27 | -1 999.51 | -0.92 | -19.16 | 482 → 484 of 510 |
+| 2, 4 USDJPY H1 EUR | | | refused | | | EURJPY is not in the tape |
+| DDPG consistency | | +3 344.09 | +4 387.29 | | | self-consistency only |
+
+"Matching" is by direction, entry price, exit price and volume in order — timestamps cannot be compared,
+because the online files carry the London-local stamps of the pre-2026-09-11 decoder. Trade counts now
+equal cTrader's on all three runs (1 024, 1 024, 510), where the old engine closed one or two more.
+
+**What moved them, in the order it was found.**
+
+1. **The two-sided bar.** The gate that decides whether to walk a bar's ticks, and the equity marks, read
+   `HighTick.Ask` — the ask at the tick where the bid peaked, not the highest ask. The bar now carries both
+   (`HighPoint.AskTick`, `HighPoint.BidTick`), and the gate reads the true bounds with no pad: `Auto` and
+   `Tick` give byte-identical exports on runs 1, 3 and 5. This is the run 2 trade-236 defect above, fixed
+   by construction. It moved runs 1 and 3 most.
+2. **Swap at the 17:00 New York roll.** The rollover hours (`SwapSummerTime` 22, `SwapWinterTime` 21 with
+   European daylight saving) were tuned while every stamp was London time. Read in UTC they charged an
+   extra night on trades opened just after 17:00 New York — the first switched run 5 read -1 329.40 of
+   swap against cTrader's -1 198.88. Counting New York rolls brought it to -1 213.65, the same
+   -14.8 residual as before (each night is converted at the exit rate, not the night's own).
+3. **Run 5's old agreement was a cancellation.** Before, gross was +14.83 off and swap -14.90; now gross is
+   -4.33 off and swap -14.77. The net moved away from cTrader while both components got better or stayed.
+4. **Run 3's 27.5 % gap is gone.** The section above traced it to EUR-denominated conversion columns read
+   by a USD account; the switch dropped those columns and rebuilds conversions at run time from the pair's
+   own quotes.
+5. **UTC stamps and the platform's labels** move every summer timestamp by an hour and every bar label to
+   the bar's own open. They change no price path on these runs.
+
+**Carry to 5.13.** Re-baseline all five pairs of runs in one cTrader session, with EURJPY in the tape so
+runs 2 and 4 replay. The run 1 and 3 remainders (-5.67 and +11.28) and run 5's swap residual are the
+expected starting points.

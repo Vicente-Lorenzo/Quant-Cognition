@@ -4,6 +4,7 @@ from Library.Universe.Contract import ContractAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Market.Tick import TickAPI
 from Library.Market.Bar import BarAPI
+from Library.Market.Point import PointAPI
 from Library.Market.Price import Direction
 from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
@@ -47,13 +48,12 @@ def make_position(env, uid=1001, direction=Direction.Buy, volume=100000.0, entry
 def make_tick(env, ts, ask, bid):
     return TickAPI(Security=env["security"], Timestamp=ts, Ask=ask, Bid=bid)
 
+def make_point(env, ts, ask, bid):
+    tick = make_tick(env, ts, ask, bid)
+    return PointAPI(AskTick=tick, BidTick=tick)
+
 def make_bar(env, ts, open_ask, open_bid, high_ask, high_bid, low_ask, low_bid, close_ask, close_bid):
-    bar = BarAPI(Security=env["security"], Timestamp=ts)
-    bar._open_tick_ = make_tick(env, ts, open_ask, open_bid)
-    bar._high_tick_ = make_tick(env, ts, high_ask, high_bid)
-    bar._low_tick_ = make_tick(env, ts, low_ask, low_bid)
-    bar._close_tick_ = make_tick(env, ts, close_ask, close_bid)
-    return bar
+    return BarAPI(Security=env["security"], Timestamp=ts, OpenPoint=make_point(env, ts, open_ask, open_bid), HighPoint=make_point(env, ts, high_ask, high_bid), LowPoint=make_point(env, ts, low_ask, low_bid), ClosePoint=make_point(env, ts, close_ask, close_bid))
 
 def make_trade(env, uid=2001, direction=Direction.Buy, volume=100000.0, entry=1.0500, exit_price=1.0550, net=500.0, gross=502.0, comm=-2.0, exit_ts=EXIT_DT):
     return TradeAPI(

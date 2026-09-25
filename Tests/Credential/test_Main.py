@@ -1,36 +1,12 @@
 import pytest
 
-from Library.Auth import AuthAPI, RoleAPI, UserAPI
-from Library.Credential import CredentialAPI, VaultAPI
-from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
-from Library.Database.Query import QueryAPI
-from Library.Credential import Main
-from Script.Setup.Auth import setup_auth
-from Script.Setup.Credential import setup_credential
+from Library.Credential import CredentialAPI, Main
 
 DATABASE = "Tests"
 
 ADMIN = "admin@test.com"
 EDITOR = "editor@test.com"
 VIEWER = "viewer@test.com"
-
-@pytest.fixture(scope="module")
-def vault():
-    for cls in (UserAPI, CredentialAPI): cls.Database = DATABASE
-    admin = PostgresDatabaseAPI(admin=True)
-    try:
-        admin.connect()
-        if not admin.exists(database=DATABASE): admin.create(database=DATABASE)
-    finally:
-        admin.disconnect()
-    with PostgresDatabaseAPI(database=DATABASE) as db:
-        db.executeone(QueryAPI('DROP SCHEMA IF EXISTS "Credential" CASCADE'))
-        setup_auth(db)
-        setup_credential(db)
-    auth = AuthAPI(database=DATABASE)
-    for username, role in ((ADMIN, RoleAPI.Administrator), (EDITOR, RoleAPI.Editor), (VIEWER, RoleAPI.Viewer)):
-        if auth.find(username) is None: auth.create(username=username, email=username, name=username, password="secret", role=role)
-    return VaultAPI(database=DATABASE)
 
 @pytest.fixture
 def clean(vault):
@@ -47,14 +23,14 @@ def typed(monkeypatch, **values):
 def test_a_secret_is_prompted_never_passed(vault, clean, capsys, monkeypatch):
     with pytest.raises(SystemExit):
         Main.CredentialCommandAPI().main(["--database", DATABASE, "store", "--service", "Spotware", "--name", "Demo", "--secret", "hunter2"])
-    typed(monkeypatch, ClientSecret="cs", AccessToken="at")
-    code, output = cli(capsys, EDITOR, "store", "--service", "Spotware", "--name", "Demo", "--kind", "OAuth2", "--username", '{"ClientId": "cid"}', "--secret", "--view-role", "Viewer", "--edit-role", "Editor")
+    typed(monkeypatch, Secret="cs", AccessToken="at")
+    code, output = cli(capsys, EDITOR, "store", "--service", "Spotware", "--name", "Demo", "--kind", "OAuth2", "--identifier", '{"Identifier": "cid"}', "--secret", "--view-role", "Viewer", "--edit-role", "Editor")
     assert code == 0 and "stored" in output
     row = vault._select_(Service="Spotware", Name="Demo")[0]
-    assert row["Owner"] == EDITOR and CredentialAPI.unpack(row["Secret"]) == {"ClientSecret": "cs", "AccessToken": "at"}
+    assert row["Owner"] == EDITOR and CredentialAPI.unpack(row["Secret"]) == {"Secret": "cs", "AccessToken": "at"}
 
 def test_listing_masks_and_carries_access(vault, clean, capsys, monkeypatch):
-    typed(monkeypatch, Password="hunter2")
+    typed(monkeypatch, Secret="hunter2")
     cli(capsys, EDITOR, "store", "--service", "Framework", "--name", "Shared", "--secret", "--view-role", "Viewer", "--edit-role", "Editor")
     code, output = cli(capsys, VIEWER, "list")
     assert code == 0 and "Shared" in output and "hunter2" not in output and "***" in output and "View" in output
@@ -62,25 +38,25 @@ def test_listing_masks_and_carries_access(vault, clean, capsys, monkeypatch):
     assert code == 0 and "Access: View" in output and "hunter2" not in output
 
 def test_reveal_needs_edit(vault, clean, capsys, monkeypatch):
-    typed(monkeypatch, Password="hunter2")
+    typed(monkeypatch, Secret="hunter2")
     cli(capsys, EDITOR, "store", "--service", "Framework", "--name", "Shared", "--secret", "--view-role", "Viewer", "--edit-role", "Editor")
     code, output = cli(capsys, VIEWER, "reveal", "--service", "Framework", "--name", "Shared")
     assert code == 1 and "Rejected ·" in output and "hunter2" not in output
     code, output = cli(capsys, EDITOR, "reveal", "--service", "Framework", "--name", "Shared")
-    assert code == 0 and "Password: hunter2" in output
+    assert code == 0 and "Secret: hunter2" in output
 
 def test_update_merges_the_prompted_keys_and_renames(vault, clean, capsys, monkeypatch):
-    typed(monkeypatch, ClientSecret="cs", AccessToken="at", RefreshToken="rt")
+    typed(monkeypatch, Secret="cs", AccessToken="at", RefreshToken="rt")
     cli(capsys, ADMIN, "store", "--service", "Spotware", "--name", "Demo", "--kind", "OAuth2", "--secret")
     typed(monkeypatch, AccessToken="new")
     code, output = cli(capsys, ADMIN, "update", "--service", "Spotware", "--name", "Demo", "--secret", "--rename", "Live", "--expires", "2026-12-31 00:00:00")
     assert code == 0 and "updated" in output
     row = vault._select_(Service="Spotware", Name="Live")[0]
-    assert CredentialAPI.unpack(row["Secret"]) == {"ClientSecret": "cs", "AccessToken": "new", "RefreshToken": "rt"}
+    assert CredentialAPI.unpack(row["Secret"]) == {"Secret": "cs", "AccessToken": "new", "RefreshToken": "rt"}
     assert row["ExpiresAt"].year == 2026
 
 def test_transfer_and_delete(vault, clean, capsys, monkeypatch):
-    typed(monkeypatch, Password="x")
+    typed(monkeypatch, Secret="x")
     cli(capsys, EDITOR, "store", "--service", "Framework", "--name", "Mine", "--secret")
     code, output = cli(capsys, VIEWER, "transfer", "--service", "Framework", "--name", "Mine", "--to", VIEWER)
     assert code == 1 and "Rejected ·" in output
@@ -90,7 +66,7 @@ def test_transfer_and_delete(vault, clean, capsys, monkeypatch):
     assert code == 0 and vault._select_(Name="Mine") == []
 
 def test_due_lists_only_what_the_reader_may_see(vault, clean, capsys, monkeypatch):
-    typed(monkeypatch, Password="x")
+    typed(monkeypatch, Secret="x")
     cli(capsys, ADMIN, "store", "--service", "Framework", "--name", "Private", "--secret", "--expires", "2000-01-01 00:00:00")
     cli(capsys, ADMIN, "store", "--service", "Framework", "--name", "Open", "--secret", "--expires", "2000-01-01 00:00:00", "--view-role", "Viewer", "--edit-role", "Viewer")
     code, output = cli(capsys, VIEWER, "due")
@@ -103,7 +79,7 @@ def test_a_missing_target_is_rejected(vault, clean, capsys):
     assert code == 1 and "--uid" in output
 
 def test_no_user_acts_as_the_administrator(vault, clean, capsys, monkeypatch):
-    typed(monkeypatch, Password="x")
+    typed(monkeypatch, Secret="x")
     code = Main.CredentialCommandAPI().main(["--database", DATABASE, "store", "--service", "Framework", "--name", "Defaulted", "--secret"])
     capsys.readouterr()
     administrator = vault.administrator()

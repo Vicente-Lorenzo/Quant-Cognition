@@ -70,10 +70,10 @@ def _update_(buys=None, sells=None, close=1.11, atr=0.01, equity=10000.0):
     technical = SimpleNamespace(ATR=_indicator_(atr), RVFast=_indicator_(0.008))
     bar = SimpleNamespace(
         Timestamp=SimpleNamespace(DateTime=datetime(2020, 6, 15, 13, 30, 0)),
-        OpenTick=SimpleNamespace(Bid=SimpleNamespace(Price=1.10)),
-        HighTick=SimpleNamespace(Bid=SimpleNamespace(Price=1.13)),
-        LowTick=SimpleNamespace(Bid=SimpleNamespace(Price=1.09)),
-        CloseTick=SimpleNamespace(Bid=SimpleNamespace(Price=close)),
+        OpenPoint=SimpleNamespace(Bid=SimpleNamespace(Price=1.10)),
+        HighPoint=SimpleNamespace(Bid=SimpleNamespace(Price=1.13)),
+        LowPoint=SimpleNamespace(Bid=SimpleNamespace(Price=1.09)),
+        ClosePoint=SimpleNamespace(Bid=SimpleNamespace(Price=close)),
         Volume=5000.0
     )
     portfolio = SimpleNamespace(

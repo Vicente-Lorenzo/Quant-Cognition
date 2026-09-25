@@ -173,9 +173,21 @@ def test_the_cli_carries_the_user_and_thresholds(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["Scheduler", "--user", EDITOR, "task", "update", "--uid", "t", "--run-role", "Owner", "--edit-role", "Editor"])
     args = SchedulerCommandAPI().parse()
     assert args.user == EDITOR
-    assert SchedulerCommandAPI._fields_(args, TaskAPI) == {"UID": "t", "RunRole": None, "EditRole": "Editor"}
+    assert SchedulerCommandAPI._fields_(args, TaskAPI) == {"UID": "t", "RunRole": "Owner", "EditRole": "Editor"}
     monkeypatch.setattr(sys, "argv", ["Scheduler", "workflow", "update", "--uid", "w"])
     assert SchedulerCommandAPI._fields_(SchedulerCommandAPI().parse(), WorkflowAPI) == {"UID": "w"}
+
+def test_the_cli_prints_the_status_a_skip_closed_with(manager, clean, capsys):
+    task(manager, "t-cli-skip", by=EDITOR, RunRole=RoleAPI.Viewer.name, EditRole=RoleAPI.Editor.name)
+    assert SchedulerCommandAPI().main(["--database", DATABASE, "--user", VIEWER, "task", "skip", "--uid", "t-cli-skip"]) == 0
+    assert "Task 't-cli-skip' skipped · Success" in capsys.readouterr().out
+
+def test_the_cli_prints_the_status_a_waited_run_finished_with(manager, clean, capsys, tmp_path):
+    script = tmp_path / "quiet.py"
+    script.write_text("print('done')")
+    task(manager, "t-cli-run", by=EDITOR, Path=str(script), RunRole=RoleAPI.Viewer.name, EditRole=RoleAPI.Editor.name)
+    assert SchedulerCommandAPI().main(["--database", DATABASE, "--user", VIEWER, "task", "run", "--uid", "t-cli-run", "--wait"]) == 0
+    assert "finished · Success" in capsys.readouterr().out
 
 def test_a_missed_heartbeat_does_not_end_the_run(manager, clean):
     executor = ExecutorAPI(database="NoSuchDatabase")

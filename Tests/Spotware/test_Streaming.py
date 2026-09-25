@@ -1,4 +1,5 @@
 import threading
+from ctrader_open_api.messages.OpenApiModelMessages_pb2 import PROTO_OA_SPOT_EVENT
 from typing import Union
 import pytest
 import Library.Market
@@ -50,7 +51,7 @@ def _spots_(api, *events):
         return ProtoOASubscribeSpotsRes()
     api._responses_.append(fire)
     api._responses_.append(ProtoOAUnsubscribeSpotsRes())
-    return api._message_("ProtoOASubscribeSpotsReq", symbolId=[1]), api._message_("ProtoOAUnsubscribeSpotsReq", symbolId=[1])
+    return [api._message_("ProtoOASubscribeSpotsReq", symbolId=[1])], [api._message_("ProtoOAUnsubscribeSpotsReq", symbolId=[1])]
 def test_ticks_dispatches_events(spotware):
     events = [
         _spot_event(1, bid=105000, ask=105002),
@@ -125,14 +126,14 @@ def test_bars_live_filters_by_period_and_symbol(spotware):
         wrong.utcTimestampInMinutes = 26500001
         api.push(ev)
         return ProtoOASubscribeLiveTrendbarRes()
-    spotware._responses_.append(fire)
-    spotware._responses_.append(ProtoOAUnsubscribeLiveTrendbarRes())
+    spotware._responses_.extend([ProtoOASubscribeSpotsRes(), fire, ProtoOAUnsubscribeLiveTrendbarRes(), ProtoOAUnsubscribeSpotsRes()])
     received = []
     spotware.streaming.bars(symbol=1, timeframe="M1", callback=lambda d: received.append(d), frame=False, limit=1, timeout=5)
     assert len(received) == 1
     assert received[0]["Timeframe"] == "M1"
     assert received[0]["Open"] == pytest.approx(1.005)
-    assert type(spotware._sent_[0]).__name__ == "ProtoOASubscribeLiveTrendbarReq"
+    assert [type(sent).__name__ for sent in spotware._sent_] == ["ProtoOASubscribeSpotsReq", "ProtoOASubscribeLiveTrendbarReq", "ProtoOAUnsubscribeLiveTrendbarReq", "ProtoOAUnsubscribeSpotsReq"]
+    assert spotware._sent_[0].subscribeToSpotTimestamp
 def test_ticks_ignores_unrelated_symbols(spotware):
     def fire(request, api):
         api.push(_spot_event(99, bid=100000, ask=100002))
@@ -144,6 +145,7 @@ def test_ticks_ignores_unrelated_symbols(spotware):
     spotware.streaming.ticks(symbols=[1], callback=lambda d: received.append(d), frame=False, limit=1, timeout=5)
     assert len(received) == 1
     assert received[0]["Symbol"] == 1
+    assert spotware._sent_[0].subscribeToSpotTimestamp
 def test_ticks_raises_a_failing_callback_instead_of_hanging(spotware):
     _spots_(spotware, _spot_event(1, bid=105000, ask=105002))
     def _callback_(item): raise ValueError("boom")
@@ -153,7 +155,7 @@ def test_ticks_raises_a_failing_callback_instead_of_hanging(spotware):
 def test_listen_raises_a_failing_decoder_instead_of_hanging(spotware):
     subscribe, unsubscribe = _spots_(spotware, _spot_event(1, bid=105000, ask=105002))
     def _decode_(payload): raise KeyError("decode")
-    outcome = _within_(lambda: spotware._listen_(subscribe, unsubscribe, _decode_, lambda item: None, limit=1))
+    outcome = _within_(lambda: spotware._listen_(subscribe, unsubscribe, PROTO_OA_SPOT_EVENT, _decode_, lambda item: None, limit=1))
     assert isinstance(outcome.get("error"), KeyError)
 def test_listen_stops_decoding_once_the_limit_is_reached(spotware):
     subscribe, unsubscribe = _spots_(spotware, *[_spot_event(1, bid=bid, ask=bid + 2) for bid in (105000, 105010, 105020)])
@@ -161,10 +163,10 @@ def test_listen_stops_decoding_once_the_limit_is_reached(spotware):
     def _decode_(payload):
         decoded.append(payload.bid)
         return [payload]
-    assert spotware._listen_(subscribe, unsubscribe, _decode_, lambda item: None, limit=1, timeout=5) == 1
+    assert spotware._listen_(subscribe, unsubscribe, PROTO_OA_SPOT_EVENT, _decode_, lambda item: None, limit=1, timeout=5) == 1
     assert decoded == [105000]
 def test_listen_counts_items_until_the_limit_across_a_multi_item_message(spotware):
     subscribe, unsubscribe = _spots_(spotware, _spot_event(1, bid=105000, ask=105002))
     received = []
-    assert spotware._listen_(subscribe, unsubscribe, lambda payload: [1, 2, 3], received.append, limit=2, timeout=5) == 2
+    assert spotware._listen_(subscribe, unsubscribe, PROTO_OA_SPOT_EVENT, lambda payload: [1, 2, 3], received.append, limit=2, timeout=5) == 2
     assert received == [1, 2]

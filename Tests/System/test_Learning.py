@@ -282,7 +282,7 @@ def test_continuous_recorded_in_manifest_and_payload(tmp_path):
     harness.run()
     manifest = read_json(tmp_path / "_FakeStrategy_ Manifest.json")
     assert manifest["Continuous"] is True
-    payload = harness._payload_(42, tmp_path, [], None)
+    payload = harness._payload_(42, tmp_path, [], None, [])
     assert payload["continuous"] is True
     _reset_(tmp_path)
     harness = _make_(episodes=1, validation=0, testing=0, seeds=1)
@@ -315,31 +315,34 @@ def test_activity_floor_prefers_active_checkpoints(tmp_path):
     assert _FakeAgent_.saves == 2
     manifest = read_json(tmp_path / "_FakeStrategy_ Manifest.json")
     assert manifest["Best"] == 0.01 and manifest["Activity"] == 5
-    assert harness._payload_(42, tmp_path, [], None)["activity"] == 5
+    assert harness._payload_(42, tmp_path, [], None, [])["activity"] == 5
 
 def _mirror_frame_():
-    return pl.DataFrame({
-        "OpenTick.Ask": [1.1002, 1.2002], "OpenTick.Bid": [1.1000, 1.2000], "OpenTick.Timestamp": [1, 5],
-        "HighTick.Ask": [1.3002, 1.4002], "HighTick.Bid": [1.3000, 1.4000], "HighTick.Timestamp": [2, 6],
-        "LowTick.Ask": [1.0002, 1.1002], "LowTick.Bid": [1.0000, 1.1000], "LowTick.Timestamp": [3, 7],
-        "CloseTick.Ask": [1.2002, 1.3002], "CloseTick.Bid": [1.2000, 1.3000], "CloseTick.Timestamp": [4, 8],
-        "CloseTick.AskBaseConversion": [1.0, 1.0]
-    })
+    ticks = {
+        "OpenPoint.AskTick": ([1.1002, 1.2002], [1.1000, 1.2000], [1, 7]), "OpenPoint.BidTick": ([1.1002, 1.2002], [1.1000, 1.2000], [1, 7]),
+        "HighPoint.AskTick": ([1.3004, 1.4004], [1.2998, 1.3998], [2, 8]), "HighPoint.BidTick": ([1.3002, 1.4002], [1.3000, 1.4000], [3, 9]),
+        "LowPoint.AskTick": ([1.0001, 1.1001], [0.9999, 1.0999], [4, 10]), "LowPoint.BidTick": ([1.0003, 1.1003], [0.9998, 1.0998], [5, 11]),
+        "ClosePoint.AskTick": ([1.2002, 1.3002], [1.2000, 1.3000], [6, 12]), "ClosePoint.BidTick": ([1.2002, 1.3002], [1.2000, 1.3000], [6, 12]),
+    }
+    columns = {f"{prefix}.{name}": values for prefix, (asks, bids, stamps) in ticks.items() for name, values in (("Ask", asks), ("Bid", bids), ("Timestamp", stamps))}
+    return pl.DataFrame({**columns, "ClosePoint.BidTick.AskBaseConversion": [1.0, 1.0]})
 
 def test_mirror_frame_negates_returns_and_swaps_extremes():
     frame = _mirror_frame_()
     anchor = 1.2 * 1.2
     mirrored = LearningAPI._mirror_frame_(frame, anchor)
-    assert abs(mirrored["CloseTick.Bid"][0] - anchor / 1.2002) < 1e-12
-    assert abs(mirrored["CloseTick.Ask"][0] - anchor / 1.2000) < 1e-12
-    assert (mirrored["CloseTick.Ask"] > mirrored["CloseTick.Bid"]).all()
-    assert abs(mirrored["HighTick.Bid"][0] - anchor / 1.0002) < 1e-12
-    assert mirrored["HighTick.Timestamp"][0] == 3 and mirrored["LowTick.Timestamp"][0] == 2
-    assert (mirrored["HighTick.Bid"] > mirrored["LowTick.Bid"]).all()
-    assert mirrored["CloseTick.AskBaseConversion"][0] is None
+    assert abs(mirrored["ClosePoint.BidTick.Bid"][0] - anchor / 1.2002) < 1e-12
+    assert abs(mirrored["ClosePoint.AskTick.Ask"][0] - anchor / 1.2000) < 1e-12
+    assert (mirrored["ClosePoint.AskTick.Ask"] > mirrored["ClosePoint.BidTick.Bid"]).all()
+    assert abs(mirrored["HighPoint.AskTick.Ask"][0] - anchor / 0.9998) < 1e-12 and mirrored["HighPoint.AskTick.Timestamp"][0] == 5
+    assert abs(mirrored["HighPoint.BidTick.Bid"][0] - anchor / 1.0001) < 1e-12 and mirrored["HighPoint.BidTick.Timestamp"][0] == 4
+    assert abs(mirrored["LowPoint.AskTick.Ask"][0] - anchor / 1.3000) < 1e-12 and mirrored["LowPoint.AskTick.Timestamp"][0] == 3
+    assert abs(mirrored["LowPoint.BidTick.Bid"][0] - anchor / 1.3004) < 1e-12 and mirrored["LowPoint.BidTick.Timestamp"][0] == 2
+    assert (mirrored["HighPoint.BidTick.Bid"] > mirrored["LowPoint.BidTick.Bid"]).all()
+    assert mirrored["ClosePoint.BidTick.AskBaseConversion"][0] is None
     import math
     original_return = math.log(1.3000 / 1.2000)
-    mirrored_return = math.log(mirrored["CloseTick.Bid"][1] / mirrored["CloseTick.Bid"][0])
+    mirrored_return = math.log(mirrored["ClosePoint.BidTick.Bid"][1] / mirrored["ClosePoint.BidTick.Bid"][0])
     assert abs(mirrored_return + math.log(1.3002 / 1.2002)) < 1e-9
     assert mirrored_return < 0.0 < original_return
 
@@ -363,7 +366,7 @@ def test_balance_floor_requires_both_directions(tmp_path):
     harness.run()
     manifest = read_json(tmp_path / "_FakeStrategy_ Manifest.json")
     assert manifest["Best"] == 0.01 and manifest["Balance"] == 2
-    assert harness._payload_(42, tmp_path, [], None)["balance"] == 2
+    assert harness._payload_(42, tmp_path, [], None, [])["balance"] == 2
 
 def test_metric_reads_buy_and_sell_columns(tmp_path):
     _reset_(tmp_path)
@@ -378,10 +381,11 @@ def test_parallel_payload_is_picklable(tmp_path):
     _reset_(tmp_path)
     harness = _make_(episodes=2, training=12, validation=6, testing=12, seeds=4, workers=4, rolling=True)
     folds, test = SplitAPI.walk_forward_folds(harness._range_start_, harness._range_stop_, 12, 6, 12, True)
-    payload = harness._payload_(43, tmp_path / "Seed 43", folds, test)
+    payload = harness._payload_(43, tmp_path / "Seed 43", folds, test, [(7, "Tape", 3, (0, 1))])
     restored = pickle.loads(pickle.dumps(payload))
     assert restored["strategy"] is _FakeStrategy_ and restored["reward"] is RewardType.LogReturn
     assert restored["provider"] == "Spotware(cTrader)" and restored["ticker"] == "EURUSD"
     assert restored["seed"] == 43 and restored["weights"].endswith("Seed 43")
     assert restored["rolling"] is True and restored["folds"] == folds and restored["test"] == test
     assert restored["spread"][1] is None and restored["account"] == ("EUR", 10000.0, 100.0)
+    assert restored["shelf"] == [(7, "Tape", 3, (0, 1))]

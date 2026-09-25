@@ -143,3 +143,20 @@ def test_depth_book_ignores_updates_after_the_limit(spotware):
     df = spotware.market.depth(symbol=1, timeout=5)
     assert df["Quote"].to_list() == [100]
     assert df["Bid"][0] == pytest.approx(1.05)
+def _tick_page_(stamps, prices, more):
+    res = ProtoOAGetTickDataRes()
+    res.hasMore = more
+    for index, (stamp, price) in enumerate(zip(stamps, prices)):
+        entry = res.tickData.add()
+        entry.timestamp = stamp if index == 0 else stamp - stamps[index - 1]
+        entry.tick = price if index == 0 else price - prices[index - 1]
+    return res
+def test_ticks_page_backwards_below_the_earliest_stamp(spotware):
+    spotware._responses_.extend([_tick_page_([1577836805000, 1577836804000, 1577836803000], [110000, 110010, 110020], True), _tick_page_([1577836802000, 1577836801000], [110030, 110040], False)])
+    df = spotware.market.ticks(symbol=1, start=datetime(2020, 1, 1), stop=datetime(2020, 1, 1, 0, 1))
+    assert len(df) == 5 and df["Timestamp"].is_sorted() and df["Bid"][0] == pytest.approx(1.1004) and df["Bid"][-1] == pytest.approx(1.1)
+    assert spotware._sent_[1].toTimestamp == 1577836802999
+def test_ticks_stop_once_a_page_reaches_the_start(spotware):
+    spotware._responses_.append(_tick_page_([1577836801000, 1577836800000], [110000, 110010], True))
+    df = spotware.market.ticks(symbol=1, start=datetime(2020, 1, 1, 0, 0, 1), stop=datetime(2020, 1, 1, 0, 1))
+    assert len(df) == 2 and len(spotware._sent_) == 1

@@ -17,7 +17,7 @@ def test_an_empty_threshold_parses_as_owner_only():
         AccessAPI.parse("Janitor")
 
 def test_a_label_names_the_role_or_owner_only():
-    assert AccessAPI.label(None) == "Owner only"
+    assert AccessAPI.label(None) == "Owner"
     assert AccessAPI.label(RoleAPI.Moderator.name) == "Moderator"
 
 def test_public_is_refused_on_either_side():
@@ -33,7 +33,7 @@ def test_the_upper_threshold_is_never_below_the_lower():
     assert AccessAPI.validate("Viewer", None, names=NAMES) == (RoleAPI.Viewer, None)
 
 def test_an_owner_only_lower_forces_an_owner_only_upper():
-    with pytest.raises(ValueError, match="must be owner only"):
+    with pytest.raises(ValueError, match="must be Owner when"):
         AccessAPI.validate(None, "Editor", names=NAMES)
     assert AccessAPI.validate(None, None, names=NAMES) == (None, None)
 

@@ -1,112 +1,40 @@
 import pytest
-import polars as pl
+
 from datetime import datetime, timedelta
+
+from Library.Database.Dataframe import pl
 from Library.Market.Market import MarketAPI
+from Library.Market.Point import PointAPI
 from Library.Market.Tick import TickAPI
-from Library.Market.Bar import BarAPI
-from Library.Universe.Security import SecurityAPI
-from Library.Universe.Timeframe import TimeframeAPI
-from Library.Universe.Category import CategoryAPI
-from Library.Universe.Provider import ProviderAPI, Platform
-from Library.Universe.Ticker import TickerAPI
-from Library.Universe.Contract import ContractAPI
-from Library.Database.Query import QueryAPI
 
-@pytest.fixture(autouse=True)
-def setup_market_test(db):
-    db.migrate(schema="Universe", table=CategoryAPI.Table, structure=CategoryAPI(db=db).Structure)
-    db.migrate(schema="Universe", table=ProviderAPI.Table, structure=ProviderAPI(db=db).Structure)
-    db.migrate(schema="Universe", table=TickerAPI.Table, structure=TickerAPI(db=db).Structure)
-    db.migrate(schema="Universe", table=ContractAPI.Table, structure=ContractAPI(db=db).Structure)
-    db.migrate(schema="Universe", table=TimeframeAPI.Table, structure=TimeframeAPI(db=db).Structure)
-    db.migrate(schema="Universe", table=SecurityAPI.Table, structure=SecurityAPI(db=db).Structure)
-    db.migrate(schema=MarketAPI.Schema, table=TickAPI.Table, structure=TickAPI(db=db).Structure)
-    db.migrate(schema=MarketAPI.Schema, table=BarAPI.Table, structure=BarAPI(db=db).Structure)
-    CategoryAPI(UID="Forex", db=db).save()
-    ProviderAPI(UID="TestProv", Platform=Platform.cTrader, db=db).save()
-    TickerAPI(UID="EURUSD", Category="Forex", db=db).save()
-    TimeframeAPI(UID="M1", db=db).save()
-    sec = SecurityAPI(Ticker="EURUSD", Provider="TestProv", Category="Forex", db=db)
-    sec.save()
-    yield sec.UID
-    db.executeone(QueryAPI(f'DELETE FROM "{MarketAPI.Schema}"."{BarAPI.Table}"')).commit()
-    db.executeone(QueryAPI(f'DELETE FROM "{MarketAPI.Schema}"."{TickAPI.Table}"')).commit()
+def test_pull_ticks_reads_the_stored_window(stored):
+    db, security, add = stored
+    base = datetime(2023, 1, 2, 10)
+    for second in range(100): add(base + timedelta(seconds=second), 1.1000 + second / 10000, 1.0999 + second / 10000)
+    pulled = MarketAPI.pull_ticks(db, security, base, base + timedelta(seconds=49))
+    assert pulled.height == 50 and pulled.columns == ["Timestamp", "Ask", "Bid", "Volume"]
+    assert pulled["Ask"].max() == pytest.approx(1.1049) and pulled["Timestamp"][0] == base
 
-def test_market_bulk_ticks(db, setup_market_test):
-    sec_uid = setup_market_test
-    base_time = datetime(2023, 1, 1, 10, 0, 0)
-    tick_data = []
-    for i in range(100):
-        tick_data.append({
-            "Security": sec_uid,
-            "Timestamp": base_time + timedelta(seconds=i),
-            "Ask": 1.1000 + (i * 0.0001),
-            "Bid": 1.0999 + (i * 0.0001),
-            "Volume": 100000.0
-        })
-    df = pl.DataFrame(tick_data)
-    MarketAPI.push_ticks(db, df)
-    pulled_df = MarketAPI.pull_ticks(db, security=sec_uid, start=base_time, stop=base_time + timedelta(seconds=99))
-    assert len(pulled_df) == 100
-    assert pulled_df["Ask"].max() == pytest.approx(1.1000 + (99 * 0.0001))
+def test_pull_bars_derives_every_bar_of_a_range(stored):
+    db, security, add = stored
+    base = datetime(2023, 1, 2, 10)
+    for minute in range(180): add(base + timedelta(minutes=minute, seconds=5), 1.1000 + minute / 100000, 1.0998 + minute / 100000)
+    bars = MarketAPI.pull_bars(db, security, "H1", start=base, stop=base + timedelta(hours=2))
+    assert bars["Timestamp"].to_list() == [base, base + timedelta(hours=1), base + timedelta(hours=2)]
+    assert bars["ClosePoint.BidTick.Bid"].to_list() == pytest.approx([1.10039, 1.10099, 1.10159])
+    assert bars["Volume"].to_list() == [120.0, 120.0, 120.0]
 
-def test_market_bulk_bars(db, setup_market_test):
-    sec_uid = setup_market_test
-    base_time = datetime(2023, 1, 1, 10, 0, 0)
-    bar_data = []
-    for i in range(50):
-        bar_data.append({
-            "Security": sec_uid,
-            "Timeframe": "M1",
-            "Timestamp": base_time + timedelta(minutes=i),
-            "Volume": 5000.0
-        })
-    df = pl.DataFrame(bar_data)
-    MarketAPI.push_bars(db, df)
-    pulled_df = MarketAPI.pull_bars(db, security=sec_uid, timeframe="M1", start=base_time, stop=base_time + timedelta(minutes=49))
-    assert len(pulled_df) == 50
-    assert pulled_df["Volume"].sum() == 5000.0 * 50
+def test_pull_bars_with_a_limit_returns_the_last_complete_bars_before_the_stop(stored):
+    db, security, add = stored
+    base = datetime(2023, 1, 2, 10)
+    for minute in range(300): add(base + timedelta(minutes=minute, seconds=5), 1.1000, 1.0998)
+    bars = MarketAPI.pull_bars(db, security, "H1", stop=base + timedelta(hours=4), limit=2)
+    assert bars["Timestamp"].to_list() == [base + timedelta(hours=2), base + timedelta(hours=3)]
 
-def test_market_empty_pulls(db, setup_market_test):
-    sec_uid = setup_market_test
-    start = datetime(1990, 1, 1)
-    stop = datetime(1990, 1, 2)
-    ticks = MarketAPI.pull_ticks(db, sec_uid, start, stop)
-    assert len(ticks) == 0
-    bars = MarketAPI.pull_bars(db, sec_uid, "M1", start, stop)
-    assert len(bars) == 0
-
-def test_copy_streams_rows(db, setup_market_test):
-    sec_uid = setup_market_test
-    base = datetime(2023, 6, 1, 10, 0, 0)
-    df = pl.DataFrame([{
-        "UID": TickAPI.encode(sec_uid, base + timedelta(seconds=i)),
-        "Security": sec_uid,
-        "Timestamp": base + timedelta(seconds=i),
-        "Ask": 1.1 + i * 0.001,
-        "Bid": 1.0 + i * 0.001,
-        "Volume": 100.0
-    } for i in range(50)])
-    db.copy(schema=TickAPI.Schema, table=TickAPI.Table, data=df)
-    pulled = MarketAPI.pull_ticks(db, sec_uid, base, base + timedelta(seconds=49))
-    assert len(pulled) == 50
-
-def test_merge_is_idempotent_and_updates(db, setup_market_test):
-    sec_uid = setup_market_test
-    base = datetime(2023, 7, 1, 10, 0, 0)
-    df = pl.DataFrame([{
-        "UID": TickAPI.encode(sec_uid, base + timedelta(seconds=i)),
-        "Security": sec_uid,
-        "Timestamp": base + timedelta(seconds=i),
-        "Ask": 1.1,
-        "Bid": 1.0,
-        "Volume": 100.0
-    } for i in range(20)])
-    db.merge(schema=TickAPI.Schema, table=TickAPI.Table, data=df, key=[str(TickAPI.ID.UID)])
-    db.merge(schema=TickAPI.Schema, table=TickAPI.Table, data=df.with_columns(pl.lit(2.0).alias("Ask")), key=[str(TickAPI.ID.UID)])
-    pulled = MarketAPI.pull_ticks(db, sec_uid, base, base + timedelta(seconds=19))
-    assert len(pulled) == 20
-    assert pulled["Ask"].max() == pytest.approx(2.0)
+def test_pull_bars_of_an_empty_window_is_empty(stored):
+    db, security, _ = stored
+    assert MarketAPI.pull_bars(db, security, "H1", start=datetime(2023, 1, 2), stop=datetime(2023, 1, 3)).is_empty()
+    assert MarketAPI.pull_bars(db, security, "H1", stop=datetime(2023, 1, 3), limit=5).is_empty()
 
 def test_series_tick_initialization():
     market = MarketAPI()
@@ -118,16 +46,12 @@ def test_series_tick_initialization():
         "Volume": [100.0, 200.0]
     })
     market.init_data(data)
-
     assert market.Ticks.Bid.last() == 1.1
     assert market.Ticks.Ask.last() == 1.2
-
     tick = market.Ticks.last(dataframe=False)
     assert isinstance(tick, TickAPI)
     assert tick.Bid.Price == 1.1
     assert tick.Ask.Price == 1.2
-
-    # test offset
     market.update_offset(2)
     assert market.Ticks.Bid.last() == 1.0
 
@@ -137,19 +61,22 @@ def test_series_bar_initialization():
         "Timestamp": [datetime(2020, 1, 1)],
         "Security": [1],
         "Timeframe": ["M1"],
-        "CloseTick.Ask": [1.2],
-        "CloseTick.Bid": [1.1],
-        "OpenTick.Ask": [1.1],
-        "OpenTick.Bid": [1.0],
+        "ClosePoint.AskTick.Ask": [1.2],
+        "ClosePoint.BidTick.Bid": [1.1],
+        "OpenPoint.AskTick.Ask": [1.1],
+        "OpenPoint.BidTick.Bid": [1.0],
         "Volume": [1000.0]
     })
     market.init_data(data)
+    assert market.ClosePoints.Bid.last() == 1.1
+    assert market.OpenPoints.Ask.last() == 1.1
+    assert market.ClosePoints.Bid.over(market.OpenPoints.Bid) == True
 
-    assert market.CloseTicks.Bid.last() == 1.1
-    assert market.OpenTicks.Ask.last() == 1.1
-
-    # over test
-    assert market.CloseTicks.Bid.over(market.OpenTicks.Bid) == True
+def test_a_point_series_returns_points():
+    market = MarketAPI()
+    market.init_data(pl.DataFrame({"Timestamp": [datetime(2020, 1, 1)], "Timeframe": ["M1"], "HighPoint.AskTick.Ask": [1.3], "HighPoint.AskTick.Bid": [1.2], "HighPoint.BidTick.Ask": [1.25], "HighPoint.BidTick.Bid": [1.24]}))
+    point = market.HighPoints.last()
+    assert isinstance(point, PointAPI) and (point.Ask.Price, point.Bid.Price) == (1.3, 1.24)
 
 def test_series_group_crossover():
     market = MarketAPI()
@@ -157,28 +84,22 @@ def test_series_group_crossover():
         "Timestamp": [datetime(2020, 1, 1), datetime(2020, 1, 2)],
         "Security": [1, 1],
         "Timeframe": ["M1", "M1"],
-        "CloseTick.Ask": [1.0, 1.3],
-        "CloseTick.Bid": [0.9, 1.2],
-        "OpenTick.Ask": [1.1, 1.1],
-        "OpenTick.Bid": [1.0, 1.0],
+        "ClosePoint.AskTick.Ask": [1.0, 1.3],
+        "ClosePoint.BidTick.Bid": [0.9, 1.2],
+        "OpenPoint.AskTick.Ask": [1.1, 1.1],
+        "OpenPoint.BidTick.Bid": [1.0, 1.0],
         "Volume": [1000.0, 1000.0]
     })
     market.init_data(data)
-
-    res = market.CloseTicks.crossover(market.OpenTicks, dataframe=False)
-    df_res = market.CloseTicks.crossover(market.OpenTicks, dataframe=True)
-    assert df_res["CloseTick.Ask"][0] == True
-    assert df_res["CloseTick.Bid"][0] == True
+    df_res = market.ClosePoints.crossover(market.OpenPoints, dataframe=True)
+    assert df_res["ClosePoint.AskTick.Ask"][0] == True
+    assert df_res["ClosePoint.BidTick.Bid"][0] == True
 
 def test_market_update_data():
     market = MarketAPI()
     t1 = TickAPI(Timestamp=datetime(2020, 1, 1), Security=1, Ask=1.1, Bid=1.0, Volume=100.0)
-    data = pl.DataFrame([t1.dict()], strict=False)
-    market.init_data(data)
-
-    tick = TickAPI(Timestamp=datetime(2020, 1, 2), Security=1, Ask=1.2, Bid=1.1, Volume=200.0)
-    market.update_data(tick)
-
+    market.init_data(pl.DataFrame([t1.dict()], strict=False))
+    market.update_data(TickAPI(Timestamp=datetime(2020, 1, 2), Security=1, Ask=1.2, Bid=1.1, Volume=200.0))
     assert market.Ticks.Ask.last() == 1.2
 
 def test_head_and_tail_without_a_count_return_every_row():

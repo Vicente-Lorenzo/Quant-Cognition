@@ -1,78 +1,105 @@
 from datetime import datetime, timedelta
+from typing import ClassVar, Union
+from dataclasses import dataclass
+
+import pytest
+
 from Library.Database import BufferAPI
+from Library.Database.Database import PrimaryKey, ForeignKey
+from Library.Database.Dataframe import pl
+from Library.Database.Datapoint import DatapointAPI
 from Library.Database.Query import QueryAPI
-from Library.Market.Bar import BarAPI
-from Library.Market.Tick import TickAPI
 
-def _make_tick_(security, dt, ask, bid):
-    return TickAPI(Security=security, Timestamp=dt, Ask=ask, Bid=bid)
+SCHEMA = "BufferTest"
 
-def _make_bar_(security, timeframe, dt, ticks):
-    g, o, h, l, c = ticks
-    return BarAPI(Security=security, Timeframe=timeframe, Timestamp=dt, GapTick=g, OpenTick=o, HighTick=h, LowTick=l, CloseTick=c, Volume=5.0)
+@dataclass
+class _ParentAPI_(DatapointAPI):
 
-def test_buffer_fk_chain_ticks_then_bar(db, universe, market):
-    sec = universe["security"]
-    tf = universe["timeframe"]
-    db.executeone(QueryAPI(f'DELETE FROM "{BarAPI.Schema}"."{BarAPI.Table}"')).commit()
-    db.executeone(QueryAPI(f'DELETE FROM "{TickAPI.Schema}"."{TickAPI.Table}"')).commit()
-    dt = datetime(2025, 1, 1, 12, 0, 0)
-    ticks = [
-        _make_tick_(sec, dt - timedelta(seconds=5), 1.1000, 1.0998),
-        _make_tick_(sec, dt - timedelta(seconds=4), 1.1010, 1.1008),
-        _make_tick_(sec, dt - timedelta(seconds=3), 1.1020, 1.1018),
-        _make_tick_(sec, dt - timedelta(seconds=2), 1.0990, 1.0988),
-        _make_tick_(sec, dt - timedelta(seconds=1), 1.1005, 1.1003)
-    ]
-    bar = _make_bar_(sec, tf, dt, ticks)
-    buf = BufferAPI(types=[TickAPI, BarAPI], batch=10, interval=0.0, workers=1, db=lambda: db)
-    for t in ticks: buf.add(t)
-    buf.add(bar)
-    buf.flush()
-    buf._consume_(db)
-    for t in ticks: assert t.UID is not None
-    row = db.select(schema=BarAPI.Schema, table=BarAPI.Table, condition='"Timestamp" = :dt:', parameters={"dt": dt}, limit=1, legacy=False)
+    Schema: ClassVar[str] = SCHEMA
+    Table: ClassVar[str] = "Parent"
+
+    UID: Union[int, None] = None
+    Value: Union[float, None] = None
+
+    @property
+    def Structure(self) -> dict:
+        return {
+            self.ID.UID: PrimaryKey(pl.Int64),
+            self.ID.Value: pl.Float64(),
+            **super().Structure
+        }
+
+@dataclass
+class _ChildAPI_(DatapointAPI):
+
+    Schema: ClassVar[str] = SCHEMA
+    Table: ClassVar[str] = "Child"
+
+    Timestamp: Union[datetime, None] = None
+    First: Union[_ParentAPI_, None] = None
+    Last: Union[_ParentAPI_, None] = None
+
+    @property
+    def Structure(self) -> dict:
+        return {
+            self.ID.Timestamp: PrimaryKey(pl.Datetime),
+            self.ID.First: ForeignKey(pl.Int64, reference=_ParentAPI_.reference()),
+            self.ID.Last: ForeignKey(pl.Int64, reference=_ParentAPI_.reference()),
+            **super().Structure
+        }
+
+@pytest.fixture
+def tables(db):
+    db.executeone(QueryAPI(f'DROP SCHEMA IF EXISTS "{SCHEMA}" CASCADE'))
+    db.executeone(QueryAPI(f'CREATE SCHEMA "{SCHEMA}"'))
+    _ParentAPI_(db=db, migrate=True)
+    _ChildAPI_(db=db, migrate=True)
+    yield db
+    db.executeone(QueryAPI(f'DROP SCHEMA IF EXISTS "{SCHEMA}" CASCADE'))
+
+def _family_(at: datetime, base: int) -> tuple[list, _ChildAPI_]:
+    parents = [_ParentAPI_(UID=base + index, Value=1.1 + index / 1000) for index in range(5)]
+    return parents, _ChildAPI_(Timestamp=at, First=parents[0], Last=parents[-1])
+
+def _child_(db, at: datetime) -> dict:
+    row = db.select(schema=SCHEMA, table=_ChildAPI_.Table, condition='"Timestamp" = :at:', parameters={"at": at}, limit=1, legacy=False)
     assert not row.is_empty()
-    persisted = row.row(0, named=True)
-    assert persisted["GapTick"] == ticks[0].UID
-    assert persisted["OpenTick"] == ticks[1].UID
-    assert persisted["HighTick"] == ticks[2].UID
-    assert persisted["LowTick"] == ticks[3].UID
-    assert persisted["CloseTick"] == ticks[4].UID
+    return row.row(0, named=True)
 
-def test_buffer_fk_chain_handles_multiple_bars(db, universe, market):
-    sec = universe["security"]
-    tf = universe["timeframe"]
-    db.executeone(QueryAPI(f'DELETE FROM "{BarAPI.Schema}"."{BarAPI.Table}"')).commit()
-    db.executeone(QueryAPI(f'DELETE FROM "{TickAPI.Schema}"."{TickAPI.Table}"')).commit()
-    base = datetime(2025, 2, 1, 12, 0, 0)
-    all_ticks = []
-    bars = []
-    for i in range(3):
-        dt = base + timedelta(minutes=i)
-        ticks = [_make_tick_(sec, dt - timedelta(seconds=5 - j), 1.1 + 0.001 * (j + i), 1.0998 + 0.001 * (j + i)) for j in range(5)]
-        bars.append(_make_bar_(sec, tf, dt, ticks))
-        all_ticks.extend(ticks)
-    buf = BufferAPI(types=[TickAPI, BarAPI], batch=100, interval=0.0, workers=1, db=lambda: db)
-    for t in all_ticks: buf.add(t)
-    for b in bars: buf.add(b)
+def _count_(db, table: str) -> int:
+    return db.executeone(QueryAPI(f'SELECT count(*) AS n FROM "{SCHEMA}"."{table}"')).fetchall(legacy=False).row(0, named=True)["n"]
+
+def test_buffer_writes_parents_before_the_child_that_references_them(tables):
+    at = datetime(2025, 1, 1, 12)
+    parents, child = _family_(at, 100)
+    buf = BufferAPI(types=[_ParentAPI_, _ChildAPI_], batch=10, interval=0.0, workers=1, db=lambda: tables)
+    for parent in parents: buf.add(parent)
+    buf.add(child)
     buf.flush()
-    buf._consume_(db)
-    assert all(t.UID is not None for t in all_ticks)
-    for i, b in enumerate(bars):
-        row = db.select(schema=BarAPI.Schema, table=BarAPI.Table, condition='"Timestamp" = :dt:', parameters={"dt": base + timedelta(minutes=i)}, limit=1, legacy=False)
-        persisted = row.row(0, named=True)
-        offset = i * 5
-        assert persisted["GapTick"] == all_ticks[offset].UID
-        assert persisted["CloseTick"] == all_ticks[offset + 4].UID
+    buf._consume_(tables)
+    persisted = _child_(tables, at)
+    assert (persisted["First"], persisted["Last"]) == (100, 104)
+
+def test_buffer_keeps_every_child_with_its_own_parents(tables):
+    base = datetime(2025, 2, 1, 12)
+    families = [_family_(base + timedelta(minutes=index), 200 + 10 * index) for index in range(3)]
+    buf = BufferAPI(types=[_ParentAPI_, _ChildAPI_], batch=100, interval=0.0, workers=1, db=lambda: tables)
+    for parents, _ in families:
+        for parent in parents: buf.add(parent)
+    for _, child in families: buf.add(child)
+    buf.flush()
+    buf._consume_(tables)
+    for index in range(3):
+        persisted = _child_(tables, base + timedelta(minutes=index))
+        assert (persisted["First"], persisted["Last"]) == (200 + 10 * index, 204 + 10 * index)
 
 class _RaceInjector_:
 
-    def __init__(self, inner, buf, ticks, bar):
+    def __init__(self, inner, buf, parents, child):
         self._inner_ = inner
         self._buf_ = buf
-        self._ticks_ = ticks
-        self._bar_ = bar
+        self._parents_ = parents
+        self._child_ = child
         self._injected_ = False
 
     def __getattr__(self, name):
@@ -80,56 +107,36 @@ class _RaceInjector_:
 
     def merge(self, **kwargs):
         result = self._inner_.merge(**kwargs)
-        if not self._injected_ and kwargs.get("table") == TickAPI.Table:
+        if not self._injected_ and kwargs.get("table") == _ParentAPI_.Table:
             self._injected_ = True
-            self._buf_._queue_[TickAPI].put(list(self._ticks_))
-            self._buf_._queue_[BarAPI].put([self._bar_])
+            self._buf_._queue_[_ParentAPI_].put(list(self._parents_))
+            self._buf_._queue_[_ChildAPI_].put([self._child_])
         return result
 
-def test_buffer_fk_race_bar_not_drained_before_its_ticks(db, universe, market):
-    sec = universe["security"]
-    tf = universe["timeframe"]
-    db.executeone(QueryAPI(f'DELETE FROM "{BarAPI.Schema}"."{BarAPI.Table}"')).commit()
-    db.executeone(QueryAPI(f'DELETE FROM "{TickAPI.Schema}"."{TickAPI.Table}"')).commit()
-    a = datetime(2025, 4, 1, 12, 0, 0)
-    b = datetime(2025, 4, 1, 12, 1, 0)
-    ticks_a = [_make_tick_(sec, a - timedelta(seconds=5 - j), 1.10 + 0.001 * j, 1.0998 + 0.001 * j) for j in range(5)]
-    ticks_b = [_make_tick_(sec, b - timedelta(seconds=5 - j), 1.20 + 0.001 * j, 1.1998 + 0.001 * j) for j in range(5)]
-    bar_a = _make_bar_(sec, tf, a, ticks_a)
-    bar_b = _make_bar_(sec, tf, b, ticks_b)
-    buf = BufferAPI(types=[TickAPI, BarAPI], batch=1000, interval=0.0, workers=1, bulk=True, db=lambda: db)
-    for t in ticks_a: buf.add(t)
-    buf.add(bar_a)
+def test_buffer_never_drains_a_child_before_its_parents(tables):
+    a, b = datetime(2025, 4, 1, 12), datetime(2025, 4, 1, 12, 1)
+    parents_a, child_a = _family_(a, 300)
+    parents_b, child_b = _family_(b, 400)
+    buf = BufferAPI(types=[_ParentAPI_, _ChildAPI_], batch=1000, interval=0.0, workers=1, bulk=True, db=lambda: tables)
+    for parent in parents_a: buf.add(parent)
+    buf.add(child_a)
     buf.flush()
-    race = _RaceInjector_(db, buf, ticks_b, bar_b)
+    race = _RaceInjector_(tables, buf, parents_b, child_b)
     buf._consume_(race)
     buf._consume_(race)
-    count = db.executeone(QueryAPI(f'SELECT count(*) AS n FROM "{BarAPI.Schema}"."{BarAPI.Table}"')).fetchall(legacy=False)
-    assert count.row(0, named=True)["n"] == 2
-    for dt in (a, b):
-        row = db.select(schema=BarAPI.Schema, table=BarAPI.Table, condition='"Timestamp" = :dt:', parameters={"dt": dt}, limit=1, legacy=False)
-        assert not row.is_empty()
+    assert _count_(tables, _ChildAPI_.Table) == 2
+    _child_(tables, a)
+    _child_(tables, b)
 
-def test_buffer_merge_bulk_fk_chain_idempotent(db, universe, market):
-    sec = universe["security"]
-    tf = universe["timeframe"]
-    db.executeone(QueryAPI(f'DELETE FROM "{BarAPI.Schema}"."{BarAPI.Table}"')).commit()
-    db.executeone(QueryAPI(f'DELETE FROM "{TickAPI.Schema}"."{TickAPI.Table}"')).commit()
-    dt = datetime(2025, 3, 1, 12, 0, 0)
-    ticks = [_make_tick_(sec, dt - timedelta(seconds=5 - j), 1.1 + 0.001 * j, 1.0998 + 0.001 * j) for j in range(5)]
-    bar = _make_bar_(sec, tf, dt, ticks)
-    def _run_():
-        buf = BufferAPI(types=[TickAPI, BarAPI], batch=10, interval=0.0, workers=1, bulk=True, db=lambda: db)
-        for t in ticks: buf.add(t)
-        buf.add(bar)
+def test_bulk_merge_is_idempotent(tables):
+    at = datetime(2025, 3, 1, 12)
+    parents, child = _family_(at, 500)
+    for _ in range(2):
+        buf = BufferAPI(types=[_ParentAPI_, _ChildAPI_], batch=10, interval=0.0, workers=1, bulk=True, db=lambda: tables)
+        for parent in parents: buf.add(parent)
+        buf.add(child)
         buf.flush()
-        buf._consume_(db)
-    _run_()
-    _run_()
-    count = db.executeone(QueryAPI(f'SELECT count(*) AS n FROM "{TickAPI.Schema}"."{TickAPI.Table}"')).fetchall(legacy=False)
-    assert count.row(0, named=True)["n"] == 5
-    row = db.select(schema=BarAPI.Schema, table=BarAPI.Table, condition='"Timestamp" = :dt:', parameters={"dt": dt}, limit=1, legacy=False)
-    assert not row.is_empty()
-    persisted = row.row(0, named=True)
-    assert persisted["GapTick"] == ticks[0].UID
-    assert persisted["CloseTick"] == ticks[4].UID
+        buf._consume_(tables)
+    assert _count_(tables, _ParentAPI_.Table) == 5
+    persisted = _child_(tables, at)
+    assert (persisted["First"], persisted["Last"]) == (500, 504)

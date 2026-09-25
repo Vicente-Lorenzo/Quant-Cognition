@@ -29,10 +29,10 @@ def _update_(open=1.10, high=1.13, low=1.09, close=1.11, volume=5000.0, atr=0.01
             setattr(technical, key, _indicator_(*value) if isinstance(value, tuple) else _indicator_(value))
     bar = SimpleNamespace(
         Timestamp=SimpleNamespace(DateTime=when),
-        OpenTick=SimpleNamespace(Bid=SimpleNamespace(Price=open)),
-        HighTick=SimpleNamespace(Bid=SimpleNamespace(Price=high)),
-        LowTick=SimpleNamespace(Bid=SimpleNamespace(Price=low)),
-        CloseTick=SimpleNamespace(Bid=SimpleNamespace(Price=close)),
+        OpenPoint=SimpleNamespace(Bid=SimpleNamespace(Price=open)),
+        HighPoint=SimpleNamespace(Bid=SimpleNamespace(Price=high)),
+        LowPoint=SimpleNamespace(Bid=SimpleNamespace(Price=low)),
+        ClosePoint=SimpleNamespace(Bid=SimpleNamespace(Price=close)),
         Volume=volume
     )
     portfolio = SimpleNamespace(
@@ -133,7 +133,7 @@ def test_overlap_slope_zero_without_history():
 def test_spread_is_relative_ask_bid_of_close_tick():
     encoder = _encoder_(action=_action_())
     update = _update_(close=1.1000)
-    update.Bar.CloseTick.Ask = SimpleNamespace(Price=1.1002)
+    update.Bar.ClosePoint.Ask = SimpleNamespace(Price=1.1002)
     features = []
     encoder._market_features_(update, features)
     value, standardized = features[5]

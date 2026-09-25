@@ -12,10 +12,8 @@ from Library.Protocol.Binary import BinaryAPI
 from Library.Strategy.Rule.Download import DownloadStrategyAPI
 from Library.System.Realtime import RealtimeAPI
 from Library.System.System import SystemType
-from Library.Market.Tick import TickAPI
-from Library.Market.Bar import BarAPI
 
-def _make_system_(market: tuple = (100, 60.0, 1, 64), portfolio: tuple = (100, 60.0, 1, 64), system: SystemType = SystemType.Live, database: str = "Quant", **kwargs) -> RealtimeAPI:
+def _make_system_(portfolio: tuple = (100, 60.0, 1, 64), system: SystemType = SystemType.Live, database: str = "Quant", **kwargs) -> RealtimeAPI:
     p = Parameter({}, "test.yml")
     system = RealtimeAPI(
         system=system,
@@ -25,7 +23,6 @@ def _make_system_(market: tuple = (100, 60.0, 1, 64), portfolio: tuple = (100, 6
         parameters=p,
         iid="12345",
         database=database,
-        market=market,
         portfolio=portfolio,
         **kwargs
     )
@@ -72,44 +69,23 @@ def test_direct_attribute_state(realtime_system):
     assert realtime_system.portfolio is None
 
 def test_buffer_instances_carry_correct_types(realtime_system):
-    assert realtime_system._market_._types_ == (TickAPI, BarAPI)
     assert realtime_system._portfolio_._types_ == (AccountAPI, OrderAPI, PositionAPI, TradeAPI)
 
-def test_live_mode_both_buffers_active():
-    system = _make_system_(market=(100, 60.0, 1, 64), portfolio=(100, 60.0, 1, 64))
-    assert system._market_.Active is True
-    assert system._portfolio_.Active is True
+def test_live_mode_buffers_the_portfolio():
+    assert _make_system_(portfolio=(100, 60.0, 1, 64))._portfolio_.Active is True
 
-def test_simulation_mode_only_market_active():
-    system = _make_system_(market=(5000, 0.0, 8, 64), portfolio=(0, 0.0, 8, 64))
-    assert system._market_.Active is True
-    assert system._portfolio_.Active is False
-
-def test_testing_mode_both_inactive():
-    system = _make_system_(market=(0, 0.0, 0, 0), portfolio=(0, 0.0, 0, 0))
-    assert system._market_.Active is False
-    assert system._portfolio_.Active is False
+def test_simulation_mode_buffers_nothing():
+    assert _make_system_(portfolio=(0, 0.0, 8, 64))._portfolio_.Active is False
 
 def test_workers_zero_disables_buffer():
-    system = _make_system_(market=(5000, 0.0, 0, 64), portfolio=(100, 60.0, 0, 64))
-    assert system._market_.Active is False
-    assert system._portfolio_.Active is False
+    assert _make_system_(portfolio=(100, 60.0, 0, 64))._portfolio_.Active is False
 
-def test_receive_update_tick_routes_to_market_buffer(realtime_system):
-    realtime_system._market_.add = MagicMock()
-    tick = MagicMock()
+def test_market_updates_are_never_stored(realtime_system):
+    tick, bar = MagicMock(), MagicMock()
     realtime_system.receive_update_tick = MagicMock(return_value=tick)
-    realtime_system._receive_update_tick_()
-    realtime_system._market_.add.assert_called_once_with(tick)
-
-def test_receive_update_bar_routes_bar_and_subticks_to__market_(realtime_system):
-    realtime_system._market_.add = MagicMock()
-    g, o, h, l, c = MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
-    bar = MagicMock()
-    bar.GapTick, bar.OpenTick, bar.HighTick, bar.LowTick, bar.CloseTick = g, o, h, l, c
     realtime_system.receive_update_bar = MagicMock(return_value=bar)
-    realtime_system._receive_update_bar_()
-    assert [call.args[0] for call in realtime_system._market_.add.call_args_list] == [g, o, h, l, c, bar]
+    assert realtime_system._receive_update_tick_() is tick and realtime_system._receive_update_bar_() is bar
+    assert not hasattr(realtime_system, "_market_")
 
 def test_receive_update_order_routes_to_portfolio_buffer(realtime_system):
     realtime_system._portfolio_.add = MagicMock()
@@ -133,20 +109,18 @@ def test_receive_update_trade_routes_to_portfolio_buffer(realtime_system):
     realtime_system._portfolio_.add.assert_called_once_with(trade)
 
 def test_simulation_mode_drops_portfolio_records():
-    system = _make_system_(market=(100, 60.0, 1, 64), portfolio=(0, 0.0, 8, 64))
+    system = _make_system_(portfolio=(0, 0.0, 8, 64))
     assert system._portfolio_.add is system._portfolio_._noop_
 
 def test_warmup_leaves_buffering_to_the_bar_receiver(realtime_system):
     realtime_system._db_ = None
     realtime_system._indicator_window_ = lambda: 999
-    realtime_system._market_.add = MagicMock()
     bar = MagicMock()
     update = MagicMock(); update.Bar = bar
     engine = realtime_system.system_management()
     initialization = engine.state(name="Initialization")
     transition = next(t for t in initialization._transitions_ if t is not None and getattr(t, "Action", None) and t.Action.__name__ == "warmup")
     transition.perform(update)
-    realtime_system._market_.add.assert_not_called()
     assert realtime_system._sync_buffer_ == [bar]
 
 def test_warmup_reuses_the_database_frame_at_execution(realtime_system, monkeypatch):
@@ -175,7 +149,6 @@ def test_warmup_reuses_the_database_frame_at_execution(realtime_system, monkeypa
 def test_warmup_emits_execution_when_window_reached(realtime_system):
     realtime_system._db_ = None
     realtime_system._indicator_window_ = lambda: 1
-    realtime_system._market_.add = MagicMock()
     bar = MagicMock()
     update = MagicMock(); update.Bar = bar
     engine = realtime_system.system_management()
@@ -220,7 +193,6 @@ def test_receive_update_exception_returns_reason(realtime_system):
 
 def test_receive_update_security_updates_and_returns_security(realtime_system):
     security_codec = realtime_system._binary_security_
-    # UpdateID (1 byte) is stripped by _binary_security_.unpack when offset=1
     realtime_system._last_update_data_ = b'\x00' + security_codec.pack("EUR", "USD", 5, 0.00001, 0.0001, 100000.0, 1000.0, 10000000.0, 1000.0, 30.0, 1, -1.5, -1.2, 0, 3)
     from Library.Universe.Contract import CommissionMode, SwapMode
     from Library.Utility.Datetime import Weekday
@@ -241,14 +213,11 @@ def test_exit_drains_buffers_before_closing_stack():
     system = _make_system_()
     calls = []
     system._connected_ = True
-    system._market_._active_ = True
     system._portfolio_._active_ = True
-    system._market_.shutdown = lambda: calls.append("market_shutdown")
     system._portfolio_.shutdown = lambda: calls.append("portfolio_shutdown")
     system._stack_ = MagicMock()
     system._stack_.__exit__ = MagicMock(side_effect=lambda *a, **k: calls.append("stack_exit"))
     system.__exit__(None, None, None)
-    assert calls.index("market_shutdown") < calls.index("stack_exit")
     assert calls.index("portfolio_shutdown") < calls.index("stack_exit")
 
 def test_a_wire_contract_is_recorded_with_its_own_provenance(tmp_path):
@@ -266,3 +235,18 @@ def test_a_wire_contract_is_recorded_with_its_own_provenance(tmp_path):
     written = read_yaml(tmp_path / "Input" / "Contract.yml", safe=False)
     assert (written["SwapLong"], written["SwapShort"], written["UpdatedBy"]) == (-9.0, -1.0, "Connector")
     assert written["UpdatedAt"] > datetime(2026, 9, 10, 18, 30)
+
+def test_a_wire_bar_carries_both_sides_of_each_extreme(realtime_system):
+    import struct
+    from Library.Protocol.Update import UpdateID
+    realtime_system.strategy = MagicMock()
+    realtime_system.strategy.Transform.Market = True
+    realtime_system._security_ = None
+    realtime_system._timeframe_ = None
+    ticks = [(1706745600000 + index, 1.1 + index / 1000, 1.0 + index / 1000, 1.0, 1.0, 1.0, 1.0, 1.0) for index in range(7)]
+    payload = struct.pack("<Bq", UpdateID.BarClosed.value, 1706745600000) + b"".join(realtime_system._binary_tick_.pack(*tick) for tick in ticks) + struct.pack("<d", 42.0)
+    assert len(payload) == realtime_system._bar_payload_
+    realtime_system._last_update_data_ = payload
+    bar = realtime_system.receive_update_bar()
+    assert (bar.HighPoint.Ask.Price, bar.HighPoint.Bid.Price, bar.LowPoint.Ask.Price, bar.LowPoint.Bid.Price) == (1.102, 1.003, 1.104, 1.005)
+    assert bar.ClosePoint.AskTick is bar.ClosePoint.BidTick and bar.ClosePoint.Bid.Price == 1.006 and bar.Volume == 42.0

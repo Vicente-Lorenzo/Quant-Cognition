@@ -82,29 +82,35 @@ def test_limit_sell_order_with_expiration(spotware):
     assert sent.expirationTimestamp == 1893456000000
 def test_stop_buy_order_sends_stop_price(spotware):
     spotware._responses_.append(_execution(order_id=31))
-    spotware.execution.stop_buy_order(symbol=1, volume=1000, price=1.3, slippage_points=2)
+    spotware.execution.stop_buy_order(symbol=1, volume=1000, price=1.3)
     sent = spotware._sent_[0]
     assert sent.orderType == 3
     assert sent.tradeSide == 1
     assert sent.stopPrice == pytest.approx(1.3)
-    assert sent.slippageInPoints == 2
+    assert not sent.HasField("slippageInPoints")
+def test_a_side_alias_takes_positional_arguments(spotware):
+    spotware._responses_.append(_execution(order_id=33))
+    spotware.execution.stop_sell_order(1, 1000, 1.1)
+    sent = spotware._sent_[0]
+    assert sent.tradeSide == 2 and sent.symbolId == 1 and sent.volume == 100000 and sent.stopPrice == pytest.approx(1.1)
 def test_stop_sell_order_sets_sell_side(spotware):
     spotware._responses_.append(_execution(order_id=32))
     spotware.execution.stop_sell_order(symbol=1, volume=1000, price=1.1)
     sent = spotware._sent_[0]
     assert sent.orderType == 3
     assert sent.tradeSide == 2
-def test_stop_limit_buy_order_sends_both_prices(spotware):
+def test_stop_limit_buy_order_sends_the_limit_as_slippage(spotware):
     spotware._responses_.append(_execution(order_id=41))
-    spotware.execution.stop_limit_buy_order(symbol=1, volume=1000, stop_price=1.3, limit_price=1.31)
+    spotware.execution.stop_limit_buy_order(symbol=1, volume=1000, price=1.3, slippage_points=100)
     sent = spotware._sent_[0]
     assert sent.orderType == 6
     assert sent.tradeSide == 1
     assert sent.stopPrice == pytest.approx(1.3)
-    assert sent.limitPrice == pytest.approx(1.31)
+    assert sent.slippageInPoints == 100
+    assert not sent.HasField("limitPrice")
 def test_stop_limit_sell_order_sets_sell_side(spotware):
     spotware._responses_.append(_execution(order_id=42))
-    spotware.execution.stop_limit_sell_order(symbol=1, volume=1000, stop_price=1.1, limit_price=1.09)
+    spotware.execution.stop_limit_sell_order(symbol=1, volume=1000, price=1.1, slippage_points=100)
     sent = spotware._sent_[0]
     assert sent.orderType == 6
     assert sent.tradeSide == 2

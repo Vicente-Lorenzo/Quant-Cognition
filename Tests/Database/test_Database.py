@@ -1,6 +1,10 @@
 import pytest
+import oracledb
 from datetime import datetime
 from Library.Database.Dataframe import pl
+from Library.Database.Database import DatabaseAPI
+from Library.Database.Microsoft import MicrosoftDatabaseAPI
+from Library.Database.Oracle import OracleDatabaseAPI
 from Library.Database.Postgres import PostgresDatabaseAPI
 from Library.Database import QueryAPI, PrimaryKey, ForeignKey
 _DATABASES_ = (
@@ -709,3 +713,41 @@ def test_fingerprint_pg_stat_fast_path(db):
     assert fp2 != fp1
     api.disconnect()
     admin.disconnect()
+
+def test_binary_reads_a_blob_as_raw_bytes(db):
+    api = db(admin=True)
+    api.connect()
+    try:
+        assert api.binary(QueryAPI("SELECT DECODE('00ff10', 'hex') AS \"Blob\", 7 AS \"Seven\"")) == (bytes([0, 255, 16]), 7)
+        assert api.binary(QueryAPI('SELECT INT8SEND(CAST(:value: AS BIGINT)) AS "Blob"'), value=258) == ((258).to_bytes(8, 'big'),)
+        assert api.binary(QueryAPI('SELECT 1 AS "One" WHERE FALSE')) is None
+    finally: api.disconnect()
+
+class _Cursor_:
+
+    def __init__(self, binary: bool = False) -> None:
+        self.binary = binary
+        self.arraysize = 100
+        self.outputtypehandler = None
+
+    def var(self, kind, arraysize: int) -> tuple:
+        return kind, arraysize
+
+class _Connection_:
+
+    def cursor(self, binary: bool = False) -> _Cursor_:
+        return _Cursor_(binary)
+
+class _Metadata_:
+
+    def __init__(self, type_code) -> None:
+        self.type_code = type_code
+
+def test_binary_asks_each_driver_for_its_own_raw_cursor():
+    postgres, oracle, microsoft = PostgresDatabaseAPI(database="Quant"), OracleDatabaseAPI(database="Quant"), MicrosoftDatabaseAPI(database="Quant")
+    postgres._connection_ = oracle._connection_ = microsoft._connection_ = _Connection_()
+    assert postgres._raw_().binary is True
+    cursor = oracle._raw_()
+    assert cursor.outputtypehandler(cursor, _Metadata_(oracledb.DB_TYPE_BLOB)) == (oracledb.DB_TYPE_LONG_RAW, 100)
+    assert cursor.outputtypehandler(cursor, _Metadata_(oracledb.DB_TYPE_VARCHAR)) is None
+    assert MicrosoftDatabaseAPI._raw_ is DatabaseAPI._raw_ and microsoft._raw_().binary is False

@@ -267,7 +267,7 @@ def test_trade_filters_single_closing_deal_by_id(spotware):
     assert df["TradeID"][0] == 801
     assert df["PositionID"][0] == 778
     assert df["Symbol"][0] == 2
-    assert df["Direction"][0] == "Sell"
+    assert df["Direction"][0] == "Buy"
     sent = spotware._sent_[0]
     assert type(sent).__name__ == "ProtoOADealListReq"
 def test_trades_filters_to_closing_deals(spotware):
@@ -323,7 +323,7 @@ def test_trades_filters_to_closing_deals(spotware):
     assert df["TradeID"][0] == 700
     assert df["PositionID"][0] == 555
     assert df["Symbol"][0] == 1
-    assert df["Direction"][0] == "Sell"
+    assert df["Direction"][0] == "Buy"
     assert df["EntryPrice"][0] == pytest.approx(1.04)
     assert df["ExitPrice"][0] == pytest.approx(1.05)
     assert df["GrossPnL"][0] == pytest.approx(100.0)
@@ -369,3 +369,40 @@ def test_cashflow_parses_entries(spotware):
     assert df["Delta"][0] == pytest.approx(500.0)
     assert df["OperationType"][0] == "Withdraw"
     assert type(spotware._sent_[0]).__name__ == "ProtoOACashFlowHistoryListReq"
+def _closing_(res, deal_id, stamp):
+    d = res.deal.add()
+    d.dealId, d.orderId, d.positionId, d.volume, d.filledVolume, d.symbolId = deal_id, deal_id, 555, 1000, 1000, 1
+    d.createTimestamp = d.executionTimestamp = d.utcLastUpdateTimestamp = stamp
+    d.executionPrice, d.tradeSide, d.dealStatus, d.moneyDigits = 1.05, 2, 2, 2
+    close = d.closePositionDetail
+    close.entryPrice, close.grossProfit, close.swap, close.commission, close.balance = 1.04, 100, 0, 0, 1000000
+    close.quoteToDepositConversionRate, close.closedVolume, close.balanceVersion = 1.0, 1000, 2
+def _page_(stamps, more):
+    res = ProtoOADealListRes()
+    res.ctidTraderAccountId = 123
+    for stamp in stamps: _closing_(res, stamp, stamp)
+    res.hasMore = more
+    return res
+def test_trades_follow_has_more_backwards_through_a_newest_first_listing(spotware):
+    spotware._responses_.extend([_page_([1577923203000, 1577923202000], True), _page_([1577923202000, 1577923201000], False)])
+    df = spotware.portfolio.trades(start=datetime(2020, 1, 1), stop=datetime(2020, 1, 3), rows=2)
+    assert sorted(df["TradeID"].to_list()) == [1577923201000, 1577923202000, 1577923203000]
+    assert spotware._sent_[1].toTimestamp == 1577923202000 and spotware._sent_[1].fromTimestamp == spotware._sent_[0].fromTimestamp
+def test_trades_step_past_a_page_the_inclusive_bound_serves_again(spotware):
+    spotware._responses_.extend([_page_([1577923203000], True), _page_([1577923203000], True), _page_([1577923202000], True), _page_([1577923202000], True), _page_([1577923201000], False)])
+    df = spotware.portfolio.trades(start=datetime(2020, 1, 1), stop=datetime(2020, 1, 3), rows=1)
+    assert sorted(df["TradeID"].to_list()) == [1577923201000, 1577923202000, 1577923203000]
+    assert [sent.toTimestamp for sent in spotware._sent_[1:4]] == [1577923203000, 1577923202999, 1577923202000]
+def test_trades_lower_the_bound_even_when_a_page_ignores_it(spotware):
+    spotware._responses_.extend([_page_([1577923203000], True), _page_([1577923203000], True), _page_([1577923203000], True), _page_([], True)])
+    df = spotware.portfolio.trades(start=datetime(2020, 1, 1), stop=datetime(2020, 1, 3), rows=1)
+    assert df["TradeID"].to_list() == [1577923203000]
+    assert [sent.toTimestamp for sent in spotware._sent_[1:]] == [1577923203000, 1577923202999, 1577923202998]
+def test_trades_stop_on_an_empty_page(spotware):
+    spotware._responses_.extend([_page_([1577923201000], True), _page_([], True)])
+    df = spotware.portfolio.trades(start=datetime(2020, 1, 1), stop=datetime(2020, 1, 3), rows=1)
+    assert df["TradeID"].to_list() == [1577923201000] and len(spotware._sent_) == 2
+def test_trades_stop_once_the_bound_passes_the_start(spotware):
+    spotware._responses_.extend([_page_([1577836800000], True), _page_([1577836800000], True)])
+    df = spotware.portfolio.trades(start=datetime(2020, 1, 1), stop=datetime(2020, 1, 3), rows=1)
+    assert df["TradeID"].to_list() == [1577836800000] and len(spotware._sent_) == 2

@@ -1,60 +1,36 @@
-import pytest
 from datetime import datetime
 from Library.Market.Bar import BarAPI
+from Library.Market.Point import PointAPI
 from Library.Market.Tick import TickAPI
-from Library.Universe.Security import SecurityAPI
-from Library.Universe.Timeframe import TimeframeAPI
-from Library.Universe.Category import CategoryAPI
-from Library.Universe.Provider import ProviderAPI, Platform
-from Library.Universe.Ticker import TickerAPI, ContractType
-from Library.Universe.Universe import UniverseAPI
 
-def test_bar_composite_identity_no_surrogate_uid():
-    bar = BarAPI(Security=5, Timeframe="D1", Timestamp=datetime(2023, 1, 1))
-    assert "UID" not in {str(k) for k in bar.Structure.keys()}
-    assert set(bar.natural_keys()) == {"Security", "Timeframe", "Timestamp"}
-    assert bar.identity_keys() == []
+AT = datetime(2023, 1, 1, 12)
 
-def test_bar_tick_fk_derives_from_encoded_uid():
-    ts = datetime(2023, 1, 1)
-    gap = TickAPI(5, ts, Ask=1.1, Bid=1.0)
-    bar = BarAPI(Security=5, Timeframe="D1", Timestamp=ts, GapTick=gap, OpenTick=gap, HighTick=gap, LowTick=gap, CloseTick=gap, Volume=1.0)
-    assert bar._parse_("GapTick") == gap.UID == TickAPI.encode(5, ts)
+def _tick_(minute: int, ask: float, bid: float) -> TickAPI:
+    return TickAPI(5, AT.replace(minute=minute), Ask=ask, Bid=bid, Volume=1.0)
 
-def test_bar_initialization(db):
-    db.migrate(schema=UniverseAPI.Schema, table=CategoryAPI.Table, structure=CategoryAPI(db=db).Structure)
-    db.migrate(schema=UniverseAPI.Schema, table=ProviderAPI.Table, structure=ProviderAPI(db=db).Structure)
-    db.migrate(schema=UniverseAPI.Schema, table=TickerAPI.Table, structure=TickerAPI(db=db).Structure)
-    db.migrate(schema=UniverseAPI.Schema, table=TimeframeAPI.Table, structure=TimeframeAPI(db=db).Structure)
-    from Library.Universe.Contract import ContractAPI
-    db.migrate(schema=UniverseAPI.Schema, table=ContractAPI.Table, structure=ContractAPI(db=db).Structure)
-    CategoryAPI(UID="Forex(Major)", Primary="Forex", Secondary="Major", Alternative="Currency", db=db).save()
-    ProviderAPI(UID="Pepperstone(cTrader)", Platform=Platform.cTrader, Name="Pepperstone Europe", Abbreviation="Pepperstone", db=db).save()
-    TickerAPI(UID="EURUSD", Category="Forex(Major)", BaseAsset="EUR", BaseName="Euro", QuoteAsset="USD", QuoteName="US Dollar", Description="Euro vs US Dollar", db=db).save()
-    ContractAPI(Ticker="EURUSD", Provider="Pepperstone(cTrader)", Type=ContractType.Spot, db=db).save()
-    tf = TimeframeAPI(UID="M1", db=db)
-    tf.save()
-    sec = SecurityAPI(Ticker="EURUSD", Provider="Pepperstone(cTrader)", Contract=ContractType.Spot, db=db, migrate=True, autoload=True)
-    sec.save()
-    dt = datetime(2023, 1, 1, 12, 0, 0)
-    db.migrate(schema=TickAPI.Schema, table=TickAPI.Table, structure=TickAPI(db=db).Structure)
-    bar_args = (
-        sec.UID,
-        tf.UID,
-        dt,
-        None,
-        TickAPI(Ask=1.0500, Bid=1.0498),
-        TickAPI(Ask=1.0510, Bid=1.0508),
-        TickAPI(Ask=1.0490, Bid=1.0488),
-        TickAPI(Ask=1.0505, Bid=1.0503)
-    )
-    bar = BarAPI(*bar_args, db=db, migrate=True)
-    assert bar.Security.UID == sec.UID
-    assert bar.Timeframe.UID == tf.UID
-    assert bar.Timestamp.DateTime == dt
-    assert bar.OpenTick.Ask.Price == pytest.approx(1.0500)
-    assert bar.HighTick.Ask.Price == pytest.approx(1.0510)
-    assert bar.LowTick.Ask.Price == pytest.approx(1.0490)
-    assert bar.CloseTick.Ask.Price == pytest.approx(1.0505)
-    from Library.Database.Query import QueryAPI
-    db.executeone(QueryAPI(f'DELETE FROM "{BarAPI.Schema}"."{BarAPI.Table}"')).commit()
+def _bar_() -> BarAPI:
+    gap, opened, closed = _tick_(0, 1.0499, 1.0497), _tick_(1, 1.0500, 1.0498), _tick_(59, 1.0505, 1.0503)
+    high = PointAPI(AskTick=_tick_(10, 1.0512, 1.0506), BidTick=_tick_(20, 1.0511, 1.0508))
+    low = PointAPI(AskTick=_tick_(30, 1.0489, 1.0486), BidTick=_tick_(40, 1.0490, 1.0485))
+    return BarAPI(5, "H1", AT, PointAPI(gap, gap), PointAPI(opened, opened), high, low, PointAPI(closed, closed), 6.0)
+
+def test_a_point_reads_its_ask_from_the_ask_tick_and_its_bid_from_the_bid_tick():
+    bar = _bar_()
+    assert (bar.HighPoint.Ask.Price, bar.HighPoint.Bid.Price) == (1.0512, 1.0508)
+    assert (bar.LowPoint.Ask.Price, bar.LowPoint.Bid.Price) == (1.0489, 1.0485)
+    assert bar.ClosePoint.AskTick is bar.ClosePoint.BidTick
+
+def test_every_field_is_reachable_from_the_bar():
+    bar = _bar_()
+    assert bar.HighPoint.AskTick.Timestamp.DateTime == AT.replace(minute=10)
+    assert (bar.HighPoint.AskTick.Ask.Price, bar.HighPoint.AskTick.Bid.Price, bar.HighPoint.AskTick.Volume) == (1.0512, 1.0506, 1.0)
+    assert (bar.Timestamp.DateTime, bar.Volume, bar.Timeframe.UID, bar.Security.UID) == (AT, 6.0, "H1", 5)
+
+def test_flattening_names_every_tick_of_every_point():
+    row = _bar_().dict(flatten=True)
+    assert (row["HighPoint.AskTick.Ask"], row["HighPoint.BidTick.Bid"]) == (1.0512, 1.0508)
+    assert row["ClosePoint.AskTick.Timestamp"] == row["ClosePoint.BidTick.Timestamp"] == AT.replace(minute=59)
+    assert str(BarAPI.OID.HighPoint.AskTick.Ask) == "HighPoint.AskTick.Ask"
+
+def test_a_bar_has_no_identity_of_its_own():
+    assert "UID" not in _bar_().dict(flatten=True)

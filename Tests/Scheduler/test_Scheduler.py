@@ -154,7 +154,7 @@ def test_a_finished_run_still_shows_its_log(scheduler, tmp_path):
     task = TaskAPI(UID="task-chatty", Name="Chatty", Owner="owner", Type=TaskType.Python, Kind=Kind.Scheduled, Path=str(script), Enabled=True, RequiresApproval=False, RequiresReview=False)
     persist(task)
     run = ExecutorAPI(database=DATABASE).run(task)
-    assert not (ExecutorAPI.settle(run.UID) / ExecutorAPI.CONSOLE).exists()
+    assert not (ExecutorAPI.settle(run.UID) / ExecutorAPI.console()).exists()
     assert "Chatty Output Line" in ManagerAPI(database=DATABASE).log(run.UID)
     assert ManagerAPI(database=DATABASE).log("missing-run") is None
 
@@ -231,13 +231,13 @@ def test_reaping_waits_one_lease_after_the_daemon_was_suspended():
     woke = slept + timedelta(hours=6)
     assert sched._suspended_(woke)
     assert sched._suspended_(woke + timedelta(seconds=30))
-    assert not sched._suspended_(woke + timedelta(seconds=SchedulerAPI._LEASE_ + 1))
+    assert not sched._suspended_(woke + timedelta(seconds=sched._lease_ + 1))
 
 def test_a_long_polling_interval_is_not_mistaken_for_a_suspension():
     sched = SchedulerAPI(database=DATABASE, interval=90)
     tick = datetime(2026, 9, 16, 9, 53)
     assert not any(sched._suspended_(tick + timedelta(seconds=100 * step)) for step in range(10))
-    assert sched._suspended_(tick + timedelta(seconds=900 + 90 + SchedulerAPI._LEASE_ + 1))
+    assert sched._suspended_(tick + timedelta(seconds=900 + 90 + sched._lease_ + 1))
 
 def test_manager_rejects_an_unknown_zone():
     with pytest.raises(ValueError, match="Unknown time zone"):

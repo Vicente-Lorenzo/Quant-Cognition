@@ -107,3 +107,10 @@ def test_trades_known_at_start_are_part_of_the_opening_balance_not_added_twice()
 
 def test_statistics_before_any_bar_are_empty():
     assert _portfolio_(10000.0).calculate_statistics().is_empty()
+
+def test_each_side_is_ordered_by_the_extremes_it_is_marked_on():
+    tick = lambda hour: SimpleNamespace(Timestamp=SimpleNamespace(DateTime=datetime(2024, 1, 2, hour)))
+    assert PortfolioAPI._high_first_(tick(10), tick(12)) and not PortfolioAPI._high_first_(tick(12), tick(10))
+    seen = []
+    PortfolioAPI._observe_(SimpleNamespace(observe=lambda *points: seen.append(points)), 2.0, 1.0, 1.5, False)
+    assert seen == [(1.0, 2.0, 1.5)]

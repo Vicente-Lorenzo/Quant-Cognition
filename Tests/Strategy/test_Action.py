@@ -6,7 +6,7 @@ from Library.Strategy.Model.Action import ActionAPI
 def _update_(close=1.15, balance=10000.0):
     contract = SimpleNamespace(VolumeStep=1000.0, VolumeMin=1000.0, VolumeMax=100000.0)
     portfolio = SimpleNamespace(Account=SimpleNamespace(Balance=balance), Security=SimpleNamespace(Contract=contract))
-    bar = SimpleNamespace(CloseTick=SimpleNamespace(Bid=SimpleNamespace(Price=close)))
+    bar = SimpleNamespace(ClosePoint=SimpleNamespace(Bid=SimpleNamespace(Price=close)))
     return SimpleNamespace(Bar=bar, Portfolio=portfolio)
 
 def test_volume_mode_caps_at_fixed_units():

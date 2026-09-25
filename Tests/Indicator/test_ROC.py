@@ -14,18 +14,18 @@ def _market_(closes):
         "Timestamp": [datetime(2020, 1, i + 1, tzinfo=timezone.utc) for i in range(n)],
         "Security": [1] * n,
         "Timeframe": ["M1"] * n,
-        "CloseTick.Bid": [float(c) for c in closes],
+        "ClosePoint.BidTick.Bid": [float(c) for c in closes],
         "Volume": [100.0] * n
     })
     market.init_data(df)
     return market, df
 
 def _append_(market, df, close, uid, day):
-    bar = {"UID": uid, "Timestamp": datetime(2020, 1, day, tzinfo=timezone.utc), "Security": 1, "Timeframe": "M1", "CloseTick.Bid": float(close), "Volume": 100.0}
+    bar = {"UID": uid, "Timestamp": datetime(2020, 1, day, tzinfo=timezone.utc), "Security": 1, "Timeframe": "M1", "ClosePoint.BidTick.Bid": float(close), "Volume": 100.0}
     for col in df.columns:
         if col not in bar: bar[col] = None
     market._data_ = market._data_.vstack(pl.DataFrame([bar]).select(df.columns))
-    market.CloseTicks.init_data(market._data_)
+    market.ClosePoints.init_data(market._data_)
 
 def test_batch_is_log_return_over_window():
     closes = [1.10, 1.11, 1.09, 1.12, 1.15, 1.13]

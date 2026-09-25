@@ -16,9 +16,11 @@ from Script.Setup.Enum import OUTPUT_PATH
 
 def pytest_addoption(parser):
     parser.addoption("--golden", action="store_true", default=False, help="Replay every golden under Tests/Golden against the Quant database")
+    parser.addoption("--spotware", action="store_true", default=False, help="Run the demo-only live Spotware suite with the cTrader ID stored in the Quant vault")
 
 def pytest_ignore_collect(collection_path, config):
     if collection_path.name == "test_Golden.py" and not config.getoption("--golden"): return True
+    if collection_path.name == "test_Live.py" and collection_path.parent.name == "Spotware" and not config.getoption("--spotware"): return True
 
 @pytest.fixture(scope="session")
 def db():
@@ -71,14 +73,6 @@ def universe(db):
     tf = TimeframeAPI(UID="M1", db=db)
     tf.save()
     return {"category": cat, "provider": prov, "ticker": ticker, "contract": contract, "security": sec, "timeframe": tf}
-
-@pytest.fixture(scope="session")
-def market(db, universe):
-    from Library.Market.Tick import TickAPI
-    from Library.Market.Bar import BarAPI
-    db.migrate(schema=MarketAPI.Schema, table=TickAPI.Table, structure=TickAPI(db=None).Structure)
-    db.migrate(schema=MarketAPI.Schema, table=BarAPI.Table, structure=BarAPI(db=None).Structure)
-    return {"tick_table": f'"{TickAPI.Schema}"."{TickAPI.Table}"', "bar_table": f'"{BarAPI.Schema}"."{BarAPI.Table}"'}
 
 @pytest.fixture(scope="session")
 def connector_enums() -> dict:

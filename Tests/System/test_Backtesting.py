@@ -1,12 +1,16 @@
 import pytest
 import random
-from datetime import datetime
 
-from Library.Database.Dataframe import np
+from datetime import datetime
+from types import SimpleNamespace
+
+from Library.Database.Dataframe import np, pl
 from Library.Market.Price import Direction
+from Library.Market.Tape import TapeAPI
 from Library.Logging import LoggingAPI, VerboseLevel
 from Library.System.Backtesting import BacktestingAPI, DatasetAPI
 from Library.Protocol.Update import UpdateID
+from Library.Universe.Timeframe import TimeframeAPI
 from Library.Universe.Contract import CommissionType, CommissionMode, SpreadType, SwapType, SwapMode
 from Library.Utility.Datetime import Weekday
 from Library.Utility.Math import truncate
@@ -16,12 +20,8 @@ def _dataset_(**overrides):
     fields = dict(
         WarmupBars=None,
         ExecutionBars=[],
-        TickTimestamps=np.empty(0, dtype="int64"),
-        TickAsks=np.empty(0, dtype="float64"),
-        TickBids=np.empty(0, dtype="float64"),
-        TickConversions=None,
-        IntraLevels=[],
-        IntraBars={}
+        Ticks=TapeAPI.empty(1),
+        Conversions=(None, None)
     )
     fields.update(overrides)
     return DatasetAPI(**fields)
@@ -114,6 +114,13 @@ def test_overnights_positive_for_multiday():
     engine = _engine_()
     assert engine._overnights_(datetime(2023, 6, 5, 12), datetime(2023, 6, 9, 12)) > 0
 
+def test_overnights_roll_at_five_in_new_york_through_daylight_saving():
+    engine = _engine_()
+    assert engine._overnights_(datetime(2015, 4, 1, 21, 0, 0, 303000), datetime(2015, 4, 2, 13, 49)) == 0
+    assert engine._overnights_(datetime(2015, 4, 1, 20, 59, 59), datetime(2015, 4, 1, 21, 0, 1)) == 3
+    assert engine._overnights_(datetime(2023, 1, 10, 21, 30), datetime(2023, 1, 10, 22, 30)) == 1
+    assert engine._overnights_(datetime(2023, 6, 9, 12), datetime(2023, 6, 12, 12)) == 1
+
 def test_swap_amount():
     engine = _engine_(swap=(SwapType.Amount, -2.0, -3.0))
     assert engine._swap_(Direction.Buy, 10000.0, 1.1, datetime(2023, 6, 5, 12), datetime(2023, 6, 9, 12)) == pytest.approx(-2.0)
@@ -141,13 +148,12 @@ def test_stop_level_sell():
     assert engine._stop_level_(sell, 1.0949, 1.0949) == (1.0950, UpdateID.TakeProfitSellPosition)
     assert engine._stop_level_(sell, 1.1000, 1.1000) == (None, None)
 
-def test_tick_bars_grouping(monkeypatch):
-    engine = _engine_()
-    timestamps = [datetime(2023, 1, 1, 0, 0, i) for i in range(5)]
-    asks = bids = [1.10, 1.12, 1.09, 1.11, 1.13]
-    monkeypatch.setattr(engine, "_period_ticks_", lambda bar: (timestamps, asks, bids))
-    out = list(engine._tick_bars_(None, 5))
-    assert [bid for _, _, bid in out] == [1.10, 1.09, 1.13]
+def test_a_tick_bar_keeps_the_ask_extremes_where_the_spread_widens():
+    bids = np.array([1.1000, 1.1002, 1.1001, 1.0999, 1.1000, 1.1003, 1.1001, 1.1002, 1.1000, 1.1001])
+    asks = bids + np.array([0.2, 0.2, 1.5, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2]) / 1000
+    tape = TapeAPI(Security=1, Stamps=np.arange(10, dtype=np.int64) * 1000, Asks=asks, Bids=bids, Volumes=np.ones(10))
+    points = BacktestingAPI._points_(tape, tape.bars(TimeframeAPI(UID="T5")))
+    assert (points.Stamps // 1000).tolist() == [0, 1, 2, 3, 4, 5, 8, 9]
 
 class _ConvTick_:
 
@@ -172,18 +178,25 @@ def test_conversions_fallback_is_bid_side():
     assert base == pytest.approx(1.0)
     assert quote == pytest.approx(1.0 / 1.10005)
 
-def _conversion_engine_():
+def _source_(asks: list, bids: list) -> tuple:
+    stamps = np.array([100, 200, 300], dtype=np.int64)
+    return TapeAPI(Security=2, Stamps=stamps, Asks=np.array(asks), Bids=np.array(bids), Volumes=np.ones(3)), False
+
+def _conversion_engine_(base=([0.80, 0.81, 0.82], [0.79, 0.80, 0.81]), quote=([0.90, 0.91, 0.92], [0.89, 0.90, 0.91])):
     engine = _engine_()
     engine._needs_conversion_ = True
-    conversions = (np.array([0.80, 0.81, 0.82]), np.array([0.79, 0.80, 0.81]),
-                   np.array([0.90, 0.91, 0.92]), np.array([0.89, 0.90, 0.91]))
-    engine._dataset_ = _dataset_(TickTimestamps=np.array([100, 200, 300], dtype="int64"), TickConversions=conversions)
+    engine._dataset_ = _dataset_(Conversions=(_source_(*base), _source_(*quote)))
     return engine
 
-def test_conversion_at_none_without_arrays():
+def test_conversion_at_without_a_source_is_one():
     engine = _engine_()
-    engine._dataset_ = _dataset_(TickTimestamps=np.array([100, 200], dtype="int64"), TickConversions=None)
-    assert engine._conversion_at_(150) == (None, None, None, None)
+    engine._dataset_ = _dataset_()
+    assert engine._conversion_at_(150) == (1.0, 1.0, 1.0, 1.0)
+
+def test_conversion_at_inverts_an_inverse_source():
+    engine = _engine_()
+    engine._dataset_ = _dataset_(Conversions=(None, (_source_([1.25, 1.25, 1.25], [1.0, 1.0, 1.0])[0], True)))
+    assert engine._conversion_at_(200) == pytest.approx((1.0, 1.0, 1.0, 0.8))
 
 def test_conversion_at_indexes_latest_at_or_before():
     engine = _conversion_engine_()
@@ -195,11 +208,17 @@ def test_conversion_at_before_first_tick_is_none():
     engine = _conversion_engine_()
     assert engine._conversion_at_(50) == (None, None, None, None)
 
+def test_a_conversion_kept_only_at_the_walked_stamps_reads_the_same_rates():
+    source = TapeAPI(Security=2, Stamps=np.array([100, 150, 300], dtype=np.int64), Asks=np.array([0.80, 0.81, 0.82]), Bids=np.array([0.79, 0.80, 0.81]), Volumes=np.ones(3))
+    stamps = np.array([90, 120, 150, 299, 300], dtype=np.int64)
+    reduced = BacktestingAPI._reduce_((source, True), stamps)
+    for stamp in stamps.tolist():
+        full, kept = TapeAPI.rates(np.array([stamp]), (source, True)), TapeAPI.rates(np.array([stamp]), reduced)
+        assert np.array_equal(full[0], kept[0], equal_nan=True) and np.array_equal(full[1], kept[1], equal_nan=True)
+    assert BacktestingAPI._reduce_(None, stamps) is None
+
 def test_conversion_at_nan_falls_back_to_none():
-    engine = _conversion_engine_()
-    conversions = (np.array([np.nan, 0.81, 0.82]), np.array([0.79, 0.80, 0.81]),
-                   np.array([np.nan, 0.91, 0.92]), np.array([0.89, 0.90, 0.91]))
-    engine._dataset_ = _dataset_(TickTimestamps=engine._dataset_.TickTimestamps, TickConversions=conversions)
+    engine = _conversion_engine_(base=([np.nan, 0.81, 0.82], [0.79, 0.80, 0.81]), quote=([np.nan, 0.91, 0.92], [0.89, 0.90, 0.91]))
     assert engine._conversion_at_(100) == (None, 0.79, None, 0.89)
 
 def test_tick_conversions_account_is_base_uses_raw():
@@ -219,75 +238,78 @@ def test_commission_accurate_is_truncated_per_deal():
     assert raw == pytest.approx(7000.0 * (-45.0 / 1_000_000) * 1.0)
     assert truncate(raw) == pytest.approx(-0.31)
 
-_BIDS_ = (1.10000, 1.10500, 1.09500, 1.10100)
-_ASKS_ = (1.10002, 1.10502, 1.09502, 1.10102)
-
-def _descend_engine_():
+def _walk_engine_():
     engine = _engine_()
     engine._positions_ = {}
     engine._ask_above_ = engine._ask_below_ = engine._bid_above_ = engine._bid_below_ = None
     return engine
 
-def test_spread_ceiling_accurate_is_max_raw_spread():
-    assert _descend_engine_()._spread_ceiling_(_BIDS_, _ASKS_) == pytest.approx(0.00002)
-
-def test_should_descend_skips_when_flat():
-    assert _descend_engine_()._should_descend_(_BIDS_, _ASKS_) is False
-
-def test_should_descend_true_when_buy_stop_reachable():
-    engine = _descend_engine_()
-    engine._positions_ = {1: _Position_(Direction.Buy, stop_loss=1.10000)}
-    assert engine._should_descend_(_BIDS_, _ASKS_) is True
-
-def test_should_descend_false_when_buy_stop_below_bar():
-    engine = _descend_engine_()
-    engine._positions_ = {1: _Position_(Direction.Buy, stop_loss=1.08000)}
-    assert engine._should_descend_(_BIDS_, _ASKS_) is False
-
-def test_should_descend_true_when_target_reachable():
-    engine = _descend_engine_()
-    engine._bid_above_ = 1.10300
-    assert engine._should_descend_(_BIDS_, _ASKS_) is True
-
-def test_should_descend_true_when_sell_stop_below_gapped_bar():
-    engine = _descend_engine_()
-    engine._positions_ = {1: _Position_(Direction.Sell, stop_loss=1.09000)}
-    assert engine._should_descend_(_BIDS_, _ASKS_) is True
-
-def test_should_descend_false_when_sell_stop_above_bar():
-    engine = _descend_engine_()
-    engine._positions_ = {1: _Position_(Direction.Sell, stop_loss=1.12000)}
-    assert engine._should_descend_(_BIDS_, _ASKS_) is False
-
 def test_effective_bounds_accurate_is_raw_ask():
-    engine = _descend_engine_()
+    engine = _walk_engine_()
     ask, bid = np.array([1.10002, 1.10502]), np.array([1.10000, 1.10500])
     eb, ask_low, ask_high = engine._effective_bounds_(ask, bid)
     assert eb.tolist() == bid.tolist()
     assert ask_low.tolist() == ask.tolist() and ask_high.tolist() == ask.tolist()
 
-def test_candidate_mask_flat_is_empty():
-    engine = _descend_engine_()
+def test_nothing_is_reachable_when_nothing_is_armed():
+    engine = _walk_engine_()
     bid = np.array([1.10000, 1.10500, 1.09500])
     eb, ask_low, ask_high = engine._effective_bounds_(bid + 0.00002, bid)
-    assert not engine._candidate_mask_(eb, ask_low, ask_high).any()
+    assert not np.any(engine._reachable_(eb, eb, ask_low, ask_high))
 
-def test_candidate_mask_flags_only_reachable_buy_stop():
-    engine = _descend_engine_()
+def test_only_the_ticks_that_reach_a_buy_stop_are_walked():
+    engine = _walk_engine_()
     engine._positions_ = {1: _Position_(Direction.Buy, stop_loss=1.10000)}
     bid = np.array([1.10100, 1.10000, 1.10050])
     eb, ask_low, ask_high = engine._effective_bounds_(bid + 0.00002, bid)
-    assert engine._candidate_mask_(eb, ask_low, ask_high).tolist() == [False, True, False]
+    assert engine._reachable_(eb, eb, ask_low, ask_high).tolist() == [False, True, False]
+
+def _bar_(asks: np.ndarray, bids: np.ndarray) -> SimpleNamespace:
+    point = lambda ask, bid: SimpleNamespace(AskTick=SimpleNamespace(Ask=SimpleNamespace(Price=float(ask))), BidTick=SimpleNamespace(Bid=SimpleNamespace(Price=float(bid))))
+    return SimpleNamespace(LowPoint=point(asks.min(), bids.min()), HighPoint=point(asks.max(), bids.max()))
+
+@pytest.mark.parametrize("spread", [(SpreadType.Accurate, None), (SpreadType.Points, 7.0), (SpreadType.Percentage, 0.01), (SpreadType.Random, 5.0)])
+def test_the_auto_gate_skips_a_bar_only_when_no_tick_of_it_would_be_walked(spread):
+    generator = np.random.default_rng(7)
+    engine = _walk_engine_()
+    engine._spread_type_, engine._spread_value_ = spread
+    for _ in range(400):
+        bids = np.round(1.1 + np.cumsum(generator.normal(0, 0.0002, 50)), 5)
+        asks = np.round(bids + generator.integers(0, 30, 50) / 100000, 5)
+        level = float(np.round(1.1 + generator.normal(0, 0.003), 5))
+        engine._positions_, engine._ask_above_, engine._bid_below_ = {}, None, None
+        match int(generator.integers(0, 4)):
+            case 0: engine._positions_ = {1: _Position_(Direction.Buy, stop_loss=level, take_profit=level + 0.004)}
+            case 1: engine._positions_ = {1: _Position_(Direction.Sell, stop_loss=level, take_profit=level - 0.004)}
+            case 2: engine._ask_above_ = level
+            case _: engine._bid_below_ = level
+        bid, ask_low, ask_high = engine._effective_bounds_(asks, bids)
+        assert engine._gate_(_bar_(asks, bids)) == bool(np.any(engine._reachable_(bid, bid, ask_low, ask_high)))
+
+def test_a_finer_bar_is_walked_open_then_its_extremes_in_time_then_close():
+    tape = TapeAPI(Security=1, Stamps=np.arange(10, dtype=np.int64) * 1000, Asks=np.arange(10) / 10 + 1.0, Bids=np.arange(10) / 10 + 0.9, Volumes=np.ones(10))
+    bars = pl.DataFrame({"Open": [0, 5], "HighAsk": [3, 9], "HighBid": [1, 9], "LowAsk": [2, 6], "LowBid": [2, 7], "Close": [4, 9]})
+    points = BacktestingAPI._points_(tape, bars)
+    assert (points.Stamps // 1000).tolist() == [0, 1, 2, 3, 4, 5, 6, 7, 9]
+    assert points.Asks.tolist() == tape.Asks[[0, 1, 2, 3, 4, 5, 6, 7, 9]].tolist()
+
+def test_a_bar_is_walked_through_its_distinct_ticks_in_time():
+    tick = lambda second: SimpleNamespace(Timestamp=SimpleNamespace(DateTime=datetime(2024, 1, 2, 10, 0, second)))
+    first, low, high, last = tick(0), tick(20), tick(40), tick(59)
+    bar = SimpleNamespace(OpenPoint=SimpleNamespace(BidTick=first), HighPoint=SimpleNamespace(AskTick=high, BidTick=first), LowPoint=SimpleNamespace(AskTick=low, BidTick=low), ClosePoint=SimpleNamespace(BidTick=last))
+    assert BacktestingAPI._intrabar_(bar) == [first, low, high, last]
+
+def test_auto_walks_nothing_in_a_bar_the_gate_closes(monkeypatch):
+    engine = _walk_engine_()
+    engine._auto_, engine._resolution_, engine._descended_, engine._skipped_ = True, None, 0, 0
+    monkeypatch.setattr(engine, "_gate_", lambda bar: False)
+    assert list(engine._intrabar_source_(None)) == [] and engine._skipped_ == 1
 
 class _LogStub_:
 
     def info(self, fn): pass
 
     def debug(self, fn): pass
-
-class _FakeArr_:
-
-    size = 7
 
 def _preload_stub_(window: int = 20):
     engine = object.__new__(BacktestingAPI)
@@ -297,18 +319,21 @@ def _preload_stub_(window: int = 20):
     engine._timeframe_ = type("T", (), {"UID": "D1"})()
     engine._start_ = datetime(2023, 1, 1)
     engine._stop_ = datetime(2024, 1, 1)
-    engine._auto_ = True
+    engine._resolution_, engine._auto_ = type("R", (), {"UID": "T1"})(), True
+    engine._account_asset_ = "EUR"
     engine._log_ = _LogStub_()
     return engine
+
+def _loaded_(bars: list) -> tuple:
+    return pl.DataFrame(), (None, None), pl.DataFrame({"Row": [0, 1]}), bars, TapeAPI.empty(1), None, [None]
 
 def test_preload_cache_reuses_across_instances(monkeypatch):
     BacktestingAPI._PRELOAD_CACHE_.clear()
     BacktestingAPI._TAPE_CACHE_.clear()
-    monkeypatch.setattr(BacktestingAPI, "_DISK_CACHE_", False)
     bars = [object()]
-    monkeypatch.setattr(BacktestingAPI, "_load_bars_", lambda self: (None, bars, None))
+    monkeypatch.setattr(BacktestingAPI, "_load_warmup_", lambda self, early, rows, history: None)
     calls = []
-    monkeypatch.setattr(BacktestingAPI, "_load_frames_", lambda self, b: (calls.append(1), (_FakeArr_(), _FakeArr_(), _FakeArr_(), None, [], {}))[1])
+    monkeypatch.setattr(BacktestingAPI, "_load_tape_", lambda self: (calls.append(1), _loaded_(bars))[1])
     first, second = _preload_stub_(), _preload_stub_()
     first._preload_()
     second._preload_()
@@ -324,49 +349,48 @@ def test_preload_cache_reuses_across_instances(monkeypatch):
 def test_preload_rebuilds_per_window_but_loads_the_tape_once(monkeypatch):
     BacktestingAPI._PRELOAD_CACHE_.clear()
     BacktestingAPI._TAPE_CACHE_.clear()
-    monkeypatch.setattr(BacktestingAPI, "_DISK_CACHE_", False)
     bars = [object()]
     windows = []
-    monkeypatch.setattr(BacktestingAPI, "_load_bars_", lambda self: (windows.append(self._window_), (None, bars, None))[1])
+    monkeypatch.setattr(BacktestingAPI, "_load_warmup_", lambda self, early, rows, history: windows.append(self._window_))
     tapes = []
-    monkeypatch.setattr(BacktestingAPI, "_load_frames_", lambda self, b: (tapes.append(1), (_FakeArr_(), _FakeArr_(), _FakeArr_(), None, [], {}))[1])
+    monkeypatch.setattr(BacktestingAPI, "_load_tape_", lambda self: (tapes.append(1), _loaded_(bars))[1])
     narrow, wide = _preload_stub_(20), _preload_stub_(30)
     narrow._preload_()
     wide._preload_()
     assert windows == [20, 30]
     assert narrow._dataset_ is not wide._dataset_
     assert len(tapes) == 1
-    assert narrow._dataset_.TickTimestamps is wide._dataset_.TickTimestamps
+    assert narrow._dataset_.Ticks is wide._dataset_.Ticks and narrow._dataset_.ExecutionBars is wide._dataset_.ExecutionBars
     BacktestingAPI._PRELOAD_CACHE_.clear()
     BacktestingAPI._TAPE_CACHE_.clear()
 
 def test_preload_injects_dataset_without_loading(monkeypatch):
     BacktestingAPI._PRELOAD_CACHE_.clear()
     calls = []
-    monkeypatch.setattr(BacktestingAPI, "_load_bars_", lambda self: calls.append("bars"))
-    monkeypatch.setattr(BacktestingAPI, "_acquire_frames_", lambda self, b: calls.append("frames"))
-    arr = _FakeArr_()
+    monkeypatch.setattr(BacktestingAPI, "_load_warmup_", lambda self, early, rows, history: calls.append("bars"))
+    monkeypatch.setattr(BacktestingAPI, "_load_tape_", lambda self: calls.append("tape"))
+    ticks = TapeAPI.empty(1)
     bars = [object()]
-    dataset = _dataset_(ExecutionBars=bars, TickTimestamps=arr, TickAsks=arr, TickBids=arr)
+    dataset = _dataset_(ExecutionBars=bars, Ticks=ticks)
     engine = _preload_stub_()
     engine._injected_ = dataset
     engine._preload_()
     assert calls == []
     assert engine._dataset_ is dataset
     assert engine._dataset_.ExecutionBars is bars
-    assert engine._dataset_.TickTimestamps is arr
+    assert engine._dataset_.Ticks is ticks
 
 def test_extract_inject_round_trips_state():
-    arr = _FakeArr_()
+    ticks = TapeAPI.empty(1)
     bars = [object()]
     source = _preload_stub_()
-    source._dataset_ = _dataset_(ExecutionBars=bars, TickTimestamps=arr, TickAsks=arr, TickBids=arr)
+    source._dataset_ = _dataset_(ExecutionBars=bars, Ticks=ticks)
     target = _preload_stub_()
     target.inject(source.extract())
     target._preload_()
     assert target._dataset_ is source._dataset_
     assert target._dataset_.ExecutionBars is bars
-    assert target._dataset_.TickTimestamps is arr
+    assert target._dataset_.Ticks is ticks
 
 def test_auto_fee_types_resolve_to_accurate():
     engine = BacktestingAPI(
