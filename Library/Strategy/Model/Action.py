@@ -36,7 +36,7 @@ class ActionAPI:
         contract = update.Portfolio.Security.Contract
         if self._mode_ == SizingMode.Balance:
             balance = update.Portfolio.Account.Balance if update.Portfolio.Account else 0.0
-            price = update.Bar.CloseTick.Bid.Price
+            price = update.Bar.ClosePoint.Bid.Price
             if not balance or not price: return 0.0
             return calculate_normalized_volume(balance * (self._maximum_ / 100.0) / price, contract)
         return calculate_normalized_volume(self._maximum_, contract)

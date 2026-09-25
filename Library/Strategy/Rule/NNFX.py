@@ -262,7 +262,7 @@ class NNFXStrategyAPI(StrategyAPI):
             volume = calculate_normalized_volume(size, contract)
         elif self._sizing_mode_ == SizingMode.Balance:
             account = update.Portfolio.Account
-            price = update.Bar.CloseTick.Bid.Price
+            price = update.Bar.ClosePoint.Bid.Price
             volume = calculate_normalized_volume(account.Balance * (size / 100.0) / price, contract) if account and account.Balance and price else 0.0
         else:
             volume = calculate_fixed_fractional_volume(size, sizing_pips, update.Portfolio.Account, contract)

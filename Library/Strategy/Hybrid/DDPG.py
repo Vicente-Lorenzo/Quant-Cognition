@@ -183,14 +183,14 @@ class DDPGObservationAPI(ObservationAPI):
 
     def _market_features_(self, update: BarUpdateAPI, features: list) -> None:
         bar = update.Bar
-        close_price = bar.CloseTick.Bid.Price
+        close_price = bar.ClosePoint.Bid.Price
         realized = self._indicator_(update, self._REALIZED_FAST_)
         sigma = realized if realized and realized > 0.0 else 1.0
         previous = self._previous_close_
         if previous and previous > 0.0:
-            features.append((math.log(bar.OpenTick.Bid.Price / previous) / sigma, False))
-            features.append((math.log(bar.HighTick.Bid.Price / previous) / sigma, False))
-            features.append((math.log(bar.LowTick.Bid.Price / previous) / sigma, False))
+            features.append((math.log(bar.OpenPoint.Bid.Price / previous) / sigma, False))
+            features.append((math.log(bar.HighPoint.Bid.Price / previous) / sigma, False))
+            features.append((math.log(bar.LowPoint.Bid.Price / previous) / sigma, False))
             features.append((math.log(close_price / previous) / sigma, False))
         else:
             features.append((0.0, False))
@@ -199,13 +199,13 @@ class DDPGObservationAPI(ObservationAPI):
             features.append((0.0, False))
         volume = bar.Volume
         features.append((math.log1p(volume) if volume and volume > 0.0 else 0.0, True))
-        ask = getattr(bar.CloseTick, "Ask", None)
+        ask = getattr(bar.ClosePoint, "Ask", None)
         ask_price = ask.Price if ask is not None else None
         features.append(((ask_price - close_price) / close_price if ask_price and close_price and close_price > 0.0 else 0.0, True))
         self._previous_close_ = close_price
 
     def _indicator_features_(self, update: BarUpdateAPI, features: list) -> None:
-        close_price = update.Bar.CloseTick.Bid.Price
+        close_price = update.Bar.ClosePoint.Bid.Price
         realized = self._indicator_(update, self._REALIZED_FAST_)
         realized_slow = self._indicator_(update, self._REALIZED_SLOW_)
         atr = self._indicator_(update, self._ATR_)
@@ -495,7 +495,7 @@ class DDPGStrategyAPI(StrategyAPI):
     def _step_(self, update: BarUpdateAPI) -> Union[list, None]:
         observation = self._observation_.encode(update)
         equity = update.Portfolio.Equity
-        close = update.Bar.CloseTick.Bid.Price
+        close = update.Bar.ClosePoint.Bid.Price
         if self.Training and self._previous_observation_ is not None:
             self._pending_reward_ += self._reward_.reward(equity, self._previous_equity_, self._hedge_(update, close) + self._turnover_(update, close))
         bucket = self._bucket_(update)
