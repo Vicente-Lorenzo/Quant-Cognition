@@ -102,8 +102,10 @@ public class SystemAPI : IDisposable
         ms.Write(BitConverter.GetBytes(((DateTimeOffset)bar.Timestamp).ToUnixTimeMilliseconds()), 0, 8);
         WriteTick(ms, bar.GapTick);
         WriteTick(ms, bar.OpenTick);
-        WriteTick(ms, bar.HighTick);
-        WriteTick(ms, bar.LowTick);
+        WriteTick(ms, bar.HighAskTick);
+        WriteTick(ms, bar.HighBidTick);
+        WriteTick(ms, bar.LowAskTick);
+        WriteTick(ms, bar.LowBidTick);
         WriteTick(ms, bar.CloseTick);
         ms.Write(BitConverter.GetBytes(bar.Volume), 0, 8);
     }

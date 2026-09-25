@@ -42,10 +42,26 @@ public class RobotAPI : IDisposable
         public DateTime Timestamp { get; set; }
         public xTick GapTick { get; set; }
         public xTick OpenTick { get; set; }
-        public xTick HighTick { get; set; }
-        public xTick LowTick { get; set; }
+        public xTick HighAskTick { get; set; }
+        public xTick HighBidTick { get; set; }
+        public xTick LowAskTick { get; set; }
+        public xTick LowBidTick { get; set; }
         public xTick CloseTick { get; set; }
         public double Volume { get; set; }
+
+        public xTick[] Ticks => new[] { GapTick, OpenTick, HighAskTick, HighBidTick, LowAskTick, LowBidTick, CloseTick };
+
+        public void Open(DateTime timestamp, xTick tick)
+        {
+            Timestamp = timestamp;
+            OpenTick = HighAskTick = HighBidTick = LowAskTick = LowBidTick = CloseTick = tick;
+            Volume = 0.0;
+        }
+
+        public xBar Copy()
+        {
+            return (xBar)MemberwiseClone();
+        }
     }
 
     private readonly Robot _robot_;
@@ -61,7 +77,6 @@ public class RobotAPI : IDisposable
     private readonly DatabaseType _database_;
     private readonly int _verification_;
     private readonly AccuracyMode _accuracy_;
-    private bool _persist_market_ = true;
     private readonly TickStreamMode _tick_stream_;
     private readonly BarStreamMode _bar_stream_;
     private readonly OrderStreamMode _order_stream_;
@@ -93,11 +108,6 @@ public class RobotAPI : IDisposable
     private readonly double _universe_interval_;
     private readonly int _universe_workers_;
     private readonly int _universe_maxsize_;
-    private readonly BufferingMode _market_buffering_;
-    private readonly int _market_batch_;
-    private readonly double _market_interval_;
-    private readonly int _market_workers_;
-    private readonly int _market_maxsize_;
     private readonly BufferingMode _portfolio_buffering_;
     private readonly int _portfolio_batch_;
     private readonly double _portfolio_interval_;
@@ -132,6 +142,8 @@ public class RobotAPI : IDisposable
     private int _degraded_bars_;
     private bool _verified_;
     private bool _primed_;
+    private double _last_ask_ = double.NaN;
+    private double _last_bid_ = double.NaN;
 
     private long _ticks_sent_;
     private long _bars_sent_;
@@ -148,7 +160,6 @@ public class RobotAPI : IDisposable
                     DelayMode order_delay_mode, int order_delay_count, DelayMode position_delay_mode, int position_delay_count,
                     DelayMode trade_delay_mode, int trade_delay_count,
                     BufferingMode universe_buffering, int universe_batch, double universe_interval, int universe_workers, int universe_maxsize,
-                    BufferingMode market_buffering, int market_batch, double market_interval, int market_workers, int market_maxsize,
                     BufferingMode portfolio_buffering, int portfolio_batch, double portfolio_interval, int portfolio_workers, int portfolio_maxsize,
                     bool benchmark, string benchmark_tickers, bool report, bool export, bool plot, bool profile, string description)
     {
@@ -186,11 +197,6 @@ public class RobotAPI : IDisposable
         _universe_interval_ = universe_interval;
         _universe_workers_ = universe_workers;
         _universe_maxsize_ = universe_maxsize;
-        _market_buffering_ = market_buffering;
-        _market_batch_ = market_batch;
-        _market_interval_ = market_interval;
-        _market_workers_ = market_workers;
-        _market_maxsize_ = market_maxsize;
         _portfolio_buffering_ = portfolio_buffering;
         _portfolio_batch_ = portfolio_batch;
         _portfolio_interval_ = portfolio_interval;
@@ -213,16 +219,8 @@ public class RobotAPI : IDisposable
         _ask_quote_conversion_ = quote_conversions.Ask;
         _bid_quote_conversion_ = quote_conversions.Bid;
         var tick = CurrentTick();
-        _bar_ = new xBar
-        {
-            Timestamp = tick.Timestamp,
-            GapTick = tick,
-            OpenTick = tick,
-            HighTick = tick,
-            LowTick = tick,
-            CloseTick = tick,
-            Volume = 0.0
-        };
+        _bar_ = new xBar { GapTick = tick };
+        _bar_.Open(_robot_.Bars.LastBar.OpenTime, tick);
         _positions_ = new Dictionary<int, LastPositionData>();
         _orders_ = new Dictionary<int, LastOrderData>();
         _verification_buffer_ = new List<xBar>();
@@ -318,7 +316,6 @@ public class RobotAPI : IDisposable
         var base_directory = new DirectoryInfo(Environment.CurrentDirectory).Parent?.Parent?.Parent?.FullName;
         var database_arg = _database_ == DatabaseType.Off ? "" : $" --database \"{_database_}\"";
         var universe_args = BufferingArgs("universe", _universe_buffering_, _universe_batch_, _universe_interval_, _universe_workers_, _universe_maxsize_);
-        var market_args = !_persist_market_ ? " --market-batch 0 --market-interval 0" : BufferingArgs("market", _market_buffering_, _market_batch_, _market_interval_, _market_workers_, _market_maxsize_);
         var portfolio_args = BufferingArgs("portfolio", _portfolio_buffering_, _portfolio_batch_, _portfolio_interval_, _portfolio_workers_, _portfolio_maxsize_);
         var benchmark_tickers = _benchmark_tickers_ == null ? "" : _benchmark_tickers_.Trim();
         var benchmark_arg = !_benchmark_ ? "" : benchmark_tickers.Length == 0 ? " --benchmark" : $" --benchmark \"{benchmark_tickers}\"";
@@ -328,7 +325,7 @@ public class RobotAPI : IDisposable
         var profile_arg = _profile_ ? " --profile" : "";
         var description = _description_ == null ? "" : _description_.Trim();
         var description_arg = description.Length == 0 ? "" : $" --description \"{description}\"";
-        var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --storage \"{_storage_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{benchmark_arg}{universe_args}{market_args}{portfolio_args}{report_arg}{export_arg}{plot_arg}{profile_arg}{description_arg}";
+        var script_args = $"{_system_mode_} --console \"{_console_}\" --file \"{_file_}\" --storage \"{_storage_}\" --strategy \"{_strategy_}\" --provider \"{_robot_.Account.BrokerName}\" --ticker \"{_robot_.Symbol.Name}\" --timeframe \"{_robot_.TimeFrame.Name}\" --iid \"{_robot_.InstanceId}\"{database_arg}{benchmark_arg}{universe_args}{portfolio_args}{report_arg}{export_arg}{plot_arg}{profile_arg}{description_arg}";
         var inner_cmd = $"cd /d \"{base_directory}\" && conda run --no-capture-output -n {_environment_} python -m Library.System.Main {script_args}";
         _log_.Debug($"Activation Operation: Launching Python · {_environment_} · {script_args}");
         SpawnTerminal(inner_cmd);
@@ -457,16 +454,18 @@ public class RobotAPI : IDisposable
 
     private xTick CurrentTick()
     {
+        var ask = _robot_.Symbol.Ask;
+        var bid = _robot_.Symbol.Bid;
         return new xTick
         {
             Timestamp = _robot_.Server.Time,
-            Ask = _robot_.Symbol.Ask,
-            Bid = _robot_.Symbol.Bid,
+            Ask = ask,
+            Bid = bid,
             AskBaseConversion = _ask_base_conversion_(),
             BidBaseConversion = _bid_base_conversion_(),
             AskQuoteConversion = _ask_quote_conversion_(),
             BidQuoteConversion = _bid_quote_conversion_(),
-            Volume = 1.0
+            Volume = (ask != _last_ask_ ? 1.0 : 0.0) + (bid != _last_bid_ ? 1.0 : 0.0)
         };
     }
 
@@ -695,8 +694,12 @@ public class RobotAPI : IDisposable
     private void OnTick(SymbolTickEventArgs args)
     {
         var tick = CurrentTick();
-        if (tick.Bid > _bar_.HighTick.Bid) _bar_.HighTick = tick;
-        if (tick.Bid < _bar_.LowTick.Bid) _bar_.LowTick = tick;
+        _last_ask_ = tick.Ask;
+        _last_bid_ = tick.Bid;
+        if (tick.Ask > _bar_.HighAskTick.Ask) _bar_.HighAskTick = tick;
+        if (tick.Bid > _bar_.HighBidTick.Bid) _bar_.HighBidTick = tick;
+        if (tick.Ask < _bar_.LowAskTick.Ask) _bar_.LowAskTick = tick;
+        if (tick.Bid < _bar_.LowBidTick.Bid) _bar_.LowBidTick = tick;
         _bar_.CloseTick = tick;
         if (!_verified_) return;
         if (EmitTickAll)
@@ -728,12 +731,7 @@ public class RobotAPI : IDisposable
 
     private void OnBarOpened(BarOpenedEventArgs args)
     {
-        var tick = CurrentTick();
-        _bar_.OpenTick = tick;
-        _bar_.HighTick = tick;
-        _bar_.LowTick = tick;
-        _bar_.CloseTick = tick;
-        _bar_.Volume = 0.0;
+        _bar_.Open(_robot_.Bars.LastBar.OpenTime, CurrentTick());
         if (!_verified_) return;
         if (!EmitBarOpened) return;
         _bars_sent_++;
@@ -744,24 +742,24 @@ public class RobotAPI : IDisposable
     {
         var last_bar = _robot_.Bars.LastBar;
         _bar_.Volume = last_bar.TickVolume;
+        _bar_.Timestamp = last_bar.OpenTime;
         if (!_primed_)
         {
             _primed_ = true;
-            _bar_.Timestamp = last_bar.OpenTime;
             _bar_.GapTick = _bar_.CloseTick;
             return;
         }
         if (!_verified_)
         {
             _observed_bars_++;
-            var bar_ticks = new[] { _bar_.GapTick, _bar_.OpenTick, _bar_.HighTick, _bar_.LowTick, _bar_.CloseTick };
+            var bar_ticks = _bar_.Ticks;
             var ts_set = new HashSet<DateTime>(bar_ticks.Select(t => t.Timestamp));
             bool sub_minute = bar_ticks.Any(t => t.Timestamp.Second != 0 || t.Timestamp.Millisecond != 0);
             if (!(ts_set.Count > 2 && sub_minute)) _degraded_bars_++;
-            _verification_buffer_.Add(new xBar { Timestamp = _bar_.Timestamp, GapTick = _bar_.GapTick, OpenTick = _bar_.OpenTick, HighTick = _bar_.HighTick, LowTick = _bar_.LowTick, CloseTick = _bar_.CloseTick, Volume = _bar_.Volume });
+            _verification_buffer_.Add(_bar_.Copy());
             if (_observed_bars_ >= _verification_)
             {
-                bool degraded = _degraded_bars_ >= _verification_;
+                bool degraded = _degraded_bars_ >= _observed_bars_;
                 if (_accuracy_ == AccuracyMode.Tick && degraded)
                 {
                     _log_.Exception("Activation Operation: Failed · Accuracy = Tick but non-Tick Data detected · Set Data to 'Tick data from Server' or set Accuracy = Auto/Bar");
@@ -775,15 +773,13 @@ public class RobotAPI : IDisposable
                     return;
                 }
                 _verified_ = true;
-                _persist_market_ = _accuracy_ == AccuracyMode.Tick || (_accuracy_ == AccuracyMode.Auto && !degraded);
-                if (!_persist_market_) _log_.Warning($"Activation Operation: Bar Mode ({_degraded_bars_}/{_verification_} non-Tick) · Market Persistence Disabled");
-                _log_.Info($"Activation Operation: Accuracy {(_persist_market_ ? "Tick" : "Bar")} ({_verification_ - _degraded_bars_}/{_verification_}) · Activating");
+                _log_.Info($"Activation Operation: Accuracy {(degraded ? "Bar" : "Tick")} ({_observed_bars_ - _degraded_bars_}/{_observed_bars_}) · Activating");
                 Activate();
                 if (EmitBarClosed)
                 {
                     foreach (var buffered in _verification_buffer_)
                     {
-                        _ticks_sent_ += 5;
+                        _ticks_sent_ += 7;
                         _bars_sent_++;
                         ReleaseSingle(_system_.BuildUpdateBar(UpdateID.BarClosed, buffered));
                     }
@@ -794,11 +790,10 @@ public class RobotAPI : IDisposable
         }
         else if (EmitBarClosed)
         {
-            _ticks_sent_ += 5;
+            _ticks_sent_ += 7;
             _bars_sent_++;
             Emit(_bar_queue_, _bar_delay_, _bar_delay_count_, _system_.BuildUpdateBar(UpdateID.BarClosed, _bar_));
         }
-        _bar_.Timestamp = last_bar.OpenTime;
         _bar_.GapTick = _bar_.CloseTick;
     }
 

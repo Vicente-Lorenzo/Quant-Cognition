@@ -54,21 +54,6 @@ public class Connector : Robot
     [Parameter("Maxsize", Group = "Universe Management", DefaultValue = 64, MinValue = 0)]
     public int UniverseMaxsize { get; set; }
 
-    [Parameter("Buffering Mode", Group = "Market Management", DefaultValue = BufferingMode.Auto)]
-    public BufferingMode MarketBuffering { get; set; }
-
-    [Parameter("Batch", Group = "Market Management", DefaultValue = 100, MinValue = 0)]
-    public int MarketBatch { get; set; }
-
-    [Parameter("Interval", Group = "Market Management", DefaultValue = 60.0, MinValue = 0.0)]
-    public double MarketInterval { get; set; }
-
-    [Parameter("Workers", Group = "Market Management", DefaultValue = 8, MinValue = 1)]
-    public int MarketWorkers { get; set; }
-
-    [Parameter("Maxsize", Group = "Market Management", DefaultValue = 64, MinValue = 0)]
-    public int MarketMaxsize { get; set; }
-
     [Parameter("Buffering Mode", Group = "Portfolio Management", DefaultValue = BufferingMode.Auto)]
     public BufferingMode PortfolioBuffering { get; set; }
 
@@ -159,7 +144,6 @@ public class Connector : Robot
             TickDelayMode, TickDelayCount, BarDelayMode, BarDelayCount, OrderDelayMode, OrderDelayCount,
             PositionDelayMode, PositionDelayCount, TradeDelayMode, TradeDelayCount,
             UniverseBuffering, UniverseBatch, UniverseInterval, UniverseWorkers, UniverseMaxsize,
-            MarketBuffering, MarketBatch, MarketInterval, MarketWorkers, MarketMaxsize,
             PortfolioBuffering, PortfolioBatch, PortfolioInterval, PortfolioWorkers, PortfolioMaxsize,
             Benchmark, BenchmarkTickers, Report, Export, Plot, Profile, Description);
     }
