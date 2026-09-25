@@ -19,16 +19,11 @@ from Library.Utility.Typing import MISSING, Missing
 
 class SchedulerAPI:
 
-    Channel: str = "Scheduler"
-
-    _INTERVAL_: int = 30
-    _CONCURRENCY_: int = 4
-    _LEASE_: int = 90
-
-    def __init__(self, *, database: str = "Quant", interval: Union[int, Missing] = MISSING, concurrency: Union[int, Missing] = MISSING) -> None:
+    def __init__(self, *, database: str = "Quant", interval: int = 30, concurrency: int = 4, lease: int = 90) -> None:
         self._database_ = database
-        self._interval_ = self._INTERVAL_ if interval is MISSING else interval
-        self._concurrency_ = self._CONCURRENCY_ if concurrency is MISSING else concurrency
+        self._interval_ = interval
+        self._concurrency_ = concurrency
+        self._lease_ = lease
         self._services_ = {}
         self._spawns_ = {}
         self._crashes_ = {}
@@ -41,11 +36,15 @@ class SchedulerAPI:
         self._listener_ = None
         self._log_ = LoggingAPI(database)
 
+    @staticmethod
+    def channel() -> str:
+        return "Scheduler"
+
     def _listen_(self) -> Union[PostgresDatabaseAPI, None]:
         try:
             listener = PostgresDatabaseAPI(database=self._database_)
             listener.connect()
-            listener.listen(channel=self.Channel)
+            listener.listen(channel=self.channel())
             return listener
         except Exception as error:
             self._log_.warning(lambda error=error: f"Scheduler Listen: Failed · Due to {error} · Falling back to {self._interval_}s Polling")
@@ -91,8 +90,8 @@ class SchedulerAPI:
     def _issue_(self, key: tuple) -> bool:
         clock = time.monotonic()
         last = self._issued_.get(key)
-        if last is not None and clock - last < self._LEASE_: return False
-        if len(self._issued_) > 1024: self._issued_ = {k: v for k, v in self._issued_.items() if clock - v < self._LEASE_}
+        if last is not None and clock - last < self._lease_: return False
+        if len(self._issued_) > 1024: self._issued_ = {k: v for k, v in self._issued_.items() if clock - v < self._lease_}
         self._issued_[key] = clock
         return True
 
@@ -136,20 +135,20 @@ class SchedulerAPI:
         return sum(1 for tid in frame["TID"].to_list() if tid in scheduled)
 
     def _suspended_(self, now: datetime) -> bool:
-        if self._ticked_ is not None and (now - self._ticked_).total_seconds() > self._interval_ + self._LEASE_:
-            self._grace_ = now + timedelta(seconds=self._LEASE_)
-            self._log_.warning(lambda gap=now - self._ticked_: f"Scheduler Resume: Reap Deferred · Suspended {gap.total_seconds():.0f}s · {self._LEASE_}s Grace")
+        if self._ticked_ is not None and (now - self._ticked_).total_seconds() > self._interval_ + self._lease_:
+            self._grace_ = now + timedelta(seconds=self._lease_)
+            self._log_.warning(lambda gap=now - self._ticked_: f"Scheduler Resume: Reap Deferred · Suspended {gap.total_seconds():.0f}s · {self._lease_}s Grace")
         self._ticked_ = now
         return self._grace_ is not None and now < self._grace_
 
     def _reap_(self, db: PostgresDatabaseAPI, now: datetime) -> None:
-        stale = now - timedelta(seconds=self._LEASE_)
+        stale = now - timedelta(seconds=self._lease_)
         for row in db.records(schema=RunAPI.Schema, table=RunAPI.Table, condition=f'"Status" IN ({self._members_(RunAPI.Busy)}) AND "Heartbeat" < :stale:', parameters={"stale": stale}):
             task = self._task_(db, row["TID"])
             status = RunAPI.outcome(failure=True, approval=task.RequiresApproval, review=task.RequiresReview, retriable=(row["Retry"] or 0) < (task.MaxRetry or 0))
             run = RunAPI.closed(row, now, Status=status, db=db)
             run.save(by="Reaper")
-            self._log_.warning(lambda row=row, run=run: f"Run Reap: {run.Status} ({row['UID']}) · Due to stale heartbeat")
+            self._log_.warning(lambda row=row, run=run: f"Run Reap: {RunStatus.parse(run.Status).name} ({row['UID']}) · Due to stale heartbeat")
 
     def _paused_(self, db: PostgresDatabaseAPI, tasks: list[dict]) -> set:
         governed = {task["UID"]: task["WID"] for task in tasks if task["WID"] is not None and Kind.parse(task["Kind"]) is Kind.Scheduled}
@@ -190,7 +189,7 @@ class SchedulerAPI:
             if running: continue
             if uid in self._services_:
                 lived = clock - self._spawns_.get(uid, clock)
-                self._crashes_[uid] = 0 if lived >= self._LEASE_ else self._crashes_.get(uid, 0) + 1
+                self._crashes_[uid] = 0 if lived >= self._lease_ else self._crashes_.get(uid, 0) + 1
                 self._services_.pop(uid, None)
             cap = task["MaxRetry"] or 0
             if cap and self._crashes_.get(uid, 0) > cap:

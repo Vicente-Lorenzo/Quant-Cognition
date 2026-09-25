@@ -13,7 +13,6 @@ class TrayAPI(BaseTrayAPI):
 
     _NAME_ = "Scheduler"
     _LOG_ = FileAPI.folder() / "Scheduler.log"
-    _LAUNCHER_ = traceback_root() / "Script" / "Scheduler.py"
 
     def __init__(self) -> None:
         self._scheduler_ = None
@@ -34,4 +33,4 @@ class TrayAPI(BaseTrayAPI):
         self._scheduler_.stop()
 
     def _relaunch_(self) -> None:
-        subprocess.Popen([sys.executable, str(self._LAUNCHER_)], cwd=str(traceback_root()), **windowless())
+        subprocess.Popen([sys.executable, str(traceback_root() / "Script" / "Scheduler.py")], cwd=str(traceback_root()), **windowless())

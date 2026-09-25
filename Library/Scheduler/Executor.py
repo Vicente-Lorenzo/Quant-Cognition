@@ -28,29 +28,35 @@ from Library.Database import PostgresDatabaseAPI, QueryAPI
 
 class ExecutorAPI:
 
-    _POLL_: float = 0.2
-    _HEARTBEAT_: float = 15.0
-    _PULSE_: float = 2.0
-    _ROOT_: str = str(traceback_root())
-    Folder: str = "Runs"
-    Runs: str = str(inspect_temporary(Folder))
-    Kept: str = str(inspect_persistent(Folder))
-    CONSOLE: str = "Console.log"
-    RECORD: str = "Run.log"
-    _SCOPE_: str = "--run"
-    _USER_: str = "--user"
-    _STORAGE_: str = "--storage"
-    _LOGGED_ = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[.,]\d+ - ")
+    @staticmethod
+    def _root_() -> str:
+        return str(traceback_root())
+
+    @classmethod
+    def _tier_(cls, persist: bool) -> Path:
+        return inspect_persistent(cls.folder()) if persist else inspect_temporary(cls.folder())
+
+    @staticmethod
+    def folder() -> str:
+        return "Runs"
+
+    @staticmethod
+    def console() -> str:
+        return "Console.log"
+
+    @staticmethod
+    def record() -> str:
+        return "Run.log"
 
     @classmethod
     def settle(cls, uid: str) -> Path:
-        kept = Path(cls.Kept) / str(uid)
-        return kept if kept.is_dir() else Path(cls.Runs) / str(uid)
+        kept = cls._tier_(True) / str(uid)
+        return kept if kept.is_dir() else cls._tier_(False) / str(uid)
 
     @classmethod
     def relocate(cls, uid: str, persist: bool) -> Union[Path, None]:
         source = cls.settle(uid)
-        target = (Path(cls.Kept) if persist else Path(cls.Runs)) / str(uid)
+        target = cls._tier_(persist) / str(uid)
         if source == target or not source.is_dir(): return target if target.is_dir() else None
         mkdir(target.parent, safe=False)
         if target.exists():
@@ -59,23 +65,26 @@ class ExecutorAPI:
         shutil.move(str(source), str(target))
         return target
 
-    def __init__(self, *, database: str = "Quant") -> None:
+    def __init__(self, *, database: str = "Quant", poll: float = 0.2, heartbeat: float = 15.0, pulse: float = 2.0) -> None:
         self._database_ = database
+        self._poll_ = poll
+        self._heartbeat_ = heartbeat
+        self._pulse_ = pulse
         self._log_ = LoggingAPI(database)
 
-    @classmethod
-    def _verbosity_(cls, arguments: Union[str, None]) -> str:
+    @staticmethod
+    def _verbosity_(arguments: Union[str, None]) -> str:
         tokens = split_arguments(arguments)
         for index, token in enumerate(tokens[:-1]):
-            if token == cls._STORAGE_ and tokens[index + 1] in VerboseLevel.__members__: return tokens[index + 1]
+            if token == "--storage" and tokens[index + 1] in VerboseLevel.__members__: return tokens[index + 1]
         return StorageAPI._DEFAULT_.name
 
-    @classmethod
-    def _sift_(cls, content: str, level: VerboseLevel) -> tuple[str, list]:
+    @staticmethod
+    def _sift_(content: str, level: VerboseLevel) -> tuple[str, list]:
         accepted, escaped = [], []
         for line in content.splitlines():
             if ProgressAPI.SENTINEL in line: continue
-            if not cls._LOGGED_.match(line):
+            if not re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[.,]\d+ - ", line):
                 if line.strip(): escaped.append(line)
                 continue
             marker = next((member for member in VerboseLevel if f" - {member.name} - " in line), None)
@@ -93,7 +102,7 @@ class ExecutorAPI:
     def _rescue_(self, folder: Path, escaped: list) -> None:
         if not escaped: return
         try:
-            with open(folder / self.RECORD, "a", encoding="utf-8", newline="\n") as sink:
+            with open(folder / self.record(), "a", encoding="utf-8", newline="\n") as sink:
                 sink.write(f"\n--- Escaped Output: {len(escaped)} Lines · Bypassed The Logger ---\n")
                 sink.write("\n".join(escaped) + "\n")
             self._log_.warning(lambda: f"Run Output: Escaped · {len(escaped)} Lines · Appended To Run.log")
@@ -113,12 +122,12 @@ class ExecutorAPI:
         except Exception as error:
             self._log_.debug(lambda error=error: f"Run Log Stop: Failed · {error}")
 
-    @classmethod
-    def _scoped_(cls, arguments: str, folder: str, owner: Union[str, None] = None) -> str:
+    @staticmethod
+    def _scoped_(arguments: str, folder: str, owner: Union[str, None] = None) -> str:
         if not arguments: return arguments
         tokens = shlex.split(arguments, posix=False)
-        if cls._SCOPE_ not in tokens: tokens += [cls._SCOPE_, f'"{folder}"']
-        if owner: tokens += [cls._USER_, f'"{owner}"']
+        if "--run" not in tokens: tokens += ["--run", f'"{folder}"']
+        if owner: tokens += ["--user", f'"{owner}"']
         return " ".join(tokens)
 
     @staticmethod
@@ -132,7 +141,7 @@ class ExecutorAPI:
     def _environment_() -> dict:
         environment = dict(os.environ)
         previous = environment.get("PYTHONPATH")
-        environment["PYTHONPATH"] = ExecutorAPI._ROOT_ + (os.pathsep + previous if previous else "")
+        environment["PYTHONPATH"] = ExecutorAPI._root_() + (os.pathsep + previous if previous else "")
         environment["PYTHONIOENCODING"] = "utf-8"
         return environment
 
@@ -144,7 +153,7 @@ class ExecutorAPI:
         if cycle is not None: command += ["--cycle", cycle]
         if retry: command += ["--retry", str(retry)]
         if manual: command += ["--manual"]
-        return subprocess.Popen(command, cwd=ExecutorAPI._ROOT_, env=ExecutorAPI._environment_(), **windowless())
+        return subprocess.Popen(command, cwd=ExecutorAPI._root_(), env=ExecutorAPI._environment_(), **windowless())
 
     @staticmethod
     def _sample_(monitor: psutil.Process, peak: int) -> int:
@@ -203,13 +212,13 @@ class ExecutorAPI:
         run.Status, run.StartedAt, run.Heartbeat = RunStatus.Running.name, started, started
         self._persist_(run)
         self._log_.info(lambda: f"Run Launch: Started ({task.Name}) · {label} · {task.Path}")
-        folder = Path(self.Runs) / run.UID
+        folder = self._tier_(False) / run.UID
         mkdir(folder, safe=False)
-        log = str(folder / self.CONSOLE)
+        log = str(folder / self.console())
         run.LID = self._open_log_(run, task, log)
         peak, beat = 0, clock
         with open(log, "wb") as sink:
-            process = subprocess.Popen(self._command_(artifact, task.Path, self._scoped_(arguments, str(folder), task.Owner)), cwd=self._ROOT_, env=self._environment_(), stdout=sink, stderr=subprocess.STDOUT, **windowless())
+            process = subprocess.Popen(self._command_(artifact, task.Path, self._scoped_(arguments, str(folder), task.Owner)), cwd=self._root_(), env=self._environment_(), stdout=sink, stderr=subprocess.STDOUT, **windowless())
             job = tether(process)
             try:
                 run.PID = os.getpid()
@@ -222,10 +231,10 @@ class ExecutorAPI:
                     now = time.monotonic()
                     cursor = self._follow_(log, cursor, run)
                     moved = run.Progress != seen
-                    if now - beat >= self._HEARTBEAT_ or (moved and now - pulse >= self._PULSE_):
+                    if now - beat >= self._heartbeat_ or (moved and now - pulse >= self._pulse_):
                         self._beat_(run)
                         beat, pulse, seen = now, now, run.Progress
-                    time.sleep(self._POLL_)
+                    time.sleep(self._poll_)
                 if monitor is not None: peak = self._sample_(monitor, peak)
             finally:
                 if process.poll() is None: terminate(process.pid)
@@ -236,5 +245,5 @@ class ExecutorAPI:
         run.Status, run.StoppedAt, run.Duration, run.Memory, run.ExitCode, run.Log = status, stopped, duration, peak, exit_code, log
         self._close_log_(run, log)
         self._persist_(run)
-        self._log_.info(lambda: f"Run Finish: {run.Status} ({task.Name}) · {run.Duration:.2f}s · {memory_to_string(peak)} · Exit {exit_code}")
+        self._log_.info(lambda: f"Run Finish: {RunStatus.parse(run.Status).name} ({task.Name}) · {run.Duration:.2f}s · {memory_to_string(peak)} · Exit {exit_code}")
         return run

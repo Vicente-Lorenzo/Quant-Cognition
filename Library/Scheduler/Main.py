@@ -13,7 +13,7 @@ from Library.Scheduler.Workflow import Kind, WorkflowAPI
 from Library.Scheduler.Task import TaskAPI, TaskType
 from Library.Scheduler.Dependency import DependencyAPI
 from Library.Scheduler.Cycle import CycleAPI
-from Library.Scheduler.Run import RunAPI, RetentionLevel
+from Library.Scheduler.Run import RunAPI, RetentionLevel, RunStatus
 from Library.Scheduler.Manager import ManagerAPI
 from Library.Scheduler.Scheduler import SchedulerAPI
 
@@ -28,13 +28,9 @@ class SchedulerCommandAPI(CommandAPI):
         return "".join(f"_{char.lower()}" if index and char.isupper() else char.lower() for index, char in enumerate(name))
 
     @staticmethod
-    def _role_(value: str):
-        return None if value == "Owner" else value
-
-    @classmethod
-    def _thresholds_(cls, parser: ArgumentParser, default) -> None:
-        roles = "{" + ",".join(["Owner", *AccessAPI.roles()]) + "}"
-        for flag in ("--run-role", "--edit-role"): parser.add_argument(flag, type=cls._role_, default=default, metavar=roles)
+    def _thresholds_(parser: ArgumentParser, default) -> None:
+        parser.add_argument("--run-role", default=default, choices=AccessAPI.choices())
+        parser.add_argument("--edit-role", default=default, choices=AccessAPI.choices())
 
     @classmethod
     def _fields_(cls, args: Namespace, model: type) -> dict:
@@ -84,10 +80,10 @@ class SchedulerCommandAPI(CommandAPI):
                 if manager.task(args.uid) is None: print(f"Task '{args.uid}' not found")
                 else:
                     result = manager.run_task(args.uid, wait=args.wait, arguments=args.arguments, by=by)
-                    print(f"Run '{result.UID}' finished · {result.Status}" if result else f"Task '{args.uid}' dispatched")
+                    print(f"Run '{result.UID}' finished · {RunStatus.parse(result.Status).name}" if result else f"Task '{args.uid}' dispatched")
             case "skip":
                 run = manager.skip(args.uid, failure=args.failure, by=by)
-                print(f"Task '{args.uid}' skipped · {run.Status}" if run else f"Task '{args.uid}' not skippable · No open cycle")
+                print(f"Task '{args.uid}' skipped · {RunStatus.parse(run.Status).name}" if run else f"Task '{args.uid}' not skippable · No open cycle")
             case "show": self.detail(manager.task(args.uid))
             case "list": self._listed_(self._annotated_(manager, manager.tasks(workflow=args.workflow, enabled=True if args.enabled else MISSING), by), TaskAPI)
 

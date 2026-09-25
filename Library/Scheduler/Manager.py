@@ -13,7 +13,7 @@ from Library.Scheduler.Workflow import WorkflowAPI, Kind
 from Library.Scheduler.Task import TaskAPI
 from Library.Scheduler.Dependency import DependencyAPI
 from Library.Scheduler.Cycle import CycleAPI
-from Library.Scheduler.Run import RunAPI, RetentionLevel
+from Library.Scheduler.Run import RunAPI, RetentionLevel, RunStatus
 from Library.Scheduler.Executor import ExecutorAPI
 from Library.Scheduler.Coordinator import CoordinatorAPI
 from Library.Database import PostgresDatabaseAPI, QueryAPI
@@ -21,7 +21,6 @@ from Library.Utility.Typing import MISSING, Missing
 
 class ManagerAPI:
 
-    _NAMES_: tuple = ("RunRole", "EditRole")
 
     def __init__(self, *, database: str = "Quant") -> None:
         self._database_ = database
@@ -110,7 +109,7 @@ class ManagerAPI:
     def _thresholds_(self, fields: dict, row: Union[dict, None], principal: Union[tuple, None]) -> None:
         row = row or {}
         previous = (row.get("RunRole"), row.get("EditRole"))
-        run, edit = AccessAPI.validate(fields.get("RunRole", previous[0]), fields.get("EditRole", previous[1]), names=self._NAMES_, setter=principal[1] if principal is not None else None, previous=previous)
+        run, edit = AccessAPI.validate(fields.get("RunRole", previous[0]), fields.get("EditRole", previous[1]), names=("RunRole", "EditRole"), setter=principal[1] if principal is not None else None, previous=previous)
         fields["RunRole"], fields["EditRole"] = (run.name if run is not None else None), (edit.name if edit is not None else None)
 
     def _member_(self, wid: Union[str, None], principal: Union[tuple, None], action: str) -> None:
@@ -234,7 +233,7 @@ class ManagerAPI:
         run = RunAPI(UID=uuid.uuid4().hex, CID=cid, TID=uid, Kind=Kind.Manual.name, Retry=0, Duration=0.0, Auditor=self._auditor_(principal), StartedAt=now, StoppedAt=now)
         run.Status = RunAPI.outcome(failure=failure, approval=row["RequiresApproval"], review=row["RequiresReview"])
         self._save_(run)
-        self._log_.info(lambda run=run: f"Task Skip: {run.Status} ({uid})")
+        self._log_.info(lambda run=run: f"Task Skip: {RunStatus.parse(run.Status).name} ({uid})")
         return run
 
     def workflow(self, uid: str) -> Union[dict, None]:
@@ -345,7 +344,7 @@ class ManagerAPI:
         row = self.run(uid)
         if row is None: return None
         folder = ExecutorAPI.settle(uid)
-        for name in (ExecutorAPI.CONSOLE, ExecutorAPI.RECORD):
+        for name in (ExecutorAPI.console(), ExecutorAPI.record()):
             text = tail_text(folder / name, size)
             if text.strip(): return text
         record = self._one_(LogAPI, row["LID"]) if row.get("LID") else None
@@ -399,7 +398,7 @@ class ManagerAPI:
         terminate(row["PID"])
         run = RunAPI.closed(row, utc_now(), Kind=Kind.Manual.name, Auditor=self._auditor_(principal), Status=RunAPI.outcome(failure=failure, approval=task["RequiresApproval"], review=task["RequiresReview"]))
         self._save_(run)
-        self._log_.info(lambda run=run: f"Run Cancel: {run.Status} ({uid})")
+        self._log_.info(lambda run=run: f"Run Cancel: {RunStatus.parse(run.Status).name} ({uid})")
         return True
 
     def approve(self, uid: str, *, by=MISSING) -> bool:
