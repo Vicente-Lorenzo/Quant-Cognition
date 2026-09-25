@@ -36,7 +36,7 @@ class CredentialAPI(DatapointAPI):
     Service: Union[str, None] = None
     Name: Union[str, None] = None
     Kind: Union[str, CredentialType, None] = None
-    Username: Union[str, None] = None
+    Identifier: Union[str, None] = None
     Secret: Union[str, None] = None
     Fields: Union[str, None] = None
     ExpiresAt: Union[datetime, None] = None
@@ -54,7 +54,7 @@ class CredentialAPI(DatapointAPI):
             self.ID.Service: pl.String(),
             self.ID.Name: pl.String(),
             self.ID.Kind: pl.String(),
-            self.ID.Username: pl.String(),
+            self.ID.Identifier: pl.String(),
             self.ID.Secret: pl.String(),
             self.ID.Fields: pl.String(),
             self.ID.ExpiresAt: pl.Datetime(),
@@ -71,7 +71,7 @@ class CredentialAPI(DatapointAPI):
     def pack(value: Any) -> Union[str, None]:
         if value is None: return None
         if isinstance(value, SecretAPI): value = value.Value
-        if isinstance(value, dict): value = {name: item.Value if isinstance(item, SecretAPI) else item for name, item in value.items()}
+        if isinstance(value, dict): value = SecretAPI.unwrap(value)
         return json.dumps(value, ensure_ascii=False)
 
     @staticmethod
@@ -80,13 +80,20 @@ class CredentialAPI(DatapointAPI):
         try: return json.loads(value)
         except ValueError: return value
 
-    @staticmethod
-    def entry(text: Union[str, None]) -> Any:
+    @classmethod
+    def entry(cls, text: Union[str, None], name: str, *, mapping: bool = False) -> Union[str, None]:
         if text is None or not str(text).strip(): return None
         text = str(text).strip()
         try: decoded = json.loads(text)
-        except ValueError: return text
-        return decoded if isinstance(decoded, dict) else text
+        except ValueError: decoded = text
+        if mapping and not isinstance(decoded, dict): raise ValueError(f"Credential {name}: Failed · Expected a JSON object")
+        return cls.pack(decoded if isinstance(decoded, dict) else text)
+
+    @classmethod
+    def flat(cls, value: Union[str, None]) -> str:
+        decoded = cls.unpack(value)
+        if decoded is None: return ""
+        return " · ".join(f"{name}: {item}" for name, item in decoded.items()) if isinstance(decoded, dict) else str(decoded)
 
     @classmethod
     def spread(cls, value: Union[str, None], name: str) -> dict:
@@ -94,8 +101,8 @@ class CredentialAPI(DatapointAPI):
         if decoded is None: return {}
         return dict(decoded) if isinstance(decoded, dict) else {name: decoded}
 
-    def usernames(self) -> dict:
-        return self.spread(self.Username, LayoutAPI.username(self.Kind))
+    def identifiers(self) -> dict:
+        return self.spread(self.Identifier, LayoutAPI.identifier(self.Kind))
 
     def secrets(self) -> dict:
         return SecretAPI.wrap(self.spread(self.Secret, LayoutAPI.secret(self.Kind)))
@@ -105,4 +112,4 @@ class CredentialAPI(DatapointAPI):
 
     def values(self, parent: Union[CredentialAPI, None] = None) -> dict:
         inherited = parent.values() if parent is not None else {}
-        return {**inherited, **self.extras(), **self.usernames(), **self.secrets()}
+        return {**inherited, **self.extras(), **self.identifiers(), **self.secrets()}

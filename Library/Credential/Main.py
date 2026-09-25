@@ -10,7 +10,7 @@ from Library.Credential.Type import CredentialType, LayoutAPI
 from Library.Credential.Credential import CredentialAPI
 from Library.Credential.Vault import VaultAPI
 from Library.Utility.Command import CommandAPI
-from Library.Utility.Datetime import INSTANT
+from Library.Utility.Datetime import INSTANT, instant_to_string
 from Library.Utility.Typing import MISSING
 
 class CredentialCommandAPI(CommandAPI):
@@ -19,25 +19,21 @@ class CredentialCommandAPI(CommandAPI):
         super().__init__(name="Credential")
 
     @staticmethod
-    def _flat_(value) -> str:
-        decoded = CredentialAPI.unpack(value)
-        if decoded is None: return ""
-        return decoded if isinstance(decoded, str) else " · ".join(f"{name}: {item}" for name, item in decoded.items())
-
-    @staticmethod
-    def _stamp_(value) -> str:
-        return value.strftime(INSTANT) if hasattr(value, "strftime") else ""
-
-    @staticmethod
-    def _role_(value: str):
-        return None if value == "Owner" else value
-
-    @classmethod
-    def _shown_(cls, row: dict, vault: VaultAPI) -> dict:
-        return {"Service": row.get("Service"), "Name": row.get("Name"), "Kind": row.get("Kind"), "Username": cls._flat_(row.get("Username")),
-                "Secret": cls._flat_(row.get("Secret")), "Owner": row.get("Owner"), "View": AccessAPI.label(row.get("ViewRole")),
-                "Edit": AccessAPI.label(row.get("EditRole")), "Access": row.get("Access"), "Validity": vault.validity(row.get("ExpiresAt")).name,
-                "Expires": cls._stamp_(row.get("ExpiresAt")), "Used": cls._stamp_(row.get("UsedAt"))}
+    def _shown_(row: dict, vault: VaultAPI) -> dict:
+        return {
+            "Service": row.get("Service"),
+            "Name": row.get("Name"),
+            "Kind": row.get("Kind"),
+            "Identifier": CredentialAPI.flat(row.get("Identifier")),
+            "Secret": CredentialAPI.flat(row.get("Secret")),
+            "Owner": row.get("Owner"),
+            "View": AccessAPI.label(row.get("ViewRole")),
+            "Edit": AccessAPI.label(row.get("EditRole")),
+            "Access": row.get("Access"),
+            "Validity": vault.validity(row.get("ExpiresAt")).name,
+            "Expires": instant_to_string(row.get("ExpiresAt")),
+            "Used": instant_to_string(row.get("UsedAt"))
+        }
 
     @staticmethod
     def _prompt_(kind) -> str:
@@ -47,18 +43,12 @@ class CredentialCommandAPI(CommandAPI):
         if list(values) == [LayoutAPI.secret(kind)]: return CredentialAPI.pack(values[LayoutAPI.secret(kind)])
         return CredentialAPI.pack(values)
 
-    @staticmethod
-    def _entry_(text: str, name: str, *, mapping: bool = False):
-        value = CredentialAPI.entry(text)
-        if mapping and value is not None and not isinstance(value, dict): raise ValueError(f"Credential {name}: Failed · Expected a JSON object")
-        return CredentialAPI.pack(value)
-
     @classmethod
     def _fields_(cls, args: Namespace, kind) -> dict:
         names = {"service": "Service", "name": "Name", "kind": "Kind", "expires": "ExpiresAt", "parent": "Parent", "owner": "Owner", "view_role": "ViewRole", "edit_role": "EditRole"}
         values = {column: getattr(args, name) for name, column in names.items() if hasattr(args, name)}
-        if hasattr(args, "username"): values["Username"] = cls._entry_(args.username, "Username")
-        if hasattr(args, "fields"): values["Fields"] = cls._entry_(args.fields, "Fields", mapping=True)
+        if hasattr(args, "identifier"): values["Identifier"] = CredentialAPI.entry(args.identifier, "Identifier")
+        if hasattr(args, "fields"): values["Fields"] = CredentialAPI.entry(args.fields, "Fields", mapping=True)
         if args.secret: values["Secret"] = cls._prompt_(kind)
         return values
 
@@ -77,18 +67,17 @@ class CredentialCommandAPI(CommandAPI):
         parser.add_argument("--name", default=None)
         return parser
 
-    @classmethod
-    def _described_(cls, parser: ArgumentParser, default) -> None:
-        roles = "{" + ",".join(["Owner", *AccessAPI.roles()]) + "}"
+    @staticmethod
+    def _described_(parser: ArgumentParser, default) -> None:
         parser.add_argument("--kind", default=default, choices=CredentialType.names())
-        parser.add_argument("--username", default=default)
+        parser.add_argument("--identifier", default=default)
         parser.add_argument("--secret", action="store_true")
         parser.add_argument("--fields", default=default)
         parser.add_argument("--expires", default=default, metavar=INSTANT.replace("%", ""))
         parser.add_argument("--parent", default=default, metavar="UID")
         parser.add_argument("--owner", default=default)
-        parser.add_argument("--view-role", type=cls._role_, default=default, metavar=roles)
-        parser.add_argument("--edit-role", type=cls._role_, default=default, metavar=roles)
+        parser.add_argument("--view-role", default=default, choices=AccessAPI.choices())
+        parser.add_argument("--edit-role", default=default, choices=AccessAPI.choices())
 
     def arguments(self, parser: ArgumentParser) -> None:
         parser.add_argument("--database", default="Quant", choices=["Quant", "Tests"])
@@ -109,7 +98,10 @@ class CredentialCommandAPI(CommandAPI):
 
     def run(self, args: Namespace) -> int:
         vault = VaultAPI(database=args.database)
-        by = args.user or vault.administrator()
+        with vault.scope(): self._act_(vault, args, args.user or vault.administrator())
+        return 0
+
+    def _act_(self, vault: VaultAPI, args: Namespace, by: str) -> None:
         match args.action:
             case "list": self.table([self._shown_(row, vault) for row in vault.credentials(by=by, service=args.service or MISSING)])
             case "due":
@@ -120,7 +112,7 @@ class CredentialCommandAPI(CommandAPI):
                 if row is None: raise PermissionError("Credential Show: Failed · You may not view this credential")
                 self.detail(self._shown_(row, vault))
             case "store":
-                credential = vault.store(by=by, **{key: value for key, value in self._fields_(args, args.kind or CredentialType.Password.name).items() if value is not None or key in ("ViewRole", "EditRole")})
+                credential = vault.store(by=by, **self._fields_(args, args.kind or CredentialType.Password.name))
                 print(f"Credential '{credential.Service} · {credential.Name}' stored · {credential.UID}")
             case "update":
                 uid = self._locate_(vault, args, by)
@@ -141,7 +133,6 @@ class CredentialCommandAPI(CommandAPI):
                 values = vault.reveal(self._locate_(vault, args, by), by=by)
                 if values is None: raise PermissionError("Credential Reveal: Failed · You may not reveal this credential")
                 self.detail(values)
-        return 0
 
 if __name__ == "__main__":
     raise SystemExit(CredentialCommandAPI().main())

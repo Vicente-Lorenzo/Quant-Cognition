@@ -2,31 +2,24 @@ import secrets
 from typing import Union
 
 from Library.Credential.Credential import CredentialAPI
-from Library.Credential.Type import CredentialType
+from Library.Credential.Type import CredentialType, LayoutAPI
 from Library.Credential.Vault import VaultAPI
 from Library.Database import PostgresDatabaseAPI
+from Library.Logging import LoggingAPI
 
 class SessionAPI:
 
-    SERVICE: str = "Framework"
-    NAME: str = "Session Key"
-    KEY: str = "Key"
-
-    _BYTES_: int = 32
-
-    @classmethod
-    def secret(cls, *, database: str = "Quant") -> Union[str, None]:
-        vault = VaultAPI(database=database)
+    @staticmethod
+    def secret(*, database: str = "Quant") -> Union[str, None]:
+        vault, key = VaultAPI(database=database), LayoutAPI.secret(CredentialType.Token)
         try:
             with PostgresDatabaseAPI.attach(database=database) as db:
                 if not db.exists(schema=CredentialAPI.Schema, table=CredentialAPI.Table): return None
-            values = vault.internal(service=cls.SERVICE, name=cls.NAME)
-            if values and values.get(cls.KEY): return values[cls.KEY].Value
+            values = vault.internal(service="Framework", name="Web Session")
+            if values and values.get(key): return values[key].Value
             owner = vault.administrator()
             if owner is None: return None
-            stored = vault.store(by=owner, Service=cls.SERVICE, Name=cls.NAME, Kind=CredentialType.ApiKey.name, Owner=owner,
-                                   Username=CredentialAPI.pack(cls.SERVICE), Secret=CredentialAPI.pack({cls.KEY: secrets.token_hex(cls._BYTES_)}))
-            return stored.secrets()[cls.KEY].Value
+            return vault.ensure(service="Framework", name="Web Session", secret=secrets.token_hex(32), by=owner, Kind=CredentialType.Token.name, Identifier=CredentialAPI.pack("Framework"), Owner=owner).secrets()[key].Value
         except Exception as error:
-            vault._log_.debug(lambda error=error: f"Session Key: Skipped · {error}")
+            LoggingAPI().warning(lambda error=error: f"Session Secret: Failed · {error}")
             return None

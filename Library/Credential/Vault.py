@@ -15,20 +15,17 @@ from Library.Utility.Typing import MISSING, Missing
 
 class VaultAPI:
 
-    def __init__(self, *, database: str = "Quant", margin: int = 7 * 86400, refreshers: Union[dict[str, Callable], Missing] = MISSING) -> None:
+    def __init__(self, *, database: str = "Quant", margin: int = 7 * 86400, refreshers: Union[dict[str, Callable], Missing] = MISSING, testers: Union[dict[str, Callable], Missing] = MISSING) -> None:
         self._database_ = database
         self._margin_ = margin
         self._refreshers_ = dict(refreshers) if refreshers else {}
+        self._testers_ = dict(testers) if testers else {}
         self._log_ = LoggingAPI(database)
-
-    @property
-    def Margin(self) -> int:
-        return self._margin_
 
     def scope(self):
         return PostgresDatabaseAPI.scope(database=self._database_)
 
-    def validity(self, expires: Union[datetime, None], now: Union[datetime, None] = None) -> Validity:
+    def validity(self, expires: Union[datetime, None], now: Union[datetime, Missing] = MISSING) -> Validity:
         if expires is None: return Validity.Permanent
         now = now or utc_now()
         if expires <= now: return Validity.Expired
@@ -56,7 +53,8 @@ class VaultAPI:
             row = db.first(schema=UserAPI.Schema, table=UserAPI.Table, condition=condition, order='"UID" ASC', parameters=parameters)
         return None if row is None else row.get("UID")
 
-    def _stamp_(self, by, uid: Union[str, None]) -> str:
+    @staticmethod
+    def _stamp_(by, uid: Union[str, None]) -> str:
         return uid or (by if isinstance(by, str) and by else "Anonymous")
 
     def _select_(self, **columns) -> list[dict]:
@@ -83,7 +81,8 @@ class VaultAPI:
             condition, parameters = db.where(UID=uid)
             db.update(schema=CredentialAPI.Schema, table=CredentialAPI.Table, data={name: None for name in cleared}, condition=condition, parameters=parameters)
 
-    def _thresholds_(self, view, edit, role: RoleAPI, previous: tuple = (None, None)) -> tuple:
+    @staticmethod
+    def _thresholds_(view, edit, role: RoleAPI, previous: tuple = (None, None)) -> tuple:
         view, edit = AccessAPI.validate(view, edit, names=("ViewRole", "EditRole"), setter=role, previous=previous)
         return (view.name if view is not None else None), (edit.name if edit is not None else None)
 
@@ -98,13 +97,11 @@ class VaultAPI:
         except ValueError: raise ValueError(f"Credential Expiry: Failed · {text} is not a date · Expected YYYY-MM-DD HH:MM:SS") from None
         return parsed.astimezone(timezone.utc).replace(tzinfo=None) if parsed.tzinfo is not None else parsed
 
-    def _allows_(self, row: Union[dict, None], principal: tuple, *, edit: bool = False) -> bool:
+    @staticmethod
+    def _allows_(row: Union[dict, None], principal: tuple, *, edit: bool = False) -> bool:
         if row is None: return False
         user, role = principal
         return AccessAPI.allows(row.get("EditRole") if edit else row.get("ViewRole"), role=role, user=user, owner=row.get("Owner"))
-
-    def permits(self, row: Union[dict, None], by, *, edit: bool = False) -> bool:
-        return self._allows_(row, self.principal(by), edit=edit)
 
     def _checked_(self, credential: CredentialAPI, principal: tuple, previous: Union[dict, None] = None) -> None:
         if not credential.Service or not credential.Name: raise ValueError("Credential Store: Failed · Service and Name are required")
@@ -118,29 +115,34 @@ class VaultAPI:
         if not self._allows_(parent, principal): raise PermissionError("Credential Parent: Failed · You may not view the parent credential")
 
     @staticmethod
-    def _merged_(row: dict, secret: str) -> Union[str, None]:
-        stored, incoming = CredentialAPI.unpack(row.get("Secret")), CredentialAPI.unpack(secret)
-        if not isinstance(stored, dict) or not isinstance(incoming, dict): return secret
-        merged = {name: value for name, value in {**stored, **incoming}.items() if value is not None}
+    def _secrets_(row: dict) -> dict:
+        return CredentialAPI.spread(row.get("Secret"), LayoutAPI.secret(row.get("Kind")))
+
+    @classmethod
+    def _merged_(cls, row: dict, secret: str) -> Union[str, None]:
+        incoming = CredentialAPI.unpack(secret)
+        if not isinstance(incoming, dict): return secret
+        merged = {name: value for name, value in {**cls._secrets_(row), **incoming}.items() if value is not None}
         return CredentialAPI.pack(merged) if merged else None
 
-    @staticmethod
-    def _masked_(row: dict) -> dict:
-        secrets = CredentialAPI.spread(row.get("Secret"), LayoutAPI.secret(row.get("Kind")))
+    @classmethod
+    def _masked_(cls, row: dict) -> dict:
+        secrets = cls._secrets_(row)
         return {**row, "Secret": CredentialAPI.pack(SecretAPI.mask(secrets)) if secrets else None}
 
-    def _presented_(self, row: dict, principal: tuple) -> dict:
-        return {**self._masked_(row), "Access": (AccessLevel.Edit if self._allows_(row, principal, edit=True) else AccessLevel.View).name}
+    @classmethod
+    def _presented_(cls, row: dict, principal: tuple) -> dict:
+        return {**cls._masked_(row), "Access": (AccessLevel.Edit if cls._allows_(row, principal, edit=True) else AccessLevel.View).name}
 
-    def credentials(self, *, by=None, service: Union[str, Missing] = MISSING) -> list[dict]:
+    def credentials(self, *, by=MISSING, service: Union[str, Missing] = MISSING) -> list[dict]:
         principal = self.principal(by)
         return [self._presented_(row, principal) for row in self._select_(Service=service) if self._allows_(row, principal)]
 
-    def credential(self, uid: str, *, by=None) -> Union[dict, None]:
+    def credential(self, uid: str, *, by=MISSING) -> Union[dict, None]:
         row, principal = self._one_(uid), self.principal(by)
         return self._presented_(row, principal) if self._allows_(row, principal) else None
 
-    def store(self, *, by=None, **fields) -> CredentialAPI:
+    def store(self, *, by=MISSING, **fields) -> CredentialAPI:
         principal = self.principal(by)
         user, role = principal
         if user is None: raise PermissionError("Credential Store: Failed · Only a signed-in user may store a credential")
@@ -156,7 +158,8 @@ class VaultAPI:
         self._log_.info(lambda: f"Credential Store: Saved ({credential.UID}) · {credential.Service} · {credential.Name}")
         return credential
 
-    def update(self, uid: str, *, by=None, **fields) -> Union[CredentialAPI, None]:
+    def update(self, uid: str, *, by=MISSING, **fields) -> Union[CredentialAPI, None]:
+        if "UID" in fields: raise ValueError("Credential Update: Failed · UID is immutable")
         row, principal = self._one_(uid), self.principal(by)
         if not self._allows_(row, principal, edit=True): return None
         user, role = principal
@@ -175,25 +178,24 @@ class VaultAPI:
         self._log_.info(lambda: f"Credential Update: Saved ({uid}) · {credential.Service} · {credential.Name}")
         return credential
 
-    def delete(self, uid: str, *, by=None) -> bool:
-        row = self._one_(uid)
-        if not self.permits(row, by, edit=True): return False
+    def delete(self, uid: str, *, by=MISSING) -> bool:
+        if not self._allows_(self._one_(uid), self.principal(by), edit=True): return False
         children = self._select_(Parent=uid)
-        if children: raise ValueError(f"Credential Delete: Failed · {len(children)} credential(s) inherit from it · {' · '.join(child['Name'] for child in children)}")
+        if children: raise ValueError(f"Credential Delete: Failed · {len(children)} credential(s) inherit from it")
         with PostgresDatabaseAPI.attach(database=self._database_) as db:
             condition, parameters = db.where(UID=uid)
             db.remove(schema=CredentialAPI.Schema, table=CredentialAPI.Table, condition=condition, parameters=parameters)
         self._log_.info(lambda: f"Credential Delete: Removed ({uid})")
         return True
 
-    def transfer(self, uid: str, owner: str, *, by=None) -> bool:
+    def transfer(self, uid: str, owner: str, *, by=MISSING) -> bool:
         return self.update(uid, by=by, Owner=owner) is not None
 
-    def reveal(self, uid: str, *, by=None) -> Union[dict, None]:
+    def reveal(self, uid: str, *, by=MISSING) -> Union[dict, None]:
         row, principal = self._one_(uid), self.principal(by)
         if not self._allows_(row, principal, edit=True): return None
         self._log_.debug(lambda: f"Credential Reveal: Read ({uid}) · By {self._stamp_(by, principal[0])}")
-        return CredentialAPI.spread(row.get("Secret"), LayoutAPI.secret(row.get("Kind")))
+        return self._secrets_(row)
 
     def _located_(self, uid: Union[str, Missing], service: Union[str, Missing], name: Union[str, Missing]) -> Union[dict, None]:
         if uid: return self._one_(uid)
@@ -206,39 +208,54 @@ class VaultAPI:
             condition, parameters = db.where(UID=uid)
             db.update(schema=CredentialAPI.Schema, table=CredentialAPI.Table, data={"UsedAt": utc_now(), "UsedBy": self._stamp_(by, user)}, condition=condition, parameters=parameters)
 
-    def resolve(self, *, uid: Union[str, Missing] = MISSING, service: Union[str, Missing] = MISSING, name: Union[str, Missing] = MISSING, by=None) -> Union[dict, None]:
-        row, principal = self._located_(uid, service, name), self.principal(by)
+    @staticmethod
+    def _values_(row: dict, parent: Union[dict, None]) -> dict:
+        return CredentialAPI.parse(row).values(CredentialAPI.parse(parent) if parent is not None else None)
+
+    def _resolved_(self, row: Union[dict, None], principal: tuple, by) -> Union[dict, None]:
         if not self._allows_(row, principal): return None
-        credential = CredentialAPI.parse(row)
-        parent = self._one_(credential.Parent) if credential.Parent else None
+        parent = self._one_(row.get("Parent"))
         if parent is not None and not self._allows_(parent, principal): return None
-        self._used_(credential.UID, by, principal[0])
-        return credential.values(CredentialAPI.parse(parent) if parent is not None else None)
+        self._used_(row["UID"], by, principal[0])
+        return self._values_(row, parent)
+
+    def resolve(self, *, uid: Union[str, Missing] = MISSING, service: Union[str, Missing] = MISSING, name: Union[str, Missing] = MISSING, by=MISSING) -> Union[dict, None]:
+        return self._resolved_(self._located_(uid, service, name), self.principal(by), by)
 
     def due(self, *, margin: Union[int, Missing] = MISSING) -> list[dict]:
         horizon = utc_now() + timedelta(seconds=self._margin_ if margin is MISSING else margin)
         with PostgresDatabaseAPI.attach(database=self._database_) as db:
             return db.records(schema=CredentialAPI.Schema, table=CredentialAPI.Table, condition='"ExpiresAt" IS NOT NULL AND "ExpiresAt" <= :horizon:', order='"ExpiresAt" ASC', parameters={"horizon": horizon})
 
-    def refresh(self, uid: str, secrets: dict, *, expires=MISSING, by=None) -> Union[CredentialAPI, None]:
-        row = self._one_(uid)
-        if row is None: return None
-        stored = CredentialAPI.spread(row.get("Secret"), LayoutAPI.secret(row.get("Kind")))
-        fields = {"Secret": CredentialAPI.pack({**stored, **SecretAPI.unwrap(secrets)})}
+    def _refreshed_(self, row: dict, secrets: dict, expires, by) -> CredentialAPI:
+        fields = {"Secret": CredentialAPI.pack({**self._secrets_(row), **SecretAPI.unwrap(secrets)})}
         if expires is not MISSING: fields["ExpiresAt"] = self._expiry_(expires)
         credential = CredentialAPI.parse({**row, **fields})
-        self._save_(credential, by=self._stamp_(by, self.principal(by)[0]))
-        self._erase_(uid, row, fields)
-        self._log_.info(lambda: f"Credential Refresh: Rotated ({uid}) · {credential.Service} · {credential.Name}")
+        self._save_(credential, by=self._stamp_(by, None))
+        self._erase_(row["UID"], row, fields)
+        self._log_.info(lambda: f"Credential Refresh: Rotated ({credential.UID}) · {credential.Service} · {credential.Name}")
         return credential
+
+    def refresh(self, uid: str, secrets: dict, *, expires=MISSING, by=MISSING) -> Union[CredentialAPI, None]:
+        row = self._one_(uid)
+        return None if row is None else self._refreshed_(row, secrets, expires, by)
 
     def rotate(self, uid: str) -> bool:
         row = self._one_(uid)
-        if row is None: return False
-        refresher = self._refreshers_.get(row.get("Service"))
+        refresher = self._refreshers_.get(row.get("Service")) if row is not None else None
         if refresher is None: return False
-        secrets, expires = refresher(CredentialAPI.parse(row).values())
-        return self.refresh(uid, secrets, expires=expires, by="Framework") is not None
+        secrets, expires = refresher(self._values_(row, self._one_(row.get("Parent"))))
+        self._refreshed_(row, secrets, expires, "Framework")
+        return True
+
+    def test(self, uid: str, *, by=MISSING) -> str:
+        row, principal = self._one_(uid), self.principal(by)
+        if not self._allows_(row, principal): raise PermissionError("Credential Test: Failed · You may not use this credential")
+        tester = self._testers_.get(row["Service"])
+        if tester is None: raise LookupError(f"Credential Test: Failed · No connection check for {row['Service']}")
+        values = self._resolved_(row, principal, by)
+        if values is None: raise PermissionError("Credential Test: Failed · You may not use the parent credential")
+        return tester(values)
 
     def internal(self, *, service: str, name: str) -> Union[dict, None]:
         rows = self._select_(Service=service, Name=name)
@@ -246,7 +263,7 @@ class VaultAPI:
         self._used_(rows[0]["UID"], "Framework", None)
         return CredentialAPI.parse(rows[0]).values()
 
-    def ensure(self, *, service: str, name: str, secret, by=None, **fields) -> CredentialAPI:
+    def ensure(self, *, service: str, name: str, secret, by=MISSING, **fields) -> CredentialAPI:
         rows = self._select_(Service=service, Name=name)
         if rows: return CredentialAPI.parse(rows[0])
         return self.store(by=by, Service=service, Name=name, Secret=CredentialAPI.pack(secret), **fields)
