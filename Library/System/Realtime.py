@@ -14,6 +14,7 @@ from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Engine import MachineAPI
 from Library.Market.Bar import BarAPI
 from Library.Market.Market import MarketAPI
+from Library.Market.Point import PointAPI
 from Library.Market.Price import Direction
 from Library.Market.Tick import TickAPI
 from Library.Portfolio.Account import AccountAPI, AccountType, MarginMode
@@ -58,7 +59,7 @@ class RealtimeAPI(SystemAPI):
     _binary_position_ = BinaryAPI('i', 'B', 'B', 'q', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'D', 'D', 's')
     _binary_trade_ = BinaryAPI('i', 'i', 'B', 'B', 'q', 'q', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 's')
 
-    _bar_payload_ = 1 + 8 + 5 * _binary_tick_._size_ + 8
+    _bar_payload_ = 1 + 8 + 7 * _binary_tick_._size_ + 8
 
     def __init__(self,
                  system: SystemType,
@@ -69,7 +70,6 @@ class RealtimeAPI(SystemAPI):
                  iid: str,
                  database: Union[str, None],
                  universe: tuple[int, float, int, int] = (0, 0.0, 0, 0),
-                 market: tuple[int, float, int, int] = (0, 0.0, 0, 0),
                  portfolio: tuple[int, float, int, int] = (0, 0.0, 0, 0),
                  risk_free: float = 0.0,
                  benchmark: Union[str, list, None] = None,
@@ -80,9 +80,8 @@ class RealtimeAPI(SystemAPI):
                  description: Union[str, None] = None) -> None:
         if database is None:
             universe = (0, 0.0, 0, 0)
-            market = (0, 0.0, 0, 0)
             portfolio = (0, 0.0, 0, 0)
-        super().__init__(strategy=strategy, security=security, timeframe=timeframe, parameters=parameters, universe=universe, market=market, portfolio=portfolio, risk_free=risk_free, benchmark=benchmark, report=report, export=export, plot=plot, run=run, description=description)
+        super().__init__(strategy=strategy, security=security, timeframe=timeframe, parameters=parameters, universe=universe, portfolio=portfolio, risk_free=risk_free, benchmark=benchmark, report=report, export=export, plot=plot, run=run, description=description)
 
         self._system_: SystemType = system
         self._iid_: str = iid
@@ -313,7 +312,7 @@ class RealtimeAPI(SystemAPI):
         ts, ask, bid, ask_base, bid_base, ask_quote, bid_quote, volume = self._binary_tick_.unpack(data, offset)
         timestamp = timestamp_to_datetime(ts, milliseconds=True)
         if not self.strategy.Transform.Market:
-            return TickAPI._ingest_(self._db_, self._security_, timestamp, ask, bid, ask_base, bid_base, ask_quote, bid_quote, volume)
+            return TickAPI._ingest_(self._security_, timestamp, ask, bid, ask_base, bid_base, ask_quote, bid_quote, volume)
         return TickAPI(
             Security=self._security_,
             Timestamp=timestamp,
@@ -323,8 +322,7 @@ class RealtimeAPI(SystemAPI):
             BidBaseConversion=bid_base,
             AskQuoteConversion=ask_quote,
             BidQuoteConversion=bid_quote,
-            Volume=volume,
-            db=self._db_
+            Volume=volume
         )
 
     def receive_update_bar(self, offset: int = 1) -> BarAPI:
@@ -334,23 +332,24 @@ class RealtimeAPI(SystemAPI):
         off = 9
         gap = self._deserialize_tick_(data, off); off += tick_size
         opn = self._deserialize_tick_(data, off); off += tick_size
-        high = self._deserialize_tick_(data, off); off += tick_size
-        low = self._deserialize_tick_(data, off); off += tick_size
+        high_ask = self._deserialize_tick_(data, off); off += tick_size
+        high_bid = self._deserialize_tick_(data, off); off += tick_size
+        low_ask = self._deserialize_tick_(data, off); off += tick_size
+        low_bid = self._deserialize_tick_(data, off); off += tick_size
         close = self._deserialize_tick_(data, off); off += tick_size
         volume = BinaryAPI.FLOAT64.unpack_from(data, off)[0]
-        self._metrics_["Ticks"] += 5
+        self._metrics_["Ticks"] += 7
         self._metrics_["Bars"] += 1
         return BarAPI(
             Security=self._security_,
             Timeframe=self._timeframe_,
             Timestamp=timestamp_to_datetime(bar_ts, milliseconds=True),
-            GapTick=gap,
-            OpenTick=opn,
-            HighTick=high,
-            LowTick=low,
-            CloseTick=close,
-            Volume=volume,
-            db=self._db_
+            GapPoint=PointAPI(AskTick=gap, BidTick=gap),
+            OpenPoint=PointAPI(AskTick=opn, BidTick=opn),
+            HighPoint=PointAPI(AskTick=high_ask, BidTick=high_bid),
+            LowPoint=PointAPI(AskTick=low_ask, BidTick=low_bid),
+            ClosePoint=PointAPI(AskTick=close, BidTick=close),
+            Volume=volume
         )
 
     def receive_update_denied(self, offset: int = 1) -> tuple[ActionID, str]:

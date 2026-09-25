@@ -6,6 +6,7 @@ from Library.Utility.Datetime import (
     MICROSECOND,
     STAMP,
     datetime_to_string,
+    instant_to_string,
     string_to_datetime,
     datetime_to_timestamp,
     datetime_to_epoch,
@@ -20,9 +21,7 @@ from Library.Utility.Datetime import (
     zones,
     local_now,
     local_to_utc,
-    utc_to_local,
-    is_summer_time,
-    is_winter_time
+    utc_to_local
 )
 from Library.Utility.Profiler import (
     PROFILE,
@@ -165,7 +164,7 @@ __all__ = [
     "hasmember", "getmember", "hasattribute", "getattribute", "hasmethod", "getmethod", "hasproperty", "getproperty",
     "getvariable", "findvariable",
     "normalize", "cast", "contains", "format",
-    "EPOCH", "MILLISECOND", "MICROSECOND", "STAMP", "datetime_to_string", "string_to_datetime", "datetime_to_timestamp", "datetime_to_epoch", "epoch_to_datetime", "timestamp_to_datetime", "datetime_to_iso", "iso_to_datetime", "parse_datetime", "seconds_to_string", "seconds_to_clock", "utc_now", "zones", "local_now", "local_to_utc", "utc_to_local", "is_summer_time", "is_winter_time",
+    "EPOCH", "MILLISECOND", "MICROSECOND", "STAMP", "datetime_to_string", "instant_to_string", "string_to_datetime", "datetime_to_timestamp", "datetime_to_epoch", "epoch_to_datetime", "timestamp_to_datetime", "datetime_to_iso", "iso_to_datetime", "parse_datetime", "seconds_to_string", "seconds_to_clock", "utc_now", "zones", "local_now", "local_to_utc", "utc_to_local",
     "EPSILON", "equals", "truncate",
     "memory_to_string",
     "find_user", "is_windows", "is_linux", "is_mac", "is_local", "is_remote", "is_service",

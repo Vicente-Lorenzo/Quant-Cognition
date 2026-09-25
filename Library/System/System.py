@@ -16,6 +16,7 @@ from Library.Indicator.Indicator import IndicatorAPI
 from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Market.Bar import BarAPI
 from Library.Market.Market import MarketAPI
+from Library.Market.Tape import TapeAPI
 from Library.Market.Tick import TickAPI
 from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.Order import OrderAPI
@@ -107,7 +108,7 @@ from Library.Protocol.Update import (
 )
 from Library.System.Lifecycle import LifecycleAPI
 from Library.Universe.Security import SecurityAPI
-from Library.Utility.Datetime import utc_now, STAMP
+from Library.Utility.Datetime import STAMP, datetime_to_epoch, epoch_to_datetime, parse_datetime, utc_now
 from Library.Utility.Enumeration import EnumerationAPI
 from Library.Utility.IO import mkdir, write_text, write_yaml
 from Library.Utility.Memory import memory_to_string
@@ -153,7 +154,6 @@ class SystemAPI(ServiceAPI, ABC):
                  timeframe: TimeframeAPI,
                  parameters: Parameter,
                  universe: tuple[int, float, int, int] = (0, 0.0, 0, 0),
-                 market: tuple[int, float, int, int] = (0, 0.0, 0, 0),
                  portfolio: tuple[int, float, int, int] = (0, 0.0, 0, 0),
                  risk_free: float = 0.0,
                  benchmark: Union[str, Sequence, None] = None,
@@ -192,7 +192,6 @@ class SystemAPI(ServiceAPI, ABC):
         self.benchmarks = None
 
         self._universe_: BufferAPI = BufferAPI(types=[SecurityAPI], batch=universe[0], interval=universe[1], workers=universe[2], maxsize=universe[3])
-        self._market_: BufferAPI = BufferAPI(types=[TickAPI, BarAPI], batch=market[0], interval=market[1], workers=market[2], maxsize=market[3], bulk=True)
         self._portfolio_: BufferAPI = BufferAPI(types=[AccountAPI, OrderAPI, PositionAPI, TradeAPI], batch=portfolio[0], interval=portfolio[1], workers=portfolio[2], maxsize=portfolio[3])
 
         self._session_: Union[SessionAPI, None] = None
@@ -226,12 +225,10 @@ class SystemAPI(ServiceAPI, ABC):
             self.technical = self.indicator.Technical
             self.fundamental = self.indicator.Fundamental
             self.sentimental = self.indicator.Sentimental
-        if self._market_.Active: self._market_.start()
         if self._portfolio_.Active: self._portfolio_.start()
         self._connected_ = True
 
     def _disconnect_(self) -> None:
-        if self._market_.Active: self._market_.shutdown()
         if self._portfolio_.Active: self._portfolio_.shutdown()
         self._connected_ = False
 
@@ -325,7 +322,7 @@ class SystemAPI(ServiceAPI, ABC):
         if self.market is None: return []
         frame = self.market.dataframe()
         if frame is None or frame.is_empty(): return []
-        columns = (str(BarAPI.ID.Timestamp), str(BarAPI.OID.OpenTick.Bid), str(BarAPI.OID.HighTick.Bid), str(BarAPI.OID.LowTick.Bid), str(BarAPI.OID.CloseTick.Bid), str(BarAPI.OID.OpenTick.Timestamp))
+        columns = (str(BarAPI.ID.Timestamp), str(BarAPI.OID.OpenPoint.BidTick.Bid), str(BarAPI.OID.HighPoint.BidTick.Bid), str(BarAPI.OID.LowPoint.BidTick.Bid), str(BarAPI.OID.ClosePoint.BidTick.Bid), str(BarAPI.OID.OpenPoint.BidTick.Timestamp))
         if any(column not in frame.columns for column in columns): return []
         if str(BarAPI.ID.Volume) in frame.columns: columns += (str(BarAPI.ID.Volume),)
         return list(zip(*(frame[column].to_list() for column in columns)))
@@ -386,9 +383,11 @@ class SystemAPI(ServiceAPI, ABC):
             try:
                 provider_uid, _, ticker_uid = spec.rpartition(":")
                 security = SecurityAPI(Provider=provider_uid or self._security_.Provider, Ticker=ticker_uid, db=database, autoload=True)
-                frame = MarketAPI.pull_bars(database, security.UID, self._timeframe_.UID, start=start, stop=stop)
+                first, last = parse_datetime(start, end_of_day=False), parse_datetime(stop, end_of_day=True)
+                tape, frame = TapeAPI.span(database, security.UID, self._timeframe_, first, last)
+                frame = frame.filter(pl.col("Timestamp") >= datetime_to_epoch(first))
                 if frame.is_empty(): raise ValueError(f"No {self._timeframe_.UID} Bars")
-                benchmarks[self._label_(security)] = list(zip(frame[str(BarAPI.ID.Timestamp)].to_list(), frame[str(BarAPI.OID.CloseTick.Bid)].to_list()))
+                benchmarks[self._label_(security)] = list(zip(map(epoch_to_datetime, frame["Timestamp"].to_list()), tape.Bids[frame["Close"].to_numpy()].tolist()))
             except Exception as error:
                 self._log_.warning(lambda s=spec, e=error: f"Benchmark Operation: Skipped · {s} · {e}")
         return benchmarks
@@ -536,23 +535,14 @@ class SystemAPI(ServiceAPI, ABC):
         raise NotImplementedError
 
     def _receive_update_tick_(self) -> TickAPI:
-        tick = self.receive_update_tick()
-        self._market_.add(tick)
-        return tick
+        return self.receive_update_tick()
 
     @abstractmethod
     def receive_update_bar(self, offset: int = 1) -> BarAPI:
         raise NotImplementedError
 
     def _receive_update_bar_(self) -> BarAPI:
-        bar = self.receive_update_bar()
-        self._market_.add(bar.GapTick)
-        self._market_.add(bar.OpenTick)
-        self._market_.add(bar.HighTick)
-        self._market_.add(bar.LowTick)
-        self._market_.add(bar.CloseTick)
-        self._market_.add(bar)
-        return bar
+        return self.receive_update_bar()
 
     @abstractmethod
     def receive_update_order(self, offset: int = 1) -> OrderAPI:
@@ -613,7 +603,6 @@ class SystemAPI(ServiceAPI, ABC):
         actions: list[ActionAPI] = []
         while True:
             if not self._universe_.Empty: self._universe_.flush()
-            if not self._market_.Empty: self._market_.flush()
             if not self._portfolio_.Empty: self._portfolio_.flush()
             update_id = self.receive_update_id()
             match update_id:
@@ -820,7 +809,6 @@ class SystemAPI(ServiceAPI, ABC):
             actions = self._process_updates_(engine)
             self._process_actions_(actions, engine.IsTerminated)
             if not self._universe_.Empty: self._universe_.flush()
-            if not self._market_.Empty: self._market_.flush()
             if not self._portfolio_.Empty: self._portfolio_.flush()
 
     @abstractmethod

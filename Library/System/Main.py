@@ -39,16 +39,6 @@ class SystemCommandAPI(CommandAPI):
         return cls._settled_((batch, interval, workers, maxsize), automatic)
 
     @classmethod
-    def _market_(cls, system: SystemType, strategy: StrategyType, batch: Union[int, Missing], interval: Union[float, Missing], workers: Union[int, Missing], maxsize: Union[int, Missing]) -> tuple[int, float, int, int]:
-        download = strategy == StrategyType.Download
-        match system:
-            case SystemType.Live: automatic = 1000, 60.0, 1, 64
-            case SystemType.Simulation: automatic = (500000, 0.0, 8, 16) if download else (0, 0.0, 0, 0)
-            case SystemType.Testing: automatic = (500000, 0.0, 8, 16) if download else (0, 0.0, 0, 0)
-            case _: automatic = 0, 0.0, 0, 0
-        return cls._settled_((batch, interval, workers, maxsize), automatic)
-
-    @classmethod
     def _portfolio_(cls, system: SystemType, batch: Union[int, Missing], interval: Union[float, Missing], workers: Union[int, Missing], maxsize: Union[int, Missing]) -> tuple[int, float, int, int]:
         match system:
             case SystemType.Live: automatic = 100, 60.0, 1, 64
@@ -59,7 +49,6 @@ class SystemCommandAPI(CommandAPI):
     @classmethod
     def _system_(cls, args: Namespace, strategy: type[StrategyAPI], security: SecurityAPI, timeframe: TimeframeAPI, resolve) -> Union[SystemAPI, None]:
         system = SystemType(args.system)
-        strategy_type = StrategyType(args.strategy)
         match system:
             case SystemType.Live | SystemType.Simulation | SystemType.Testing:
                 params: Parameter = resolve("Realtime")
@@ -72,7 +61,6 @@ class SystemCommandAPI(CommandAPI):
                     iid=args.iid,
                     database=args.database,
                     universe=cls._universe_(system, args.universe_batch, args.universe_interval, args.universe_workers, args.universe_maxsize),
-                    market=cls._market_(system, strategy_type, args.market_batch, args.market_interval, args.market_workers, args.market_maxsize),
                     portfolio=cls._portfolio_(system, args.portfolio_batch, args.portfolio_interval, args.portfolio_workers, args.portfolio_maxsize),
                     risk_free=args.risk_free,
                     benchmark=args.benchmark,
@@ -261,10 +249,6 @@ class SystemCommandAPI(CommandAPI):
         realtime_parser.add_argument("--universe-interval", type=float, default=MISSING)
         realtime_parser.add_argument("--universe-workers", type=int, default=MISSING)
         realtime_parser.add_argument("--universe-maxsize", type=int, default=MISSING)
-        realtime_parser.add_argument("--market-batch", type=int, default=MISSING)
-        realtime_parser.add_argument("--market-interval", type=float, default=MISSING)
-        realtime_parser.add_argument("--market-workers", type=int, default=MISSING)
-        realtime_parser.add_argument("--market-maxsize", type=int, default=MISSING)
         realtime_parser.add_argument("--portfolio-batch", type=int, default=MISSING)
         realtime_parser.add_argument("--portfolio-interval", type=float, default=MISSING)
         realtime_parser.add_argument("--portfolio-workers", type=int, default=MISSING)

@@ -26,6 +26,9 @@ class Weekday(EnumerationAPI):
 def datetime_to_string(dt: Union[datetime, date, time], fmt: str) -> str:
     return dt.strftime(fmt)
 
+def instant_to_string(value: Union[datetime, None]) -> str:
+    return value.strftime(INSTANT) if value is not None else ""
+
 def string_to_datetime(date_str: str, fmt_str: str) -> datetime:
     return datetime.strptime(date_str, fmt_str)
 
@@ -141,26 +144,3 @@ def saturday_shift_datetime(shift: int, today: Union[datetime, None] = None) -> 
 
 def sunday_shift_datetime(shift: int, today: Union[datetime, None] = None) -> datetime:
     return weekday_shift_datetime(wd=Weekday.Sunday, shift=shift, today=today)
-
-def _last_weekday_(year: int, month: int, weekday: int) -> datetime:
-    last = datetime(year, 12, 31) if month == 12 else datetime(year, month + 1, 1) - timedelta(days=1)
-    return last - timedelta(days=(last.weekday() - weekday) % 7)
-
-def _nth_weekday_(year: int, month: int, weekday: int, n: int) -> datetime:
-    first = datetime(year, month, 1)
-    return first + timedelta(days=(weekday - first.weekday()) % 7 + (n - 1) * 7)
-
-def is_summer_time(timestamp: datetime, region: str = "EU") -> bool:
-    year = timestamp.year
-    if region == "EU":
-        spring = _last_weekday_(year, 3, Weekday.Sunday.value).replace(hour=1)
-        autumn = _last_weekday_(year, 10, Weekday.Sunday.value).replace(hour=1)
-    elif region == "US":
-        spring = _nth_weekday_(year, 3, Weekday.Sunday.value, 2).replace(hour=2)
-        autumn = _nth_weekday_(year, 11, Weekday.Sunday.value, 1).replace(hour=2)
-    else:
-        raise ValueError(f"Region {region}: Failed · Due to unsupported daylight-saving region")
-    return spring <= timestamp < autumn
-
-def is_winter_time(timestamp: datetime, region: str = "EU") -> bool:
-    return not is_summer_time(timestamp, region)
