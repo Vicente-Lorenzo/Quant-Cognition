@@ -4,17 +4,15 @@ from types import SimpleNamespace
 
 from Library.Database.Dataframe import np
 from Library.Market.Price import Direction
-from Library.Portfolio.Sizing import SizingMode
 from Library.Strategy.Hybrid.DDPG import DDPGNormalizationAPI, DDPGObservationAPI
-from Library.Strategy.Model.Action import ActionAPI
 from Library.Strategy.Model.Normalizer import NormalizerAPI
 from Library.Strategy.Model.Observation import ObservationAPI
 
-def _action_(exposure=100.0):
-    return ActionAPI(mode=SizingMode.Balance, maximum=exposure, deadzone=0.0)
+def _reference_(volume=9000.0):
+    return lambda update: volume
 
-def _encoder_(action=None, momentum_features=("MOMFast", "MOMMedium", "MOMSlow"), overlap_features=(), normalize_window=200, window=1):
-    return DDPGObservationAPI(action=action if action is not None else _action_(), momentum_features=momentum_features, overlap_features=overlap_features, normalize_window=normalize_window, window=window)
+def _encoder_(reference=None, momentum_features=("MOMFast", "MOMMedium", "MOMSlow"), overlap_features=(), normalize_window=200, window=1):
+    return DDPGObservationAPI(reference=reference if reference is not None else _reference_(), momentum_features=momentum_features, overlap_features=overlap_features, normalize_window=normalize_window, window=window)
 
 def _indicator_(value, window=1, previous=None):
     return SimpleNamespace(Result=SimpleNamespace(last=lambda shift=0: value if shift == 0 or previous is None else previous), Window=window)
@@ -54,16 +52,16 @@ def test_shape_essential_and_with_moving_averages():
 
 def test_layout_records_the_feature_order_and_composition():
     assert _encoder_().layout() == {"Account": True, "Momentum": ["MOMFast", "MOMMedium", "MOMSlow"], "Overlap": [], "Shape": 30, "Window": 1}
-    stacked = DDPGObservationAPI(action=_action_(), momentum_features=("MOMSlow", "MOMFast"), overlap_features=("MASlow", "MAFast"), normalize_window=200, window=3, account=False)
+    stacked = DDPGObservationAPI(reference=_reference_(), momentum_features=("MOMSlow", "MOMFast"), overlap_features=("MASlow", "MAFast"), normalize_window=200, window=3, account=False)
     assert stacked.layout() == {"Account": False, "Momentum": ["MOMSlow", "MOMFast"], "Overlap": ["MASlow", "MAFast"], "Shape": 3 * (8 + 1 + 6 + 4 + 2 + 4), "Window": 3}
 
 def test_encode_shape_and_dtype():
-    observation = _encoder_(action=_action_()).encode(_update_())
+    observation = _encoder_(reference=_reference_()).encode(_update_())
     assert observation.shape == (30,)
     assert observation.dtype == np.float32
 
 def test_window_stacks_frames_with_repeat_padding():
-    encoder = _encoder_(action=_action_(), window=3)
+    encoder = _encoder_(reference=_reference_(), window=3)
     assert encoder.shape() == 90
     first = encoder.encode(_update_(close=1.11))
     assert first.shape == (90,) and first.dtype == np.float32
@@ -78,43 +76,43 @@ def test_window_stacks_frames_with_repeat_padding():
 
 def test_timestamp_is_raw_sin_cos():
     when = datetime(2020, 6, 15, 13, 30, 0)
-    observation = _encoder_(action=_action_()).encode(_update_(when=when))
+    observation = _encoder_(reference=_reference_()).encode(_update_(when=when))
     assert abs(observation[0] - math.sin(2.0 * math.pi * (when.month - 1) / 12)) < 1e-6
     assert abs(observation[1] - math.cos(2.0 * math.pi * (when.month - 1) / 12)) < 1e-6
     assert abs(observation[2] - math.sin(2.0 * math.pi * when.weekday() / 7)) < 1e-6
 
 def test_drawdown_and_exposure_are_raw():
-    observation = _encoder_(action=_action_()).encode(_update_(drawdown=-0.05, buys=[_position_(5000.0, True)]))
+    observation = _encoder_(reference=_reference_()).encode(_update_(drawdown=-0.05, buys=[_position_(5000.0, True)]))
     assert abs(observation[10] - (-0.05)) < 1e-6
     assert abs(observation[12] - 5000.0 / 9000.0) < 1e-6
 
 def test_flagged_features_zero_on_first_encode():
-    observation = _encoder_(action=_action_()).encode(_update_(volume=5000.0))
+    observation = _encoder_(reference=_reference_()).encode(_update_(volume=5000.0))
     assert observation[21] == 0.0
     assert observation[8] == 0.0
 
 def test_market_features_are_vol_scaled_log_moves():
-    encoder = _encoder_(action=_action_())
+    encoder = _encoder_(reference=_reference_())
     encoder.encode(_update_(close=1.10))
     observation = encoder.encode(_update_(open=1.105, close=1.11, rv=0.008))
     assert abs(observation[20] - math.log(1.11 / 1.10) / 0.008) < 1e-4
     assert abs(observation[17] - math.log(1.105 / 1.10) / 0.008) < 1e-4
 
 def test_reset_clears_previous_close():
-    encoder = _encoder_(action=_action_())
+    encoder = _encoder_(reference=_reference_())
     encoder.encode(_update_(close=1.10))
     encoder.reset()
     observation = encoder.encode(_update_(open=1.105, close=1.11))
     assert observation[17] == 0.0 and observation[20] == 0.0
 
 def test_moving_average_extends_vector():
-    encoder = _encoder_(action=_action_(), overlap_features=("MA20",))
+    encoder = _encoder_(reference=_reference_(), overlap_features=("MA20",))
     observation = encoder.encode(_update_(close=1.11, atr=0.01, extra={"MA20": 1.09}))
     assert observation.shape == (32,)
     assert math.isfinite(float(observation[30])) and math.isfinite(float(observation[31]))
 
 def test_overlap_pair_encodes_distance_and_slope():
-    encoder = _encoder_(action=_action_(), overlap_features=("MA20",))
+    encoder = _encoder_(reference=_reference_(), overlap_features=("MA20",))
     update = _update_(close=1.11, atr=0.01)
     update.Technical.MA20 = _indicator_(1.09, previous=1.085)
     features = []
@@ -123,7 +121,7 @@ def test_overlap_pair_encodes_distance_and_slope():
     assert abs(features[8][0] - (1.09 - 1.085) / 0.01) < 1e-12 and features[8][1] is True
 
 def test_overlap_slope_zero_without_history():
-    encoder = _encoder_(action=_action_(), overlap_features=("MA20",))
+    encoder = _encoder_(reference=_reference_(), overlap_features=("MA20",))
     update = _update_(close=1.11, atr=0.01)
     update.Technical.MA20 = SimpleNamespace(Result=SimpleNamespace(last=lambda shift=0: 1.09 if shift == 0 else None), Window=1)
     features = []
@@ -131,7 +129,7 @@ def test_overlap_slope_zero_without_history():
     assert features[7][0] > 0.0 and abs(features[8][0]) < 1e-12
 
 def test_spread_is_relative_ask_bid_of_close_tick():
-    encoder = _encoder_(action=_action_())
+    encoder = _encoder_(reference=_reference_())
     update = _update_(close=1.1000)
     update.Bar.ClosePoint.Ask = SimpleNamespace(Price=1.1002)
     features = []
@@ -140,13 +138,13 @@ def test_spread_is_relative_ask_bid_of_close_tick():
     assert abs(value - 0.0002 / 1.1000) < 1e-12 and standardized is True
 
 def test_spread_zero_without_ask():
-    encoder = _encoder_(action=_action_())
+    encoder = _encoder_(reference=_reference_())
     features = []
     encoder._market_features_(_update_(), features)
     assert features[5] == (0.0, True)
 
 def test_position_duration_counts_holds_and_resets():
-    encoder = _encoder_(action=_action_())
+    encoder = _encoder_(reference=_reference_())
     encoder.encode(_update_())
     assert encoder._position_bars_ == 0
     encoder.encode(_update_(buys=[_position_(5000.0, True, uid=1)]))
@@ -159,29 +157,30 @@ def test_position_duration_counts_holds_and_resets():
     assert encoder._position_bars_ == 0
 
 def test_momentum_reads_roc_indicator_vol_scaled():
-    encoder = _encoder_(action=_action_(), momentum_features=("MOM2",))
+    encoder = _encoder_(reference=_reference_(), momentum_features=("MOM2",))
     observation = encoder.encode(_update_(rv=0.008, extra={"MOM2": (0.016, 2)}))
     assert abs(observation[27] - 0.016 / (0.008 * math.sqrt(2))) < 1e-6
 
 def test_momentum_zero_without_indicator():
-    observation = _encoder_(action=_action_(), momentum_features=("MOM2",)).encode(_update_(rv=0.008))
+    observation = _encoder_(reference=_reference_(), momentum_features=("MOM2",)).encode(_update_(rv=0.008))
     assert observation[26] == 0.0
 
 def test_vol_regime_is_log_ratio_of_fast_to_slow():
-    observation = _encoder_(action=_action_()).encode(_update_(rv=0.008, extra={"RVSlow": 0.004}))
+    observation = _encoder_(reference=_reference_()).encode(_update_(rv=0.008, extra={"RVSlow": 0.004}))
     assert abs(observation[25] - math.log(2.0)) < 1e-6
 
 def test_vol_regime_zero_without_slow_indicator():
-    observation = _encoder_(action=_action_()).encode(_update_(rv=0.008))
+    observation = _encoder_(reference=_reference_()).encode(_update_(rv=0.008))
     assert observation[25] == 0.0
 
 def test_exposure_bounded_by_reference():
-    observation = _encoder_(action=_action_(exposure=100.0)).encode(_update_(buys=[_position_(5000.0, True)], balance=10000.0, close=1.11))
-    assert -1.0 <= observation[12] <= 1.0
+    observation = _encoder_(reference=_reference_(9000.0)).encode(_update_(buys=[_position_(5000.0, True)]))
     assert abs(observation[12] - 5000.0 / 9000.0) < 1e-6
+    clipped = _encoder_(reference=_reference_(2000.0)).encode(_update_(sells=[_position_(5000.0, False)]))
+    assert clipped[12] == -1.0
 
 def test_nan_indicators_encode_finite():
-    observation = _encoder_(action=_action_(), overlap_features=("MA20",)).encode(_update_(volume=float("nan"), atr=float("nan"), rv=float("nan"), extra={"MA20": float("nan")}))
+    observation = _encoder_(reference=_reference_(), overlap_features=("MA20",)).encode(_update_(volume=float("nan"), atr=float("nan"), rv=float("nan"), extra={"MA20": float("nan")}))
     assert np.isfinite(observation).all()
 
 def test_ddpg_encoder_subclasses_generic_bases():

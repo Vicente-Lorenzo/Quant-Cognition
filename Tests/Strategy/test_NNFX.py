@@ -14,7 +14,7 @@ def _position_(volume, long, uid=1):
 
 def _update_(buys=None, sells=None, drawdown=0.0, atr=0.01, close=1.0):
     technical = SimpleNamespace(ATR=_indicator_(atr))
-    bar = SimpleNamespace(ClosePoint=SimpleNamespace(Bid=SimpleNamespace(Price=close)))
+    bar = SimpleNamespace(ClosePoint=SimpleNamespace(Bid=SimpleNamespace(Price=close), BidTick=SimpleNamespace(BidBaseConversion=SimpleNamespace(Price=close), BidQuoteConversion=SimpleNamespace(Price=1.0))))
     portfolio = SimpleNamespace(
         BuyPositions=buys or [],
         SellPositions=sells or [],

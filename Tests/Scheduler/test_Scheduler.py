@@ -1,8 +1,11 @@
 import sys
 import time
+import threading
+from pathlib import Path
 
 import pytest
 
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta, timezone
 
@@ -13,6 +16,7 @@ from Library.Scheduler.Main import SchedulerCommandAPI
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Database.Query import QueryAPI
 from Library.Scheduler.Runner import RunnerCommandAPI
+from Library.Scheduler.Tray import TrayAPI
 from Script.Setup.Auth import setup_auth
 from Script.Setup.Scheduler import setup_scheduler
 
@@ -231,7 +235,18 @@ def test_reaping_waits_one_lease_after_the_daemon_was_suspended():
     woke = slept + timedelta(hours=6)
     assert sched._suspended_(woke)
     assert sched._suspended_(woke + timedelta(seconds=30))
+    assert sched._suspended_(woke + timedelta(seconds=60))
     assert not sched._suspended_(woke + timedelta(seconds=sched._lease_ + 1))
+
+def test_reaping_waits_one_lease_after_ticks_went_unobserved():
+    sched = SchedulerAPI(database=DATABASE)
+    tick = datetime(2026, 9, 27, 4, 30, 30)
+    assert not sched._suspended_(tick)
+    assert not sched._suspended_(tick + timedelta(seconds=30))
+    assert sched._suspended_(tick + timedelta(seconds=130))
+    assert sched._suspended_(tick + timedelta(seconds=160))
+    assert sched._suspended_(tick + timedelta(seconds=190))
+    assert not sched._suspended_(tick + timedelta(seconds=130 + sched._lease_ + 1))
 
 def test_a_long_polling_interval_is_not_mistaken_for_a_suspension():
     sched = SchedulerAPI(database=DATABASE, interval=90)
@@ -249,6 +264,14 @@ def test_cli_carries_the_workflow_zone(monkeypatch):
     assert SchedulerCommandAPI._fields_(SchedulerCommandAPI().parse(), WorkflowAPI) == {"UID": "wf-zone", "Zone": "Asia/Tokyo"}
     monkeypatch.setattr(sys, "argv", ["Scheduler", "workflow", "create", "--uid", "wf-zone", "--name", "Zone", "--owner", "owner"])
     assert SchedulerCommandAPI._fields_(SchedulerCommandAPI().parse(), WorkflowAPI)["Zone"] is None
+
+def test_cli_carries_the_workflow_upstream(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["Scheduler", "workflow", "update", "--uid", "Web", "--after", "Environment"])
+    assert SchedulerCommandAPI._fields_(SchedulerCommandAPI().parse(), WorkflowAPI) == {"UID": "Web", "After": "Environment"}
+    monkeypatch.setattr(sys, "argv", ["Scheduler", "workflow", "update", "--uid", "Web", "--after", ""])
+    assert SchedulerCommandAPI._fields_(SchedulerCommandAPI().parse(), WorkflowAPI) == {"UID": "Web", "After": ""}
+    monkeypatch.setattr(sys, "argv", ["Scheduler", "workflow", "create", "--uid", "Web", "--name", "Web", "--owner", "owner"])
+    assert SchedulerCommandAPI._fields_(SchedulerCommandAPI().parse(), WorkflowAPI)["After"] is None
 
 def _repeated_(zone):
     for minute in range(15, 36 * 60, 15):
@@ -578,42 +601,41 @@ def test_service_workflow_resident_cycle(scheduler):
     assert len(first) == 1 and first[0]["Status"] == RunStatus.Running.name and first[0]["Kind"] == Kind.Service.name
     assert len(second) == 1
 
-def test_paused_governs_services(scheduler):
+def _chain_(uid: str) -> tuple:
     with PostgresDatabaseAPI(database=DATABASE) as conn:
-        WorkflowAPI(UID="wf-env", Name="Env", Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
-        TaskAPI(UID="env-update", Name="Update", Owner="owner", WID="wf-env", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
-        TaskAPI(UID="env-server", Name="Server", Owner="owner", WID="wf-env", Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, db=conn).save(by="Test")
-        RunAPI(UID="env-run", TID="env-update", Status="Running", db=conn).save(by="Test")
-    sched = SchedulerAPI(database=DATABASE)
+        WorkflowAPI(UID=uid, Name=uid, Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID=f"{uid}-version", Name="Version", Owner="owner", WID=uid, Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID=f"{uid}-other", Name="Other", Owner="owner", WID=uid, Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID=f"{uid}-tunnel", Name="Tunnel", Owner="owner", WID=uid, Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID=f"{uid}-server", Name="Server", Owner="owner", WID=uid, Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, db=conn).save(by="Test")
+        CoordinatorAPI.link(conn, uid, f"{uid}-version", f"{uid}-tunnel")
+        CoordinatorAPI.link(conn, uid, f"{uid}-tunnel", f"{uid}-server")
+    opened(f"{uid}-cycle", uid)
+    sched = RecordingSchedulerAPI(database=DATABASE)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
-        assert "wf-env" in sched._paused_(conn, sched._tasks_(conn))
-    with PostgresDatabaseAPI(database=DATABASE) as conn:
-        run = RunAPI(UID="env-run", db=conn, autoload=True)
-        run.Status = "Approving"
-        run.save(by="Test")
-    with PostgresDatabaseAPI(database=DATABASE) as conn:
-        assert "wf-env" not in sched._paused_(conn, sched._tasks_(conn))
-    with PostgresDatabaseAPI(database=DATABASE) as conn:
-        run = RunAPI(UID="env-run", db=conn, autoload=True)
-        run.Status = "Success"
-        run.save(by="Test")
-    with PostgresDatabaseAPI(database=DATABASE) as conn:
-        assert "wf-env" not in sched._paused_(conn, sched._tasks_(conn))
+        members = [task for task in sched._tasks_(conn) if task["WID"] == uid]
+    return sched, {task["UID"]: task for task in members}, {task["UID"]: Kind.parse(task["Kind"]) for task in members}
 
-def test_service_supervises_and_pauses(scheduler):
+def test_a_service_awaits_only_its_own_ancestors_in_the_open_cycle(scheduler):
+    sched, members, kinds = _chain_("wf-await")
     with PostgresDatabaseAPI(database=DATABASE) as conn:
-        WorkflowAPI(UID="wf-svc2", Name="Svc2", Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
-        TaskAPI(UID="svc2-update", Name="Update", Owner="owner", WID="wf-svc2", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
-        TaskAPI(UID="svc2-server", Name="Server", Owner="owner", WID="wf-svc2", Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, db=conn).save(by="Test")
-    active = RecordingSchedulerAPI(database=DATABASE)
-    suspended = RecordingSchedulerAPI(database=DATABASE)
+        assert sched._awaited_(conn, members["wf-await-server"], kinds, {}) == "wf-await-version"
+        persist(RunAPI(UID="await-other", TID="wf-await-other", CID="wf-await-cycle", Status="Running", StartedAt=utc_now()))
+        persist(RunAPI(UID="await-version", TID="wf-await-version", CID="wf-await-cycle", Status="Running", StartedAt=utc_now()))
+        assert sched._awaited_(conn, members["wf-await-tunnel"], kinds, {}) == "wf-await-version"
+        persist(RunAPI(UID="await-version", TID="wf-await-version", CID="wf-await-cycle", Status="Approving", StartedAt=utc_now()))
+        assert sched._awaited_(conn, members["wf-await-tunnel"], kinds, {}) is None
+        persist(RunAPI(UID="await-version", TID="wf-await-version", CID="wf-await-cycle", Status="Success", StartedAt=utc_now()))
+        assert sched._awaited_(conn, members["wf-await-server"], kinds, {}) is None
+
+def test_a_service_starts_only_once_its_ancestors_ran_in_the_open_cycle(scheduler):
+    sched, members, kinds = _chain_("wf-flap")
     with PostgresDatabaseAPI(database=DATABASE) as conn:
-        members = [task for task in active._tasks_(conn) if task["WID"] == "wf-svc2"]
-        active._service_(conn, members, set(), utc_now())
-        suspended._service_(conn, members, {"wf-svc2"}, utc_now())
-    assert ("svc2-server", None) in active.spawned
-    assert "svc2-update" not in [tid for tid, _ in active.spawned]
-    assert suspended.spawned == []
+        sched._service_(conn, list(members.values()), utc_now())
+        assert sched.spawned == []
+        persist(RunAPI(UID="flap-version", TID="wf-flap-version", CID="wf-flap-cycle", Status="Success", StartedAt=utc_now()))
+        sched._service_(conn, list(members.values()), utc_now())
+        assert [tid for tid, _ in sched.spawned] == ["wf-flap-tunnel"]
 
 class _Resident_:
 
@@ -628,11 +650,14 @@ def test_service_suspension_closes_the_run_as_success(scheduler):
         TaskAPI(UID="susp-update", Name="Update", Owner="owner", WID="wf-susp", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
         TaskAPI(UID="susp-tunnel", Name="Tunnel", Owner="owner", WID="wf-susp", Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, db=conn).save(by="Test")
         RunAPI(UID="susp-run", TID="susp-tunnel", Status="Running", Retry=0, PID=4242, StartedAt=utc_now(), Heartbeat=utc_now(), db=conn).save(by="Test")
+        CoordinatorAPI.link(conn, "wf-susp", "susp-update", "susp-tunnel")
+    opened("susp-cycle", "wf-susp")
+    persist(RunAPI(UID="susp-update-run", TID="susp-update", CID="susp-cycle", Status="Running", StartedAt=utc_now()))
     sched = RecordingSchedulerAPI(database=DATABASE)
     sched._services_["susp-tunnel"] = _Resident_()
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-susp"]
-        sched._service_(conn, members, {"wf-susp"}, utc_now())
+        sched._service_(conn, members, utc_now())
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         run = RunAPI(UID="susp-run", db=conn, autoload=True)
     assert run.Status == RunStatus.Success.name
@@ -646,7 +671,7 @@ def test_service_crash_is_not_laundered_into_success(scheduler):
     sched = RecordingSchedulerAPI(database=DATABASE)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["UID"] == "susp-crash"]
-        sched._service_(conn, members, set(), utc_now())
+        sched._service_(conn, members, utc_now())
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         run = RunAPI(UID="susp-crash-run", db=conn, autoload=True)
     assert run.Status == RunStatus.Running.name
@@ -658,10 +683,10 @@ def test_service_crash_cap(scheduler):
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["UID"] == "svc-flaky"]
         now = utc_now()
-        sched._service_(conn, members, set(), now)
-        sched._service_(conn, members, set(), now)
-        sched._service_(conn, members, set(), now)
-        sched._service_(conn, members, set(), now)
+        sched._service_(conn, members, now)
+        sched._service_(conn, members, now)
+        sched._service_(conn, members, now)
+        sched._service_(conn, members, now)
     assert len(sched.spawned) == 2
     assert sched._crashes_["svc-flaky"] > 1
 
@@ -684,6 +709,137 @@ def test_boot_launch_fires_once(scheduler):
     assert sched.spawned[0][1] != "boot-old"
     assert sched._launch_ == set()
 
+def test_boot_launch_continues_an_open_cycle_instead_of_opening_a_second(scheduler):
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        WorkflowAPI(UID="wf-resume", Name="Resume", Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID="resume-update", Name="Update", Owner="owner", WID="wf-resume", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID="resume-credential", Name="Credential", Owner="owner", WID="wf-resume", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
+        CoordinatorAPI.link(conn, "wf-resume", "resume-update", "resume-credential")
+    opened("resume-cycle", "wf-resume", started=utc_now() - timedelta(minutes=5))
+    persist(RunAPI(UID="resume-update-run", TID="resume-update", CID="resume-cycle", Status="Success", StartedAt=utc_now() - timedelta(minutes=5), StoppedAt=utc_now()))
+    sched = RecordingSchedulerAPI(database=DATABASE, concurrency=8)
+    sched._launch_ = {"wf-resume"}
+    workflow = {"UID": "wf-resume", "Name": "Resume", "Schedule": "0 0 1 1 *", "Kind": None, "Waits": None}
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-resume"]
+        sched._advance_(conn, workflow, members, CoordinatorAPI.edges(conn, "wf-resume"), utc_now(), 8)
+    assert sched.spawned == [("resume-credential", "resume-cycle")]
+    assert sched._launch_ == set()
+
+def test_stopping_the_scheduler_suspends_its_services_instead_of_failing_them(scheduler, monkeypatch):
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        TaskAPI(UID="stop-svc", Name="Stopped", Owner="owner", Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, RetryDelay=0, db=conn).save(by="Test")
+        RunAPI(UID="stop-svc-run", TID="stop-svc", Status="Running", Retry=0, StartedAt=utc_now(), Heartbeat=utc_now(), db=conn).save(by="Test")
+    killed = []
+    monkeypatch.setattr("Library.Scheduler.Scheduler.terminate", lambda pid: killed.append(pid))
+    sched = SchedulerAPI(database=DATABASE)
+    sched._services_ = {"stop-svc": SimpleNamespace(pid=4242, poll=lambda: None), "stop-gone": SimpleNamespace(pid=4343, poll=lambda: 1)}
+    sched.stop()
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        run = RunAPI(UID="stop-svc-run", db=conn, autoload=True)
+    assert killed == [4242] and sched._services_ == {}
+    assert run.Status == RunStatus.Success.name and run.UpdatedBy == "Suspend"
+
+def test_the_tray_restarts_through_the_launcher_on_the_base_interpreter(monkeypatch, tmp_path):
+    base = tmp_path / "conda"
+    (base / "condabin").mkdir(parents=True)
+    monkeypatch.setattr(sys, "executable", str(base / "envs" / "Quant" / "pythonw.exe"))
+    command = TrayAPI.launcher()
+    assert command[0] == str(base / "pythonw.exe") and command[1].endswith(str(Path("Script") / "Scheduler.py"))
+
+def _upstream_(uid: str, after: str, *, running: bool) -> dict:
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        WorkflowAPI(UID=after, Name=after, Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
+        WorkflowAPI(UID=uid, Name=uid, Owner="owner", Schedule="0 0 1 1 *", After=after, Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID=f"{uid}-task", Name="Task", Owner="owner", WID=uid, Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
+    opened(f"{after}-cycle", after, status="Running" if running else "Success")
+    return {"UID": uid, "Name": uid, "Schedule": "0 0 1 1 *", "After": after, "Kind": None, "Waits": None}
+
+def test_a_workflow_waits_for_its_upstream_then_runs(scheduler):
+    workflow = _upstream_("wf-after", "wf-before", running=True)
+    sched = RecordingSchedulerAPI(database=DATABASE, concurrency=8)
+    sched._launch_ = {"wf-after"}
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-after"]
+        sched._advance_(conn, workflow, members, [], utc_now(), 8)
+        waiting = sched._cycle_(conn, "wf-after")
+        assert waiting["Status"] == RunStatus.Waiting.name and sched.spawned == []
+        sched._advance_(conn, workflow, members, [], utc_now(), 8)
+        assert sched.spawned == [] and sched._cycle_(conn, "wf-after")["UID"] == waiting["UID"]
+        sched._record_(conn, sched._cycle_(conn, "wf-before"), RunStatus.Success.name, utc_now(), "Test")
+        sched._advance_(conn, workflow, members, [], utc_now(), 8)
+        released = sched._cycle_(conn, "wf-after")
+    assert released["UID"] == waiting["UID"] and released["Status"] == RunStatus.Running.name
+    assert sched.spawned == [("wf-after-task", waiting["UID"])]
+
+def test_a_manual_run_waits_for_the_upstream_too(scheduler):
+    _upstream_("wf-manual-after", "wf-manual-before", running=True)
+    manager = ManagerAPI(database=DATABASE)
+    spawned = []
+    manager._spawn_ = lambda tid, **kwargs: spawned.append(tid)
+    cid = manager.run_workflow("wf-manual-after")
+    assert manager.cycle(cid)["Status"] == RunStatus.Waiting.name and spawned == []
+
+def test_a_disabled_upstream_holds_nothing(scheduler):
+    workflow = _upstream_("wf-free", "wf-idle", running=True)
+    ManagerAPI(database=DATABASE).disable_workflow("wf-idle")
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        assert CoordinatorAPI.held(conn, workflow) is None
+
+def test_after_refuses_itself_an_unknown_workflow_and_a_loop_and_clears_on_empty(scheduler):
+    manager = ManagerAPI(database=DATABASE)
+    manager.create_workflow(UID="wf-a", Name="A", Owner="owner", Kind="Manual")
+    manager.create_workflow(UID="wf-b", Name="B", Owner="owner", Kind="Manual", After="wf-a")
+    with pytest.raises(ValueError, match="cannot run after itself"): manager.update_workflow("wf-a", After="wf-a")
+    with pytest.raises(ValueError, match="Unknown workflow"): manager.update_workflow("wf-a", After="wf-nowhere")
+    with pytest.raises(ValueError, match="a loop is refused"): manager.update_workflow("wf-a", After="wf-b")
+    manager.update_workflow("wf-b", After="")
+    assert manager.workflow("wf-b")["After"] is None
+
+def test_deleting_an_upstream_frees_its_dependents(scheduler):
+    manager = ManagerAPI(database=DATABASE)
+    manager.create_workflow(UID="wf-gone", Name="Gone", Owner="owner", Kind="Manual")
+    manager.create_workflow(UID="wf-left", Name="Left", Owner="owner", Kind="Manual", After="wf-gone")
+    manager.delete_workflow("wf-gone")
+    assert manager.workflow("wf-left")["After"] is None
+
+def test_launch_brings_the_upstream_of_every_service_workflow(scheduler):
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        WorkflowAPI(UID="wf-launch-env", Name="Env", Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
+        WorkflowAPI(UID="wf-launch-web", Name="Web", Owner="owner", Schedule="0 0 1 1 *", After="wf-launch-env", Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID="launch-server", Name="Server", Owner="owner", WID="wf-launch-web", Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, db=conn).save(by="Test")
+    sched = RecordingSchedulerAPI(database=DATABASE)
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        assert {"wf-launch-env", "wf-launch-web"} <= sched._launchable_(conn, sched._tasks_(conn))
+
+def test_a_service_does_not_start_while_its_upstream_runs(scheduler):
+    _upstream_("wf-held", "wf-holder", running=True)
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        TaskAPI(UID="held-server", Name="Server", Owner="owner", WID="wf-held", Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, db=conn).save(by="Test")
+    sched = RecordingSchedulerAPI(database=DATABASE)
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        members = [task for task in sched._tasks_(conn) if task["UID"] == "held-server"]
+        sched._service_(conn, members, utc_now())
+        assert sched.spawned == []
+        sched._record_(conn, sched._cycle_(conn, "wf-holder"), RunStatus.Success.name, utc_now(), "Test")
+        sched._service_(conn, members, utc_now())
+    assert sched.spawned == [("held-server", None)]
+
+def test_a_predecessor_finished_in_the_workflows_latest_cycle_counts_after_a_restart(scheduler):
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        WorkflowAPI(UID="wf-restart", Name="Restart", Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID="restart-version", Name="Version", Owner="owner", WID="wf-restart", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID="restart-server", Name="Server", Owner="owner", WID="wf-restart", Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, db=conn).save(by="Test")
+        CoordinatorAPI.link(conn, "wf-restart", "restart-version", "restart-server")
+    before = utc_now() - timedelta(minutes=5)
+    opened("restart-cycle", "wf-restart", status="Success", started=before)
+    persist(RunAPI(UID="restart-version-run", TID="restart-version", CID="restart-cycle", Status="Success", StartedAt=before, StoppedAt=before))
+    sched = RecordingSchedulerAPI(database=DATABASE)
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-restart"]
+        sched._service_(conn, members, utc_now())
+    assert sched.spawned == [("restart-server", None)]
+
 def test_service_orders_after_maintenance(scheduler):
     early = utc_now() - timedelta(minutes=5)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
@@ -697,13 +853,17 @@ def test_service_orders_after_maintenance(scheduler):
     sched = RecordingSchedulerAPI(database=DATABASE, concurrency=8)
     with PostgresDatabaseAPI(database=DATABASE) as conn:
         members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-ord"]
-        sched._service_(conn, members, set(), utc_now())
+        sched._service_(conn, members, utc_now())
         assert sched.spawned == []
         RunAPI(UID="ord-fresh", TID="ord-update", Status="Success", StartedAt=utc_now(), db=conn).save(by="Test")
-        sched._service_(conn, members, set(), utc_now())
+        sched._service_(conn, members, utc_now())
         assert [tid for tid, _ in sched.spawned] == ["ord-tunnel"]
         sched._services_["ord-tunnel"] = FakeHandle()
-        sched._service_(conn, members, set(), utc_now())
+        RunAPI(UID="ord-tunnel-run", TID="ord-tunnel", Kind="Service", Status="Initializing", StartedAt=utc_now(), db=conn).save(by="Test")
+        sched._service_(conn, members, utc_now())
+        assert [tid for tid, _ in sched.spawned] == ["ord-tunnel"]
+        RunAPI(UID="ord-tunnel-run", TID="ord-tunnel", Kind="Service", Status="Running", StartedAt=utc_now(), db=conn).save(by="Test")
+        sched._service_(conn, members, utc_now())
     assert [tid for tid, _ in sched.spawned] == ["ord-tunnel", "ord-server"]
 
 def test_notify_wakes_listener(scheduler):
@@ -927,3 +1087,78 @@ def test_advance_never_opens_a_cycle_before_the_latest_one(scheduler):
     assert cycle["StartedAt"] == woke
     assert len(ManagerAPI(database=DATABASE).cycles(workflow="wf-wake")) == 2
     assert sched.spawned == [("wf-wake-a", cycle["UID"])]
+
+def test_a_run_reports_its_phases(scheduler, tmp_path):
+    script = tmp_path / "phased.py"
+    script.write_text("import time\nfrom Library.Utility.Progress import Phase, ProgressAPI\ntime.sleep(1.5)\nProgressAPI.phase(Phase.Running)\ntime.sleep(2.5)\nProgressAPI.phase(Phase.Terminating)\ntime.sleep(1.5)\n")
+    task = TaskAPI(UID="task-phased", Name="Phased", Owner="owner", Type=TaskType.Python, Kind=Kind.Scheduled, Path=str(script), Enabled=True, RequiresApproval=False, RequiresReview=False)
+    persist(task)
+    seen, result = [], {}
+    worker = threading.Thread(target=lambda: result.update(run=ExecutorAPI(database=DATABASE, poll=0.05).run(task)))
+    worker.start()
+    with PostgresDatabaseAPI(database=DATABASE) as db:
+        while worker.is_alive():
+            row = db.first(schema="Scheduler", table="Run", condition='"TID" = :tid:', order='"StartedAt" DESC NULLS LAST', parameters={"tid": "task-phased"})
+            if row is not None and (not seen or seen[-1] != row["Status"]): seen.append(row["Status"])
+            time.sleep(0.05)
+    worker.join()
+    assert [status for status in seen if status in RunAPI.Phases] == [RunStatus.Initializing.name, RunStatus.Running.name, RunStatus.Terminating.name]
+    assert result["run"].Status == RunStatus.Success.name
+
+def test_a_phase_never_returns_to_initializing():
+    assert ExecutorAPI._advance_(RunStatus.Initializing.name, RunStatus.Running.name) == RunStatus.Running.name
+    assert ExecutorAPI._advance_(RunStatus.Running.name, RunStatus.Terminating.name) == RunStatus.Terminating.name
+    assert ExecutorAPI._advance_(RunStatus.Terminating.name, RunStatus.Running.name) == RunStatus.Running.name
+    assert ExecutorAPI._advance_(RunStatus.Running.name, RunStatus.Initializing.name) == RunStatus.Running.name
+    assert ExecutorAPI._advance_(RunStatus.Success.name, RunStatus.Running.name) == RunStatus.Success.name
+    assert ExecutorAPI._advance_(RunStatus.Running.name, "Unknown") == RunStatus.Running.name
+
+def test_every_phase_counts_as_alive():
+    for phase in RunAPI.Phases:
+        assert phase in RunAPI.Busy and phase in RunAPI.Live and phase in RunAPI.Active and phase in RunAPI.Open
+
+def test_a_scheduled_successor_waits_for_a_useful_service(scheduler):
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        WorkflowAPI(UID="wf-useful", Name="Gate", Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID="gate-service", Name="Feed", Owner="owner", WID="wf-useful", Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID="gate-report", Name="Report", Owner="owner", WID="wf-useful", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
+        CoordinatorAPI.link(conn, "wf-useful", "gate-service", "gate-report")
+        sched = RecordingSchedulerAPI(database=DATABASE)
+        members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-useful"]
+        edges = CoordinatorAPI.edges(conn, "wf-useful")
+        tids = [member["UID"] for member in members]
+        assert CoordinatorAPI.eligible(tids, edges, sched._gate_(conn, members, {})) == ["gate-service"]
+        sched._services_["gate-service"] = FakeHandle()
+        RunAPI(UID="gate-run", TID="gate-service", Kind="Service", Status="Initializing", StartedAt=utc_now(), db=conn).save(by="Test")
+        assert "gate-report" not in CoordinatorAPI.eligible(tids, edges, sched._gate_(conn, members, {}))
+        RunAPI(UID="gate-run", TID="gate-service", Kind="Service", Status="Running", StartedAt=utc_now(), db=conn).save(by="Test")
+        assert "gate-report" in CoordinatorAPI.eligible(tids, edges, sched._gate_(conn, members, {}))
+
+def test_a_successor_that_does_not_wait_starts_at_once(scheduler):
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        WorkflowAPI(UID="wf-nowait", Name="NoWait", Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID="nowait-first", Name="First", Owner="owner", WID="wf-nowait", Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID="nowait-second", Name="Second", Owner="owner", WID="wf-nowait", Type=TaskType.Python, Kind=Kind.Service, Path="x", Enabled=True, Waits=False, db=conn).save(by="Test")
+        CoordinatorAPI.link(conn, "wf-nowait", "nowait-first", "nowait-second")
+        sched = RecordingSchedulerAPI(database=DATABASE)
+        tasks = {task["UID"]: task for task in sched._tasks_(conn)}
+        kinds = {uid: Kind.parse(task["Kind"]) for uid, task in tasks.items()}
+        assert sched._ready_(conn, tasks["nowait-second"], kinds, {})
+        assert not sched._ready_(conn, {**tasks["nowait-second"], "Waits": True}, kinds, {})
+
+def test_a_run_in_a_status_the_daemon_does_not_know_keeps_its_cycle_open(scheduler, monkeypatch):
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        WorkflowAPI(UID="wf-skew", Name="Skew", Owner="owner", Schedule="0 0 1 1 *", Enabled=True, db=conn).save(by="Test")
+        TaskAPI(UID="skew-task", Name="Task", Owner="owner", WID="wf-skew", Type=TaskType.Python, Kind=Kind.Scheduled, Path="x", Enabled=True, db=conn).save(by="Test")
+    opened("wf-skew-cycle", "wf-skew")
+    with PostgresDatabaseAPI(database=DATABASE) as conn: RunAPI(UID="skew-run", CID="wf-skew-cycle", TID="skew-task", Status=RunStatus.Initializing.name, StartedAt=utc_now(), db=conn).save(by="Test")
+    for name, statuses in (("Busy", (RunStatus.Waiting.name, RunStatus.Running.name)), ("Active", (RunStatus.Waiting.name, RunStatus.Running.name, RunStatus.Approving.name, RunStatus.Reviewing.name, RunStatus.Retrying.name))):
+        monkeypatch.setattr(RunAPI, name, statuses)
+    sched = RecordingSchedulerAPI(database=DATABASE, concurrency=8)
+    workflow = {"UID": "wf-skew", "Name": "Skew", "Schedule": "0 0 1 1 *", "Kind": None, "Waits": None}
+    with PostgresDatabaseAPI(database=DATABASE) as conn:
+        members = [task for task in sched._tasks_(conn) if task["WID"] == "wf-skew"]
+        sched._advance_(conn, workflow, members, [], utc_now(), 8)
+        cycle = sched._cycle_(conn, "wf-skew")
+        assert cycle["UID"] == "wf-skew-cycle" and cycle["Status"] == RunStatus.Running.name and sched.spawned == []
+        assert sched._dedup_(conn, "skew-task")

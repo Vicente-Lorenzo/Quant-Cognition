@@ -139,3 +139,15 @@ def test_a_failed_rebuild_keeps_the_foreign_key(probe):
     rows = probe.executeone(Q(f"""SELECT conname FROM pg_constraint
                                   WHERE contype = 'f' AND conrelid = '"{_SCHEMA_}"."Child"'::regclass"""), admin=False).fetchall(legacy=False)
     assert probe._records_(rows), "the foreign key did not survive the failed rebuild"
+
+def test_a_rebuild_resumes_the_identity_after_the_copied_rows(probe):
+    from Library.Database.Database import IdentityKey, PrimaryKey
+    from Library.Database.Dataframe import pl
+    from Library.Database.Query import QueryAPI as Q
+    probe.create(schema=_SCHEMA_, table="Counter", structure={"UID": IdentityKey(pl.Int64), "Name": PrimaryKey(pl.String), "Value": pl.Float64})
+    for name in ("a", "b", "c"): probe.executeone(Q(f"""INSERT INTO "{_SCHEMA_}"."Counter" ("Name", "Value") VALUES ('{name}', 1.0)"""), admin=False)
+    declared = {"UID": IdentityKey(pl.Int64), "Name": PrimaryKey(pl.String), "Extra": pl.Float64, "Value": pl.Float64}
+    probe.migrate(schema=_SCHEMA_, table="Counter", structure=declared)
+    probe.executeone(Q(f"""INSERT INTO "{_SCHEMA_}"."Counter" ("Name", "Value") VALUES ('d', 1.0)"""), admin=False)
+    rows = probe.executeone(Q(f'SELECT "Name", "UID" FROM "{_SCHEMA_}"."Counter" ORDER BY "UID"'), admin=False).fetchall(legacy=False)
+    assert probe._records_(rows) == [{"Name": "a", "UID": 1}, {"Name": "b", "UID": 2}, {"Name": "c", "UID": 3}, {"Name": "d", "UID": 4}]

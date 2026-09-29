@@ -30,3 +30,7 @@ def test_auto_marker_matches_the_engine():
 
 def test_declared_modes_are_the_three_editor_kinds():
     assert re.findall(r'"([^"]*)"', _literal_(r"var MODES = \[(.*)\];")) == [SpaceAPI.AUTOMATIC, "Range", "List"]
+
+def test_a_tooltip_never_takes_the_click_meant_for_a_control():
+    styles = (inspect_module(V2.__file__) / "Assets" / "Styles" / "app.css").read_text(encoding="utf-8")
+    assert ".tooltip { pointer-events: none; }" in styles

@@ -4,7 +4,7 @@ from Library.Scheduler import WorkflowAPI, TaskAPI, DependencyAPI, CycleAPI, Run
 from Library.Auth import UserAPI
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Utility.Path import traceback_root
-from Script.Install import bootstrap, register, WORKFLOWS
+from Script.Install import bootstrap, register, STANDALONE, WORKFLOWS
 
 DATABASE = "Tests"
 ROOT = traceback_root()
@@ -25,6 +25,19 @@ def test_task_artifacts_exist_and_are_runnable():
             assert source.is_file()
             text = source.read_text(encoding="utf-8")
             assert 'if __name__ == "__main__":' in text
+
+def test_every_registered_task_reports_its_phases_through_the_shared_plumbing():
+    plumbing = ("attempt(", "provision(", "CommandAPI", ".serve()", "ProgressAPI.phase")
+    for workflow in WORKFLOWS:
+        for task in workflow["tasks"]:
+            text = (ROOT / task["path"]).read_text(encoding="utf-8")
+            assert any(marker in text for marker in plumbing), task["uid"]
+    for task in STANDALONE: assert "CommandAPI" in (ROOT / task["path"]).read_text(encoding="utf-8")
+
+def test_the_data_services_start_in_the_order_each_one_needs():
+    data = next(workflow for workflow in WORKFLOWS if workflow["uid"] == "Data")
+    assert set(data["edges"]) == {("Data.Credential", "Data.Universe"), ("Data.Universe", "Data.Market"), ("Data.Market", "Data.Portfolio"), ("Data.Credential", "Data.Calendar")}
+    assert {task["uid"] for task in data["tasks"] if task["kind"].name == "Service"} == {"Data.Universe", "Data.Market", "Data.Portfolio", "Data.Calendar"}
 
 @pytest.fixture(scope="module")
 def prepared():

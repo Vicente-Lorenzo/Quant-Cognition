@@ -9,7 +9,7 @@ from Script.Environment.Cache import ROOT, clean
 from Library.Utility.Runtime import windowless
 from Script.Environment.Update import run_manager
 
-ENVIRONMENTS = {"Quant": ROOT / "Quant.yml", "Future": ROOT / "Future.yml", "Exotics": ROOT / "Exotics.yml"}
+ENVIRONMENTS = {"Future": ROOT / "Future.yml", "Exotics": ROOT / "Exotics.yml"}
 
 def _base_():
     conda = os.environ.get("CONDA_EXE", "conda")

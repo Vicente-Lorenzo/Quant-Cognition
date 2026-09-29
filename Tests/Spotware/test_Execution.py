@@ -1,14 +1,17 @@
 from typing import Union
 import pytest
 from datetime import datetime, timezone
+
 import Library.Market
 import Library.Portfolio
 from Library.Portfolio.Order import TimeInForce
-from ctrader_open_api.messages.OpenApiMessages_pb2 import (
+from Library.Spotware.Messages import (
     ProtoOAExecutionEvent,
+    ProtoOAOrderDetailsRes,
     ProtoOAOrderErrorEvent,
     ProtoOAReconcileRes
 )
+
 def _execution(order_id: Union[int, None] = None, position_id: Union[int, None] = None, deal_id: Union[int, None] = None, exec_type: int = 2):
     ev = ProtoOAExecutionEvent()
     ev.ctidTraderAccountId = 123
@@ -127,10 +130,24 @@ def test_market_order_passes_relative_sl_tp_and_flags(spotware):
     assert sent.clientOrderId == "CID"
     assert sent.trailingStopLoss is True
     assert sent.guaranteedStopLoss is True
+def _details_(order_id: int, **fields):
+    response = ProtoOAOrderDetailsRes()
+    response.order.orderId = order_id
+    for name, value in fields.items(): setattr(response.order, name, value)
+    return response
+
+def _held_(position_id: int, **fields):
+    response = ProtoOAReconcileRes()
+    position = response.position.add()
+    position.positionId = position_id
+    for name, value in fields.items(): setattr(position, name, value)
+    return response
+
 def test_modify_order_sends_amend_request(spotware):
-    spotware._responses_.append(_execution(order_id=61))
+    spotware._responses_.extend([_details_(61), _execution(order_id=61)])
     spotware.execution.modify_order(order=61, volume=20, limit_price=1.25, stop_loss=1.0, take_profit=1.5, trailing=True)
-    sent = spotware._sent_[0]
+    assert type(spotware._sent_[0]).__name__ == "ProtoOAOrderDetailsReq" and spotware._sent_[0].orderId == 61
+    sent = spotware._sent_[1]
     assert type(sent).__name__ == "ProtoOAAmendOrderReq"
     assert sent.orderId == 61
     assert sent.volume == 2000
@@ -138,6 +155,14 @@ def test_modify_order_sends_amend_request(spotware):
     assert sent.stopLoss == pytest.approx(1.0)
     assert sent.takeProfit == pytest.approx(1.5)
     assert sent.trailingStopLoss is True
+def test_modify_order_resends_every_field_it_does_not_change(spotware):
+    spotware._responses_.extend([_details_(62, limitPrice=1.2, stopLoss=1.0, takeProfit=1.5, expirationTimestamp=1790000000000, trailingStopLoss=True, slippageInPoints=100), _execution(order_id=62)])
+    spotware.execution.modify_order(order=62, volume=20, stop_loss=0.9)
+    sent = spotware._sent_[1]
+    assert sent.volume == 2000 and sent.stopLoss == pytest.approx(0.9)
+    assert sent.limitPrice == pytest.approx(1.2) and sent.takeProfit == pytest.approx(1.5) and sent.expirationTimestamp == 1790000000000 and sent.trailingStopLoss is True and sent.slippageInPoints == 100
+    assert not sent.HasField("stopPrice") and not sent.HasField("relativeStopLoss")
+
 def test_close_order_sends_cancel_request(spotware):
     spotware._responses_.append(_execution(order_id=71))
     df = spotware.execution.close_order(order=71)
@@ -146,14 +171,20 @@ def test_close_order_sends_cancel_request(spotware):
     assert sent.orderId == 71
     assert df["OrderID"][0] == 71
 def test_modify_position_sends_amend_sltp_request(spotware):
-    spotware._responses_.append(_execution(position_id=81))
+    spotware._responses_.extend([_held_(81), _execution(position_id=81)])
     spotware.execution.modify_position(position=81, stop_loss=1.0, take_profit=1.5, trailing=True)
-    sent = spotware._sent_[0]
+    sent = spotware._sent_[1]
     assert type(sent).__name__ == "ProtoOAAmendPositionSLTPReq"
     assert sent.positionId == 81
     assert sent.stopLoss == pytest.approx(1.0)
     assert sent.takeProfit == pytest.approx(1.5)
     assert sent.trailingStopLoss is True
+def test_modify_position_keeps_the_side_it_does_not_change(spotware):
+    spotware._responses_.extend([_held_(82, stopLoss=1.0, takeProfit=1.5, trailingStopLoss=False), _execution(position_id=82)])
+    spotware.execution.modify_position(position=82, stop_loss=1.1)
+    sent = spotware._sent_[1]
+    assert sent.stopLoss == pytest.approx(1.1) and sent.takeProfit == pytest.approx(1.5) and sent.trailingStopLoss is False
+
 def test_close_position_sends_close_request(spotware):
     spotware._responses_.append(_execution(position_id=91, deal_id=301))
     df = spotware.execution.close_position(position=91, volume=10)
@@ -246,22 +277,22 @@ def test_limit_order_batches_prices_and_tif(spotware):
     assert [s.limitPrice for s in spotware._sent_] == pytest.approx([1.1, 1.2])
     assert [s.volume for s in spotware._sent_] == [500, 600]
 def test_modify_order_batches(spotware):
-    spotware._responses_.append(_execution(order_id=131))
-    spotware._responses_.append(_execution(order_id=132))
+    spotware._responses_.extend([_details_(131), _execution(order_id=131), _details_(132), _execution(order_id=132)])
     spotware.execution.modify_order(order=[131, 132], volume=[15, 25])
-    assert len(spotware._sent_) == 2
-    assert all(type(s).__name__ == "ProtoOAAmendOrderReq" for s in spotware._sent_)
-    assert [s.orderId for s in spotware._sent_] == [131, 132]
-    assert [s.volume for s in spotware._sent_] == [1500, 2500]
+    amends = spotware._sent_[1::2]
+    assert len(spotware._sent_) == 4
+    assert all(type(s).__name__ == "ProtoOAAmendOrderReq" for s in amends)
+    assert [s.orderId for s in amends] == [131, 132]
+    assert [s.volume for s in amends] == [1500, 2500]
 def test_modify_position_batches(spotware):
-    spotware._responses_.append(_execution(position_id=141))
-    spotware._responses_.append(_execution(position_id=142))
+    spotware._responses_.extend([_held_(141), _execution(position_id=141), _held_(142), _execution(position_id=142)])
     spotware.execution.modify_position(position=[141, 142], stop_loss=[1.0, 1.1], take_profit=1.5)
-    assert len(spotware._sent_) == 2
-    assert all(type(s).__name__ == "ProtoOAAmendPositionSLTPReq" for s in spotware._sent_)
-    assert [s.positionId for s in spotware._sent_] == [141, 142]
-    assert [s.stopLoss for s in spotware._sent_] == pytest.approx([1.0, 1.1])
-    assert [s.takeProfit for s in spotware._sent_] == pytest.approx([1.5, 1.5])
+    amends = spotware._sent_[1::2]
+    assert len(spotware._sent_) == 4
+    assert all(type(s).__name__ == "ProtoOAAmendPositionSLTPReq" for s in amends)
+    assert [s.positionId for s in amends] == [141, 142]
+    assert [s.stopLoss for s in amends] == pytest.approx([1.0, 1.1])
+    assert [s.takeProfit for s in amends] == pytest.approx([1.5, 1.5])
 def test_close_order_closes_all_when_no_args(spotware):
     spotware._responses_.append(_reconcile_orders([(301, 1, 1, 1000), (302, 2, 2, 2000)]))
     spotware._responses_.append(_execution(order_id=301))
@@ -310,3 +341,30 @@ def test_close_position_mismatched_lengths_raises(spotware):
     spotware._responses_.append(_execution(position_id=431, deal_id=801))
     with pytest.raises(ValueError):
         spotware.execution.close_position(position=[431, 432], volume=[500])
+
+def _refusal_(code, description):
+    err = ProtoOAOrderErrorEvent()
+    err.ctidTraderAccountId, err.errorCode, err.orderId, err.positionId, err.description = 123, code, 0, 0, description
+    return err
+
+def test_a_concurrent_modification_is_retried_until_the_order_is_accepted(spotware, monkeypatch):
+    slept = []
+    monkeypatch.setattr("Library.Spotware.Execution.time.sleep", slept.append)
+    accepted = ProtoOAExecutionEvent()
+    accepted.ctidTraderAccountId, accepted.executionType = 123, 2
+    accepted.order.orderId = 77
+    spotware._responses_.extend([_refusal_("CONCURRENT_MODIFICATION", "Cannot modify position while Stop Loss/Take Profit order is pending execution")] * 2 + [accepted])
+    df = spotware.execution.limit_buy_order(symbol=1, volume=1000, price=1.05)
+    assert df["OrderID"][0] == 77 and slept == [0.5, 1.0] and len(spotware._sent_) == 3
+
+def test_a_refused_order_carries_no_identifier_and_is_not_retried(spotware, monkeypatch):
+    slept = []
+    monkeypatch.setattr("Library.Spotware.Execution.time.sleep", slept.append)
+    spotware._responses_.append(_refusal_("NOT_ENOUGH_MONEY", "Not enough money"))
+    df = spotware.execution.market_order("BUY", symbol=1, volume=1000)
+    assert df["ErrorCode"][0] == "NOT_ENOUGH_MONEY" and df["OrderID"][0] is None and df["PositionID"][0] is None and slept == []
+
+def test_closing_a_position_that_is_not_open_names_it(spotware):
+    spotware._responses_.append(ProtoOAReconcileRes(ctidTraderAccountId=123))
+    with pytest.raises(LookupError, match="Position 91 is not open"):
+        spotware.execution.close_position(position=91)

@@ -8,7 +8,7 @@ import psutil
 import pytest
 
 from Library.Utility.Path import traceback_root
-from Library.Utility.Runtime import is_windows, join_arguments, release, split_arguments, tether
+from Library.Utility.Runtime import find_packages, find_revision, is_windows, join_arguments, release, split_arguments, tether
 
 def reference(arguments):
     tokens = shlex.split(arguments, posix=False) if arguments else []
@@ -67,3 +67,12 @@ def test_releasing_a_job_ends_what_is_left_in_it():
 
 def test_release_accepts_no_job():
     release(None)
+
+def test_a_revision_names_the_commit_and_whether_tracked_files_changed(tmp_path):
+    revision = find_revision(traceback_root())
+    assert len(revision["Commit"]) == 40 and isinstance(revision["Modified"], bool)
+    assert find_revision(tmp_path) == {}
+
+def test_packages_are_named_with_their_versions():
+    packages = find_packages("numpy", "no-such-package")
+    assert packages["Python"].count(".") == 2 and packages["numpy"] and packages["no-such-package"] is None

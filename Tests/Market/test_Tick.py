@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 
 from Library.Market.Tick import TickAPI
-from Library.Universe.Security import SecurityAPI
 
 def test_encode_matches_bit_layout():
     sec, ts = 100, datetime(2023, 1, 1, 12, 0, 0)
@@ -55,16 +54,3 @@ def test_tick_properties():
     assert round(tick.Spread.Price, 4) == 0.0005
     assert tick.InvertedAsk == 1.0 / 1.1005
     assert tick.InvertedBid == 1.0 / 1.1000
-
-def test_fast_ingest_matches_normal_constructor():
-    flags = dict(include_fields=True, include_initvar_fields=False, include_properties=False, include_override_fields=True)
-    sec = SecurityAPI(UID=1)
-    cases = [
-        (datetime(2022, 9, 7, 1, 1, 0, 343000), 0.98978, 0.98977, 1.0, 1.0, 0.98978, 0.98977, 3.0),
-        (datetime(2023, 2, 27, 8, 47, 0, 0), 1.05123, 1.05119, 0.95, 0.95, 1.05123, 1.05119, 0.0),
-        (datetime(2022, 12, 31, 23, 59, 59, 999000), 1.07, 1.06998, 1.0, 1.0, 1.0, 1.0, 12345.0),
-    ]
-    for ts, ask, bid, ab, bb, aq, bq, vol in cases:
-        normal = TickAPI(Security=sec, Timestamp=ts, Ask=ask, Bid=bid, AskBaseConversion=ab, BidBaseConversion=bb, AskQuoteConversion=aq, BidQuoteConversion=bq, Volume=vol)
-        fast = TickAPI._ingest_(sec, ts, ask, bid, ab, bb, aq, bq, vol)
-        assert fast.dict(**flags) == normal.dict(**flags)

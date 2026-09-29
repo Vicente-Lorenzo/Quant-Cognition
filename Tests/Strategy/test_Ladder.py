@@ -173,6 +173,12 @@ def test_a_pinned_file_that_does_not_exist_fails_loudly(ladder, tmp_path):
     with pytest.raises(Exception):
         ladder.pin(TrendStrategyAPI, "Backtesting", tmp_path / "Absent.yml", tmp_path / "Parameters.yml")
 
+def test_a_pinned_file_refuses_a_section_the_strategy_does_not_have(ladder, tmp_path):
+    source = tmp_path / "Override.yml"
+    source.write_text("Trend:\n  MoneyManagement:\n    RiskPercentage: [2.5]\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Unknown sections Trend"):
+        ladder.pin(TrendStrategyAPI, "Backtesting", source, tmp_path / "Parameters.yml")
+
 def test_a_pinned_file_keeps_its_own_key_order(ladder, tmp_path):
     source = tmp_path / "Pinned.yml"
     source.write_text("TechnicalManagement:\n  Zeta: [1]\n  Alpha: [2]\nMoneyManagement:\n  RiskPercentage: [2.5]\n", encoding="utf-8")

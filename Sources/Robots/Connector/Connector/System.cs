@@ -68,21 +68,24 @@ public class SystemAPI : IDisposable
 
     private static void WriteSymbol(MemoryStream ms, Symbol symbol)
     {
+        ms.Write(BitConverter.GetBytes(symbol.Id), 0, 8);
         WriteString(ms, symbol.BaseAsset.Name);
         WriteString(ms, symbol.QuoteAsset.Name);
+        WriteString(ms, symbol.Description);
         ms.Write(BitConverter.GetBytes(symbol.Digits), 0, 4);
         ms.Write(BitConverter.GetBytes(symbol.TickSize), 0, 8);
         ms.Write(BitConverter.GetBytes(symbol.PipSize), 0, 8);
-        ms.Write(BitConverter.GetBytes(symbol.QuantityToVolumeInUnits(1.0)), 0, 8);
+        ms.Write(BitConverter.GetBytes(symbol.LotSize), 0, 8);
         ms.Write(BitConverter.GetBytes(symbol.VolumeInUnitsMin), 0, 8);
         ms.Write(BitConverter.GetBytes(symbol.VolumeInUnitsMax), 0, 8);
         ms.Write(BitConverter.GetBytes(symbol.VolumeInUnitsStep), 0, 8);
-        ms.Write(BitConverter.GetBytes(symbol.Commission), 0, 8);
         ms.WriteByte((byte)symbol.CommissionType);
+        ms.Write(BitConverter.GetBytes(symbol.Commission), 0, 8);
+        ms.WriteByte((byte)symbol.SwapCalculationType);
         ms.Write(BitConverter.GetBytes(symbol.SwapLong), 0, 8);
         ms.Write(BitConverter.GetBytes(symbol.SwapShort), 0, 8);
-        ms.WriteByte((byte)symbol.SwapCalculationType);
-        ms.Write(BitConverter.GetBytes(symbol.Swap3DaysRollover != null ? (int)symbol.Swap3DaysRollover : 0), 0, 4);
+        ms.Write(BitConverter.GetBytes(symbol.Swap3DaysRollover.HasValue ? (int)symbol.Swap3DaysRollover.Value : -1), 0, 4);
+        ms.WriteByte((byte)symbol.TradingMode);
     }
 
     private static void WriteTick(MemoryStream ms, RobotAPI.xTick tick)
@@ -104,8 +107,10 @@ public class SystemAPI : IDisposable
         WriteTick(ms, bar.OpenTick);
         WriteTick(ms, bar.HighAskTick);
         WriteTick(ms, bar.HighBidTick);
+        WriteTick(ms, bar.HighMidTick);
         WriteTick(ms, bar.LowAskTick);
         WriteTick(ms, bar.LowBidTick);
+        WriteTick(ms, bar.LowMidTick);
         WriteTick(ms, bar.CloseTick);
         ms.Write(BitConverter.GetBytes(bar.Volume), 0, 8);
     }
@@ -248,10 +253,5 @@ public class SystemAPI : IDisposable
     public void SendRecord(byte[] record)
     {
         Send(record);
-    }
-
-    public void SendBatch(byte[] payload)
-    {
-        Send(payload);
     }
 }

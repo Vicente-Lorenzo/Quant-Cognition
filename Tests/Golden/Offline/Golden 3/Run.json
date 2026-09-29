@@ -1,22 +1,25 @@
 {
   "System": "Backtesting",
-  "Strategy": "Trend",
+  "Strategy": "Test",
   "Provider": "Spotware",
-  "Ticker": "EURUSD",
+  "Ticker": "GBPJPY",
   "Timeframe": "Hour",
-  "Start": "2023-01-01",
-  "Stop": "2024-01-01",
-  "StartedAt": "2026-09-11T16:55:14.842146",
-  "Command": "Backtesting --strategy Trend --provider Spotware --ticker EURUSD --timeframe Hour --start 2023-01-01 --stop 2024-01-01 --account-asset USD --account-balance 10000 --account-leverage 30 --spread-type Auto --commission-type Auto --swap-type Auto --console Warning --file Warning --storage Warning --export --run C:\\Users\\Admin\\AppData\\Local\\cAlgo\\Data\\Runs\\Offline Golden 3",
+  "Start": "2023-01-01 23:00:00",
+  "Stop": "2024-01-01 23:00:00",
+  "Description": "Golden 3",
+  "StartedAt": "2026-09-29T00:13:27.690997",
+  "Command": "Backtesting --strategy Test --provider Spotware --ticker GBPJPY --timeframe Hour --start \"2023-01-01 23:00:00\" --stop \"2024-01-01 23:00:00\" --account-asset CHF --account-balance 10000 --account-leverage 100 --spread-type Auto --commission-type Auto --swap-type Auto --parameters \"Tests/Golden/Offline/Golden 3/Parameters.yml\" --contract \"Tests/Golden/Offline/Golden 3/Contract.yml\" --console Warning --file Warning --storage Warning --export --description \"Golden 3\" --run \"C:\\Users\\Admin\\AppData\\Local\\Temp\\claude\\C--Users-Admin-OneDrive-Documents-cAlgo\\57af110b-4912-4270-8d8b-34a4e89fa3fc\\scratchpad\\golden_build\\Golden 3\"",
   "Parameters": {
     "Backtesting": [
-      "Defaults"
+      "Defaults",
+      "Tests\\Golden\\Offline\\Golden 3\\Parameters.yml"
     ]
   },
+  "Contract": "Tests/Golden/Offline/Golden 3/Contract.yml",
   "Scope": [
     "Spotware(cTrader)",
-    "Forex(Major)",
-    "EURUSD",
+    "Forex(Minor)",
+    "GBPJPY",
     "H1"
   ]
 }

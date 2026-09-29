@@ -10,6 +10,7 @@ from Library.Auth.Role import RoleAPI
 from Library.Scheduler.Manager import ManagerAPI
 from Library.Scheduler.Workflow import Kind
 from Library.Scheduler.Task import TaskType
+from Library.Scheduler.Tray import TrayAPI
 from Library.Database import PostgresDatabaseAPI
 from Library.Logging import LoggingAPI
 from Library.Utility.Path import traceback_root
@@ -37,9 +38,9 @@ WORKFLOWS = [
             {"uid": "Setup.Credential", "name": "Setup Credential", "path": "Script/Setup/Credential.py", "kind": Kind.Scheduled, "description": "Creates the Credential schema holding every external API secret with its View and Edit thresholds"},
             {"uid": "Setup.Logging", "name": "Setup Logging", "path": "Script/Setup/Logging.py", "kind": Kind.Scheduled, "description": "Creates the Logging schema (Log) holding one durable row per captured log"},
             {"uid": "Setup.Scheduler", "name": "Setup Scheduler", "path": "Script/Setup/Scheduler.py", "kind": Kind.Scheduled, "description": "Creates the Scheduler schema (Workflow · Task · Dependency · Run)"},
-            {"uid": "Setup.Universe", "name": "Setup Universe", "path": "Script/Setup/Universe.py", "kind": Kind.Scheduled, "description": "Creates and populates the Universe schema (categories · providers · tickers · contracts · securities · timeframes)"},
-            {"uid": "Setup.Market", "name": "Setup Market", "path": "Script/Setup/Market.py", "kind": Kind.Scheduled, "description": "Creates the Market schema (Tick · Bar)"},
-            {"uid": "Setup.Portfolio", "name": "Setup Portfolio", "path": "Script/Setup/Portfolio.py", "kind": Kind.Scheduled, "description": "Creates the Portfolio schema (Session · Account · Order · Position · Trade)"},
+            {"uid": "Setup.Universe", "name": "Setup Universe", "path": "Script/Setup/Universe.py", "kind": Kind.Scheduled, "description": "Creates the Universe schema (categories · providers · tickers · securities · dated contracts) and seeds the timeframes · the catalog comes from the Universe service"},
+            {"uid": "Setup.Market", "name": "Setup Market", "path": "Script/Setup/Market.py", "kind": Kind.Scheduled, "description": "Creates the Market schema (the Tick hypertable and the Download record)"},
+            {"uid": "Setup.Portfolio", "name": "Setup Portfolio", "path": "Script/Setup/Portfolio.py", "kind": Kind.Scheduled, "description": "Creates the Portfolio schema (Account · Order · Position · Trade · Cashflow), the mirror of the tracked broker accounts"},
             {"uid": "Setup.Indicator", "name": "Setup Indicator", "path": "Script/Setup/Indicator.py", "kind": Kind.Scheduled, "description": "Creates the Indicator schema (Calendar)"}
         ],
         "edges": [
@@ -56,32 +57,46 @@ WORKFLOWS = [
     },
     {
         "uid": "Environment", "name": "Environment", "schedule": "0 4 * * *", "kind": Kind.Scheduled, "tolerates": True,
-        "description": "Daily maintenance — refreshes the Quant conda environment then relaunches the always-on tunnel and application server",
+        "description": "Daily maintenance — builds and tests the next Quant environment, then clears stale caches and expired logs",
         "tasks": [
+            {"uid": "Environment.Update", "name": "Environment Update", "path": "Script/Environment/Update.py", "kind": Kind.Scheduled, "description": "Builds Quant.next from Quant.yml when anything newer exists and validates it with the suite · the launcher applies it at the next logon"},
             {"uid": "Environment.Cache", "name": "Cache Cleanup", "path": "Script/Environment/Cache.py", "kind": Kind.Scheduled, "description": "Removes Python bytecode and tooling caches plus C# build artifacts across the repository"},
-            {"uid": "Environment.Retention", "name": "Log Retention", "path": "Script/Environment/Retention.py", "kind": Kind.Scheduled, "description": "Prunes expired log files from the temporary folders and expired log rows from the Logging schema"},
-            {"uid": "Environment.Version", "name": "Version Check", "path": "Script/Environment/Version.py", "kind": Kind.Scheduled, "description": "Reports when a vendored frontend library has a newer release upstream — never upgrades automatically"},
-            {"uid": "Environment.Update", "name": "Environment Update", "path": "Script/Environment/Update.py", "kind": Kind.Scheduled, "description": "Syncs the active conda environment to the pinned Quant manifest while the services are suspended"},
-            {"uid": "Environment.Credential", "name": "Credential Refresh", "path": "Script/Environment/Credential.py", "kind": Kind.Scheduled, "description": "Refreshes every stored credential whose expiry falls inside the margin so no service meets an expired token"},
-            {"uid": "Environment.Tunnel", "name": "Cloudflare Tunnel", "path": "Script/Environment/Tunnel.py", "kind": Kind.Service, "description": "Runs the named Cloudflare tunnel exposing the loopback app server to the public edge"},
-            {"uid": "Environment.Server", "name": "Application Server", "path": "Script/Environment/Server.py", "kind": Kind.Service, "description": "Serves the Quant Cognition Dash application under waitress with its own system-tray controls"}
+            {"uid": "Environment.Retention", "name": "Log Retention", "path": "Script/Environment/Retention.py", "kind": Kind.Scheduled, "description": "Prunes expired log files from the temporary folders and expired log rows from the Logging schema"}
         ],
         "edges": [
-            ("Environment.Cache", "Environment.Retention"),
-            ("Environment.Retention", "Environment.Version"),
-            ("Environment.Version", "Environment.Update"),
-            ("Environment.Update", "Environment.Credential"),
-            ("Environment.Credential", "Environment.Tunnel"),
-            ("Environment.Tunnel", "Environment.Server")
+            ("Environment.Update", "Environment.Cache"),
+            ("Environment.Cache", "Environment.Retention")
         ]
     },
     {
-        "uid": "Market", "name": "Market Data", "schedule": "0 6 * * *", "kind": Kind.Scheduled, "tolerates": True,
-        "description": "Daily download and update of market and fundamental data into the database",
+        "uid": "Web", "name": "Web Application", "schedule": "0 4 * * *", "kind": Kind.Scheduled, "tolerates": True,
+        "description": "The public web application — checks its frontend library, then runs the Cloudflare tunnel and the application server",
         "tasks": [
-            {"uid": "Market.Calendar", "name": "Economic Calendar", "path": "Script/Market/Calendar.py", "kind": Kind.Scheduled, "description": "Downloads and updates the Forex Factory economic calendar (rolling week · idempotent upsert)"}
+            {"uid": "Web.Version", "name": "Version Check", "path": "Script/Web/Version.py", "kind": Kind.Scheduled, "description": "Reports when a vendored frontend library has a newer release upstream — never upgrades automatically"},
+            {"uid": "Web.Tunnel", "name": "Cloudflare Tunnel", "path": "Script/Web/Tunnel.py", "kind": Kind.Service, "description": "Runs the named Cloudflare tunnel exposing the loopback app server to the public edge"},
+            {"uid": "Web.Server", "name": "Application Server", "path": "Script/Web/Server.py", "kind": Kind.Service, "description": "Serves the Quant Cognition Dash application under waitress with its own system-tray controls"}
         ],
-        "edges": []
+        "edges": [
+            ("Web.Version", "Web.Tunnel"),
+            ("Web.Tunnel", "Web.Server")
+        ]
+    },
+    {
+        "uid": "Data", "name": "Data Intelligence", "schedule": "0 6 * * *", "kind": Kind.Scheduled, "tolerates": True,
+        "description": "Everything data — refreshes the credentials the data services use, then downloads market, fundamental and alternative data",
+        "tasks": [
+            {"uid": "Data.Credential", "name": "Credential Refresh", "path": "Script/Data/Credential.py", "kind": Kind.Scheduled, "description": "Refreshes every stored credential whose expiry falls inside the margin so no service meets an expired token"},
+            {"uid": "Data.Universe", "name": "Universe Service", "path": "Script/Data/Universe.py", "kind": Kind.Service, "description": "Mirrors every current symbol of the broker with its dated term sheet into the Universe schema, daily and on every symbol change"},
+            {"uid": "Data.Market", "name": "Market Service", "path": "Script/Data/Market.py", "kind": Kind.Service, "description": "Backfills and follows the tick tape of every tracked security, one worker process per security, about a second behind the market"},
+            {"uid": "Data.Portfolio", "name": "Portfolio Service", "path": "Script/Data/Portfolio.py", "kind": Kind.Service, "description": "Mirrors every tracked broker account (orders · positions · trades · cash flows) and derives each position's balances and excursions from the tick tape"},
+            {"uid": "Data.Calendar", "name": "Economic Calendar", "path": "Script/Data/Calendar.py", "kind": Kind.Service, "description": "Backfills the missing weeks of the Forex Factory economic calendar, then keeps the current and next week fresh and follows each release until its actual lands, keeping every revision"}
+        ],
+        "edges": [
+            ("Data.Credential", "Data.Universe"),
+            ("Data.Universe", "Data.Market"),
+            ("Data.Market", "Data.Portfolio"),
+            ("Data.Credential", "Data.Calendar")
+        ]
     }
 ]
 
@@ -146,8 +161,7 @@ def enlist(manager):
         )
 
 def schedule_orchestrator():
-    pythonw = Path(sys.executable).with_name("pythonw.exe")
-    interpreter = pythonw if pythonw.exists() else Path(sys.executable)
+    interpreter = Path(TrayAPI.launcher()[0]).with_name("pythonw.exe")
     command = f'"{interpreter}" "{LAUNCHER}"'
     subprocess.run(["schtasks", "/Create", "/TN", ORCHESTRATOR, "/TR", command, "/SC", "ONLOGON", "/RL", "HIGHEST", "/F"], check=True, **windowless())
 
@@ -160,14 +174,14 @@ def main(database="Quant", boot=False, registration=False):
                 register(manager)
                 enlist(manager)
         except Exception as error:
-            log.exception(lambda: f"Install Setup: Failed · Due to {error}")
+            log.exception(lambda error=error: f"Install Setup: Failed · Due to {error}")
             return 1
         if boot:
             try:
                 schedule_orchestrator()
                 log.info(lambda: f"Install Setup: Scheduled ({ORCHESTRATOR}) · {LAUNCHER}")
             except Exception as error:
-                log.warning(lambda: f"Install Setup: Boot Task Skipped · Due to {error} · Register {ORCHESTRATOR} manually")
+                log.warning(lambda error=error: f"Install Setup: Boot Task Skipped · Due to {error} · Register {ORCHESTRATOR} manually")
         log.info(lambda: f"Install Setup: Completed · {database} Database · {len(WORKFLOWS)} Workflows · {sum(len(workflow['tasks']) for workflow in WORKFLOWS)} Tasks")
         return 0
 

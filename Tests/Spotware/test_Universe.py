@@ -1,13 +1,15 @@
 import pytest
+
 import Library.Market
 import Library.Portfolio
-from ctrader_open_api.messages.OpenApiMessages_pb2 import (
-    ProtoOASymbolsListRes,
-    ProtoOASymbolByIdRes,
-    ProtoOAAssetListRes,
+from Library.Spotware.Messages import (
     ProtoOAAssetClassListRes,
-    ProtoOASymbolCategoryListRes
+    ProtoOAAssetListRes,
+    ProtoOASymbolByIdRes,
+    ProtoOASymbolCategoryListRes,
+    ProtoOASymbolsListRes
 )
+
 def _add_symbol(response, symbol_id, name, asset_base=10, asset_quote=20, category=5, archived=False):
     if archived:
         s = response.archivedSymbol.add()
@@ -114,3 +116,27 @@ def test_categories(spotware):
     assert df["CategoryId"].to_list() == [10, 11]
     assert df["AssetClassId"].to_list() == [1, 1]
     assert df["Name"].to_list() == ["Major", "Minor"]
+def test_catalog_decodes_percentage_and_minimum_commission(spotware):
+    symbols = ProtoOASymbolsListRes()
+    _add_symbol(symbols, 1, "EURUSD", asset_base=10, asset_quote=20, category=5)
+    _add_symbol(symbols, 2, "US 500", asset_base=30, asset_quote=20, category=6)
+    assets = ProtoOAAssetListRes()
+    for uid, name in ((10, "EUR"), (20, "USD"), (30, "US 500")):
+        a = assets.asset.add(); a.assetId = uid; a.name = name; a.displayName = name; a.digits = 2
+    classes = ProtoOAAssetClassListRes()
+    c = classes.assetClass.add(); c.id = 1; c.name = "Forex"
+    d = classes.assetClass.add(); d.id = 2; d.name = "Indices"
+    categories = ProtoOASymbolCategoryListRes()
+    e = categories.symbolCategory.add(); e.id = 5; e.assetClassId = 1; e.name = "Major"
+    f = categories.symbolCategory.add(); f.id = 6; f.assetClassId = 2; f.name = "Default Category"
+    specifications = ProtoOASymbolByIdRes()
+    fx = specifications.symbol.add(); fx.symbolId = 1; fx.digits = 5; fx.pipPosition = 4; fx.commissionType = 1; fx.preciseTradingCommissionRate = 4_500_000_000
+    index = specifications.symbol.add(); index.symbolId = 2; index.digits = 2; index.pipPosition = 0; index.commissionType = 3; index.preciseTradingCommissionRate = 1000
+    index.preciseMinCommission = 400_000_000; index.minCommissionType = 2; index.minCommissionAsset = "EUR"
+    spotware._responses_.extend([symbols, assets, classes, categories, specifications])
+    df = spotware.universe.catalog(legacy=False)
+    fx_row, index_row = df.row(0, named=True), df.row(1, named=True)
+    assert fx_row["CommissionMode"] == "BaseAssetPerMillionVolume" and fx_row["Commission"] == pytest.approx(45.0)
+    assert fx_row["MinCommission"] == 0.0 and fx_row["MinCommissionAsset"] == "USD"
+    assert index_row["CommissionMode"] == "PercentageOfVolume" and index_row["Commission"] == pytest.approx(0.01)
+    assert index_row["MinCommission"] == pytest.approx(4.0) and index_row["MinCommissionAsset"] == "USD"

@@ -1,14 +1,13 @@
 import threading
 from types import SimpleNamespace
-
 import pytest
-from ctrader_open_api.messages.OpenApiCommonMessages_pb2 import ProtoMessage
-from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOAAccountDisconnectEvent, ProtoOAAccountsTokenInvalidatedEvent, ProtoOAClientDisconnectEvent
 
 import Library.Market
 import Library.Portfolio
-import Library.Spotware.Spotware as Spotware
 from Library.Spotware import SpotwareAPI
+from Library.Spotware.Client import ClientAPI
+from Library.Spotware.Messages import ProtoMessage, ProtoOAAccountDisconnectEvent, ProtoOAAccountsTokenInvalidatedEvent, ProtoOAClientDisconnectEvent
+import Library.Spotware.Spotware as Spotware
 from Library.Utility.Typing import MISSING, Missing
 
 class Recorder:
@@ -29,7 +28,7 @@ def _session_(monkeypatch, *, renew=MISSING, failures=MISSING, account=7):
     recorder = Recorder(failures)
     monkeypatch.setattr(api, "_send_", recorder)
     monkeypatch.setattr(api, "connected", lambda: True)
-    api._connection_ = SimpleNamespace(drop=lambda: None, isConnected=True)
+    api._connection_ = SimpleNamespace(drop=lambda: None, Connected=True)
     api._connected_event_ = threading.Event()
     return api, recorder
 
@@ -125,7 +124,7 @@ def test_a_refused_account_auth_without_a_renewer_raises(monkeypatch):
 def test_a_failed_restore_drops_the_connection_to_try_again(monkeypatch):
     api, _ = _session_(monkeypatch, failures={"ProtoOAAccountAuthReq": 1})
     dropped, slept = [], []
-    api._connection_ = SimpleNamespace(drop=lambda: dropped.append(True), isConnected=True)
+    api._connection_ = SimpleNamespace(drop=lambda: dropped.append(True), Connected=True)
     monkeypatch.setattr(Spotware.time, "sleep", slept.append)
     monkeypatch.setattr(Spotware, "blockingCallFromThread", lambda reactor, function, *args, **kwargs: function(*args, **kwargs))
     api._restore_()
@@ -141,7 +140,7 @@ def test_a_request_waits_for_the_session_and_then_gives_up(monkeypatch):
 def test_a_clean_stop_logs_the_account_out_and_forgets_subscriptions(monkeypatch):
     api, recorder = _session_(monkeypatch)
     stopped = []
-    api._connection_ = SimpleNamespace(stopService=lambda: stopped.append(True), isConnected=True)
+    api._connection_ = SimpleNamespace(stopService=lambda: stopped.append(True), Connected=True)
     monkeypatch.setattr(Spotware.reactor, "running", True, raising=False)
     monkeypatch.setattr(Spotware, "blockingCallFromThread", lambda reactor, function, *args, **kwargs: function(*args, **kwargs))
     api._account_authed_ = api._established_ = True
@@ -152,7 +151,7 @@ def test_a_clean_stop_logs_the_account_out_and_forgets_subscriptions(monkeypatch
     assert api._subscriptions_ == {} and not api._established_ and api._connection_ is None
 
 def test_a_stream_registers_its_subscription_only_while_it_runs(spotware):
-    from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOASpotEvent, ProtoOASubscribeSpotsRes, ProtoOAUnsubscribeSpotsRes
+    from Library.Spotware.Messages import ProtoOASpotEvent, ProtoOASubscribeSpotsRes, ProtoOAUnsubscribeSpotsRes
     registered = []
     def fire(request, api):
         registered.append(len(api._subscriptions_))
@@ -163,7 +162,7 @@ def test_a_stream_registers_its_subscription_only_while_it_runs(spotware):
     assert registered == [1, 1] and spotware._subscriptions_ == {}
 
 def test_a_stream_skips_unsubscribing_from_a_dead_session(spotware):
-    from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOASpotEvent, ProtoOASubscribeSpotsRes
+    from Library.Spotware.Messages import ProtoOASpotEvent, ProtoOASubscribeSpotsRes
     def fire(request, api):
         api.push(ProtoOASpotEvent(ctidTraderAccountId=123, symbolId=1, bid=105000, ask=105002))
         api._ready_.clear()
@@ -175,13 +174,12 @@ def test_a_stream_skips_unsubscribing_from_a_dead_session(spotware):
 def test_a_failed_authentication_stops_the_connection_it_opened(monkeypatch):
     stopped = []
     class _Connection_:
-        isConnected = True
-        def setConnectedCallback(self, callback): self.connected = callback
-        def setDisconnectedCallback(self, callback): pass
-        def setMessageReceivedCallback(self, callback): pass
+        Connected = True
+        message, payload = ClientAPI.message, ClientAPI.payload
+        def __init__(self, host, port, connected, disconnected, received): self.connected = connected
         def startService(self): self.connected(self)
         def stopService(self): stopped.append(True)
-    monkeypatch.setattr(Spotware, "ClientAPI", lambda host, port: _Connection_())
+    monkeypatch.setattr(Spotware, "ClientAPI", _Connection_)
     monkeypatch.setattr(Spotware, "blockingCallFromThread", lambda reactor, function, *args, **kwargs: function(*args, **kwargs))
     monkeypatch.setattr(Spotware.reactor, "running", True, raising=False)
     api = SpotwareAPI(client_id="cid", client_secret="cs", access_token="bad", account_id=7)
@@ -197,7 +195,7 @@ def test_a_restore_for_a_socket_already_replaced_does_nothing(monkeypatch):
     assert recorder.sent == [] and not api._ready_.is_set()
 
 def test_a_stop_wakes_every_stream_still_listening(spotware):
-    from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOASubscribeSpotsRes
+    from Library.Spotware.Messages import ProtoOASubscribeSpotsRes
     spotware._responses_.append(ProtoOASubscribeSpotsRes())
     outcome = {}
     def stream():

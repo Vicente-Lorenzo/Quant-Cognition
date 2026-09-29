@@ -96,7 +96,7 @@ def test_every_column_reads_its_own_curve():
 def test_the_report_keeps_every_row_and_adds_the_risk_free_rate():
     empty = pl.DataFrame()
     report = generate_net_report(empty, empty, SimpleNamespace(Balance=100.0), date(2021, 1, 1), date(2022, 1, 1), _curves_([100.0, 110.0], risk_free=0.03))
-    assert report[STATISTICS_METRICS_LABEL].to_list() == Metrics and len(Metrics) == 90
+    assert report[STATISTICS_METRICS_LABEL].to_list() == Metrics and len(Metrics) == 91
     assert report.filter(pl.col(STATISTICS_METRICS_LABEL) == RISKFREERATEPERC).row(0)[1:] == (3.0,) * 6
 
 def test_a_report_without_curves_leaves_the_curve_rows_at_zero():

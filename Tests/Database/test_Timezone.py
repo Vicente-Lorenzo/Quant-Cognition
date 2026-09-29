@@ -17,6 +17,9 @@ def test_every_driver_declares_a_zoned_datetime_apart_from_a_naive_one(driver):
 def test_every_postgres_session_runs_in_utc(db):
     assert db.executeone(QueryAPI("SHOW TimeZone")).fetchall(legacy=False).item() == "UTC"
 
+def test_every_postgres_session_plans_each_statement_for_its_own_values(db):
+    assert db.executeone(QueryAPI("SHOW plan_cache_mode")).fetchall(legacy=False).item() == "force_custom_plan"
+
 def test_a_zoned_datetime_declares_timestamptz_and_round_trips_as_naive_utc(db):
     structure = {"UID": PrimaryKey(pl.Int64), "Stamp": pl.Datetime(time_zone="UTC")}
     db.migrate(schema="Probe", table="Zoned", structure=structure)

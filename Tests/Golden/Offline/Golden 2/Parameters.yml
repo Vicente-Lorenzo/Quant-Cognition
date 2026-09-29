@@ -18,6 +18,8 @@ RiskManagement:
   - 0
   StopLossScale:
   - 1.5
+  TakeProfitScale:
+  - 3.0
   TrailingStopLossScale:
   - 1.5
   TrailingStopLossStep:

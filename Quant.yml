@@ -2,61 +2,75 @@ name: Quant
 channels:
     - conda-forge
     - bloomberg
-    - defaults
 dependencies:
     - python=3.12
     - pip
 
     - tqdm
     - wheel
-    - pytest
+    - pypdf
     - psutil
+    - pyyaml
     - croniter
-    - pythonnet
+    - networkx
     - setuptools
+    - python-dateutil
+    - typing-extensions
 
-    - pyarrow
+    - py-spy
+    - pytest
+    - pyflakes
+    - autoflake
+
     - numpy
     - pandas
     - polars
+    - pyarrow
+
     - panel
     - bokeh
     - altair
     - hvplot
+    - plotly
     - seaborn
     - holoviews
     - matplotlib
-    - networkx
 
-    - pillow
-    - pystray
-    - selenium
+    - ipython
     - jupyter
     - notebook
     - ipykernel
     - ipywidgets
 
+    - pillow
+    - pystray
+
+    - psycopg
     - pymssql
     - oracledb
-    - psycopg
 
-    - ta-lib
+    - dash
+    - flask
+    - pyjwt
+    - fastapi
+    - waitress
+    - werkzeug
+    - flask-login
+    - argon2-cffi
+    - dash-bootstrap-components
+
+    - xbbg
+    - pyzmq
     - blpapi
     - xlwings
     - yfinance
-    - xbbg
 
-    - dash
-    - dash-extensions
-    - dash-bootstrap-components
-    - fastapi
-    - flask
-
-    - gymnasium
+    - certifi
+    - twisted
+    - protobuf
+    - requests
+    - pyopenssl
+    - service-identity
 
     - pip:
-        - --extra-index-url https://download.pytorch.org/whl/cu121
         - torch
-        - torchvision
-        - torchaudio
-        - ctrader-open-api

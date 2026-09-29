@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from Library.Logging import LoggingAPI
 from Library.Indicator.Fundamental.Calendar import CalendarAPI
 from Library.Utility.Datetime import utc_now
-from Script.Market.Horizon import HORIZON
+from Script.Data.Horizon import HORIZON
 from Script.Task import migrate, provision
 
 def moment(value, fallback=None):

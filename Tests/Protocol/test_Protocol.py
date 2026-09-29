@@ -1,5 +1,7 @@
-import struct
 import math
+import struct
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,6 +15,7 @@ from Library.Protocol.Action import (
     DecreaseSellPositionVolumeActionAPI,
     IncreaseBuyPositionVolumeActionAPI,
     IncreaseSellPositionVolumeActionAPI,
+    InitActionAPI,
     ModifyBuyPositionStopLossActionAPI,
     ModifyBuyPositionVolumeActionAPI,
     ModifySellPositionVolumeActionAPI,
@@ -63,8 +66,7 @@ def test_update_id_enum_values():
     assert UpdateID.Denied.value == 79
     assert UpdateID.Exception.value == 80
     assert UpdateID.Shutdown.value == 81
-    assert UpdateID.Batch.value == 82
-    assert UpdateID.Complete.value == 83
+    assert UpdateID.Complete.value == 82
 
 def test_open_buy_position_action_serialization():
     action = OpenBuyPositionActionAPI(PositionType=PositionType.Normal, Volume=1000.0, StopLoss=1.0500, TakeProfit=1.0600)
@@ -142,14 +144,14 @@ def test_codec_bar_subtick_round_trip():
     ts = 1706745600000
     tick_values = (ts, 1.08, 1.07, 1.0, 1.0, 1.08, 1.07, 50.0)
     bar_data = struct.pack('<Bq', UpdateID.BarClosed.value, ts)
-    for _ in range(7):
+    for _ in range(9):
         bar_data += tick_codec.pack(*tick_values)
     bar_data += struct.pack('<d', 1000.0)
-    assert len(bar_data) == RealtimeAPI._bar_payload_ == 465
+    assert len(bar_data) == RealtimeAPI._bar_payload_ == 593
     bar_ts = struct.unpack_from('<q', bar_data, 1)[0]
     assert bar_ts == ts
     off = 9
-    for _ in range(7):
+    for _ in range(9):
         sub_ts, ask, bid, ab, bb, aq, bq, vol = tick_codec.unpack(bar_data, off)
         assert sub_ts == ts
         assert abs(ask - 1.08) < 1e-10
@@ -167,15 +169,14 @@ def test_codec_account_round_trip():
     assert asset == "USD"
 
 def test_codec_security_round_trip():
-    codec = BinaryAPI('B', 's', 's', 'i', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'B', 'd', 'd', 'B', 'i')
-    data = codec.pack(UpdateID.Security.value, "EUR", "USD", 5, 0.00001, 0.0001, 100000.0, 1000.0, 10000000.0, 1000.0, 7.0, 2, -5.0, 3.0, 1, 3)
-    _, base, quote, digits, ps, pips, lots, vmin, vmax, vstep, comm, cm, sl, ss, sm, sed = codec.unpack(data)
-    assert base == "EUR"
-    assert quote == "USD"
-    assert digits == 5
+    codec = RealtimeAPI._binary_security_
+    data = bytes([UpdateID.Security.value]) + codec.pack(1, "EUR", "USD", "Euro vs US Dollar", 5, 0.00001, 0.0001, 100000, 1000.0, 10000000.0, 1000.0, 0, 45.0, 0, -9.71, 4.4, -1, 3)
+    symbol, base, quote, description, digits, ps, pips, lots, vmin, vmax, vstep, cm, comm, sm, sl, ss, sed, tm = codec.unpack(data, 1)
+    assert (symbol, base, quote, description) == (1, "EUR", "USD", "Euro vs US Dollar")
+    assert digits == 5 and lots == 100000
     assert abs(pips - 0.0001) < 1e-15
-    assert cm == 2
-    assert sed == 3
+    assert (cm, comm, sm, sl, ss) == (0, 45.0, 0, -9.71, 4.4)
+    assert (sed, tm) == (-1, 3)
 
 def test_codec_position_round_trip():
     codec = BinaryAPI('B', 'i', 'B', 'B', 'q', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'D', 'D', 's')
@@ -241,6 +242,14 @@ def test_codec_init_round_trip():
     assert data[0] == UpdateID.Init.value
     _, pid = codec.unpack(data)
     assert pid == 1234
+
+def test_the_handshake_carries_the_run_label():
+    data = InitActionAPI(ProcessID=1234, Label="9f2c4e").serialize()
+    assert BinaryAPI('B', 'i', 's').unpack(data) == (ActionID.Init.value, 1234, "9f2c4e")
+
+def test_a_realtime_run_labels_its_orders_with_its_run_folder():
+    assert RealtimeAPI.label(SimpleNamespace(_run_=Path("Runs") / "9f2c4e", _iid_="instance")) == "9f2c4e"
+    assert RealtimeAPI.label(SimpleNamespace(_run_=None, _iid_="instance")) == "instance"
 
 def test_codec_field_count_validation():
     codec = BinaryAPI('B', 'i', 'd')

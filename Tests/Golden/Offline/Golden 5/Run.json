@@ -1,22 +1,25 @@
 {
   "System": "Backtesting",
-  "Strategy": "Trend",
+  "Strategy": "Test",
   "Provider": "Spotware",
-  "Ticker": "EURUSD",
-  "Timeframe": "Daily",
-  "Start": "2015-01-01",
-  "Stop": "2026-01-01",
-  "StartedAt": "2026-09-11T16:55:27.122150",
-  "Command": "Backtesting --strategy Trend --provider Spotware --ticker EURUSD --timeframe Daily --start 2015-01-01 --stop 2026-01-01 --account-asset EUR --account-balance 10000 --account-leverage 30 --spread-type Auto --commission-type Auto --swap-type Auto --console Warning --file Warning --storage Warning --export --run C:\\Users\\Admin\\AppData\\Local\\cAlgo\\Data\\Runs\\Offline Golden 5",
+  "Ticker": "US500",
+  "Timeframe": "Hour",
+  "Start": "2023-01-03 08:00:00",
+  "Stop": "2023-12-29 19:00:00",
+  "Description": "Golden 5",
+  "StartedAt": "2026-09-29T00:13:52.177085",
+  "Command": "Backtesting --strategy Test --provider Spotware --ticker US500 --timeframe Hour --start \"2023-01-03 08:00:00\" --stop \"2023-12-29 19:00:00\" --account-asset EUR --account-balance 10000 --account-leverage 100 --spread-type Auto --commission-type Auto --swap-type Auto --parameters \"Tests/Golden/Offline/Golden 5/Parameters.yml\" --contract \"Tests/Golden/Offline/Golden 5/Contract.yml\" --console Warning --file Warning --storage Warning --export --description \"Golden 5\" --run \"C:\\Users\\Admin\\AppData\\Local\\Temp\\claude\\C--Users-Admin-OneDrive-Documents-cAlgo\\57af110b-4912-4270-8d8b-34a4e89fa3fc\\scratchpad\\golden_build\\Golden 5\"",
   "Parameters": {
     "Backtesting": [
-      "Defaults"
+      "Defaults",
+      "Tests\\Golden\\Offline\\Golden 5\\Parameters.yml"
     ]
   },
+  "Contract": "Tests/Golden/Offline/Golden 5/Contract.yml",
   "Scope": [
     "Spotware(cTrader)",
-    "Forex(Major)",
-    "EURUSD",
-    "D1"
+    "Index(AMER)Equity",
+    "US500",
+    "H1"
   ]
 }

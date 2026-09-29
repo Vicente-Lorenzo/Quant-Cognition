@@ -14,11 +14,11 @@ from Library.Universe.Timeframe import TimeframeAPI
 
 @pytest.fixture
 def stored(db):
-    for kind in (CategoryAPI, ProviderAPI, TickerAPI, ContractAPI, TimeframeAPI, SecurityAPI): db.migrate(schema="Universe", table=kind.Table, structure=kind(db=db).Structure)
+    for kind in (CategoryAPI, ProviderAPI, TickerAPI, TimeframeAPI, SecurityAPI, ContractAPI): db.migrate(schema="Universe", table=kind.Table, structure=kind(db=db).Structure)
     CategoryAPI(UID="Forex", db=db).save()
     ProviderAPI(UID="TestProv", Platform=Platform.cTrader, db=db).save()
     TickerAPI(UID="EURUSD", Category="Forex", db=db).save()
-    security = SecurityAPI(Ticker="EURUSD", Provider="TestProv", Category="Forex", db=db)
+    security = SecurityAPI(Ticker="EURUSD", Provider="TestProv", db=db)
     security.save()
     try: TapeAPI.create(db)
     except Exception as error: pytest.skip(f"TimescaleDB unavailable in the Tests database · {error}")

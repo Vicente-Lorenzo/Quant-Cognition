@@ -2,7 +2,7 @@
 
 The single planning file for the framework. Written 2026-09-10, replacing `TODOS.md`,
 `Research/THESIS-NOTES.md` and the project memory set, all of which were folded in here or into
-`RULES.md` and then deleted. Reordered 2026-09-17 and rewritten 2026-09-18 — Appendix C maps every
+`RULES.md` and then deleted. Reordered 2026-09-17, rewritten 2026-09-18 and renumbered 2026-09-26 — Appendices C and D map every
 earlier item number to its current one.
 
 **What belongs here:** work not yet done, in the order it will be done, with the evidence that
@@ -14,7 +14,7 @@ closed, where its facts now live — and every detail of it is deleted from this
 inside a live phase keeps one line in that phase's **Done** list until the phase itself closes.
 
 **The thesis is delivered, and its numbers bind nothing below — decided 2026-09-24.** Once every phase
-is done, a fresh campaign runs on the new tape and the corrected engine (Phase 6); nothing is kept only to
+is done, a fresh campaign runs on the new tape and the corrected engine (Phase 7); nothing is kept only to
 replay the old one. Nothing below is a quick fix applied to make a result look better; every phase is a
 structural change that leaves the framework permanently correct.
 
@@ -29,8 +29,11 @@ gone from this file.
 |---|---|---|---|
 | **0** | Safety net — the online and offline goldens, the DDPG self-consistency golden, the `Contract.yml` pin | 2026-09-17 | `RULES.md` ("Goldens", "Contract terms"), `Tests/Golden/RESIDUALS.md` |
 | **1** | Credential manager — `Library/Credential`, owner and threshold access on credentials, workflows and tasks, the credential page and CLI, the stored session key | 2026-09-23 | `RULES.md` ("`Library/Credential`", "Two thresholds"), `ARCHITECTURE.md` |
-| **3** | The market database — `Market.Tick` in UTC, the only market table: **1 663 014 876 ticks in 7.0 GB** (the database went from 365 GB to 7.2 GB); the two-sided `BarAPI` → `PointAPI` → `TickAPI`; every timeframe built on demand on the 17:00 New York clock and **equal to the platform's trendbars** (labels on every bar, OHLC exact M1 to D1, 2020-2025); conversions rebuilt at run time for any account currency; one binary blob per chunk read in parallel, no cache anywhere (run 5 cold 568 s → 17 s); Postgres tuned; the engine switched, the old tables and the Parquet cache dropped; the goldens' movement explained — runs 1 and 3 now within 6 and 11 EUR of cTrader, from 104 and 882 — and 5.0's gate made exact | 2026-09-25 | `RULES.md` ("The tick tape", "Bars", "Market data", "Currency conversion"), `ARCHITECTURE.md`, `Tests/Golden/RESIDUALS.md` ("The switch") |
+| **3** | The market database — `Market.Tick` in UTC, the only market table: **1 663 014 876 ticks in 7.0 GB** (the database went from 365 GB to 7.2 GB); the two-sided `BarAPI` → `PointAPI` → `TickAPI`; every timeframe built on demand on the 17:00 New York clock and **equal to the platform's trendbars** (labels on every bar, OHLC exact M1 to D1, 2020-2025); conversions rebuilt at run time for any account currency; one binary blob per chunk read in parallel, no cache anywhere (run 5 cold 568 s → 17 s); Postgres tuned; the engine switched, the old tables and the Parquet cache dropped; the goldens' movement explained — runs 1 and 3 now within 6 and 11 EUR of cTrader, from 104 and 882 — and 6.0's gate made exact | 2026-09-25 | `RULES.md` ("The tick tape", "Bars", "Market data", "Currency conversion"), `ARCHITECTURE.md`, `Tests/Golden/RESIDUALS.md` ("The switch") |
 | **2** | The Spotware module — a verified TLS connection; one sign-in and refresh through the vault; every public method verified live, five defects fixed; **the Open API proven to serve exactly the cBot's tape, and the stored tape found in London time**; what a tick is, decided; the allowance measured without asking Spotware (per connection, spaced sends, eight connections ≈ two hours for the whole history); a session that survives drops, silence and token loss (a 30-minute soak: 88 of 88 fetch cycles, both forced socket drops restored in 2-2.5 s with the live stream resumed); the demo-only live suite and 96 % offline coverage | 2026-09-24 | `RULES.md` ("`Library/Spotware`", "Market data", "Exclusions"), Appendix B |
+| **4** | Database and engine optimization, and an environment always on its latest libraries — workers share tapes, warmup history and the bar index through shared memory with one pool per fold (eleven years of D1 at 16 workers 85.2 → 51.0 s, every score identical); generic `DatabaseAPI.binary`; `Research/` distilled into `CAMPAIGNS.md`; every dependency declared and nothing pinned but Python; the vendor package replaced by the module's own client, verified live (tape equality, throughput, backoff, resilience, 61 methods, a 30-minute soak; three defects fixed); upgrades built and tested as `Quant.next` and applied by a base-Python launcher at logon, never in place; workflows split into `Environment` · `Web Application` · `Data Intelligence`, with workflow dependencies, `Waiting` cycles and services that wait only for their own ancestors | 2026-09-27 | `RULES.md` (`Library/System`, "The tick tape", "The warmup window", `Quant.yml`, "Never upgrade the `Quant` environment in place", `Library/Spotware`, `Library/Scheduler`, `Script/`), `CAMPAIGNS.md`, README ("Rebuilding This Machine From Scratch") |
+| **5** | The data workflow — one writer per schema under the `Data` workflow: the Universe from the Open API (830 symbols, dated terms, the 28 pairs of the eight majors tracked); the Market service, a worker per security, the 28 pairs refilled from 2014 (130 284 pair-days) and kept current, a tick reaching its row in about 2 s at the median (the tail is 9.12); the Portfolio mirror of every demo account with every derived field through `PortfolioAPI` and equal to the tick truth; the economic calendar in Monday weeks read across both Forex Factory pages; the database pages; a cBot that stores nothing; the tape repaired (`Script/Setup/Boundary.py`: 95 days rewritten, 38 last-millisecond ticks restored) and diffed against the cBot tape over every year — every old tick present, the only value differences 3 205 same-millisecond pairs in 2014-2017 — after which the 5.97 GB archive was deleted; the Spotware module verified live on six demo accounts in five currencies (72 tests, netting and hedging), its netting defects fixed | 2026-09-28 | `RULES.md` (`Library/Data`, "Market data", "The tick tape", `Library/Spotware`, `Library/Scheduler`), `ARCHITECTURE.md`, the diff reports in `inspect_persistent("Archive")`; its open items moved to 9.12, 11.1 and Phase 12 |
+| **6** | Backtesting engine accuracy — the engine reverse-engineers cTrader's and extends it: intrabar segmentation (every excursion equal to the tick truth), costs inside the excursions, the open position settled at the stop, swap charged at each roll from every contract term (`SwapTime` in UTC, each night rounded), `SpreadPnL`, risk sizing through the conversions for any account currency, bridging through a third currency, hedging and netting, closes by oldest fills with an exact average entry, commission rounded like the broker with its minimum and the conversion fee; `PriceMode.Mid` and the nine-tick wire bar; the `Test` strategy; the goldens re-based in one cTrader session — five backtests (every position opens identically, 93-99.6 % close identically) and two live demo runs equal to the broker to the cent (15 of 15 deals netted, 12 of 12 hedged); offline 6.7-35× faster than cTrader end to end | 2026-09-29 | `RULES.md` ("The goldens", "Swap", "Commission", "A close takes the position's oldest fills", "A stop fires", "Risk", "An intrabar event", "The position open at the stop", "Currency conversion", `Library/Portfolio`, `Library/System`, `Library/Strategy`), `Tests/Golden/RESIDUALS.md` ("The `Test` goldens", "Phase 6"), `ARCHITECTURE.md`; what it measured and did not take is in 9.8 and 9.13 |
 
 ---
 
@@ -38,33 +41,30 @@ gone from this file.
 
 | Phase | Scope | Gate | Can start |
 |---|---|---|---|
-| **4** | The market workflow — tick and calendar services running 24/7; the cBot only executes | none | **now** |
-| **5** | Backtesting engine accuracy, plus the cBot protocol items | Phase 4 | after 4 |
-| **6** | Optimization and Learning — thesis iteration two | Phase 5 complete | after 5 |
-| **7** | Web app, opened by the Research schema (7.0) | none | any time |
-| **8** | Remaining | none | any time |
-| **9** | Indicator connector — Python indicators on cTrader charts | Phase 5 complete | after 5 |
-| **10** | Live trading panel at `/trading` | Phases 4, 5 and 7 complete | after 7 |
-| **11** | Interactive Brokers provider | Phase 10 complete | after 10 |
-| **12** | Option strategy pricer and backtester | Phase 11 complete (chain data) | last |
+| **7** | Optimization and Learning — thesis iteration two | Phase 6 (done) | **now** |
+| **8** | Web app, opened by the Research schema (8.0) | none | any time |
+| **9** | Remaining | none | any time |
+| **10** | Indicator connector — Python indicators on cTrader charts | Phase 6 (done) | now |
+| **11** | Live trading panel at `/trading` | Phases 5, 6 and 8 complete | after 8 |
+| **12** | Interactive Brokers provider | Phase 11 complete | after 11 |
+| **13** | Option strategy pricer and backtester | Phase 12 complete (chain data) | last |
+| **14** | Free-threaded Python — investigate | none | any time |
 
 **Five rules bind the order.**
 
-1. **Nothing touches the engine without the goldens.** They exist as of 2026-09-17 —
-   `Tests/Golden/Online` and `Tests/Golden/Offline` (runs 1-5 each) plus `Tests/Golden/Consistency/DDPG`.
-   `pytest Tests/Golden --golden` replays the six offline-engine goldens byte for byte, each with its own
-   `Parameters.yml` and `Contract.yml` pinned.
-2. **There is exactly one golden re-baseline, and it is item 5.13.** The switch to the UTC tape (Phase 3)
-   and the sizing fixes (5.2, 5.3) change engine output deliberately. Re-baselining after each would cost
-   two cTrader sessions and would hide which change moved which number. Everything before 5.13 therefore
-   runs against the Phase 0 goldens as a *tripwire* — the Phase 3 break is explained in
-   `Tests/Golden/RESIDUALS.md` ("The switch"), 5.2's is expected, and `pytest Tests/Golden --golden` fails by
-   design until 5.13; goldens 2 and 4 are refused outright until EURJPY is in the tape (4.0). **Declared exception, 2026-09-15:** the offline half was
-   re-baselined once outside 5.13, when `shrink_dtype()` was removed from `DataframeAPI.frame` — every
+1. **Nothing touches the engine without the goldens.** `Tests/Golden/Offline` and `Tests/Golden/Online`
+   (runs 1-5, the `Test` strategy's, re-based in the cTrader session of 2026-09-29) and
+   `Tests/Golden/Consistency/DDPG`. `pytest Tests/Golden --golden` replays the six offline-engine goldens byte
+   for byte, each with its own `Parameters.yml` and `Contract.yml` pinned.
+2. **A cTrader re-baseline is a versioned event, never part of a refactor.** The last one, the `Test` session
+   of 2026-09-29, re-based the goldens for the UTC tape (Phase 3) and every Phase 6 change; each move is
+   explained in `Tests/Golden/RESIDUALS.md` ("The switch", "Phase 6", "The `Test` goldens"). An engine change
+   that moves output deliberately needs its own session and its own section there. **Declared exception,
+   2026-09-15:** the offline half was re-baselined once outside a session, when `shrink_dtype()` was removed from `DataframeAPI.frame` — every
    database read and preload tape had been downcasting `Float64` prices to `Float32`. That corrected an
    input, not engine logic; the pre-fix exports stay in commit `578c9a5`, and the before/after is in
    `Tests/Golden/RESIDUALS.md`, "Re-baselined 2026-09-15".
-3. **Phase 6 retrains once, at the end.** Every engine change invalidates trained weights. Retraining
+3. **Phase 7 retrains once, at the end.** Every engine change invalidates trained weights. Retraining
    between phases burns the longest-running job in the framework for a result the next phase throws
    away.
 4. **No secret lives anywhere but the credential store, and it travels by reference.** Not in code,
@@ -75,7 +75,7 @@ gone from this file.
 5. **One tape, one writer at a time.** The London-local tape was converted once into `Market.Tick`, in
    UTC — proven identical to what the Open API serves — and the old tables are gone (2026-09-25). From
    now on the market service is its only writer: the market data is dropped and refilled from `HORIZON`
-   through the service (4.2). Two sources writing one table would move every engine number
+   through the Market service (Phase 5). Two sources writing one table would move every engine number
    without raising a single error.
 
 **Why this order, 2026-09-24.** Measured that day: the Open API serves exactly the tape the Download cBot stored,
@@ -84,496 +84,39 @@ service on `Library/Spotware` — **a calendar service** beside it, and **a cBot
 and receives updates**, never storing. The end state is a fast database, and two services keeping the
 tick tape and the economic calendar current around the clock, in UTC. The database comes first and is
 proven on the whole tape — 1.66 billion ticks, not a sample — so every speed and size claim is measured
-where it matters (3); the services come next (4); the engine work that reads the new tape follows (5).
-The Research schema left Phase 3 for 7.0, and parity with the cBot left Phase 2 for 10.0, so neither
+where it matters (3); the engine and environment are made fast and current on it (4); the services come next (5);
+the engine work that reads the new tape follows (6).
+The Research schema left Phase 3 for 8.0, and parity with the cBot left Phase 2 for 11.0, so neither
 gates the services.
 
 ---
 
-## Phase 4 — The market workflow, around the clock
-
-**Decided 2026-09-24.** The `Market` workflow becomes two services that run 24/7 under the Scheduler:
-**ticks** from the Open API (4.1, 4.2) and the **economic calendar** (4.3), each backfilling from
-`HORIZON` (2014-01-01) and staying current, in UTC. Storing is their job alone: the Connector cBot and the
-strategies behind it execute actions and receive updates, and **write nothing to the database** (4.4-4.6).
-**Both services work the same way:** on start each backfills whatever is missing from `HORIZON`, then runs
-live once it has caught up, and a restart resumes the backfill where it stopped. Phase 3 closed
-2026-09-25, so this phase starts now.
-
-### 4.0 The worker model — one process per tracked pair, true parallelism
-
-**Requested 2026-09-24: speed and the lowest latency are the point,** both backfilling and live, and a
-tick on Pepperstone EURUSD must never wait behind one on IC Markets USDJPY. In Python that means
-**processes, not threads**: threads share one GIL, and every Twisted connection in a process shares one
-reactor thread, so a slow decode or a large write for one pair would delay the next pair's tick.
-
-- **A tracked set** of (provider, ticker) pairs — the pairs traded plus the direct pairs the currency rule
-  needs for every account currency in use (`RULES.md`, "Currency conversion") — adding a pair is a row, not
-  a code change or a task registration. **EURJPY first:** goldens 2 and 4 (USDJPY on a EUR account) are
-  refused without it, and the other five EUR crosses follow.
-- **One OS process per tracked pair**, each with its own reactor, its own Open API connection (the
-  allowance is per connection, measured) and its own database connection, supervised by the service task
-  and tethered to it like the Scheduler's runners, so a crash stays inside one pair and is restarted.
-- **Each worker backfills its own pair, then goes live** — one owner of the pair's tape end to end, no
-  handoff. While backfilling it may open a few extra connections; live, it keeps one.
-- **Live is the historical endpoint polled about once a second per pair** on that dedicated connection —
-  two requests a poll against 4 a second allowed — so the tape trails the market by about a second with
-  exactly the canonical sampling, instead of a minute.
-- **No write contention:** `Market.Tick` is partitioned per security and month, so each worker writes its
-  own partition through binary `COPY` (1.1 M rows a second on one connection, measured 2026-09-24).
-- **Measured cost, 2026-09-24:** importing `Library.Spotware` in a fresh process takes 0.8 s and 141 MB
-  with no torch loaded — twenty workers are about 2.8 GB of the machine's 64 GB, and twenty database
-  connections of the 400 allowed.
-- **The calendar service takes the same shape** with one worker, since it has one source.
-
-**Done when:** at least two providers and seven tickers run in parallel, and per-pair latency — the
-tick's time to its row being committed — is measured with one worker deliberately loaded and shown not
-to move the others.
-
-### 4.1 The market-data service
-
-An always-on `Service` task under the Scheduler, in the `Market` workflow — the task and script names
-follow the `Market.Calendar` pattern:
-
-- **Credentials from the store**, the token refreshed by `Environment.Credential` — the service never sees
-  an expired token and never holds a secret in its arguments; the session survives drops, silence and token
-  loss (`RULES.md`, `Library/Spotware`), and `renew` hands it a rotated token from the vault.
-- **Backfill first, then live.** Its first run is the refill of 4.2; once every pair-day up to today is
-  stored, it switches to the live cycle below, and a restart resumes wherever it stopped.
-- **The decided source (Appendix B), kept current to the minute:** the historical endpoint, bid and ask merged on
-  the millisecond, stamped UTC. It serves ticks up to a few seconds ago (measured 2026-09-24), so each
-  pair's worker (4.0) polls from its last stored tick about once a second — the tape trails the market by
-  about a second, with exactly the canonical sampling, and a retry is idempotent because a window is
-  re-read, never appended blindly.
-- **The rate budget, measured 2026-09-24.** A pair-day costs two paginated historical requests, one per
-  side, 6-14 in all at up to 10 000 ticks a page. The allowance is per connection, so the service holds
-  several — eight reached 11 466 pair-days an hour with no refusal, and live polling needs one.
-- **Written through binary `COPY` into `Market.Tick`, provenance on every row** — prices as points
-  (price × 100 000), `Volume` left null because the Open API reports no size (the reader counts the sides
-  that moved). The writer belongs on `TapeAPI`, beside its reader. Bars are not written: `TapeAPI` derives
-  them.
-- **Gaps are reported, never papered over** — a day that comes back short is logged and retried, and a
-  day that stays short is recorded like the 2016 hole.
-- **Contract terms get one writer too.** Today every cBot run overwrites `Universe.Contract`
-  (`UpdatedBy = 'Autosave'`), so the terms a run used survive only in its `Contract.yml`. The service
-  refreshes them from `ProtoOASymbolByIdReq` once a day and on `ProtoOASymbolChangedEvent`, mapping the
-  Open API's commission and swap types onto the framework's; runs keep pinning `Contract.yml` as today.
-  **`SwapPeriod`, `SwapSummerTime` and `SwapWinterTime` have no reader since the switch** — the engine
-  charges swap at the 17:00 New York roll (`TapeAPI.rollovers`), which reproduced cTrader's swaps on run
-  5 — so map the Open API's `swapTime` onto that roll or drop the three columns here, with the goldens'
-  `Contract.yml` files.
-- **Share a subscription between streams before two workers need one symbol.** `SpotwareAPI._listen_`
-  subscribes and unsubscribes per stream, so a second stream on the same symbol and account shares the
-  server's subscription and the first one's exit removes it for both. Count listeners per symbol and
-  unsubscribe on the last (found in the 2026-09-25 hard pass; no caller does this yet).
-- **A 24/7 security needs a decision on the repeated hour.** `TapeAPI.bars` buckets on New York time, so
-  the hour New York repeats when its clocks go back falls into one bucket and an H1 bar there holds two
-  hours. Forex is closed then (Sunday 01:00-02:00 New York), so no stored pair is affected; the first
-  weekend-trading security (a crypto pair, an index CFD) must choose between one long bar and two bars
-  sharing a label.
-
-### 4.2 The refill — drop the market data, backfill 2014 to today
-
-**Decided 2026-09-25:** the Open API serves exactly the cBot's tape (Phase 2), so the refill is not
-compared day by day against the copy. The market data is dropped — `Market.Tick` only; `Auth`,
-`Credential`, `Scheduler`, `Logging` and the rest stay — and each pair's worker backfills its own history
-from `HORIZON`, pair-day by pair-day, in parallel with the others — about two hours for seven pairs at the
-measured per-connection allowance, resumable from a marker — then goes live. The 2016-01-11 → 2016-01-25
-hole comes back empty from the endpoint too and is recorded like any day that stays short (4.1). When the
-refill completes, every row names the service as its source. **Decide at the drop:** the equality was
-proven on 13 sampled windows, not every day, so a dump of `Market.Tick` taken first (about 7 GB) keeps a
-later doubt about one day checkable; without it the old tape is gone for good.
-
-### 4.3 The calendar service
-
-`Market.Calendar` is today a daily task (06:00) that scrapes the last six days of Forex Factory into
-`Indicator.Calendar` — 60 514 events from 2014, upserted by Forex Factory's event id. **Its time zone is
-already right,** measured 2026-09-24: the page's `dateline` is an absolute epoch and every sampled event
-sits at its true UTC release time (08:30 New York claims at 12:30 in summer and 13:30 in winter, the Bank
-of England at 11:00 in September). What it lacks is being a service:
-
-- **Around the clock.** A `Service` task that keeps the current and next week fresh — forecasts move all
-  week, and an **actual** lands at its release minute — so it re-reads the current week on a short cycle
-  and, around each scheduled release, until the actual appears.
-- **Backfill first, as gap-filling, then live.** From `HORIZON`, week by week, re-reading only weeks
-  missing or incomplete, so a new install or an outage repairs itself; once caught up it switches to the
-  live cycle, and a restart resumes the backfill where it stopped.
-- **Revisions kept.** A revised previous value is information; it is recorded with its own stamp, not
-  lost to an overwrite.
-- **Polite and robust.** One request at a time with a pause, back-off on refusal, and a blocked or changed
-  page reported as a named failure — the scraper depends on the page's embedded JSON
-  (`calendarComponentStates`) and must fail loudly, never write an empty week.
-- **UTC stays proven** by a test pinning known releases across both daylight-saving regimes.
-
-**Done when:** a week's actuals land within minutes of release without a manual run, a gap left by an
-outage refills by itself, and a changed page stops the service with a named error instead of writing
-nothing.
-
-### 4.4 The cBot stops storing
-
-Mapped 2026-09-24. **Every write is on the Python side** — the C# Connector makes no database call; it
-only passes `--database` and the buffering flags — and there were exactly three. **The market writer is
-gone (2026-09-25, with the switch):** it could not write the UTC tape, so the market buffer, the four
-`--market-*` flags and the C# Market Management group went with Phase 3, and `TickAPI` and `BarAPI` are no
-longer datapoints. Two remain:
-
-| Writer | Tables | When, by default |
-|---|---|---|
-| `security.save()` at the handshake (`System.py:531`) and in the shutdown report (`Realtime.py:442`) | `Universe.Ticker` · `Provider` · `Category` · `Contract` · `Security` — through `Main`'s hard-coded `Quant` connection, whatever `--database` says | Live and Simulation |
-| the portfolio buffers and the session plumbing (`System.py:514-598`, `Realtime.py:123-139`) | `Portfolio.Session` · `Account` · `Order` · `Position` · `Trade` | Live |
-
-No cBot run writes `Scheduler` or `Logging` rows. Remove both remaining writers and what exists only for
-them: `BufferAPI` (`Library/Database/Buffer.py`) and `SystemAPI`'s two buffers, the session plumbing, the
-eight buffer flags of `Main.py`, and on the C# side the Universe and Portfolio Buffering groups and the
-inert `Storage` level (the Python side never attaches that sink; `--storage` stays for Scheduler runs).
-**What stays:** the `Connector` stamp in `Contract.yml` (a run's provenance), and `--database`, which now
-selects the database for the **reads** a run still makes — the security lookup, the warmup bars and the
-benchmarks.
-
-Consequences to settle in the same change:
-
-- **The `Portfolio` schema loses its only writer.** Live results already live in the run folder. Drop the
-  five tables, or keep them deliberately for 10.3's blotters — decide, do not leave them orphaned.
-- **A ticker the database does not know is no longer created by the cBot,** so it would have no `UID`, no
-  tick key and no warmup. The service (4.1) owns `Universe` from now on, from the Open API's symbol list.
-- **The warmup read depends on the service's tape and derived bars** — a Live run warms up from what 4.1
-  keeps current.
-- **One inconsistency disappears:** with `--database Tests` a run today splits its rows across two
-  databases, because the buffers and the universe save always write to `Quant`.
-
-### 4.5 Delete the Download strategy
-
-It is not a separate cBot: it is the Connector with `Strategy = Download`, its default. Delete
-`Library/Strategy/Rule/Download.py` and every trace — the `Rule` re-export, the `CatalogAPI` entry,
-`StrategyType.Download = 1` (NNFX 2, DDPG 3 and Trend 4 keep their numbers, so no wire ID moves),
-`Main.py`'s `download` branch and its default `--strategy Download`, `TickAPI._ingest_` and the
-`Transform` flags Download alone varied, the C# default `Strategy = Download` and the one Download branch
-in C# (`Auto` delay meaning `Full`). Regenerate `Enum.cs` (its hash in `RULES.md` changes), rebuild, and
-reinstall the `.algo`. Tests that used Download as their concrete stub (`Tests/Strategy/test_Strategy.py`,
-`test_Hybrid.py`, `Tests/System/test_Realtime.py`) get a minimal stub of their own. The web pages list
-strategies from the catalog and follow by themselves; an old promoted Download run renders as an unknown
-strategy, which is handled.
-
-**Delay mode and batch framing go with it.** Delay `Full` is Download's mode — it sends no `Complete`, so
-actions wait for the drain, which a trading run cannot afford — and batches are only ever produced by it:
-`Delay Management` (C#), `UpdateID.Batch` and the batch framing on both sides are removed, and 5.9 is void.
-
-### 4.6 Simplify the parameters
-
-Mapped 2026-09-24: **about 38 of the Connector's 50 parameters exist only to store or download.**
-
-| Where | Parameters | Verdict |
-|---|---|---|
-| C# · Universe, Portfolio Management | five buffer settings each | **remove** — write buffers for the two remaining writers of 4.4 (Market Management went with Phase 3) |
-| C# · Delay Management | five modes and a count | **remove** — the batching of 4.5 |
-| C# · Tick, Bar, Order, Position, Trade Stream | force-overrides of a strategy's `Subscription` | **remove** — `All` was the capture switch; each strategy declares its own subscription (5.10 decides DDPG's) |
-| C# · Accuracy Mode, Verification Mode and Count | tick-or-bar detection that switched market storage off | **simplify** — keep the priming step, drop the classification, or keep it only as a guard that tick data is in use |
-| C# · Storage | the database log level | **remove** — inert on cBot runs: the Python side never attaches that sink; `--storage` stays for Scheduler runs |
-| C# · Database (`Auto` · `Quant` · `Tests` · `Off`) | persistence switch and the warmup and benchmark reads | **simplify** to one read-only connection — `Tests` is a leftover, since the universe loads from `Quant` regardless |
-| C# · Strategy | the Python strategy | keep, without `Download` |
-| C# · Environment, Console, File, Benchmark, Benchmark Tickers, Profile, Report, Export, Plot, Description | execution and outputs | keep |
-| Python · `--universe-*`, `--market-*`, `--portfolio-*` | twelve buffer flags and their helpers (`Main.py:29-57, 260-271`) | **remove** |
-| Python · `--database` | the read connection | **simplify**, as the C# `Database` |
-| Python · `Transform` | Download's fast paths | **remove** with 4.5 |
-| Python · Money, Risk, Signal, Technical Management; Fundamental and Sentimental hooks | sizing, signals, warmup window | keep |
-| Python · `PortfolioManagement` | `PositionMode` — Netting or Hedging, read by the backtester and set by every override | keep; its name no longer clashes once the C# group of the same name is gone |
-
-**Done when:** the Connector's panel holds only what execution needs — about a dozen parameters — each
-with a reader, the CLI has no flag without one, and a Live and a Simulation run trade exactly as before.
-
-### 4.7 Drop the vendor package — every dependency at its latest
-
-**Proposed 2026-09-25, not yet decided.** Asked: no forced versions in `Quant.yml`. Its two pins,
-`ctrader-open-api==0.9.2` and `service-identity==24.2.0`, are symptoms; the real pins are the vendor's
-own. `ctrader-open-api` 0.9.2 — its latest release — requires exactly Twisted 24.3.0, protobuf 3.20.1,
-pyOpenSSL 24.1.0 (which caps cryptography below 43: 42.0.8 against 50.0.1 released), requests 2.32.3 and
-inputimeout 1.0.4. `service-identity` is pinned because pip would otherwise take 26.1.0, which cannot
-import against cryptography 42 — and Twisted then falls back, with only a warning, to rudimentary hostname
-checks, undoing the TLS verification of 2026-09-24. `Library/Spotware` already replaces the vendor's
-client and sender; what it still imports is the generated protobuf messages, `Client`, `TcpProtocol`,
-`Factory`, `Protobuf` and `EndPoints`. Generate the messages from Spotware's published `.proto` files with
-the current protobuf, write the small Twisted client, protocol and factory the module needs, and drop the
-package: both pins go and every dependency floats. It belongs here because 4.1 builds the service on this
-module and the demo suite exercises it anyway.
-
-**Done when:** `Quant.yml` pins nothing, the offline Spotware suite and the demo suite (`--spotware`)
-pass on the latest Twisted, pyOpenSSL, cryptography, service-identity and protobuf, and a wrong host is
-still refused.
-
-**Phase done when:** both services run 24/7 under the Scheduler — the tape trailing the market by about a
-minute and the calendar's actuals landing within minutes of release — the market data has been dropped
-and refilled from `HORIZON`, every pair-day stored or named as a gap, a Live and a Simulation cBot run leave every table's insert
-and update counters (`pg_stat_user_tables`) unchanged, neither language mentions Download, and the
-parameters are down to what execution needs.
-
-## Phase 5 — Backtesting engine accuracy
-
-The engine already reverse-engineers the cTrader engine byte for byte on the golden protocol and extends
-it. This phase closes the places where that fidelity is incomplete and makes the account currency
-generic. **5.10 to 5.12 and 5.14 are the cBot protocol items** (5.9 went with Download, 4.5); none needs the Open API, but each changes the wire
-and must be verified by a live round-trip, so they ship in the same cTrader session as the re-baseline
-(5.13).
-
-**Done.** Facts in `RULES.md` ("`net.csv` had four defects") and `Tests/Golden/RESIDUALS.md`.
-
-- **5.0, the auto-resolution descend gate — closed 2026-09-25.** `Auto` is the default again and equals `T1`
-  by construction: the gate asks the tick filter's own question of the bar's two-sided extremes, with no
-  ladder of H1 and M1 bars (`RULES.md`, `Library/System`). Run 2's trade 236 is the case it was found on; it
-  replays once EURJPY is in the tape (4.0).
-- `net.csv`'s concat dropped `Position`, silently disabling aggregation whenever a position was open —
-  fixed 2026-09-11 (`_aligned_positions_`).
-- `initial_balance` was the closing balance, so every balance-relative percentage was wrong — fixed
-  2026-09-11 (`equity_curve[0]`).
-- Holding time collapsed to `stop - entry` with a position open — fixed 2026-09-11 by the same change.
-- `net.csv`'s "Net Return (%)" compounded per-trade log returns (38.29 % on the DDPG golden against an
-  account return of 34.02 %) — fixed 2026-09-17: it is Σ NetPnL / opening balance, so Buy + Sell = Total,
-  and `FitnessType.AnnualizedReturn`, the default `--fitness`, ranks by account CAGR.
-- Optimization and Learning workers share the tapes, the warmup history and the bar index, start together,
-  and keep one pool per fold — closed 2026-09-25: eleven years of D1 at 16 workers 85.2 → 51.0 s, every score
-  identical (`RULES.md`, `Library/System`).
-- Report folder collisions — closed 2026-09-16: every run mints its own folder, and `_export_` suffixes an
-  explicit path that exists. The one case left is `--plot PATH` for the same ticker and strategy twice in
-  one second.
-
-### 5.1 Write the spread charge to the trade record
-
-`BacktestingAPI._build_position_` charges the spread correctly — `gross = (bid - ask) * volume *
-quote_conversion` — but never surfaces it as a field. The only recovery route today is the identity
-`spread = abs(commission) * points / 7`, which **fails when commission is zero — exactly the training
-configuration** (`--commission-value 0`). So in every Learning run the single largest cost component,
-about 42% of total cost, is invisible. Fix: an additive `SpreadPnL` field on `PositionAPI` and
-`TradeAPI`. Goldens stay byte-identical apart from the new column.
-
-### 5.2 Risk sizing ignores the quote-to-account conversion
-
-**The defect is confirmed (golden run 4); the fix stands.** `calculate_fixed_amount_volume` computes
-`amount / (sl_pips * PipSize)` where `amount` is in **account** currency and the stop is in **quote**
-currency, with no conversion. `PipSize` cancels, so contract tick metadata is not the lever. Effective
-risk becomes `RiskPercentage / price`:
-
-| pair | intended | actual |
-|---|---|---|
-| EURUSD | 1.0% | 0.909% |
-| USDJPY | 1.0% | **0.0067%** |
-
-On USD/JPY the raw volume — 133 units at a 10 000 balance — falls under `VolumeMin`, which is why DDPG
-could never open a position there. **Raising the balance does not help**: risk stays `1/price` because
-volume and balance scale together. The published campaign is unaffected — every winner ran with active
-risk sizing, 26 to 124 distinct volumes, 0.0 to 4.1% of trades at the floor; USD/JPY alone used a
-research-only compensation, `RiskPercentage` scaled by 119.1994, restoring roughly 1% risk a trade,
-exact at the window start and easing to about 0.8% by the end. **Remove that compensation as part of
-this fix, not before.**
-
-**Verified correct — do not "fix" these.** P&L quote-to-account conversion is right for every base and
-quote combination under a EUR account: `account == base` uses `1/price` (EURUSD 30.27/1.0743 = 28.1765
-against a recorded 28.1760), and `account == third` uses the tick's `QuoteConversion` per tick — USD/JPY
-0.00707514, 0.00707354, 0.00698959, 0.00704379. `QuoteConv / BaseConv` equals `1/price` to four decimals
-on all seven majors.
-
-### 5.3 Unify the exposure feature with the order sizer
-
-`DDPGObservationAPI._position_features_` normalises exposure by `ActionAPI.maximum_volume`
-(`SizingMode.Balance`), while orders are sized by `_reference_volume_`, which is risk-based. They
-disagree by 9x on EURUSD and GBPUSD and by **238x on USD/JPY**, so the feature clips to plus or minus one
-above an `abs(action)` of 0.109, 0.112 and **0.004** respectively. On USD/JPY the agent is effectively
-blind to its own position and can only trade all-in or flat. **This invalidates trained weights** — the
-main reason Phase 6 retrains.
-
-### 5.4 Generic account currency
-
-**The rate source exists since Phase 3:** conversions are rebuilt at run time by cTrader's direct-pair
-rule for any account currency, from the direct pairs' own ticks (`RULES.md`, "Currency conversion"), and
-a run is refused, naming the pair, when no direct pair is in the tape. What is left: bridging through a
-third currency as an explicit, recorded run option, and one cross-account golden — a CHF account on
-GBPJPY — once the tracked set (4.0) carries its pairs.
-
-### 5.5 Hedging
-
-`PositionMode.Hedging` is a stated goal and is **unproven, not merely untested** — everything to date ran
-`PositionMode.Netting`. Treat it as new work with its own validation, not as a flag to flip.
-
-### 5.6 The position open at the stop date is valued differently from cTrader
-
-cTrader closes any position still open at the end of the window, at the final tick, and charges its
-closing commission and a full swap. We mark it earlier, and `_build_position_` sets `SwapPnL=0.0` at open
-with swap only ever applied in `_build_trade_`, so an open position accrues **no swap at all**. The open
-position's mark-to-market gap equals the entire short-side gross gap, exactly, every time:
-
-| Run | Open position | Our mark | cTrader implied | Gap | Short gross gap |
-|---|---|---|---|---|---|
-| 1 | Sell 28 000 @ 1.10473 | 2.53 | 26.64 | 24.11 | 24.11 |
-| 2 | Sell 1 000 @ 141.001 | 0.53 | -0.77 | -1.30 | -1.30 |
-| 3 | Sell 27 000 @ 1.10473 | 2.70 | 28.35 | 25.65 | 25.65 |
-| 4 | Sell 23 000 @ 141.001 | 12.11 | 41.65 | 29.54 | 29.54 |
-
-Golden 5 has no open position and reconciles to the cent — the control. Fix: value the open position at
-the final tick of the window, charge its closing commission, and accrue swap on open positions. **Ship
-with 5.13** — it moves `positions.csv` and the `net.csv` totals deliberately.
-
-### 5.7 A backtest contaminates the next one in the same process
-
-Mitigated, not fixed. Bounded in practice because runs are process-per-run, but a real correctness hole
-in any in-process sequence.
-
-### 5.8 Backtesting engine performance
-
-Measured 2026-09-11 by `cProfile` on the online hot path — `Trend` on EURUSD H1 over 2023, warm tape,
-6 217 bars, 17.6M calls. Ranked by what the profile said, with what has happened since:
-
-| Cost | Evidence | State |
-|---|---|---|
-| **Datapoint construction** | `Datapoint.__setattr__` 1 006 870 calls, the single largest entry; `Dataclass.data` 1.8s cumulative; `isinstance` 3 237 615 calls inside the same parse path; `TickAPI.__post_init__` 33 101 calls, 1.2s cumulative | **Mostly taken 2026-09-17:** the unused autosave hook removed and the `data()` field plan cached — `TickAPI()` 12.0 → 6.3 µs, `bar.dict(flatten=True)` 46.9 → 24.1 µs, goldens unmoved |
-| **Polars frame churn** | `dict_to_pydf` 18 658 calls, three per bar | **Partly taken 2026-09-17** — `_scalar_` and ATR's `_extract_`; the per-bar indicator frame remains |
-| **Preload** | `_load_bars_` 3.76s of the 4.04s `_preload_`, 40% of a single backtest | **Rebuilt at the Phase 3 switch** — the tape is read and its bars built in parallel (EURUSD H1 2023: 1.1 s read and D1 build, 0.5 s for the H1 and M1 intrabar bars); measure the whole run again |
-| **`select.select`** | 0.558s over 693 calls | open — database round trips *during* a run, after preload. Find what is still talking to Postgres |
-
-**The preload disk cache is gone (Phase 3).** Run 5 now runs in 9 s end to end at `Auto` (6.1 s in-process,
-0.8 s on a dataset in memory), against 568 s cold and 9.1 s warm before, with no file on disk. **What is left,
-measured 2026-09-25:** an Optimization candidate reconnects to Postgres on every replay (22 of 144 s over 654
-D1 candidates, about 34 ms each); `_row_to_bar_` builds every `BarAPI` of the window at load (13 s of a 165 s
-profiled DDPG decade); and the per-bar indicator frames (`Technical.update_data`, 86 of those 165 s) are the
-largest single cost of a model strategy. **Do not** re-attempt the recorded dead ends (Appendix A).
-
-### 5.9 Delay and batch protocol — void
-
-**Void 2026-09-24.** Bulk transfer over the shared-memory slot existed for downloading, which is no longer
-the cBot's job; delay mode and the batch framing are removed in 4.5.
-
-### 5.10 Decide DDPG's `Subscription` deliberately
-
-`NNFXStrategyAPI` moved to `Stream.All & ~Stream.Tick` because its intrabar reactivity is entirely
-target-driven — 21.3 M raw ticks collapsed to bar closes plus a few thousand target crossings, bit-exact.
-**DDPG has never been reviewed.** An RL agent may genuinely act per tick. Decide from its actual channels;
-do not copy NNFX. Base `StrategyAPI.Subscription = Stream.All` is a safe superset; every strategy should
-declare its minimal subscription.
-
-### 5.11 Protocol symmetry
-
-`Decreased{Buy,Sell}PositionVolume` updates 65 and 66 exist; the gap is on the **action** side. Add four
-target-volume actions in the logical order `Increase`, `Decrease`, `Modify`. Renumbering is safe because
-`Script/Setup/Enum.py` regenerates the C# side. Run `python -m Script.Setup.Enum`, rebuild, reinstall the
-`.algo`, then verify a live round-trip — a wire-ID mismatch mis-decodes silently. Logs must be symmetric
-with the existing pairs.
-
-### 5.12 `receive_update_security`
-
-Parse the C# security payload to enrich `SecurityAPI`. Small; ship with 5.11.
-
-### 5.13 The cTrader session — re-baseline the goldens
-
-**Blocked on you — one cTrader session, the single re-baseline for Phases 3 and 5.** The goldens stay
-here, after Phase 4, and run on the refilled tape (decided 2026-09-25). Run the checklist below first,
-then in the same session:
-
-1. **Confirm both `.algo` files load and run** (`Sources/Robots/Connector.algo`,
-   `Sources/Indicators/Connector.algo`). They are built by the pinned `cTrader.Automate` on SDK 10;
-   everything so far is compile-time evidence, none of it proves the platform accepts the artefact. Do
-   it first, so a later wire mismatch can only be the enum change, never the compiler.
-2. **Round-trip 5.10 to 5.12 and 5.14** live, and the cBot of Phase 4 — storing nothing, Download gone.
-3. **Regenerate the five `Simulation` runs** below, and the matching `Backtesting` runs, under 5.6's
-   change and everything Phase 3, 5.2 and 5.3 moved. Every deviation from the current goldens must already have
-   a written explanation. Compare, accept and commit.
-
-This is a **versioned** change — the old goldens stay in git history as the pre-fix reference. Never
-absorb a re-baseline into an ordinary refactor. The one declared exception so far is rule 2's
-(2026-09-15); it does not replace this item.
-
-#### The session checklist
-
-**Two Spotware demo accounts, EUR and USD**, same broker and symbols. The USD one exists solely to reach
-the `account == quote` branch (run 3). Both are **Hedging**; record it, but it is not a variable here —
-`Trend` holds one position at a time, so netting and hedging are observationally identical.
-
-Four checks before the session, or the whole set is void:
-
-1. **Fees run at the demo account's own terms.** `Auto` resolves to `Accurate` for spread, commission
-   **and** swap, and `Accurate` reads `Universe.Contract` — or the pinned `Contract.yml`:
-   `Commission` 45.0 as `BaseAssetPerMillionVolume`, `SwapMode` `Pips` with per-pair `SwapLong`/
-   `SwapShort`, `SwapPeriod` 24. **45 is correct here** — the demo standard, and what cTrader's
-   accurate-commission backtest charges. **Do not confuse it with the thesis cost model**, which
-   deliberately prices a raw-spread, swap-free account at 3.5 USD per 100 000. The goldens prove the
-   **engine** matches cTrader; the thesis prices a **realistic broker**. Neither is edited to match the
-   other.
-2. **Leave swap on.** The swap residual against cTrader is one of the accuracy floors and these runs pin
-   it.
-3. **cTrader's "download historical data for additional symbols to convert profit/margin" must be on.**
-   Off, the cross-pair spot freezes and conversions go stale — a silent, plausible-looking wrong number.
-4. **Set the cBot's `Description` to `Golden1` … `Golden5`** in the Reporting Management group. It
-   travels as `--description` into `Run.json` and is the only thing that tells the run folders apart.
-
-#### The five runs
-
-Strategy **`Trend`** throughout — the only strategy that drives stop loss, take profit, break-even,
-trailing stop with step re-arming and scale-out through armed intrabar targets, which is exactly where
-the engine has to agree with cTrader. **Each configuration runs twice because there are two engines:**
-the cTrader half is the Connector cBot in cTrader's Backtesting tab (`Simulation`, `RealtimeAPI`, P&L
-arriving over the wire), the CLI half is `Backtesting` (`BacktestingAPI`, computing its own fills and
-fees). Agreement on fills and fees is tautological in the first and a real measurement in the second.
-
-| Table column | Where it goes in cTrader's Backtesting tab |
-|---|---|
-| Ticker | the chart symbol |
-| `--timeframe` | the chart timeframe — `h1` or `Daily` |
-| `--start` / `--stop` | From / To |
-| `--account-asset` | which demo account is selected, EUR or USD |
-| `--account-balance` | Balance |
-| `--account-leverage` | the account's own leverage, 30 |
-| `--spread-type` / `--commission-type` / `--swap-type` | cTrader's accurate-commission configuration — nothing to set per run |
-
-Common CLI flags: `--strategy Trend --provider Spotware --account-leverage 30 --spread-type Auto
---commission-type Auto --swap-type Auto --export --run FOLDER`, `--resolution` unset so `Auto`
-runs, and `--contract` pointing at the golden's `Contract.yml`.
-
-| # | Ticker | `--timeframe` | `--start` | `--stop` | `--account-asset` | `--account-balance` | The only cover for |
-|---|---|---|---|---|---|---|---|
-| 1 | EURUSD | `Hour` | 2023-01-01 | 2024-01-01 | EUR | 10 000 | `account == base` (`1/rate`); commission base **is** the account; raw volume clear of `VolumeMin`; the tick tape, auto-resolution and intrabar exits at roughly a thousand trades |
-| 2 | USDJPY | `Hour` | 2023-01-01 | 2024-01-01 | EUR | 10 000 | third currency with a **non-USD quote**; the only 3-digit, 0.01-pip contract of the seven |
-| 3 | EURUSD | `Hour` | 2023-01-01 | 2024-01-01 | **USD** | 10 000 | **`account == quote`**; commission base is not the account |
-| 4 | USDJPY | `Hour` | 2023-01-01 | 2024-01-01 | EUR | **1 000 000** | raw volume clearing `VolumeMin` on a 3-digit pair — the full volume distribution 5.2 needs |
-| 5 | EURUSD | `Daily` | 2015-01-01 | 2026-01-01 | EUR | 10 000 | eleven years: **swap accumulation over long holds**, the D1 auto-resolution path, the 2016-01-11 to 2016-01-25 hole, every DST transition, a position open at the stop date (5.6) |
-
-**Why four of five are `Hour`:** conversion, sizing, spread, commission and intrabar exits are
-timeframe-independent, so hourly buys a thousand trades to compare instead of a few dozen. **Why run 5
-stays `Daily`:** swap accrues per 24-hour period, so a swap error scales with hold duration, not trade
-count. **Why not the other four majors:** GBPUSD, NZDUSD, USDCAD and USDCHF are structurally identical to
-run 1 or 2. **Two optional additions:** `AUDUSD Daily 2023 EUR 10 000`, the only major with a positive
-`SwapLong` (+0.105 against EURUSD's -2.445), proves a swap credit is credited; `USDJPY Hour 2023 EUR 10 000` puts the 3-digit contract
-under run 5's density.
-
-**What the Phase 3 switch did to this set** (`Tests/Golden/RESIDUALS.md`, "The switch"): runs 1, 3 and 5
-and the DDPG golden moved, runs 1 and 3 to within 6 and 11 EUR of cTrader; runs 2 and 4 are refused until
-EURJPY is in the tape, because their conversions are now rebuilt from EURJPY's own ticks rather than read
-from columns the cBot filled.
-
-**Compared:** `trades`, `positions`, `orders` and `deals`, byte for byte. `net.csv` is excluded by
-design. Pass `--run FOLDER` and **commit the folders** — the 2026-07-05 set was lost because it never
-entered git.
-
-### 5.14 Restore `PriceMode.Mid`, exactly
-
-Removed at the Phase 3 switch with the stored `Mid` column; wanted back (2026-09-25) as long as it is
-exact. Gap, open and close mids are exact already (`tick.Mid`: both sides come from one tick). A bar's
-mid high and low are not derivable from its two-sided points — the highest mid can fall on a tick that is
-neither the highest ask nor the highest bid, so `(HighAsk + HighBid) / 2` overstates it. Exact means a
-third tick per extreme point: `TapeAPI.bars` finds `HighMid` and `LowMid` (argmax and argmin of ask + bid,
-first occurrence, summed per work slice so no tape-sized temporary), `PointAPI` gains `MidTick` (the same
-object as the other two on gap, open and close), and `materialize`, `_row_to_bar_` and `SeriesAPI` (`Price`
-in `Mid` mode) follow. The Connector's bar tracks both extremes and sends nine ticks instead of seven, so
-this ships with 5.10-5.12 in the 5.13 session — one rebuild for every wire change. `Mid` returns as 1,
-the slot its removal left (`Ask` 0, `Bid` 2). Nothing selects a `PriceMode` today (`MarketAPI` defaults to
-`Bid`), so decide in the same change how a strategy picks one, and measure the hot-path cost: two more
-ticks per bar in `_row_to_bar_`, two more tick groups in `materialize`.
-
----
-
-## Phase 6 — Optimization and Learning
+## Phase 7 — Optimization and Learning
 
 Goal: out-of-sample strength that survives scrutiny, and a walk-forward protocol that is what it claims to
 be. Thesis iteration two.
 
 **Done.** Record the observation order with the weights (2026-09-17) — every `DDPGStrategyAPI.save()`
 writes `Observation.json` and `load()` refuses a different layout; the champion and the DDPG golden are
-backfilled (`RULES.md`, "Parameter key order is an input").
+backfilled (`RULES.md`, "Parameter key order is an input"). Optimization and Learning verified end to end and
+eight defects fixed (2026-09-29, `RULES.md`, "Optimization and Learning are verified end to end").
+
+### 7.0 The thesis campaign — decided 2026-09-29
+
+The final campaign, `Script/Campaign/` (`NAME` "DDPG 2026-09"). One model per major, trained and selected so that
+2025 stays out of sample; results are read test ≫ validation ≫ full range.
+
+| Item | Decided |
+|---|---|
+| Split | 2015-01-01 → 2026-01-01; rolling 36-month training, 12-month validation (75/25) → seven folds validating 2018-2024; test 2025; `--continuous`, election `Last` |
+| Account | USD for all seven, 10 000, 1 % risk, leverage 30, netting |
+| Recipe | the DDPG `Defaults` (`RULES.md`); 20 episodes a fold; mirror 0.50; gates activity 10 · balance 300 · ratio 0.30; fitness annualised Calmar; `--threads 1` |
+| Costs | real tick spread; commission 3.5 USD a lot a side (`Lots`); swap-free, with a swap sensitivity table |
+| Training costs | a canary A/B on GBPUSD and EURUSD, paired seeds: A trains on the spread with hysteresis 0 (the recipe), B on the full costs with hysteresis 0.20; the arm is chosen on validation |
+| Seed selection | the seven validation years only, under the full costs: gates (profitable, beats the pair, weaker side ≥ 10 % of active time, mean hold ≥ 24 bars, regime above its own null), then a money · safety · behaviour composite preferring low beta; 2025 is opened once per pair |
+| Reproducibility | the commit and packages in every `Run.json`; the nightly environment upgrade paused; one winning seed per pair retrained byte for byte at the end |
+| Hardware | one job at a time, about 20 workers (1.2 GB each plus 5 GB a run), a 6 GB free-memory floor |
+| Deliverables | the draft's figures and tables regenerated as PDF for `Papers/2026-MEIC-DDPG-FX-Majors`, plus the walk-forward table, the validation stitch, 2025 against the pair and US500, the signal chart and the deal map; the equal-weight basket computed afterwards by script (9.14 is the engine feature) |
 
 ### Rules that bind every item in this phase
 
@@ -618,14 +161,14 @@ Each of these cost a wasted campaign or a wrong conclusion. Apply before believi
   `PositionMode` or the sizing settings, so arms become indistinguishable unless the sweep results carry
   them.
 
-### 6.1 Purging and embargo at fold boundaries
+### 7.1 Purging and embargo at fold boundaries
 
-Golden 19 has an average hold of **537 days**. A naive train/test boundary leaks badly — a position opened
-inside training and closed inside validation puts future information on both sides. This is the strongest
-methodological criticism available to a reader of the thesis, and it is fixable. Purge the training
-window of any sample whose label horizon crosses the boundary, then embargo a band after it.
+`--purge` and `--embargo` exist (days trimmed from each training window's end, days skipped after each
+validation window), and in this engine a fold cannot leak through a position: every training and validation
+window is its own backtest, started flat and settled at its stop, so no position crosses a boundary (checked
+2026-09-29). What is left is to state that in the thesis and to report the purge used.
 
-### 6.2 Probability of backtest overfitting and a deflated Sharpe
+### 7.2 Probability of backtest overfitting and a deflated Sharpe
 
 **The overfitting budget compounds; it does not reset per stage.** Staging turns a product into a sum —
 6, 2, 2, 1 is 24 combinations flat but 11 staged — and coarse-to-fine turns a sweep into a funnel, so both
@@ -633,7 +176,7 @@ genuinely cut trials. But stage three is conditioned on winners already fitted t
 effective trial count is the **accumulated total across every stage, round and fold**. A run already
 records that number, so the deflated metric can be computed against the real one.
 
-### 6.3 True walk-forward with `--continuous`, reported honestly
+### 7.3 True walk-forward with `--continuous`, reported honestly
 
 Continuity makes folds path-dependent — every fold starts near the previous winner — so `Frequency`
 election becomes near-tautological. With `--continuous`, `Last` or `Mean` is the honest choice, and the
@@ -641,12 +184,12 @@ run must record which it used. `SplitAPI.walk_forward_folds` takes the single-sp
 `training <= 0` rather than entering the rolling loop. A fold's model is scored on its **validation**
 window, never its training window, and the held-out `--testing` pass is the only unbiased number.
 
-### 6.4 One untouched holdout, used exactly once
+### 7.4 One untouched holdout, used exactly once
 
 Structural discipline rather than code. Decide the window now, write it down here, and do not look at it
 until the campaign is otherwise finished.
 
-### 6.5 A real risk-free rate curve
+### 7.5 A real risk-free rate curve
 
 `--risk-free` is a single constant applied across every ratio and Jensen's alpha — and since 2026-09-17 it
 reaches Learning and its workers too. A constant is wrong over 2014 to 2026 — it flatters every ratio in
@@ -655,7 +198,7 @@ right reference for a EUR account, published daily, free. Store it as a dated se
 data and have the statistics read the rate in force at each period. Keep the flag as an override for
 reproducibility.
 
-### 6.6 Search beyond three free parameters
+### 7.6 Search beyond three free parameters
 
 TPE or random search once the space exceeds three free dimensions; the grid stops being the right tool
 there. **The trap that would silently corrupt every sweep:** `DatasetAPI` carries `IndicatorResults`.
@@ -665,9 +208,9 @@ candidate's indicators — the sweep completes, produces plausible numbers, and 
 the market-data tape, always `inject(replace(tape, IndicatorResults=None))`. Do **not** warm every
 candidate to the grid's worst-case window (`RULES.md`).
 
-### 6.7 Re-run the seven-pair campaign on the corrected engine
+### 7.7 Re-run the seven-pair campaign on the corrected engine
 
-The output of Phases 3 and 5, and the input to thesis iteration two. Single-threaded so it is exactly
+The output of Phases 3 and 6, and the input to thesis iteration two. Single-threaded so it is exactly
 reproducible. Compare against `CAMPAIGNS.md` (section 1.2) pair by pair and write down what moved and why;
 rebuild the evaluation methods it specifies (section 8) in `Library` first, since the campaign's own
 harnesses were deleted with `Research/`.
@@ -677,15 +220,15 @@ differing roughly thirty-fold, which a reader of a tick-derived result needs to 
 Then decide, on evidence, whether iteration two replaces iteration one. If the corrected engine produces
 weaker numbers, that is a finding worth stating, not a result worth hiding.
 
-**Three claims iteration one could not make. Items 6.1 through 6.4 exist to earn them.**
+**Three claims iteration one could not make. Items 7.1 through 7.4 exist to earn them.**
 
 1. **It was not walk-forward and not continuous.** The invocation was `--training 0 --validation 12
    --testing 12`, which takes the `training <= 0` branch and produces **one** split: train 2015-01 to
    2024-01, validate 2024-01 to 2025-01, test 2025-01 to 2026-01. Iteration two must pass `training > 0`
-   and `--continuous`, and 6.3 says how to elect honestly once it does.
+   and `--continuous`, and 7.3 says how to elect honestly once it does.
 2. **There was no genuinely held-out evaluation.** The campaign's evaluator scored over the full 2015-01-01 to
    2026-01-01, which contains the nine training years. Iteration one states this as a limitation and must
-   never sell it as train/validate/test rigour. 6.4 is what fixes it.
+   never sell it as train/validate/test rigour. 7.4 is what fixes it.
 3. **"Ten-plus years of data" is not a differentiator.** Across the 18 surveyed articles, 12 already use
    ten years or more, at a median span of 11. What *is* distinctive is resolution over that span: only
    Carapuço and co-authors use tick data, over seven years. Claim tick-derived data across 11 years and
@@ -695,7 +238,7 @@ weaker numbers, that is a finding worth stating, not a result worth hiding.
 path-robustness protocol is 9 900 / 10 000 / 10 050 / 10 100 / 10 200, and every pair came back
 robust-positive five times out of five. Alpha leads, not return, because in every pair the highest-return
 candidate failed the permutation test. USD/JPY is a documented negative — beta +1.012, alpha -1.07% a year
-— and after 5.2 and 5.3 it is the pair most likely to move. The regime null is per-model, not a constant.
+— and since Phase 6 fixed its sizing it is the pair most likely to move. The regime null is per-model, not a constant.
 
 **Two facts about the delivered agent that were each got wrong at least once — read the source, do not
 restate these from memory.** Gradient clipping at norm 1.0 on both critic and actor is **not** an
@@ -709,11 +252,11 @@ override appended (`CAMPAIGNS.md` section 4). Always read the manifest.
 
 ---
 
-## Phase 7 — Web app
+## Phase 8 — Web app
 
-Opened by 7.0, which is where the data comes from. The credential page already exists (Phase 1).
+Opened by 8.0, which is where the data comes from. The credential page already exists (Phase 1).
 
-### 7.0 Research schema — DB-only inputs and outputs
+### 8.0 Research schema — DB-only inputs and outputs
 
 **Moved from Phase 3 on 2026-09-24:** it stores research results, not market data, so it no longer
 gates the market-data service; the pages of this phase are its first consumer.
@@ -754,7 +297,7 @@ the YAML tree — and the contract snapshot (`Input/Contract.yml`) belongs in th
 4. Learning: `.episode(...)` per episode, replacing log parsing; `.manifest`; `.weights` at completion.
    Parallel seed workers need the rid in their payload. Weight loading moves to a Model UID plus
    `materialize()` into the local cache.
-5. Retire the CSV export once the DB path is verified (7.6).
+5. Retire the CSV export once the DB path is verified (8.6).
 
 **Measured gotchas**
 
@@ -786,28 +329,28 @@ matching bar counts; a one-seed one-episode Learning run records episodes, store
 `promote()` plus `materialize()` round-trips byte-identically in torch; the full suite is green; and the
 DDPG consistency golden still replays.
 
-### 7.1 Move the pages onto the Research schema
+### 8.1 Move the pages onto the Research schema
 
 `Library/Web/Research/` reads run rows and result series instead of parsing artifacts. A result detail page
 renders an immutable artifact and therefore **does not poll** — polling re-mounted the grid and discarded
 sheet tabs and chart zoom.
 
-### 7.2 Profit, risk and ratio columns on `/backtesting` rows
+### 8.2 Profit, risk and ratio columns on `/backtesting` rows
 
-Build as a DB read once 7.0 lands, never by re-parsing each run's stored artifacts.
+Build as a DB read once 8.0 lands, never by re-parsing each run's stored artifacts.
 
-### 7.3 Signal and plot refactor
+### 8.3 Signal and plot refactor
 
 Direction and Volume signal on the Strategy **base** class; thresholds default **off** and one-sided
 capable; eight toggleable lines; `Parameter` returns None for a missing key; a `--plot` hardcode audit;
 optional markers and a deal map. **Land it as a no-op first, prove the suite and the goldens, then tune
 the bounds.**
 
-### 7.4 Payload thinning on one shared time grid
+### 8.4 Payload thinning on one shared time grid
 
-See the measured note in 7.0. This is what makes an 11-year H1 run openable in a browser at all.
+See the measured note in 8.0. This is what makes an 11-year H1 run openable in a browser at all.
 
-### 7.5 iPad pass
+### 8.5 iPad pass
 
 `Library/Web` is used from a Windows desktop browser **and an iPad 12.9 inch**; both are first-class.
 
@@ -819,11 +362,11 @@ See the measured note in 7.0. This is what makes an 11-year H1 run openable in a
   is virtualized, so verify momentum scrolling behaves. Playwright emulates the viewport at 1024 by 1366
   CSS pixels.
 
-### 7.6 Retire the CSV export
+### 8.6 Retire the CSV export
 
-Once 7.0 is verified end to end.
+Once 8.0 is verified end to end.
 
-### 7.7 Known and unfixed
+### 8.7 Known and unfixed
 
 - An ordinal pane with very few points does not fill the width — a three-fold generalization chart leaves
   space at the right edge. Lightweight clamps bar spacing and setting it explicitly is overridden.
@@ -833,33 +376,38 @@ Once 7.0 is verified end to end.
 
 ---
 
-## Phase 8 — Remaining
+## Phase 9 — Remaining
 
-### 8.1 Logging
+### 9.1 Logging
 
 `StorageAPI` is unit-tested against a fake record but has never been exercised against a live Postgres run
 end to end, and the Scheduler still writes durable rows through `ExecutorAPI._open_log_`. Close both.
 Measured dead end, do not retry: a drain thread for the console and file sinks. Async is a per-sink
 property — console and file synchronous, `StorageAPI` not.
 
-### 8.2 Realtime hardening
+### 9.2 Realtime hardening
 
 Audited 2026-07-02, needs a cTrader session: transport hardening; the watchdog is armed only on `Init`;
 no hung-peer timeout. The three buffer defects of that audit — warmup bars double-added to the market
 buffer, `BufferAPI._worker_` deadlocking on a flush when connect fails, an unused universe buffer — go
-with `BufferAPI` in 4.4.
+with `BufferAPI` in 5.6.
 
-### 8.3 Strategy state recovery
+### 9.3 Strategy state recovery
 
 Persist Signal and Risk machine state across a Live restart — `SessionAPI.State` bytes, loaded at
 `deploy()`, saved on `Shutdown`.
 
-### 8.4 Test coverage gaps
+### 9.4 Test coverage gaps
 
 `Statistic` 1 file for 1889 lines; `Scheduler` 1 for 1700; `Model` 2 for 1654; `Web` 3 for 3449; `Auth` 1
 for 460; `Indicator` 4 files for 43 modules.
 
-### 8.5 Dead surface
+**A race in `Tests/Scheduler/test_Access.py::test_a_runner_whose_run_was_closed_elsewhere_stands_down`** — it
+failed once under a full-suite load on 2026-09-28 and passed alone three times: the test closes the run as soon
+as the child has written its marker, and under load that close can land before the runner's own row exists.
+Wait for the row, not the marker.
+
+### 9.5 Dead surface
 
 Zero callers outside the package `__init__`. Delete, or keep deliberately as a library offering.
 
@@ -874,7 +422,7 @@ earlier listing here:** `string_to_datetime` (`Web/Core/Artifact.py` parses run 
 Called only by their own tests (rechecked 2026-09-17 across `.py`, `.js`, `.sql`, `.yml`, `.cs`):
 `Typing` `hasmember`, `hasmethod`, `getmethod`, `hasproperty`, `getproperty`; `Runtime`
 `find_caller_module`, `find_caller_class`, `find_caller_package`; `DataclassAPI.tuple` and `list`.
-`DataclassAPI.fields` and `json` have no caller at all — deleting those four also settles 8.6's note that
+`DataclassAPI.fields` and `json` have no caller at all — deleting those four also settles 9.6's note that
 they forward seven keyword arguments.
 
 `Portfolio.py` the five statics that remain of the original 16: `pull_accounts` and `push_accounts`,
@@ -899,12 +447,12 @@ Slashed, Underscored; `Timeframe.Hours`. Plus about 25 `@overridefield` Position
 `Database.structured`, `ManagerAPI.delete_run`, `ManagerAPI.retained`, `OptimizationAPI.trials`,
 `BrownianNoiseAPI`, `GeometricBrownianNoiseAPI` (no factory; DDPG hardcodes OU), the empty
 `Sources/Plugins/Plugin`, and `Requirements.txt` at 0 bytes. `Sources/Indicators/Connector/Connector.cs` is
-still the cTrader hello-world template — Phase 9 either makes it real or it goes.
+still the cTrader hello-world template — Phase 10 either makes it real or it goes.
 
 `Library/Formulas/` stays — an xlwings Excel UDF feature with zero callers that you intend to renovate.
 The `xlwings` pin stays with it.
 
-### 8.6 Simplifications
+### 9.6 Simplifications
 
 Behaviour-preserving, provable by AST body hash plus the suite and the goldens.
 
@@ -947,7 +495,7 @@ Behaviour-preserving, provable by AST body hash plus the suite and the goldens.
   imports `json` inside three; comments appear in seven test files; the `test_Sizing.py` derivations could
   move into the assertions; `Tests/Benchmark/IPC.py` is a benchmark script living under `Tests/`.
 
-### 8.7 Blocked
+### 9.7 Blocked
 
 - **Huge pages for Postgres — yours.** They need the Windows privilege *Lock pages in memory* for
   `NT AUTHORITY\NetworkService` (`secpol.msc` → Local Policies → User Rights Assignment), then a restart
@@ -956,14 +504,13 @@ Behaviour-preserving, provable by AST body hash plus the suite and the goldens.
 - **`Script/Install.py` and `Script/Task.py` both define `provision()`** — different modules, different
   jobs, no collision today. Rename one if it ever confuses.
 
-### 8.8 Measured but not taken — the 2026-09-17 hard pass
+### 9.8 Measured but not taken — the hard passes of 2026-09-17 and 2026-09-28
 
 Each was measured, each left the goldens byte-identical in a throwaway process, and each was left out for
 the reason given. Take them with the golden gate in hand.
 
 | Opportunity | Measured | Why not yet |
 |---|---|---|
-| Optimization and Learning reconnect to Postgres for every candidate | 19-22ms per candidate, 0 queries sent on a warm replay | Making `_db_` lazy moves when a bad connection surfaces; wants a deliberate design |
 | `_build_intra_arrays_` gathers 18 arrays from the tape per candidate | 6-11ms per 369k M1 rows before Phase 3 | A scope-keyed memo is wrong for Learning's mirrored tapes, which share the scope but not the prices |
 | Whole-table polling fingerprint (`n_tup_*` on `Scheduler.Run`) | Service heartbeats every 15s make every open page rebuild: research pages ~every 15s, Scheduler pages ~every 20s | A narrower token (0.4-2.9ms, filtered `COUNT(*)` + `MAX`) must still catch Progress and Status without catching service beats |
 | 78 KB of the 135 KB index page is duplicate inline JS (87 inline scripts, 33 distinct) | first load only | The fix is `dash.Dash._inline_scripts`, a private attribute Dash drains at index time. Not worth coupling the composition root to it |
@@ -973,7 +520,7 @@ the reason given. Take them with the golden gate in hand.
 | `None` where `RULES.md` wants `MISSING` | — | `LoggingAPI.install(logger)`, `StorageAPI.attach(source, path)`, `BufferAPI(db)`, `find_caller_frame(skip)`, `MarketAPI.pull_bars(start, stop)`, `System._transition_(start)`, `_label_(suffix)`, `Strategy._emit_(raw)`, `Backtesting._stitch_(equity)`. Each needs its body read, not a blind swap |
 | `Library/Statistic/Composition.py` wraps 21 calls across lines with several arguments each | — | `RULES.md` says one line or one name per line; mechanical but large |
 
-### 8.9 Move the `Data` tier under OneDrive
+### 9.9 Move the `Data` tier under OneDrive
 
 **Moved from Phase 3 on 2026-09-24** — a storage-tier question, not the market database.
 
@@ -992,16 +539,62 @@ atomic. Also open: whether `inspect_root()` stays derived with only `Data` redir
 for `Data/Models`, since roughly 1 100 wave-archive models (about 110 MB) are search byproduct; and a
 per-machine namespace if two machines ever sync the same `Data`.
 
-### 8.10 Exercise the authorization-code sign-in once
+### 9.10 Exercise the authorization-code sign-in once
 
 From Phase 2: `Script/Setup/Spotware.py` signs a cTrader ID in through the browser, and has never run
 end to end — the playground's tokens made it unnecessary, and the refresh grant has kept the token alive
 since. It is the only way back if the refresh chain ever breaks. With the https redirect it runs in paste
 mode; a `/openapi/callback` page on the web app would make it one click.
 
+### 9.11 Replace the WSGI bridge before Starlette drops it
+
+Found 2026-09-26, the suite's one third-party warning: Starlette deprecated `starlette.middleware.wsgi`,
+which `fastapi.middleware.wsgi` re-exports and both `App/V1/App.py` and `App/V2/App.py` mount the Dash
+server through. Nothing is pinned, so the release that removes it fails every web import — the updater's
+suite catches it on the candidate and keeps the live environment, but every upgrade after it is blocked
+until the bridge moves to `a2wsgi`, the named replacement.
+
+### 9.12 Data workflow follow-ups
+
+Moved from Phase 5 when it closed, 2026-09-28; each needs a date or an event that has not come yet.
+
+- **The calendar's Sunday evening.** A Monday week reads both Forex Factory pages it spans since
+  2026-09-28; confirm on the first Sunday evening after (2026-10-04) that the NZD, AUD and JPY actuals land
+  within a minute or two of release.
+- **`SwapTime` at the clock changes** (2026-10-25 Europe, 2026-11-01 US). The engine reads Spotware's 1259 as
+  minutes after 00:00 UTC, fixed all year — the winter positions of the `Test` goldens proved cTrader rolls at
+  20:59 UTC in winter as in summer (2026-09-29). Confirm the row does not move at either change; if it does,
+  the Universe service records a dated row and `ContractAPI.rolls` follows it.
+- **A 24/7 security and the repeated hour.** `TapeAPI.bars` buckets on New York time, so the hour New York
+  repeats when its clocks go back is one bucket and an H1 bar there holds two hours; the first weekend-trading
+  security tracked (a crypto pair, an index CFD) must choose between one long bar and two bars sharing a label.
+- **The live tape's tail latency.** Measured 2026-09-28 17:55 UTC on a quiet database, five minutes on EURUSD,
+  GBPUSD and USDJPY with every Phase 5 fix live: a tick reaches its row in 2.0-2.5 s at the median, but 11-13 s at
+  p90 and up to 22 s, with none missing — the median is near the one-second gate, the tail is not. The causes
+  found so far (whole-hypertable deletes, generic plans, compression stalls) are fixed; find the periodic 10-20 s
+  stall (a worker's poll cycle, a refusal backoff, a background job) with a per-worker timeline, then re-measure.
+- **The mirror after a week offline.** With the PC off for a week and demo trades placed meanwhile, the next
+  logon backfills the tape first and then the mirror with correct derived fields. Verified over a nine-hour
+  outage (the crash of 2026-09-28 05:17 UTC): the tape resumed, and every derived trade equals the tick truth.
+
+### 9.13 Indicator streaming
+
+Profiled on the DDPG golden, 2026-09-29: the engine's own Phase 6 code is not a hotspot; the largest cost is
+`Technical.update_data`, whose `_scalar_` builds a one-row Polars frame per indicator per bar — about 39 of 90 s
+under cProfile (its overhead included). Update each indicator on numpy scalars instead, keeping its
+frame-building path for the warmup. Gate: every golden byte-identical, the DDPG golden included. Not Appendix
+A's ring buffer, which replaced `SeriesAPI`'s storage and was measured slower.
+
+### 9.14 Several securities and timeframes in one backtest
+
+Requested 2026-09-29. Today a backtest trades one security on one timeframe, and a portfolio of models is
+built afterwards from their separate equity curves (the thesis basket). Let one run hold several securities,
+each on its own timeframe, on one account: one clock across the tapes, one balance and margin, and the
+portfolio statistics computed by the engine instead of by a script.
+
 ---
 
-## Phase 9 — Indicator connector
+## Phase 10 — Indicator connector
 
 `Sources/Indicators/Connector` is the untouched cTrader indicator template today. This is what it becomes:
 **a bridge that plots a Python-implemented indicator directly onto a cTrader chart, so it can be compared
@@ -1012,7 +605,7 @@ of every strategy in the framework — the DDPG feature bank alone is 16 indicat
 proven those implementations agree with the platform's. A silent disagreement in, say, `ATR` or `ER` does
 not crash anything; it quietly changes every observation the agent ever sees.
 
-### 9.1 The bridge
+### 10.1 The bridge
 
 Mirror the Robots connector rather than inventing a second mechanism: shared memory, single-slot
 request/response lockstep, the same `Protocol` vocabulary. An indicator needs bars in and a series out,
@@ -1021,7 +614,7 @@ must emit into both projects** once this starts; `OUTPUT_PATH` is a single hardc
 project today. The two `.algo` artefacts must always be generated from the same enum source, or the wire
 mis-decodes exactly as it would between mismatched robot builds.
 
-### 9.2 The comparison harness
+### 10.2 The comparison harness
 
 The point of the phase, and worth designing before the bridge:
 
@@ -1034,7 +627,7 @@ The point of the phase, and worth designing before the bridge:
 - Where the framework has no native counterpart, the comparison is against a hand-computed fixture
   instead, not skipped.
 
-### 9.3 Coverage
+### 10.3 Coverage
 
 Start with the DDPG feature bank, since those are the implementations carrying published results:
 `ATR 14`, `ER 120`, `RV 16/480`, the `SMA` family and the `ROC` family. Then the rest of
@@ -1048,16 +641,15 @@ counterpart with a difference pane, and the feature-bank indicators each carry a
 
 ---
 
-## Phase 10 — Live trading panel at `/trading`
+## Phase 11 — Live trading panel at `/trading`
 
 `Library/Web/Trading/Trading.py` is a 910-byte placeholder today. This phase replaces it with the console
 the framework is actually for. It consumes almost everything above it: broker sessions and tokens come
-from the credential store (1); per-tick updates need the Spotware session (done, Phase 2) and the market service (4) and
-the batch protocol (5.9); order actions need the four target-volume actions (5.11); a non-EUR account
-needs generic currency (5.4); a hedged account needs 5.5; surviving a restart needs 8.3; and the run and
-result surfaces it links into come from 7.0.
+from the credential store (1); per-tick updates need the Spotware session (done, Phase 2) and the market service (done, Phase 5);
+order actions, any account currency and both position modes are done (Phase 6); surviving a restart needs 9.3; and the run and
+result surfaces it links into come from 8.0.
 
-### 10.0 Parity with the cBot — `Live` over the Open API
+### 11.0 Parity with the cBot — `Live` over the Open API
 
 **Requested 2026-09-24.** Everything the Connector cBot and `RealtimeAPI` do in `Live` must be doable
 through `Library/Spotware`: market data (ticks and bars, historical and live), every Protocol action
@@ -1102,7 +694,7 @@ slipped in.
 side, and the two update streams agree event by event — order, position, trade and bar — with every
 difference named.
 
-### 10.1 The transport seam
+### 11.1 The transport seam
 
 Every other page either polls on a timer or renders an immutable artifact. **A live panel is neither.**
 It needs push, and it needs to stay correct when push drops.
@@ -1112,29 +704,32 @@ It needs push, and it needs to stay correct when push drops.
   ceiling and a return path — verify with a soak where `pg_stat_activity` plateaus.
 - Degrade explicitly. If the push channel drops, the panel says so in the header and falls back to a slow
   poll — never silently shows stale prices as though they were live.
+- **Share a subscription between streams** before two consumers need one symbol: `SpotwareAPI._listen_`
+  subscribes and unsubscribes per stream, so the first one's exit removes the server's subscription for both.
+  Count listeners per symbol and unsubscribe on the last (found 2026-09-25, moved from Phase 5).
 
-### 10.2 Account header
+### 11.2 Account header
 
 Balance, equity, margin used, free margin, margin level, unrealized P&L, and open exposure broken out by
 currency. Equity and margin level update per tick; balance only on a closed deal. Margin level gets a
 status treatment — good, warning, serious, critical — with an icon and a label, never colour alone.
 
-### 10.3 Position and order blotters
+### 11.3 Position and order blotters
 
 Two virtualized `LightweightTableAPI` grids. **Positions:** symbol, side, volume, entry price, current
-price, stop loss, take profit, swap, commission, spread paid (5.1), gross and net unrealized P&L,
+price, stop loss, take profit, swap, commission, spread paid (`SpreadPnL`), gross and net unrealized P&L,
 duration, and the strategy that owns it; row actions modify stop and target, close partially, close
 fully. **Orders:** symbol, side, type, volume, limit or stop price, expiry, state; row actions modify,
 cancel. Both need a totals row computed server-side, not summed in the browser from a thinned payload.
 
-### 10.4 Order ticket
+### 11.4 Order ticket
 
-Market, limit and stop, with the volume field driven by the **same** sizing path the engine uses — after
-5.2 and 5.3 there is exactly one correct sizing formula and this ticket must call it. Show the derived
+Market, limit and stop, with the volume field driven by the **same** sizing path the engine uses — since
+Phase 6 there is exactly one correct sizing formula and this ticket must call it. Show the derived
 risk in account currency and as a percentage of balance before the button is armed. Stops and targets
 accept pips or price, and convert visibly.
 
-### 10.5 Strategy control and the kill switch
+### 11.5 Strategy control and the kill switch
 
 Which strategies are deployed, on which securities and timeframes, what state each Signal and Risk machine
 is in, and how long since the last update. Per-strategy start, stop and flatten.
@@ -1145,22 +740,22 @@ that moment: the live session already holds its resolved token in memory, and th
 session. Confirm destructively, and log the outcome where `Run.log` will capture it even if the process
 dies immediately after. Mutations are `Editor` and above through the existing router gate.
 
-### 10.6 Live chart
+### 11.6 Live chart
 
 One Lightweight chart per watched security: price, the open position with its entry, stop and target as
-price lines, and fill markers as they arrive, with the live signal tape from 7.0 as its own pane. Reuse
+price lines, and fill markers as they arrive, with the live signal tape from 8.0 as its own pane. Reuse
 `Library/Statistic/Workspace.py` for the spec, so the same definition serves the panel and the backtest
 view.
 
-### 10.7 Connection health
+### 11.7 Connection health
 
 Connector state, last heartbeat, tick latency, ticks a second, reconnect count, the current subscription
 per strategy, and the token's expiry from the credential store. The panel that answers "is it actually
 running".
 
-### 10.8 iPad
+### 11.8 iPad
 
-The whole panel is subject to 7.5, and more strictly: blotter rows need touch-sized targets, the order
+The whole panel is subject to 8.5, and more strictly: blotter rows need touch-sized targets, the order
 ticket must be usable one-handed, and the kill switch must be reachable without a precise tap.
 
 **Done when:** a Simulation deployment drives the full panel end to end — positions open and close, orders
@@ -1169,7 +764,7 @@ demo account, with the push channel deliberately severed mid-session to prove th
 
 ---
 
-## Phase 11 — Interactive Brokers provider
+## Phase 12 — Interactive Brokers provider
 
 **Requested 2026-09-15.** A second broker adapter in the shape of Spotware, standalone, with no provider
 base class (Appendix B). Its login lives in the credential store from the first line (rule 4). What it
@@ -1183,14 +778,18 @@ changes, to be verified against its current documentation before design:
 - **Historical pacing.** It documents strict limits on historical data requests — a poor bulk tick-history
   source and a good live-and-reference source.
 - **Options chains and greeks.** One of the few retail-accessible sources for listed option chains, which
-  is what makes this phase the data gate for Phase 12.
+  is what makes this phase the data gate for Phase 13.
+
+**Cross-provider tickers.** Brokers name one instrument differently (`GERMANY 40`, `GER40`); a second
+provider needs a mapping onto one ticker before its securities can share the framework's `Ticker` rows
+(moved from Phase 5).
 
 **Done when:** the provider fetches reference data, historical bars and a live stream for at least one
 security per asset class it supports, with its own suite green.
 
 ---
 
-## Phase 12 — Option strategy pricer and backtester
+## Phase 13 — Option strategy pricer and backtester
 
 **Requested 2026-09-15.** A new asset class for the framework. **The data gate comes first:** cTrader lists
 no vanilla options, so chains come from Bloomberg — already integrated — or from Interactive Brokers.
@@ -1212,6 +811,24 @@ to `RULES.md` at that point.
 
 **Done when:** the pricer reproduces reference values for European and American vanillas and their greeks,
 and a multi-leg strategy backtests across at least one expiry cycle with exercise handled.
+
+---
+
+## Phase 14 — Free-threaded Python
+
+**Requested 2026-09-26:** investigate whether the framework can move to a free-threaded (no-GIL) CPython.
+The motivation is measured here: every row-wise path stalls near 1.3 M rows a second on the GIL, the tape
+decode and the bar build use threads only where numpy releases it, a CPU-bound Python thread starved a
+concurrent log writer 253×, and Optimization and Learning pay for processes — spawn, imports, shared memory —
+to get parallelism at all. `Future.yml` already maintains a Python 3.14 free-threading environment to try it
+in.
+
+Answer, with measurements: which dependencies ship free-threaded wheels (numpy, polars, torch, psycopg,
+Twisted, Dash …); how much single-thread speed the free-threaded build costs on the engine's hot path;
+whether the tape decode, the bar build and the engine scale with threads once the GIL is gone; and whether
+Optimization and Learning could run their candidates and seeds on threads instead of processes.
+
+**Done when:** a written verdict with those measurements, and a migration plan or a stated reason not to.
 
 ---
 
@@ -1282,15 +899,17 @@ and a multi-leg strategy backtests across at least one expiry cycle with exercis
 | `timestamptz`, with the server and every session pinned to `UTC`, converted at the driver | the column declares an absolute instant; the driver loads it back as naive UTC, so `RULES.md`'s one in-memory convention stands and every export stays byte-identical. Emitting aware datetimes framework-wide would touch every `utc_now()` caller, Polars dtype and CSV stamp for nothing the column type does not already give |
 | The tick hypertable is partitioned on `UID` | keeps the primary key and the existing `UID`-range reads; one chunk per security-month |
 | No shared provider base class until many providers pull genuinely different data | decided 2026-09-15; an attempt (`Library/Provider`, `ResultAPI`, `ServiceAPI._listen_`) was built and stripped because none of it had a production caller |
-| `Auto` stays the default resolution and must equal `Tick` byte for byte | a lossless optimization; since 2026-09-25 equal by construction, the gate asking the tick filter's own question of the bar's extremes (5.0) |
-| DB-first for 7.0, no CSV interim | the backend must be touched anyway to capture equity and signals |
+| A block-extremes index over the tape for long-bar segments | About 5 % of a warm D1 decade (0.73 s), 2026-09-28 | New machinery for a small share; a D1 bar holds about 70 000 ticks and the scan already reads only the sides the open positions need |
+| `_row_to_bar_` built lazily | Eager today | The dataset is memoised across candidates, so an eager build is paid once per scope |
+| `Auto` stays the default resolution and must equal `Tick` byte for byte | a lossless optimization; since 2026-09-25 equal by construction, the gate asking the tick filter's own question of the bar's extremes (Phase 6) |
+| DB-first for 8.0, no CSV interim | the backend must be touched anyway to capture equity and signals |
 | Weights in the DB as bytea, with `materialize()` | self-contained and atomic with results; nets are kilobytes to megabytes |
 | Reuse the Scheduler executor, plus a `Task.Arguments` column | `ExecutorAPI` and `Runner` already own spawn, heartbeat leases, PID tracking, tree-kill, retry, peak RSS, reaping and log capture. `Research.Run` **references** a `Scheduler.Run` rather than reimplementing it, exactly as `Scheduler.Run` references `Logging.Log` |
 | `Library/Research` owns the domain | parameter snapshots, result series, headline metrics and `KeptAt` are research concepts the Scheduler must not learn |
 | Retention as a nullable `KeptAt` on the Run row | null means eligible for the 30-day sweep, set means retained with its full series |
 | `UpdatedAt` and `UpdatedBy` stay on every datapoint | part of the `DatapointAPI` contract; removing them would have to be a `Library/Database` capability |
 | Conversions rebuilt from full tick streams, not H1 bars | accuracy over convenience — by cTrader's direct-pair rule at run time, validated against the cBot's stored columns on 2026-09-24 (`RULES.md`, "Currency conversion") |
-| Market data comes from the Open API historical endpoint — bid and ask requested separately, merged on the millisecond, each side carried forward — fetched by one service | decided 2026-09-24: identical to the cBot's tape on thirteen windows, 2014-2025 (`RULES.md`, "Market data"). Live spots never enter the tape; they drive the live panel and 10.0 |
+| Market data comes from the Open API historical endpoint — bid and ask requested separately, merged on the millisecond, each side carried forward — fetched by one service | decided 2026-09-24: identical to the cBot's tape on thirteen windows, 2014-2025 (`RULES.md`, "Market data"). Live spots never enter the tape; they drive the live panel and 11.0 |
 | A tick is time, bid and ask, in UTC, keyed `security << 42 \| epoch_ms`, with its source named | no conversion columns (rebuilt at run time), no `Mid` (derivable); `Volume` null unless a provider reports sizes, the reader counting the sides that moved; no millisecond is shared in either source, so the key holds |
 | Bars are labelled by their own open, in UTC, every timeframe on the 17:00 New York clock | the platform's convention, verified against its trendbars at the switch (2026-09-25); the old tape's one-bar-early London label went with it |
 | The Spotware allowance is found by measurement, not by asking | decided 2026-09-24: spaced sends, per-connection limits and a stop at the first refusal on demo (`RULES.md`, "`Library/Spotware`") |
@@ -1299,6 +918,8 @@ and a multi-leg strategy backtests across at least one expiry cycle with exercis
 | The search space lives in a sibling `Optimization.yml` | it cannot live in `Backtesting.yml`, whose list arity is **structural** — `RiskPercentage: [1.0]` unpacks with `self._risk_percentage_, = ...` |
 
 ## Appendix C — Renumbering, 2026-09-18
+
+Numbers on the right are the 2026-09-18 scheme; Appendix D maps them to today's.
 
 References written before this date resolve here. Phases 0 and 1 are done and live in the Done log; Phase 0's
 session checklist and five runs (0.0, 0.1) moved into 5.13 on 2026-09-23.
@@ -1339,3 +960,15 @@ session checklist and five runs (0.0, 0.1) moved into 5.13 on 2026-09-23.
 | 4.2 capture service | 4.1 |
 | 4.3 close the tail | 4.2 — the whole history is refilled, not only the tail |
 | (new) | 3.7 the switch · 4.3 the calendar service |
+
+## Appendix D — Renumbering, 2026-09-26
+
+A phase was inserted for the database and engine optimization that followed Phase 3, and one appended.
+
+| Before | After |
+|---|---|
+| 4.0-4.6 the market services | 5.0-5.6 |
+| 4.7 drop the vendor package | 4.2 |
+| Phase 5 (5.0-5.14) | Phase 6 (6.0-6.14) |
+| Phases 6 to 12 and their items | Phases 7 to 13, the same item numbers under the new phase |
+| — | 4.1, 4.3 and Phase 14, new |

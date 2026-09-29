@@ -2,6 +2,7 @@ import pytest
 import threading
 
 from Library.Database.Postgres import PostgresDatabaseAPI
+from Library.Database.Query import QueryAPI
 
 class MockCursor:
 
@@ -177,3 +178,22 @@ def test_scope_does_not_leak_across_threads(dialed):
             thread.join()
             assert seen[0] is not mine
     assert len(dialed) == 2
+def backend(db: PostgresDatabaseAPI) -> int:
+    return int(db.executeone(QueryAPI("SELECT pg_backend_pid() AS pid")).fetchall(legacy=False)["pid"][0])
+
+def terminate(pid: int) -> None:
+    with PostgresDatabaseAPI(database="Tests") as killer: killer.executeone(QueryAPI("SELECT pg_terminate_backend(:pid:) AS done"), pid=pid).fetchall(legacy=False)
+
+def test_a_connection_the_server_closed_is_replaced_on_the_next_call():
+    with PostgresDatabaseAPI(database="Tests") as db:
+        first = backend(db)
+        terminate(first)
+        with pytest.raises(Exception): db.executeone(QueryAPI("SELECT 1 AS one"))
+        assert backend(db) != first
+
+def test_a_lost_connection_inside_a_transaction_is_never_replaced_silently():
+    with pytest.raises(Exception, match="connection"):
+        with PostgresDatabaseAPI(database="Tests", autocommit=False) as db:
+            terminate(backend(db))
+            with pytest.raises(Exception): db.executeone(QueryAPI("SELECT 1 AS one"))
+            with pytest.raises(Exception): db.executeone(QueryAPI("SELECT 1 AS one"))

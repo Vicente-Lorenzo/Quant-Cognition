@@ -13,6 +13,7 @@ from Library.Utility.File import PruneAPI
 from Library.Utility.Memory import memory_to_string
 from Library.Utility.Path import inspect_cached, inspect_temporary
 from Library.Utility.Profiler import PROFILES
+from Script.Task import attempt
 
 _DAYS_: int = PruneAPI.DAYS
 
@@ -35,18 +36,16 @@ def prune_records(database: str = "Quant", days: int = _DAYS_) -> int:
 
 def main(database: str = "Quant", days: int = _DAYS_) -> int:
     with LoggingAPI() as log:
-        try:
+        def work():
             removed, reclaimed = prune_files(days=days)
             log.info(lambda: f"Retention Files: Completed · {removed} Files · {memory_to_string(reclaimed)} · {days} Days")
-        except Exception as error:
-            log.exception(lambda error=error: f"Retention Files: Failed · Due to {error}")
-            return 1
-        try:
-            records = prune_records(database=database, days=days)
-            log.info(lambda: f"Retention Records: Completed · {records} Rows · {days} Days")
-        except Exception as error:
-            log.warning(lambda error=error: f"Retention Records: Skipped · Due to {error}")
-        return 0
+            try:
+                records = prune_records(database=database, days=days)
+                log.info(lambda: f"Retention Records: Completed · {records} Rows · {days} Days")
+            except Exception as error:
+                log.warning(lambda error=error: f"Retention Records: Skipped · Due to {error}")
+            return f"{days} Days"
+        return attempt(log, "Retention", work, operation="Prune")
 
 if __name__ == "__main__":
     raise SystemExit(main())

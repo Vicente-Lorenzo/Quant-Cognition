@@ -1,17 +1,24 @@
 import pytest
 from datetime import datetime, timedelta, timezone
+
 import Library.Market
 import Library.Portfolio
 from Library.Portfolio.Order import OrderStatus, TimeInForce
 from Library.Spotware import SpotwareAPI, UniverseAPI, MarketAPI, StreamingAPI, PortfolioAPI
-from Library.Utility.Typing import MISSING
-from ctrader_open_api.messages.OpenApiCommonMessages_pb2 import ProtoMessage
-from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOAOrder, ProtoOAOrderType, ProtoOAQuoteType, ProtoOATimeInForce, ProtoOATradeSide, ProtoOATrader
-from ctrader_open_api.messages.OpenApiMessages_pb2 import (
-    ProtoOAApplicationAuthRes,
+from Library.Spotware.Messages import (
+    ProtoMessage,
     ProtoOAAccountAuthRes,
-    ProtoOAErrorRes
+    ProtoOAApplicationAuthRes,
+    ProtoOAErrorRes,
+    ProtoOAOrder,
+    ProtoOAOrderType,
+    ProtoOAQuoteType,
+    ProtoOATimeInForce,
+    ProtoOATrader,
+    ProtoOATradeSide
 )
+from Library.Utility.Typing import MISSING
+
 def test_initialization_defaults():
     api = SpotwareAPI(client_id="cid", client_secret="csec")
     assert api._client_id_ == "cid"
@@ -71,10 +78,10 @@ def test_send_raises_on_error_payload(monkeypatch):
     monkeypatch.setattr("Library.Spotware.Spotware.blockingCallFromThread", lambda reactor, function, *args, **kwargs: wrapped)
     with pytest.raises(RuntimeError, match="BAD · nope"):
         api._send_(object())
-def _throttled_(monkeypatch, answers):
+def _throttled_(monkeypatch, answers, code="BLOCKED_PAYLOAD_TYPE", description="You are being rate limited"):
     api = SpotwareAPI(client_id="x", client_secret="y")
     api._connection_ = type("Connection", (), {"send": None})()
-    throttle = ProtoOAErrorRes(errorCode="BLOCKED_PAYLOAD_TYPE", description="You are being rate limited")
+    throttle = ProtoOAErrorRes(errorCode=code, description=description)
     wrapped = ProtoMessage(payloadType=throttle.payloadType, payload=throttle.SerializeToString())
     replies, slept = iter(wrapped if answer is None else answer for answer in answers), []
     monkeypatch.setattr("Library.Spotware.Spotware.blockingCallFromThread", lambda reactor, function, *args, **kwargs: next(replies))
@@ -89,6 +96,14 @@ def test_send_gives_up_after_the_last_back_off(monkeypatch):
     with pytest.raises(RuntimeError, match="BLOCKED_PAYLOAD_TYPE · You are being rate limited"):
         api._send_(object())
     assert slept == [1, 2, 4, 8]
+def test_send_retries_the_tick_data_refusal_and_nothing_else_of_its_code(monkeypatch):
+    authed = ProtoOAApplicationAuthRes()
+    api, slept = _throttled_(monkeypatch, [None, ProtoMessage(payloadType=authed.payloadType, payload=authed.SerializeToString())], code="UNKNOWN_ERROR", description="Can't request tickdata")
+    assert type(api._send_(object())).__name__ == "ProtoOAApplicationAuthRes" and slept == [1]
+    api, slept = _throttled_(monkeypatch, [None], code="UNKNOWN_ERROR", description="Something else")
+    with pytest.raises(RuntimeError, match="UNKNOWN_ERROR · Something else"):
+        api._send_(object())
+    assert slept == []
 def test_disconnect_does_not_block_without_a_running_reactor():
     api = SpotwareAPI(client_id="x", client_secret="y")
     api._connection_ = object()
@@ -153,7 +168,7 @@ def test_on_message_swallows_subscriber_exceptions(spotware):
     spotware._on_message_(spotware._connection_, "dummy")
     assert calls == ["dummy"]
 def _offline_(monkeypatch):
-    connection = type("Connection", (), {"isConnected": True})()
+    connection = type("Connection", (), {"Connected": True})()
     monkeypatch.setattr(SpotwareAPI, "_connect_", lambda self, **kwargs: setattr(self, "_connection_", connection))
     monkeypatch.setattr(SpotwareAPI, "_disconnect_", lambda self: setattr(self, "_connection_", None))
 def test_of_builds_from_the_uniform_credential_keys():

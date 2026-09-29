@@ -207,7 +207,7 @@ def test_the_rounds_of_a_fold_share_one_pool_until_a_round_needs_a_wider_history
     engine._disconnect_ = lambda: None
     engine._payload_ = lambda start, stop, history, spans: {"History": history, "Spans": spans}
     engine._histories_ = lambda share, starts, window: {starts[0]: window}
-    engine._bars_ = lambda share, scopes: {scope: "Bars" for scope in scopes}
+    engine._shared_bars_ = lambda share, scopes: {scope: "Bars" for scope in scopes}
     engine._reach_ = lambda candidate: windows[candidate.index]
     def grid(*reaches: int) -> list:
         windows.update({index: reach for index, reach in enumerate(reaches)})

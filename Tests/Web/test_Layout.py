@@ -7,7 +7,7 @@ import pytest
 import Library.Web as Web
 from Library.Utility.Path import inspect_module
 
-_PACKAGES_ = ("Core", "Trading", "Research", "Strategy", "Scheduler", "Framework", "Service")
+_PACKAGES_ = ("Core", "Trading", "Research", "Strategy", "Scheduler", "Framework", "Database", "Service")
 _ROOT_ = inspect_module(Web.__file__)
 
 def test_every_page_lives_under_its_father_root(application):
@@ -19,7 +19,7 @@ def test_every_page_lives_under_its_father_root(application):
         expected = _ROOT_ if not father else _ROOT_ / father.capitalize()
         assert source.parent == expected, f"{endpoint} is declared in {source.parent.name}"
         checked += 1
-    assert checked == 24, f"only {checked} owned pages were checked"
+    assert checked == 27, f"only {checked} owned pages were checked"
 
 def test_declared_packages_all_exist():
     for name in _PACKAGES_:

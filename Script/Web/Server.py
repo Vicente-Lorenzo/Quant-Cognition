@@ -3,15 +3,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from waitress import serve
+from waitress import create_server
 
 from Library.Logging import LoggingAPI
+from Library.Utility.Progress import Phase, ProgressAPI
 from Library.Web.App import WebAppAPI
 from Library.Web.Service.Tray import TrayAPI
 
 def headless() -> None:
     app = WebAppAPI.build()
-    serve(app.app.server, host=app._host_, port=app._port_, threads=8, ident=TrayAPI._NAME_)
+    server = create_server(app.app.server, host=app._host_, port=app._port_, threads=8, ident=TrayAPI._NAME_)
+    ProgressAPI.phase(Phase.Running)
+    server.run()
 
 def main() -> None:
     TrayAPI.redirect(TrayAPI._LOG_)

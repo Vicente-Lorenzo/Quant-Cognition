@@ -24,7 +24,136 @@
 > Regenerating it needs a cTrader session, and `net.csv` is outside the gate, so the files stand as the
 > evidence that found the defects rather than as corrected output. `Offline/*/net.csv` is post-fix, and was regenerated on 2026-09-17 for the redefinition of "Net Return (%)" as Σ NetPnL / opening balance (13 return and ratio rows changed; the four byte-gated exports replayed identically), and again the same day when every equity row moved onto per-column curves (Buy and Sell equity drawdown, volatility and ratios; the per-bar ratios and `Risk-free Rate (%)` rows added, 90 rows in all). No number below depends on those rows.
 
-The five runs defined in `PLAN.md` §0.1, their artifacts, and the measured residual against cTrader.
+# The `Test` goldens — the cTrader session, 2026-09-29
+
+The five folders under `Online/` and `Offline/` are now the `Test` strategy's; the `Trend` goldens
+retired with this session and everything after this section records them (git history keeps their files). Each
+`Online/Golden N` is the cTrader backtest as run (its `Run.json`, the parameters and contract terms it recorded, its
+exports); each `Offline/Golden N` is `BacktestingAPI` on the same parameters and terms, and is what the gate replays.
+
+| # | Symbol | TF | Window | Account | Balance |
+|---|---|---|---|---|---|
+| 1 | EURUSD | H1 | 2023 | EUR | 10 000 |
+| 2 | EURUSD | H1 | 2023 | USD | 10 000 |
+| 3 | GBPJPY | H1 | 2023 | CHF | 10 000 |
+| 4 | AUDUSD | D1 | 2015-2025 | EUR | 10 000 |
+| 5 | US500 | H1 | 2023 | EUR | 10 000 |
+
+**How they were run, to run them again.** cTrader's Backtesting tab · the Connector cBot · strategy `Test` ·
+leverage 1:100 · accurate commission on · swap on · "download historical data for additional symbols" on · the
+description `Golden N`, which names the run folder. The live runs: Automate · EURUSD m1 · 30-40 minutes each,
+market open, on the EUR netted and the EUR hedged demo account, with the override
+`Overrides/Spotware(cTrader)/Forex(Major)/EURUSD/M1/Realtime.yml` (volume 10 000, wider stops and targets, SMA 5).
+Rebuild both Connectors with cTrader's Build first whenever `Enum.cs` changes. Afterwards: re-run each CLI twin
+with the run's own `Input/Parameters.yml` and `Input/Contract.yml`, and replay each live account's mirrored fills
+through `ReplayAPI.book` against the broker's closing deals.
+
+**The protocol has two rules the Trend runs never needed.** The offline twin starts on the cBot's first bar and
+stops at its last bar's close (`Phase Warmup: First Bar` and `Phase Execution: Last Bar` in the online `Run.log`):
+the cBot activates on its first *full* bar, one bar after the window's first, and ATR is a Wilder mean seeded
+from the first bar loaded, so a one-bar offset left about 23 % of the seed gap at the first trade and moved the
+first volumes (47 000 against 48 000 on run 1). Aligned, the first twelve entries of run 1 equal cTrader's stop
+distance and volume exactly. And cTrader's "To" is inclusive: its last bar is the window's last day.
+
+**The data are equal.** Every bar the cBot sent over the wire equals the tape's on every bar of all five runs,
+eleven years of AUDUSD D1 included (open, high, low and close to half a point). The account currencies were
+confirmed from each run's own report.
+
+**Result, on the engine as it stands** (positions matched on open time and side; net P&L in the account currency):
+
+| # | Positions | Same close | Trades identical (open, close, side, volume) | cTrader net | Offline net | Δ |
+|---|---|---|---|---|---|---|
+| 1 | 908 / 908 | 846 | 925 / 1 201 | −3 543.65 | −3 558.12 | −14.48 |
+| 2 | 908 / 908 | 845 | 885 / 1 201 | −3 483.67 | −3 567.31 | −83.64 |
+| 3 | 953 / 953 | 949 | 1 192 / 1 226 | −6 289.88 | −6 309.67 | −19.80 |
+| 4 | 476 / 476 | 467 | 609 / 620 | −3 815.19 | −3 814.24 | +0.95 |
+| 5 | 494 / 494 | 483 | 303 / 643 | −2 548.86 | −5 099.42 | −2 550.56, the minimum commission (finding 3) |
+
+The engine rounds commission half up per deal like the live broker (decided 2026-09-29, Live 2 below), where the
+backtester truncates: that moved run 1's commission from −19.48 to −29.80 against cTrader and is by design. Before
+the change the net gaps were −5.26, −66.46, −12.10, −1.05.
+
+Every position opens at the same time on the same side in both engines. Net is closed trades only.
+
+**Findings.**
+1. **Closes take the oldest fills first (fixed 2026-09-29).** cTrader books each closing deal against the lots
+   that opened the position in time order — one trade per closing deal, its entry price the volume-weighted price
+   of the lots it consumed and its entry time the first of them — while the position's own entry price stays the
+   average of every fill (break-even after a scale-out moved the stop to 1.0567 on run 1, the average of three
+   lots, not 1.056715, the remaining two). The engine had booked every close at the position's average: position
+   totals were equal, the split between trades was not (run 4's position 64: 7 000 at 0.76003 then 6 000 at
+   0.757805 in cTrader, both legs at 0.759 before the fix). Identical trades rose on every run (run 1 895 → 920,
+   run 3 1 173 → 1 198). The live broker books the same way (Live 1 below).
+2. **The average entry is exact (fixed 2026-09-29).** The engine rounded a position's average to five digits
+   after every increase; the broker keeps it exact (Live 1: 1.137063 for 10 M at 1.13706 and 5 M at 1.13707, 50 USD
+   on one deal).
+3. **US500's minimum commission — cTrader's backtester omits it, the live server charges it; the engine keeps
+   it.** The backtester charged 0.72 EUR per contract round trip (0.01 % of value, two sides, no floor); a
+   one-contract round trip on the live demo server cost 7.04 EUR, 2 × 4 USD. Spotware's own forum answers say
+   backtesting takes only a commission per million and, at the time, no percentage commission at all; nothing
+   documents a minimum in backtesting. Without the minimum the offline twin lands 31.44 from cTrader's net and
+   630 of 643 trades are identical; with it, the committed golden, −5 093.07.
+4. **A strict stop trigger is not cTrader's rule.** Half the stops cTrader fired a tick later than we did fit
+   "strictly beyond the level", but firing only then moved every run away from cTrader (run 3's equal closes
+   947 → 835). `≤`/`≥` stays.
+5. **Bounded: trigger-boundary exits.** 2-7 % of closes differ by a tick or a trailing step: cTrader's trigger level
+   sits a few millionths below ours where both are known exactly (run 1, 2023-01-03 08:31:53.256: ask 1.05582,
+   our trailing trigger 1.055822, cTrader moved at 08:31:54.139), and once a trailing path differs the position's
+   later P&L and every later volume follow. Investigated on 2026-09-29 and closed as not fixable from the exports:
+   every one of cTrader's 3 070 exit fills equals the tape's price at its millisecond, the cBot checks every tick
+   with the same `≤`/`≥`, the stop distances agree to the tenth of a pip cTrader prints, and neither a strict
+   trigger (run 3's equal closes 947 → 835) nor an unrounded opening stop (run 1's 846 → 813) comes closer — the
+   level cTrader held lies in a band of a few millionths that no rounding rule produces.
+6. **By design: commission follows the broker, not cTrader's backtester.** Before the broker rounding, cTrader's commission was a cent under ours where the exact value lands on a cent. 48 000 units: 4.32
+   exact, cTrader 4.30; 46 000: 4.14 against 4.12; but 43 000 (1.935 a side) truncates to 3.86 in both. No
+   candidate rule — the base route, the documented USD route on either side of the spread — matches more than
+   half the single-leg positions; about −21 EUR of 3 912 on run 1.
+7. **Swap is charged at 20:59 UTC all year, each night rounded half up (fixed 2026-09-29).** `SwapTime` 1259 is
+   minutes after 00:00 UTC (the Open API's definition), not 16:59 New York: in winter the engine rolled an hour late,
+   which positions closed at 21:00 UTC showed on every run (run 1, 2023-11-16 18:00 → 21:00:00.173: cTrader −7.21,
+   ours 0). Each night's charge is rounded half up to the cent. Positions whose swap equals cTrader's to the cent,
+   before → after: run 1 86/103 → 92/99, run 2 79/87 → 82/83, run 3 129/151 → 135/145, run 4 348/441 → 400/441,
+   run 5 without the minimum 102/121 → 114/121. **What remains is cTrader's partial-close split**: the closed part
+   books the remaining fraction of the swap and the remainder keeps it too (run 4, a 7 000 position closing 4 000:
+   3/7 of the accrued swap on the close where 4/7 was accrued), so cTrader's trades do not sum to the swap it
+   charged; the engine keeps the pro-rata split, as it keeps the minimum commission (finding 3).
+
+**Speed** (cTrader: the time Python was attached to its backtest, a lower bound on cTrader's own; offline: a new
+process, the database read included):
+
+| # | cTrader | Offline | Faster | Trading loop only |
+|---|---|---|---|---|
+| 1 | 41 s | 6.1 s | 6.7× | 39.9 → 1.2 s (33×) |
+| 2 | 40 s | 6.0 s | 6.7× | 38.9 → 1.1 s (34×) |
+| 3 | 2 min 50 s | 9.0 s | 19× | 167 → 1.2 s (140×) |
+| 4 | 11 min 43 s | 20.3 s | 35× | 701 → 1.0 s (730×) |
+| 5 | 46 s | 5.0 s | 9× | 44.7 → 0.7 s (68×) |
+
+**The live check — Live 1, the EUR netted demo account, 2026-09-28.** Fifteen closing deals before the cBot
+stopped, every one reproduced to the cent from the broker's own fills: an exact volume-weighted average for
+increases, a reduce closing at that average, gross converted at 1 / ask at the close. The run stopped on a
+refused amendment (`InvalidRequest`): M1 at night gave a 0.27-pip ATR, so risk sizing hit the 10 M maximum with
+stops inside the spread that the broker dropped, a scale-out filled at or above entry so break-even was skipped
+and the armed target fired three more partial closes, and the second break-even repeated the first. Fixed: the
+live override trades 10 000 units with 4 × ATR stops, and the scale-out target is disarmed with the partial close
+(`NNFXStrategyAPI`, byte-neutral on every offline golden).
+
+**Live 2, the EUR hedged demo account, 2026-09-29.** 41 minutes on both fixes, ten entries, no error and no refused
+amendment: **12 of 12 closing deals equal the oldest-first replay of the broker's fills in volume, entry price and
+gross to the cent**, through eight increases, six partial closes, four take-profit changes, fourteen stop moves,
+a take profit and a stop loss. Two findings: the live server **rounds each deal's commission half up** (5 000 units:
+0.225 → 0.23, the opening fee split 0.23 + 0.22 across two partial closes; a 20 000 position opened in three fills
+paid 1.81, not 1.80) where the backtester truncates — the engine follows the broker since the same day; and the mirror stamps a closing deal with its position's open time,
+not its lot's (the prices are the lots'). **Not exercised:** two positions open at once — on M1 with SMA 5 the bar
+after every fourth entry brought a reversal that closed the hedge scenario's primary before its first step; Live 1
+exercised the same-side add and the opposite reduce on the netted account, and every backtest exercised both.
+
+**DDPG was re-baselined** for findings 1 and 2: it increases and partly closes positions constantly and its
+observation reads the realised P&L, so its path moved (net 3 600.07 → 3 950.62). It is a self-consistency golden.
+
+---
+
+The five `Trend` runs defined in `PLAN.md` §0.1, their artifacts, and the measured residual against cTrader.
 This file exists so the runs never have to be repeated. Each folder holds `Run.json`,
 `Parameters.yml` and the five exports; `trades`, `positions`, `orders` and `deals` are the gated
 files, `net.csv` is excluded from the gate by design.
@@ -537,7 +666,8 @@ of the plan expects. Every number below is from a fresh run of the switched code
 | 1 EURUSD H1 EUR | -2 940.52 | -2 836.06 | **-2 946.19** | +104.46 | **-5.67** | 584 → **924** of 1 024 |
 | 3 EURUSD H1 USD | -3 198.53 | -2 317.01 | **-3 187.25** | +881.52 | **+11.28** | 154 → **905** of 1 024 |
 | 5 EURUSD D1 EUR | -1 980.35 | -1 981.27 | -1 999.51 | -0.92 | -19.16 | 482 → 484 of 510 |
-| 2, 4 USDJPY H1 EUR | | | refused | | | EURJPY is not in the tape |
+| 2 USDJPY H1 EUR | -61.20 | -61.12 | **-61.17** | +0.08 | **+0.03** | 704 → 702 of 709 |
+| 4 USDJPY H1 EUR 1 000 000 | -3 389.54 | -3 379.80 | **-3 386.28** | +9.74 | **+3.26** | 1 010 → 1 006 of 1 017 |
 | DDPG consistency | | +3 344.09 | +4 387.29 | | | self-consistency only |
 
 "Matching" is by direction, entry price, exit price and volume in order — timestamps cannot be compared,
@@ -564,6 +694,63 @@ equal cTrader's on all three runs (1 024, 1 024, 510), where the old engine clos
 5. **UTC stamps and the platform's labels** move every summer timestamp by an hour and every bar label to
    the bar's own open. They change no price path on these runs.
 
-**Carry to 5.13.** Re-baseline all five pairs of runs in one cTrader session, with EURJPY in the tape so
-runs 2 and 4 replay. The run 1 and 3 remainders (-5.67 and +11.28) and run 5's swap residual are the
+**Runs 2 and 4, measured 2026-09-28** once the refill put EURJPY on the tape: both replay, and both moved
+closer to cTrader (gross 2.35 against 2.10 and -1 152.54 against -1 150.83; commission -56.71 against -56.72 and
+-1 989.09 against -1 997.68; swap -6.81 against -6.58 and -244.65 against -241.03). Run 1 replayed the same day
+at -2 946.19, exactly the figure above, so nothing in the engine moved between the two measurements.
+
+**Carry to 6.13.** Re-baseline all five pairs of runs in one cTrader session. The run 1 and 3 remainders (-5.67 and +11.28) and run 5's swap residual are the
 expected starting points.
+
+## Phase 6 — the offline half re-baselined, 2026-09-28
+
+The engine changes of Phase 6 are in, and the offline goldens, the DDPG self-consistency golden and a new
+**Golden 6** were regenerated on them, each with its own pinned `Parameters.yml` and `Contract.yml`.
+`pytest Tests/Golden --golden` replays all seven byte for byte again (with the in-process sequence test and
+the account-currency matrix, 10 passed). **The online half is not regenerated:** the cBot runs the same Python
+strategies, so its sizing moved with this change too, and the pairs are re-run together in the cTrader
+session (2026-09-29, above). Until then, compare a closed trade with cTrader only on run 3, whose sizing did not
+move. "Before" below is a fresh run of the code as it stood this morning.
+
+| Run | Trades | Closed-trade net | Open position net | `net.csv` net | Max equity drawdown % | Distinct volumes | Swap |
+|---|---|---|---|---|---|---|---|
+| 1 EURUSD H1 EUR | 1024 → 1024 | -2 946.19 → -3 200.55 | 25.38 → 25.27 | -2 920.81 → -3 175.28 | 33.37 → 35.23 | 60 → 65 | -461.21 → -491.59 |
+| 2 USDJPY H1 EUR | 709 → 1017 | -61.17 → -4 173.69 | -0.80 → -23.80 | -61.96 → -4 197.49 | 0.88 → 43.88 | 1 → 69 | -6.81 → -291.03 |
+| 3 EURUSD H1 USD | 1024 → 1024 | -3 187.25 → -3 187.25 | 27.01 → 25.10 | -3 160.24 → -3 162.14 | 35.84 → 35.11 | 59 → 59 | -490.19 → -490.75 |
+| 4 USDJPY H1 EUR 1 000 000 | 1017 → 1017 | -3 386.28 → -420 938.00 | -18.36 → -2 410.48 | -3 404.63 → -423 348.48 | 0.37 → 44.25 | 68 → 786 | -244.65 → -29 507.85 |
+| 5 EURUSD D1 EUR | 510 → 510 | -2 000.00 → -2 244.25 | -0.54 → -1.18 | -2 000.54 → -2 245.43 | 22.05 → 25.07 | 14 → 14 | -1 213.65 → -1 358.77 |
+| 6 GBPJPY H1 **CHF** (new) | 1052 | -5 224.66 | 22.37 | -5 202.29 | 54.82 | 41 | -275.78 |
+| DDPG consistency | 1076 → 1051 | +4 327.32 → +3 600.07 | -4.16 → -5.30 | +4 323.16 → +3 594.77 | 24.53 → 34.35 | 53 → 60 | 0 |
+
+**What moved each run, and why.**
+
+1. **Risk sizing through the quote conversion (6.2)** moved every account that is not the quote currency — runs
+   1, 2, 4, 5, 6. The risk amount is in the account currency and the stop distance in the quote currency; the
+   volume is now `amount / (stop × pip × quote-to-account rate)`, so a trade risks the configured 1 % on every
+   pair. On USDJPY with a EUR account the old sizing risked 0.0067 %: run 2 traded the 1 000-unit floor 709
+   times with one distinct volume and lost 0.6 % of the account; at a true 1 % the same Trend strategy loses
+   42 %, and run 4 has the full volume distribution (786 distinct volumes) that it exists to cover. Run 3 (USD
+   account, the quote) is the control: its closed trades are identical, so its gap to cTrader stays **+11.28**.
+2. **The open position is settled at the stop (6.6).** It was already marked at the final tick offline (run 1's
+   gross 26.64 is cTrader's implied 26.64); it now also pays its closing commission and the swap of every roll
+   up to `--stop`. Run 3: commission -1.34 → -2.68 and swap 0 → -0.57, where cTrader charged 1.34 and 0.55 more than we did.
+3. **Swap is accrued at each roll (6.15, 6.17)**, from the contract's schedule and at the roll's own rate, and a
+   close takes its share. Per trade on run 5's volumes (the baseline's, which are cTrader's), each night at its
+   own rate equals cTrader's swap to the cent on **245 of 438** swapped trades, against **187** for one rate at
+   exit; the total moves only -1 213.65 → -1 212.73 against cTrader's -1 198.88. Truncating each night to the
+   cent would put the total at -1 202.05 but matches only 105 trades, so it is not cTrader's rule; the -13.9
+   residual stays open for 6.13.
+4. **Intrabar segmentation (6.16)** moved every excursion column and the curve's drawdown rows, never a fill.
+   Checked against the tape tick by tick, run 3's trades went from **483 of 1 024** equal to the tick truth
+   (worst gap 855 points) to **1 024 of 1 024**, and every run is exact (1 024, 1 017, 1 024, 1 017, 510 and
+   the live-contract twin of run 1, whose 16:59 New York roll falls inside an H1 bar). Feeding the exports back
+   through the mirror's `ReplayAPI` reproduces every excursion price and entry balance, and the drawdown P&L
+   to a cent (runs 1, 3, 5).
+5. **`SpreadPnL`** is a new column on every export and a new `net.csv` row (Spreads Profit/Loss), between gross
+   and commission. It is part of gross — never add it to net.
+6. **DDPG** moved because its exposure feature is now normalised by the order sizer's own reference volume
+   (6.3): the weights are stale by design and the golden only proves determinism until Phase 7 retrains.
+
+**Golden 6** is the cross-currency case: a CHF account on GBPJPY, where neither side of the pair is the account
+— profit converts through CHFJPY and the commission's base through GBPCHF, both direct pairs on the tape. It
+has no cTrader twin yet: a CHF demo account now exists, so it joins the 6.13 session.

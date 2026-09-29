@@ -29,7 +29,7 @@ it compares.
 | Everything never committed — the 1 822-line seven-pair write-up `CAMPAIGN-7PAIR.md`, its drivers (`campaign.py`, `pair.py`, `score.py`, `champion_override.py`, `publish.py`, `consolidate.py`, `evaluate_seeds.py`, `memory_guard.py`), the per-pair `Learning.yml` files and every result JSON | `%LOCALAPPDATA%\cAlgo\Data\Archive\Research 2026-09-25.zip`, outside the repository |
 | The seven-pair seed weights | `%LOCALAPPDATA%\cAlgo\Data\Models\WAVE <PAIR> H1 seeds<a>-<b> champion\Seed N\DDPG` — the only copies of the seven winners |
 | The published runs (the web Journal) | `%LOCALAPPDATA%\cAlgo\Data\Runs`, run ids in section 1.2 |
-| **Live parameter overrides the campaign installed** | `%LOCALAPPDATA%\cAlgo\Data\Overrides\Spotware(cTrader)\Forex(Major)\<pair>\H1\{Learning,Backtesting}.yml`, provenance `DDPG: Champion`. **They still apply to every DDPG H1 run on the seven pairs**; USDJPY's carry the research-only `RiskPercentage 119.1994` and `ExposureReference 2591`. Remove them with `PLAN.md` 5.2, before the next campaign |
+| **Live parameter overrides the campaign installed** | `%LOCALAPPDATA%\cAlgo\Data\Overrides\Spotware(cTrader)\Forex(Major)\<pair>\H1\{Learning,Backtesting}.yml`, provenance `DDPG: Champion`. They applied to every DDPG H1 run on the seven pairs; USDJPY's carried the research-only `RiskPercentage 119.1994` and `ExposureReference 2591`. Archived in `inspect_persistent("Archive")/Overrides 2026-09-28.zip` and deleted with Phase 6's sizing fix, 2026-09-28 |
 
 The champion **cannot be retrained** (section 11) and **no longer replays at its published numbers** on the
 current engine (section 12). It survives as an archived artifact; the method is what carries forward.
@@ -274,7 +274,7 @@ frictionless, unfiltered cell; it was once misreported as the canonical result.)
 
 ### 5.3 The sizing defects every campaign weight was trained under
 
-Both are open in `PLAN.md` (5.2, 5.3) and both invalidate the weights, so everything is retrained after them.
+Both were fixed in Phase 6 (2026-09-28) and both invalidate the weights, so everything is retrained in Phase 7.
 
 1. **Risk sizing ignores the quote-to-account conversion.** `amount / (stop × PipSize)` mixes account and
    quote currency, so effective risk is `RiskPercentage / price`: EURUSD 0.909 % instead of 1 %, **USDJPY
@@ -496,7 +496,7 @@ pair), a hard-coded −2.93 % benchmark printed for every pair, two tools readin
 7. **Currency conversion** is rebuilt at run time from the direct pair, for any account currency, and a
    missing direct pair is refused. A EUR account on the six USD pairs needs the EUR crosses, which the tape
    does not hold yet.
-8. **Sizing** is still defective (section 5.3) until `PLAN.md` 5.2 and 5.3 land; both invalidate every
+8. **Sizing** was defective (section 5.3) until Phase 6 fixed it on 2026-09-28; the fix invalidates every
    campaign weight.
 9. **Tape start**: 2014-01 today against 2012-11 then; 2016-01-11 → 2016-01-25 is missing in every pair and
    cannot be repaired — it sits inside the training window.
@@ -513,10 +513,10 @@ pair), a hard-coded −2.93 % benchmark printed for every pair, two tools readin
 ## 13. For the next campaign
 
 1. **Fix sizing first, then retrain everything** — the quote-to-account conversion in the order sizer and one
-   formula for the exposure feature and the sizer (`PLAN.md` 5.2, 5.3); remove the USDJPY override. USDJPY is
+   formula for the exposure feature and the sizer (both done in Phase 6, 2026-09-28, and the USDJPY override removed). USDJPY is
    the first pair to re-test: whether it can learn a two-sided policy once it can trade at all is open.
 2. **Earn the claims iteration one could not make** — walk-forward with `training > 0` and `--continuous`, an
-   honest election rule (`Last` or `Mean`), and a window **never** used for selection (`PLAN.md` 6.1-6.4).
+   honest election rule (`Last` or `Mean`), and a window **never** used for selection (`PLAN.md` 7.1-7.4).
    Pre-register the configuration and correct p for the number of seeds and configurations tried.
 3. **Measure behavior before profit**, time-weighted: two-sidedness over active bars and a per-model
    permutation null; regime is a screen. Lead with the alpha/beta decomposition and the five-balance mean.
@@ -528,7 +528,7 @@ pair), a hard-coded −2.93 % benchmark printed for every pair, two tools readin
 6. **Seeds over episodes**: many short seeds over fresh ranges, a per-pair budget (emergence 3-19 %), every
    seed evaluated and archived; stop a pair after two waves fail to beat the incumbent.
 7. **Record costs explicitly** — the spread is about 42 % of the cost and invisible in Learning runs
-   (`PLAN.md` 5.1) — model swap at the New York roll, and keep the cost 2×2 as a standard pre-flight.
+   (`SpreadPnL` records it since Phase 6) — swap is charged at the contract's own roll, and keep the cost 2×2 as a standard pre-flight.
 8. **Re-examine γ.** 0.9995 was chosen as a credit horizon of about 2 000 *hourly* steps; with daily
    transitions it is about eight years — a change of meaning nobody discussed.
 9. **Worth one bounded test:** "train at low risk, deliver leveraged". The seven-pair write-up also lists

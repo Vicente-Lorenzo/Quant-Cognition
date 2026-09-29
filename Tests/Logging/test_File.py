@@ -218,3 +218,17 @@ def test_changing_path_reopens_on_the_new_target(tmp_path, lines):
     log.info(lambda: "second location")
     LoggingAPI.file.flush()
     assert (moved / LoggingAPI.file.Filename).exists()
+
+def test_a_record_reaches_the_disk_when_it_opens_a_second_or_is_a_warning(tmp_path, monkeypatch):
+    clock = iter([1000.1, 1000.2, 1000.3, 1000.4, 1001.1])
+    monkeypatch.setattr("Library.Logging.Logging.time", lambda: next(clock))
+    LoggingAPI.file.set_level(VerboseLevel.Debug)
+    log = LoggingAPI("Pace")
+    log.info(lambda: "Opens Second 1000")
+    assert len(LoggingAPI.file.Path.read_bytes().splitlines()) == 1
+    log.info(lambda: "Same Second")
+    log.warning(lambda: "Warning Flushes")
+    assert len(LoggingAPI.file.Path.read_bytes().splitlines()) == 3
+    log.info(lambda: "Same Second Again")
+    log.info(lambda: "Opens Second 1001")
+    assert len(LoggingAPI.file.Path.read_bytes().splitlines()) == 5

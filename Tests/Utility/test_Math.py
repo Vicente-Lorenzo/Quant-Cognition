@@ -1,6 +1,6 @@
 import pytest
 
-from Library.Utility.Math import EPSILON, equals, truncate
+from Library.Utility.Math import EPSILON, equals, quantize, truncate
 
 def test_equals():
     assert equals(1.0, 1.0) is True
@@ -36,3 +36,8 @@ def test_truncate_tolerance_recovers_a_unit_lost_to_float_error_from_below():
     assert truncate(-0.29999999999) == -0.3
     assert truncate(0.29999999999, tolerance=0.0) == 0.29
     assert truncate(0.2999, tolerance=0.0) == truncate(0.2999)
+
+def test_quantize_rounds_half_away_from_zero():
+    assert quantize(0.225) == 0.23 and quantize(-0.225) == -0.23
+    assert quantize(0.2249) == 0.22 and quantize(0.315) == 0.32
+    assert quantize(-0.001) == 0.0 and str(quantize(-0.001)) == "0.0"

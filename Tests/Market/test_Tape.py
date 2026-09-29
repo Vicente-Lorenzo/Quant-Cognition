@@ -40,12 +40,35 @@ def test_a_tick_is_worth_the_sides_that_moved_unless_it_carries_a_size(stored):
 def test_a_bar_takes_each_extreme_at_its_first_occurrence_and_its_gap_from_the_last_close():
     tape = _tape_((datetime(2024, 6, 3, 10, 0, 1), 1.1003, 1.1001), (datetime(2024, 6, 3, 10, 10), 1.1010, 1.1005), (datetime(2024, 6, 3, 10, 20), 1.1008, 1.1007), (datetime(2024, 6, 3, 10, 25), 1.1009, 1.1007), (datetime(2024, 6, 3, 10, 30), 1.0995, 1.0990), (datetime(2024, 6, 3, 10, 40), 1.0994, 1.0992), (datetime(2024, 6, 3, 10, 59), 1.1000, 1.0998), (datetime(2024, 6, 3, 11, 5), 1.1001, 1.0999))
     bars = tape.bars(TimeframeAPI(UID="H1"))
-    assert bars.select("Gap", "Open", "HighAsk", "HighBid", "LowAsk", "LowBid", "Close").rows() == [(0, 0, 1, 2, 5, 4, 6), (6, 7, 7, 7, 7, 7, 7)]
+    assert bars.select("Gap", "Open", "HighAsk", "HighBid", "HighMid", "LowAsk", "LowBid", "LowMid", "Close").rows() == [(0, 0, 1, 2, 3, 5, 4, 4, 6), (6, 7, 7, 7, 7, 7, 7, 7, 7)]
     assert bars["Volume"].to_list() == [7.0, 1.0]
     frame = tape.materialize(bars, TimeframeAPI(UID="H1"))
-    assert set(frame.columns) == set(BarAPI(ClosePoint=PointAPI(TickAPI(), TickAPI()), GapPoint=PointAPI(TickAPI(), TickAPI()), OpenPoint=PointAPI(TickAPI(), TickAPI()), HighPoint=PointAPI(TickAPI(), TickAPI()), LowPoint=PointAPI(TickAPI(), TickAPI())).dict(flatten=True))
+    assert set(frame.columns) == set(BarAPI(ClosePoint=PointAPI(TickAPI(), TickAPI(), TickAPI()), GapPoint=PointAPI(TickAPI(), TickAPI(), TickAPI()), OpenPoint=PointAPI(TickAPI(), TickAPI(), TickAPI()), HighPoint=PointAPI(TickAPI(), TickAPI(), TickAPI()), LowPoint=PointAPI(TickAPI(), TickAPI(), TickAPI())).dict(flatten=True))
     assert (frame["HighPoint.AskTick.Ask"][0], frame["HighPoint.BidTick.Bid"][0], frame["LowPoint.AskTick.Ask"][0], frame["LowPoint.BidTick.Bid"][0]) == (1.1010, 1.1007, 1.0994, 1.0990)
-    assert frame["GapPoint.BidTick.Timestamp"][1] == frame["ClosePoint.BidTick.Timestamp"][0]
+    assert (frame["HighPoint.MidTick.Ask"][0], frame["HighPoint.MidTick.Bid"][0], frame["LowPoint.MidTick.Ask"][0], frame["LowPoint.MidTick.Bid"][0]) == (1.1009, 1.1007, 1.0995, 1.0990)
+    assert frame["GapPoint.BidTick.Timestamp"][1] == frame["ClosePoint.BidTick.Timestamp"][0] == frame["GapPoint.MidTick.Timestamp"][1]
+
+def test_a_mid_extreme_is_its_own_tick_when_neither_side_is_extreme_there():
+    tape = _tape_((datetime(2024, 6, 3, 10, 0, 1), 1.1010, 1.1000), (datetime(2024, 6, 3, 10, 5), 1.1009, 1.1006), (datetime(2024, 6, 3, 10, 10), 1.1007, 1.1007), (datetime(2024, 6, 3, 10, 20), 1.0995, 1.0975), (datetime(2024, 6, 3, 10, 30), 1.0981, 1.0981), (datetime(2024, 6, 3, 10, 40), 1.0982, 1.0979), (datetime(2024, 6, 3, 10, 50), 1.1009, 1.1006), (datetime(2024, 6, 3, 11, 5), 1.1001, 1.0999))
+    bars = tape.bars(TimeframeAPI(UID="H1"))
+    assert bars.select("HighAsk", "HighBid", "HighMid", "LowAsk", "LowBid", "LowMid").row(0) == (0, 2, 1, 4, 3, 5)
+    bar = BarAPI.row(tape.materialize(bars, TimeframeAPI(UID="H1")).to_dicts()[0], None, TimeframeAPI(UID="H1"))
+    assert (bar.HighPoint.Mid.Price, bar.LowPoint.Mid.Price) == ((1.1009 + 1.1006) / 2, (1.0982 + 1.0979) / 2)
+    assert bar.HighPoint.Mid.Price < (bar.HighPoint.Ask.Price + bar.HighPoint.Bid.Price) / 2 and bar.LowPoint.Mid.Price > (bar.LowPoint.Ask.Price + bar.LowPoint.Bid.Price) / 2
+    assert bar.ClosePoint.MidTick is bar.ClosePoint.BidTick is bar.ClosePoint.AskTick
+
+def test_mid_extremes_equal_a_scan_of_every_bar_on_short_and_long_bars():
+    generator = np.random.default_rng(7)
+    stamps = np.arange(datetime_to_epoch(datetime(2024, 3, 4)), datetime_to_epoch(datetime(2024, 3, 9)), 250, dtype=np.int64)
+    bids = 110_000 + np.cumsum(generator.integers(-2, 3, stamps.size))
+    asks = bids + generator.integers(0, 4, stamps.size)
+    tape = TapeAPI(Security=1, Stamps=stamps, Asks=asks / 100_000.0, Bids=bids / 100_000.0, Volumes=np.ones(stamps.size))
+    for uid in ("M1", "H1"):
+        bars = tape.bars(TimeframeAPI(UID=uid))
+        mids = tape.Asks + tape.Bids
+        opens, closes = bars["Open"].to_numpy(), bars["Close"].to_numpy()
+        assert bars["HighMid"].to_list() == [int(start + np.argmax(mids[start:stop + 1])) for start, stop in zip(opens, closes)], uid
+        assert bars["LowMid"].to_list() == [int(start + np.argmin(mids[start:stop + 1])) for start, stop in zip(opens, closes)], uid
 
 def test_every_timeframe_counts_from_the_new_york_close_through_daylight_saving():
     winter, summer = datetime(2024, 3, 7, 12, 30), datetime(2024, 3, 12, 12, 30)

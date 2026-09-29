@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from Library.Database.Dataframe import pl
 from Library.Market.Market import MarketAPI
 from Library.Market.Point import PointAPI
+from Library.Market.Price import PriceMode
 from Library.Market.Tick import TickAPI
 
 def test_pull_ticks_reads_the_stored_window(stored):
@@ -108,3 +109,41 @@ def test_head_and_tail_without_a_count_return_every_row():
     assert market.head().height == 2 and market.tail().height == 2
     assert market.head(1)["Bid"].to_list() == [1.0] and market.tail(1)["Bid"].to_list() == [1.1]
     assert market.Ticks.Bid.tail().to_list() == [1.0, 1.1]
+
+def _points_() -> pl.DataFrame:
+    return pl.DataFrame({
+        "Timestamp": [datetime(2020, 1, 1), datetime(2020, 1, 2)],
+        "Timeframe": ["M1", "M1"],
+        "HighPoint.AskTick.Ask": [1.30, 1.40], "HighPoint.AskTick.Bid": [1.20, 1.30],
+        "HighPoint.BidTick.Ask": [1.27, 1.37], "HighPoint.BidTick.Bid": [1.26, 1.36],
+        "HighPoint.MidTick.Ask": [1.29, 1.39], "HighPoint.MidTick.Bid": [1.25, 1.35],
+        "ClosePoint.AskTick.Ask": [1.21, 1.31], "ClosePoint.BidTick.Bid": [1.19, 1.29],
+        "ClosePoint.MidTick.Ask": [1.21, 1.31], "ClosePoint.MidTick.Bid": [1.19, 1.29]
+    })
+
+def test_a_market_prices_at_the_bid_unless_told_otherwise():
+    market = MarketAPI()
+    market.init_data(_points_())
+    assert market.HighPoints.Price.tail().to_list() == [1.26, 1.36] and market.ClosePoints.Price.last() == 1.29
+
+def test_a_market_in_ask_mode_prices_every_point_at_its_ask_tick():
+    market = MarketAPI(mode=PriceMode.Ask)
+    market.init_data(_points_())
+    assert market.HighPoints.Price.tail().to_list() == [1.30, 1.40] and market.ClosePoints.Price.last(1) == 1.21
+
+def test_a_market_in_mid_mode_prices_every_point_at_the_mid_of_its_mid_tick():
+    market = MarketAPI(mode=PriceMode.Mid)
+    market.init_data(_points_())
+    assert market.HighPoints.Price.tail().to_list() == [(1.29 + 1.25) / 2, (1.39 + 1.35) / 2]
+    assert market.HighPoints.Price.last() == (1.39 + 1.35) / 2 and market.HighPoints.Price.last(1) == (1.29 + 1.25) / 2 and market.HighPoints.Price.last(2) is None
+    assert market.HighPoints.Price.tail(1).to_list() == [(1.39 + 1.35) / 2] and market.HighPoints.Price.dataframe().name == "HighPoint.MidTick.Mid"
+    assert market.HighPoints.Price.over(market.ClosePoints.Price) and market.ClosePoints.Price.under(1.35)
+    market.update_offset(2)
+    assert market.HighPoints.Price.last() == (1.29 + 1.25) / 2
+    point = market.HighPoints.last()
+    assert (point.Ask.Price, point.Bid.Price, point.Mid.Price) == (1.30, 1.26, (1.29 + 1.25) / 2)
+
+def test_a_tick_series_carries_its_mid():
+    market = MarketAPI(mode=PriceMode.Mid)
+    market.init_data(pl.DataFrame({"Timestamp": [datetime(2020, 1, 1), datetime(2020, 1, 2)], "Ask": [1.1, 1.3], "Bid": [1.0, 1.1]}))
+    assert market.Ticks.Price is market.Ticks.Mid and market.Ticks.Mid.last() == (1.3 + 1.1) / 2 and market.Ticks.Mid.tail().to_list() == [(1.1 + 1.0) / 2, (1.3 + 1.1) / 2]

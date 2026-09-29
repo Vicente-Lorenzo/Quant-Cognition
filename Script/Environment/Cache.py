@@ -3,9 +3,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from Library.Logging import LoggingAPI
 from Library.Utility.File import PruneAPI
 from Library.Utility.Memory import memory_to_string
 from Library.Utility.Path import traceback_root
+from Script.Task import attempt
 
 ROOT = traceback_root()
 FOLDERS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".ipynb_checkpoints", ".hypothesis", ".tox", ".nox", "htmlcov"}
@@ -24,9 +26,11 @@ def clean(root=ROOT, days=DAYS):
     return PruneAPI.sweep(folders + files, PruneAPI.horizon(days))
 
 def main(days=DAYS):
-    cleaned, reclaimed = clean(days=days)
-    print(f"Cache Clean: Completed · {cleaned} Entries · {memory_to_string(reclaimed)} · {days} Days")
-    return 0
+    def work():
+        cleaned, reclaimed = clean(days=days)
+        return f"{cleaned} Entries · {memory_to_string(reclaimed)} · {days} Days"
+    with LoggingAPI() as log:
+        return attempt(log, "Cache", work, operation="Clean")
 
 if __name__ == "__main__":
     raise SystemExit(main())

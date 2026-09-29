@@ -1,14 +1,16 @@
 import pytest
 from datetime import datetime, timezone
+
 import Library.Market
 import Library.Portfolio
-from ctrader_open_api.messages.OpenApiMessages_pb2 import (
+from Library.Spotware.Messages import (
     ProtoOADepthEvent,
-    ProtoOAGetTrendbarsRes,
     ProtoOAGetTickDataRes,
+    ProtoOAGetTrendbarsRes,
     ProtoOASubscribeDepthQuotesRes,
     ProtoOAUnsubscribeDepthQuotesRes
 )
+
 def test_period_resolves_wire_and_framework_timeframes(spotware):
     assert spotware.market._period_("M1") == 1
     assert spotware.market._period_("m5") == 5
@@ -151,12 +153,21 @@ def _tick_page_(stamps, prices, more):
         entry.timestamp = stamp if index == 0 else stamp - stamps[index - 1]
         entry.tick = price if index == 0 else price - prices[index - 1]
     return res
-def test_ticks_page_backwards_below_the_earliest_stamp(spotware):
-    spotware._responses_.extend([_tick_page_([1577836805000, 1577836804000, 1577836803000], [110000, 110010, 110020], True), _tick_page_([1577836802000, 1577836801000], [110030, 110040], False)])
+def test_ticks_page_backwards_to_the_earliest_stamp_which_the_server_excludes(spotware):
+    spotware._responses_.extend([_tick_page_([1577836805000, 1577836804000, 1577836803000], [110000, 110010, 110020], True), _tick_page_([1577836802999, 1577836801000], [110030, 110040], False)])
     df = spotware.market.ticks(symbol=1, start=datetime(2020, 1, 1), stop=datetime(2020, 1, 1, 0, 1))
     assert len(df) == 5 and df["Timestamp"].is_sorted() and df["Bid"][0] == pytest.approx(1.1004) and df["Bid"][-1] == pytest.approx(1.1)
-    assert spotware._sent_[1].toTimestamp == 1577836802999
+    assert spotware._sent_[0].toTimestamp == 1577836860000 and spotware._sent_[1].toTimestamp == 1577836803000
+def test_ticks_keep_same_millisecond_ticks_in_time_order(spotware):
+    spotware._responses_.append(_tick_page_([1577836802000, 1577836801000, 1577836801000, 1577836800000], [110030, 110020, 110010, 110000], False))
+    df = spotware.market.ticks(symbol=1, start=datetime(2020, 1, 1), stop=datetime(2020, 1, 1, 0, 1))
+    assert df["Bid"].to_list() == pytest.approx([1.1, 1.1001, 1.1002, 1.1003])
+
 def test_ticks_stop_once_a_page_reaches_the_start(spotware):
     spotware._responses_.append(_tick_page_([1577836801000, 1577836800000], [110000, 110010], True))
     df = spotware.market.ticks(symbol=1, start=datetime(2020, 1, 1, 0, 0, 1), stop=datetime(2020, 1, 1, 0, 1))
     assert len(df) == 2 and len(spotware._sent_) == 1
+def test_tick_prices_decode_to_the_correctly_rounded_price(spotware):
+    spotware._responses_.append(_tick_page_([1577836801000, 1577836800000], [113774, 108432], False))
+    df = spotware.market.ticks(symbol=1, start=datetime(2020, 1, 1), stop=datetime(2020, 1, 1, 0, 1))
+    assert df["Bid"].to_list() == [1.08432, 1.13774]

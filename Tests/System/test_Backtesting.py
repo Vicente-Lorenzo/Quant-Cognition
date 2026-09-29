@@ -9,11 +9,14 @@ from Library.Market.Price import Direction
 from Library.Market.Tape import TapeAPI
 from Library.Logging import LoggingAPI, VerboseLevel
 from Library.System.Backtesting import BacktestingAPI, DatasetAPI
+from Library.System.Learning import LearningAPI
+from Library.System.Optimization import OptimizationAPI
+from Library.System.System import SystemAPI
 from Library.Protocol.Update import UpdateID
 from Library.Universe.Timeframe import TimeframeAPI
-from Library.Universe.Contract import CommissionType, CommissionMode, SpreadType, SwapType, SwapMode
-from Library.Utility.Datetime import Weekday
-from Library.Utility.Math import truncate
+from Library.Universe.Contract import CommissionType, CommissionMode, ContractAPI, SpreadType, SwapType, SwapMode
+from Library.Utility.Datetime import Weekday, datetime_to_epoch, epoch_to_datetime
+from Library.Utility.Math import quantize
 from Library.Utility.Typing import MISSING
 
 def _dataset_(**overrides):
@@ -26,20 +29,12 @@ def _dataset_(**overrides):
     fields.update(overrides)
     return DatasetAPI(**fields)
 
-class _Contract_:
+def _nights_(engine, entry, exit):
+    stamps, days = engine._rolls_
+    return int(days[np.searchsorted(stamps, datetime_to_epoch(entry), side="right"):np.searchsorted(stamps, datetime_to_epoch(exit), side="left")].sum())
 
-    PointSize = 0.00001
-    PipSize = 0.0001
-    LotSize = 100000
-    Commission = 45.0
-    CommissionMode = CommissionMode.BaseAssetPerMillionVolume
-    SwapLong = -2.445
-    SwapShort = -0.105
-    SwapMode = SwapMode.Pips
-    SwapPeriod = 24
-    SwapWinterTime = 22
-    SwapSummerTime = 21
-    SwapExtraDay = Weekday.Wednesday
+def _contract_():
+    return ContractAPI(PointSize=0.00001, PipSize=0.0001, LotSize=100000, Commission=45.0, CommissionMode=CommissionMode.BaseAssetPerMillionVolume, SwapLong=-2.445, SwapShort=-0.105, SwapMode=SwapMode.Pips, SwapPeriod=24, SwapTime=1259, SwapExtraDay=Weekday.Wednesday, SwapWeekends=False)
 
 class _Price_:
 
@@ -55,7 +50,9 @@ class _Position_:
 
 def _engine_(spread=(SpreadType.Accurate, None), commission=(CommissionType.Accurate, None), swap=(SwapType.Accurate, None, None)):
     engine = object.__new__(BacktestingAPI)
-    engine._contract_ = _Contract_()
+    engine._contract_ = _contract_()
+    engine._start_, engine._stop_ = datetime(2015, 1, 1), datetime(2024, 1, 1)
+    engine._rolls_ = engine._schedule_()
     engine._rng_ = random.Random(1)
     engine._spread_type_, engine._spread_value_ = spread
     engine._commission_type_, engine._commission_value_ = commission
@@ -87,52 +84,125 @@ def test_spread_random_bounded_and_reproducible():
 
 def test_commission_points():
     engine = _engine_(commission=(CommissionType.Points, 1.0))
-    assert engine._commission_(10000.0, 1.1) == pytest.approx(10000.0 * (-1.0 * 0.00001) * (1.0 / 1.1))
+    assert engine._commission_(10000.0, 1.1, 1.0, 1.0 / 1.1) == pytest.approx(10000.0 * (-1.0 * 0.00001) * (1.0 / 1.1))
 
 def test_commission_percentage():
     engine = _engine_(commission=(CommissionType.Percentage, 1.0))
-    assert engine._commission_(10000.0, 1.1) == pytest.approx(-1.0 / 100.0 * 10000.0)
+    assert engine._commission_(10000.0, 1.1, 1.0, 1.0 / 1.1) == pytest.approx(-1.0 / 100.0 * 10000.0)
 
 def test_commission_amount():
     engine = _engine_(commission=(CommissionType.Amount, 5.0))
-    assert engine._commission_(10000.0, 1.1) == pytest.approx(-5.0)
+    assert engine._commission_(10000.0, 1.1, 1.0, 1.0 / 1.1) == pytest.approx(-5.0)
+
+def test_commission_per_lot_is_the_same_amount_on_every_pair():
+    engine = _engine_(commission=(CommissionType.Lots, 3.5))
+    assert engine._commission_(100000.0, 1.1, 1.0, 1.0 / 1.1) == pytest.approx(-3.5)
+    assert engine._commission_(250000.0, 150.0, 1.0, 1.0 / 150.0) == pytest.approx(-8.75)
 
 def test_commission_accurate_base_per_million():
     engine = _engine_()
-    assert engine._commission_(10000.0, 1.1) == pytest.approx(10000.0 * (-45.0 / 1_000_000) * 1.0)
+    assert engine._commission_(10000.0, 1.1, 1.0, 1.0 / 1.1) == pytest.approx(10000.0 * (-45.0 / 1_000_000) * 1.0)
 
 def test_commission_accurate_per_lot():
     engine = _engine_()
     engine._contract_.CommissionMode = CommissionMode.BaseAssetPerOneLot
-    assert engine._commission_(100000.0, 1.1) == pytest.approx(1.0 * -45.0 * 1.0)
+    assert engine._commission_(100000.0, 1.1, 1.0, 1.0 / 1.1) == pytest.approx(1.0 * -45.0 * 1.0)
+
+def test_commission_accurate_percentage_of_value():
+    engine = _engine_()
+    engine._contract_.CommissionMode, engine._contract_.Commission = CommissionMode.PercentageOfVolume, 0.01
+    assert engine._commission_(10.0, 4000.0, 1.0, 0.9) == pytest.approx(-0.0001 * 10.0 * 4000.0 * 0.9)
+
+def test_commission_minimum_is_charged_per_side_in_its_asset():
+    engine = _engine_()
+    engine._contract_.CommissionMode, engine._contract_.Commission = CommissionMode.PercentageOfVolume, 0.01
+    engine._contract_.MinCommission, engine._contract_.MinCommissionAsset = 4.0, "USD"
+    engine._account_asset_, engine._base_asset_, engine._quote_asset_ = "EUR", "US 500", "USD"
+    tick = SimpleNamespace(Ask=_Price_(7670.8), Bid=_Price_(7670.6), BidBaseConversion=None, BidQuoteConversion=_Price_(1.0 / 1.1363), Timestamp=SimpleNamespace(DateTime=datetime(2026, 9, 28)))
+    assert engine._fee_(1.0, tick) == pytest.approx(-3.52)
+    assert engine._fee_(20.0, tick) == pytest.approx(quantize(-0.0001 * 20.0 * 7670.7 / 1.1363))
+
+def test_commission_minimum_through_its_own_conversion():
+    engine = _engine_()
+    engine._contract_.CommissionMode, engine._contract_.Commission = CommissionMode.PercentageOfVolume, 0.01
+    engine._contract_.MinCommission, engine._contract_.MinCommissionAsset = 4.0, "USD"
+    engine._account_asset_, engine._base_asset_, engine._quote_asset_ = "CHF", "GERMANY 40", "EUR"
+    engine._dataset_ = _dataset_(Conversions=(None, None, _source_([0.80, 0.80, 0.80], [0.79, 0.79, 0.79])))
+    tick = SimpleNamespace(Timestamp=SimpleNamespace(DateTime=epoch_to_datetime(150)))
+    assert engine._minimum_(tick, 1.0, 0.95) == pytest.approx(4.0 * 0.79)
+
+def test_base_conversion_is_optional_unless_commission_needs_it():
+    engine = _engine_()
+    engine._contract_.CommissionMode = CommissionMode.PercentageOfVolume
+    engine._account_asset_, engine._base_asset_ = "EUR", "US 500"
+    engine._log_ = LoggingAPI()
+    def refuse(asset, tape): raise ValueError(f"Conversion {asset} to EUR: Failed")
+    engine._source_ = refuse
+    source = engine._base_source_(TapeAPI.empty(7))
+    assert source[0].Stamps.size == 0 and np.isnan(TapeAPI.rates(np.array([1], dtype=np.int64), source)[1][0])
+    engine._contract_.CommissionMode = CommissionMode.BaseAssetPerOneLot
+    with pytest.raises(ValueError, match="US 500"): engine._base_source_(TapeAPI.empty(7))
 
 def test_overnights_zero_when_not_held():
     engine = _engine_()
-    assert engine._overnights_(datetime(2023, 6, 1, 12), datetime(2023, 6, 1, 12)) == 0
+    assert _nights_(engine, datetime(2023, 6, 1, 12), datetime(2023, 6, 1, 12)) == 0
 
 def test_overnights_positive_for_multiday():
     engine = _engine_()
-    assert engine._overnights_(datetime(2023, 6, 5, 12), datetime(2023, 6, 9, 12)) > 0
+    assert _nights_(engine, datetime(2023, 6, 5, 12), datetime(2023, 6, 9, 12)) > 0
 
-def test_overnights_roll_at_five_in_new_york_through_daylight_saving():
+def test_overnights_roll_at_the_contract_swap_time_in_utc_all_year():
     engine = _engine_()
-    assert engine._overnights_(datetime(2015, 4, 1, 21, 0, 0, 303000), datetime(2015, 4, 2, 13, 49)) == 0
-    assert engine._overnights_(datetime(2015, 4, 1, 20, 59, 59), datetime(2015, 4, 1, 21, 0, 1)) == 3
-    assert engine._overnights_(datetime(2023, 1, 10, 21, 30), datetime(2023, 1, 10, 22, 30)) == 1
-    assert engine._overnights_(datetime(2023, 6, 9, 12), datetime(2023, 6, 12, 12)) == 1
+    assert _nights_(engine, datetime(2015, 4, 1, 21, 0, 0, 303000), datetime(2015, 4, 2, 13, 49)) == 0
+    assert _nights_(engine, datetime(2015, 4, 1, 20, 58, 59), datetime(2015, 4, 1, 20, 59, 1)) == 3
+    assert _nights_(engine, datetime(2023, 1, 10, 20, 30), datetime(2023, 1, 10, 21, 30)) == 1
+    assert _nights_(engine, datetime(2023, 1, 10, 21, 30), datetime(2023, 1, 10, 22, 30)) == 0
+    assert _nights_(engine, datetime(2023, 6, 9, 12), datetime(2023, 6, 12, 12)) == 1
 
-def test_swap_amount():
+def test_no_swap_time_means_no_roll():
+    engine = _engine_()
+    engine._contract_.SwapTime = None
+    engine._rolls_ = engine._schedule_()
+    assert _nights_(engine, datetime(2023, 6, 5, 12), datetime(2023, 6, 9, 12)) == 0
+
+def test_skipped_periods_spare_a_position_its_first_charges():
+    engine = _engine_()
+    engine._contract_.SwapSkip = 1
+    engine._rolls_ = engine._schedule_()
+    engine._positions_, engine._roll_index_, engine._tick_ = {}, 0, None
+    engine._roll_rates_ = np.ones(engine._rolls_[0].size)
+    charged = []
+    engine.portfolio = SimpleNamespace(charge=lambda position, swap: charged.append(swap))
+    position = SimpleNamespace(UID=1, EntryTimestamp=SimpleNamespace(DateTime=datetime(2015, 1, 5, 12)), Direction=Direction.Buy, Volume=10000.0)
+    engine._positions_[1] = position
+    engine._accrue_(datetime_to_epoch(datetime(2015, 1, 7, 12)))
+    assert len(charged) == 1
+
+def test_swap_amount_is_charged_per_day_in_the_account_currency():
     engine = _engine_(swap=(SwapType.Amount, -2.0, -3.0))
-    assert engine._swap_(Direction.Buy, 10000.0, 1.1, datetime(2023, 6, 5, 12), datetime(2023, 6, 9, 12)) == pytest.approx(-2.0)
-    assert engine._swap_(Direction.Sell, 10000.0, 1.1, datetime(2023, 6, 5, 12), datetime(2023, 6, 9, 12)) == pytest.approx(-3.0)
+    assert engine._swap_amount_(True, 10000.0, 1.1, 2, 0.5) == pytest.approx(-4.0)
+    assert engine._swap_amount_(False, 10000.0, 1.1, 3, 0.5) == pytest.approx(-9.0)
 
 def test_swap_zero_intraday():
-    engine = _engine_(swap=(SwapType.Amount, -2.0, -3.0))
-    assert engine._swap_(Direction.Buy, 10000.0, 1.1, datetime(2023, 6, 5, 12), datetime(2023, 6, 5, 18)) == 0.0
+    assert _nights_(_engine_(), datetime(2023, 6, 5, 12), datetime(2023, 6, 5, 18)) == 0
 
-def test_swap_accurate_pips_negative():
+def test_swap_accurate_pips_are_converted_from_the_quote():
     engine = _engine_()
-    assert engine._swap_(Direction.Buy, 10000.0, 1.1, datetime(2023, 6, 5, 12), datetime(2023, 6, 9, 12)) < 0.0
+    assert engine._swap_amount_(True, 10000.0, 1.1, 1, 1.0 / 1.1) == pytest.approx(10000.0 * -2.445 * 0.0001 / 1.1)
+    assert engine._swap_amount_(False, 10000.0, 1.1, 3, 1.0 / 1.1) == pytest.approx(3 * 10000.0 * -0.105 * 0.0001 / 1.1)
+
+def test_swap_points_and_percentage_follow_their_own_terms():
+    assert _engine_(swap=(SwapType.Points, -5.0, 2.0))._swap_amount_(True, 10000.0, 1.1, 2, 1.0) == pytest.approx(10000.0 * -5.0 * 0.00001 * 2)
+    assert _engine_(swap=(SwapType.Percentage, -3.65, 1.0))._swap_amount_(True, 10000.0, 1.1, 1, 1.0) == pytest.approx(10000.0 * 1.1 * -0.0365 / 365.0)
+
+def test_the_roll_schedule_comes_from_the_contract():
+    engine = _engine_()
+    engine._contract_.SwapWeekends = True
+    engine._rolls_ = engine._schedule_()
+    assert _nights_(engine, datetime(2023, 6, 9, 12), datetime(2023, 6, 12, 12)) == 3
+    engine._contract_.SwapWeekends, engine._contract_.SwapExtraDay = False, Weekday.Friday
+    engine._rolls_ = engine._schedule_()
+    assert _nights_(engine, datetime(2023, 6, 9, 12), datetime(2023, 6, 12, 12)) == 3 and _nights_(engine, datetime(2023, 6, 6, 12), datetime(2023, 6, 8, 12)) == 2
 
 def test_stop_level_buy():
     engine = _engine_()
@@ -232,11 +302,19 @@ def test_tick_conversions_account_is_quote_uses_raw():
     engine._needs_conversion_ = False
     assert engine._tick_conversions_(0, 1.30010, 1.30000) == pytest.approx((1.30010, 1.30000, 1.0, 1.0))
 
-def test_commission_accurate_is_truncated_per_deal():
+def test_commission_accurate_is_rounded_half_up_per_deal():
     engine = _engine_()
-    raw = engine._commission_(7000.0, 1.1)
+    raw = engine._commission_(7000.0, 1.1, 1.0, 1.0 / 1.1)
     assert raw == pytest.approx(7000.0 * (-45.0 / 1_000_000) * 1.0)
-    assert truncate(raw) == pytest.approx(-0.31)
+    assert quantize(raw) == pytest.approx(-0.32)
+
+def test_a_partial_close_takes_the_rounded_share_of_its_lot_fee():
+    engine = _engine_()
+    engine._lots_ = {7: [[datetime(2026, 9, 29), 1.13693, 10000.0, -0.45, 0.0]]}
+    position = SimpleNamespace(UID=7)
+    first = engine._consume_(position, 5000.0)
+    second = engine._consume_(position, 5000.0)
+    assert (first[2], second[2]) == (pytest.approx(-0.23), pytest.approx(-0.22)) and not engine._lots_[7]
 
 def _walk_engine_():
     engine = _engine_()
@@ -320,7 +398,7 @@ def _preload_stub_(window: int = 20):
     engine._start_ = datetime(2023, 1, 1)
     engine._stop_ = datetime(2024, 1, 1)
     engine._resolution_, engine._auto_ = type("R", (), {"UID": "T1"})(), True
-    engine._account_asset_ = "EUR"
+    engine._account_asset_, engine._bridge_ = "EUR", MISSING
     engine._log_ = _LogStub_()
     return engine
 
@@ -391,9 +469,19 @@ def test_a_run_that_fans_out_publishes_its_tapes_once_and_reads_them_itself(monk
     monkeypatch.setattr(BacktestingAPI, "_share_", share)
     engine = _preload_stub_()
     engine._shared_, engine._shelf_, engine._range_start_, engine._range_stop_ = None, {2: "Conversion"}, engine._start_, engine._stop_
-    assert engine._publish_() is engine._publish_()
+    assert engine._shelve_() is engine._shelve_()
     assert shares == [(engine._start_, engine._stop_)] and engine._shelf_ == {2: "Conversion", 1: "Shared"}
     assert not BacktestingAPI._spawns_(engine)
+
+def test_every_offline_system_publishes_its_run_files_through_the_system():
+    assert BacktestingAPI._publish_ is SystemAPI._publish_ and OptimizationAPI._publish_ is SystemAPI._publish_ and LearningAPI._publish_ is SystemAPI._publish_
+
+def test_no_offline_system_shadows_a_private_method_of_its_engine():
+    engine = {name for name in vars(BacktestingAPI) if name.startswith("_") and name.endswith("_") and not name.startswith("__") and callable(vars(BacktestingAPI)[name])}
+    system = {name for name in vars(SystemAPI) if name.startswith("_") and name.endswith("_") and not name.startswith("__") and callable(vars(SystemAPI)[name])}
+    for child in (OptimizationAPI, LearningAPI):
+        shadowed = {name for name in vars(child) if name in engine | system and name not in {"_connect_", "_disconnect_", "_spawns_", "_worker_", "_workspace_", "_analysis_", "_fitness_", "_replay_", "_report_"}}
+        assert not shadowed, (child.__name__, sorted(shadowed))
 
 def test_a_published_history_serves_every_window_without_a_read(monkeypatch):
     history = pl.DataFrame({"Timestamp": [1, 2, 3, 4, 5], "Close": [1.0, 2.0, 3.0, 4.0, 5.0]})
@@ -486,15 +574,16 @@ def test_quieted_stays_transparent_while_delivering():
 def test_a_worker_payload_carries_the_contract_and_the_worker_pins_it(monkeypatch):
     from types import SimpleNamespace
     from Library.Universe.Contract import ContractAPI
+    from Library.Universe.Security import SecurityAPI
     from Library.Universe.Ticker import ContractType
     import Library.System.Backtesting as module
-    parent = ContractAPI(Ticker="EURUSD", Provider="Spotware(cTrader)", Type=ContractType.Spot, SwapLong=-9.0)
-    engine = SimpleNamespace(_strategy_="Trend", _security_=SimpleNamespace(_provider_=parent.Provider, _ticker_=parent.Ticker, Contract=parent), _timeframe_=SimpleNamespace(UID="H1"),
-                             _account_asset_="EUR", _account_balance_=10000.0, _account_leverage_=30.0, _spread_type_=SpreadType.Accurate, _spread_value_=None,
+    parent = SecurityAPI(Ticker="EURUSD", Provider="Spotware(cTrader)", Type=ContractType.Spot, Contract=ContractAPI(SwapLong=-9.0)).Contract
+    engine = SimpleNamespace(_strategy_="Trend", _security_=SimpleNamespace(_provider_=parent._owner_.Provider, _ticker_=parent._owner_.Ticker, Contract=parent), _timeframe_=SimpleNamespace(UID="H1"),
+                             _account_asset_="EUR", _bridge_=MISSING, _account_balance_=10000.0, _account_leverage_=30.0, _spread_type_=SpreadType.Accurate, _spread_value_=None,
                              _commission_type_=CommissionType.Accurate, _commission_value_=None, _swap_type_=SwapType.Accurate, _swap_long_=None, _swap_short_=None, _risk_free_=0.02)
     payload = BacktestingAPI._dispatch_(engine, SimpleNamespace(data={}), datetime(2023, 1, 1), datetime(2024, 1, 1))
     assert payload["contract"] == parent.snapshot() and payload["risk_free"] == 0.02
-    stored = ContractAPI(Ticker="EURUSD", Provider="Spotware(cTrader)", Type=ContractType.Spot, SwapLong=-2.445)
+    stored = SecurityAPI(Ticker="EURUSD", Provider="Spotware(cTrader)", Type=ContractType.Spot, Contract=ContractAPI(SwapLong=-2.445)).Contract
     class _Database_:
         def __init__(self, **kwargs): pass
         def __enter__(self): return self

@@ -12,10 +12,10 @@ public enum PositionTypeID
 
 public enum StrategyType
 {
-    Download = 1,
     NNFX = 2,
     DDPG = 3,
     Trend = 4,
+    Test = 5,
 }
 
 public enum VerboseLevel
@@ -123,8 +123,7 @@ public enum UpdateID
     Denied = 79,
     Exception = 80,
     Shutdown = 81,
-    Batch = 82,
-    Complete = 83,
+    Complete = 82,
 }
 
 public enum ActionID

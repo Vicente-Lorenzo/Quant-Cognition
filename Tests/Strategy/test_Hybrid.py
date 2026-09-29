@@ -73,7 +73,7 @@ def _update_(buys=None, sells=None, close=1.11, atr=0.01, equity=10000.0):
         OpenPoint=SimpleNamespace(Bid=SimpleNamespace(Price=1.10)),
         HighPoint=SimpleNamespace(Bid=SimpleNamespace(Price=1.13)),
         LowPoint=SimpleNamespace(Bid=SimpleNamespace(Price=1.09)),
-        ClosePoint=SimpleNamespace(Bid=SimpleNamespace(Price=close)),
+        ClosePoint=SimpleNamespace(Bid=SimpleNamespace(Price=close), BidTick=SimpleNamespace(BidBaseConversion=SimpleNamespace(Price=close), BidQuoteConversion=SimpleNamespace(Price=1.0))),
         Volume=5000.0
     )
     portfolio = SimpleNamespace(
@@ -98,11 +98,14 @@ def _strategy_(risk=1.0, atr_scale=1.5, entry=None, exit=None, action=0.0, train
     signal = Parameter({"DirectionalEntryThreshold": list(entry) if entry else None, "DirectionalExitThreshold": list(exit) if exit else None, "ObservationWindow": [1], "NormalizeWindow": [200], "NeutralizeReward": [neutralize]}, ".")
     return _FakeDDPG_(money_management=money, risk_management=None, signal_management=signal, technical_management=technical if technical is not None else _technical_(), fundamental_management=Parameter({}, "."), sentimental_management=Parameter({}, "."), portfolio_management=Parameter({}, "."))
 
-def test_strategy_type_registers_four_strategies():
-    assert StrategyType.Download.value == 1
+def test_strategy_type_registers_three_strategies():
     assert StrategyType.NNFX.value == 2
     assert StrategyType.DDPG.value == 3
     assert StrategyType.Trend.value == 4
+
+def test_ddpg_subscribes_to_bar_closes_and_its_own_positions_and_trades_only():
+    from Library.Protocol.Action import Stream
+    assert DDPGStrategyAPI.Subscription == Stream.BarClosed | Stream.Position | Stream.Trade
 
 def test_signal_maps_to_proportional_target_exposure():
     strategy = _strategy_()

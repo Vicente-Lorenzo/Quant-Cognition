@@ -9,21 +9,28 @@ from Library.Portfolio.Position import PositionAPI
 from Library.Portfolio.Trade import TradeAPI
 from Library.Protocol.Action import ActionID
 from Library.Protocol.Binary import BinaryAPI
-from Library.Strategy.Rule.Download import DownloadStrategyAPI
+from Library.Strategy.Strategy import StrategyAPI
 from Library.System.Realtime import RealtimeAPI
 from Library.System.System import SystemType
 
-def _make_system_(portfolio: tuple = (100, 60.0, 1, 64), system: SystemType = SystemType.Live, database: str = "Quant", **kwargs) -> RealtimeAPI:
+class _Stub_(StrategyAPI):
+
+    def risk_management(self) -> None:
+        return None
+
+    def signal_management(self) -> None:
+        return None
+
+def _make_system_(system: SystemType = SystemType.Live, database: str = "Quant", **kwargs) -> RealtimeAPI:
     p = Parameter({}, "test.yml")
     system = RealtimeAPI(
         system=system,
-        strategy=DownloadStrategyAPI,
+        strategy=_Stub_,
         security=MagicMock(),
         timeframe=MagicMock(),
         parameters=p,
         iid="12345",
         database=database,
-        portfolio=portfolio,
         **kwargs
     )
     system._transport_ = MagicMock()
@@ -34,16 +41,12 @@ def _make_system_(portfolio: tuple = (100, 60.0, 1, 64), system: SystemType = Sy
 def realtime_system():
     return _make_system_()
 
-def test_receive_update_id_unpacks_batch(realtime_system):
+def test_receive_update_id_reads_one_record(realtime_system):
     from Library.Protocol.Update import UpdateID
-    rec1 = bytes([UpdateID.Tick.value, 1, 2, 3])
-    rec2 = bytes([UpdateID.BarClosed.value, 4, 5])
-    batch = bytes([UpdateID.Batch.value]) + len(rec1).to_bytes(2, "little") + rec1 + len(rec2).to_bytes(2, "little") + rec2
-    realtime_system._receive_ = MagicMock(side_effect=[batch, bytes([UpdateID.Complete.value])])
+    record = bytes([UpdateID.Tick.value, 1, 2, 3])
+    realtime_system._receive_ = MagicMock(side_effect=[record, bytes([UpdateID.Complete.value])])
     assert realtime_system.receive_update_id() == UpdateID.Tick
-    assert realtime_system._last_update_data_ == rec1
-    assert realtime_system.receive_update_id() == UpdateID.BarClosed
-    assert realtime_system._last_update_data_ == rec2
+    assert realtime_system._last_update_data_ == record
     assert realtime_system.receive_update_id() == UpdateID.Complete
     assert realtime_system._receive_.call_count == 2
 
@@ -68,17 +71,8 @@ def test_direct_attribute_state(realtime_system):
     assert realtime_system.sentimental is None
     assert realtime_system.portfolio is None
 
-def test_buffer_instances_carry_correct_types(realtime_system):
-    assert realtime_system._portfolio_._types_ == (AccountAPI, OrderAPI, PositionAPI, TradeAPI)
-
-def test_live_mode_buffers_the_portfolio():
-    assert _make_system_(portfolio=(100, 60.0, 1, 64))._portfolio_.Active is True
-
-def test_simulation_mode_buffers_nothing():
-    assert _make_system_(portfolio=(0, 0.0, 8, 64))._portfolio_.Active is False
-
-def test_workers_zero_disables_buffer():
-    assert _make_system_(portfolio=(100, 60.0, 0, 64))._portfolio_.Active is False
+def test_a_cbot_run_keeps_no_write_buffer(realtime_system):
+    assert not hasattr(realtime_system, "_portfolio_") and not hasattr(realtime_system, "_universe_") and not hasattr(realtime_system, "_session_")
 
 def test_market_updates_are_never_stored(realtime_system):
     tick, bar = MagicMock(), MagicMock()
@@ -87,30 +81,17 @@ def test_market_updates_are_never_stored(realtime_system):
     assert realtime_system._receive_update_tick_() is tick and realtime_system._receive_update_bar_() is bar
     assert not hasattr(realtime_system, "_market_")
 
-def test_receive_update_order_routes_to_portfolio_buffer(realtime_system):
-    realtime_system._portfolio_.add = MagicMock()
-    order = MagicMock()
+def test_portfolio_updates_pass_through_without_being_stored(realtime_system):
+    order, position, trade, account, security = MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
     realtime_system.receive_update_order = MagicMock(return_value=order)
-    realtime_system._receive_update_order_()
-    realtime_system._portfolio_.add.assert_called_once_with(order)
-
-def test_receive_update_position_routes_to_portfolio_buffer(realtime_system):
-    realtime_system._portfolio_.add = MagicMock()
-    position = MagicMock()
     realtime_system.receive_update_position = MagicMock(return_value=position)
-    realtime_system._receive_update_position_()
-    realtime_system._portfolio_.add.assert_called_once_with(position)
-
-def test_receive_update_trade_routes_to_portfolio_buffer(realtime_system):
-    realtime_system._portfolio_.add = MagicMock()
-    trade = MagicMock()
     realtime_system.receive_update_trade = MagicMock(return_value=trade)
-    realtime_system._receive_update_trade_()
-    realtime_system._portfolio_.add.assert_called_once_with(trade)
-
-def test_simulation_mode_drops_portfolio_records():
-    system = _make_system_(portfolio=(0, 0.0, 8, 64))
-    assert system._portfolio_.add is system._portfolio_._noop_
+    realtime_system.receive_update_account = MagicMock(return_value=account)
+    realtime_system.receive_update_security = MagicMock(return_value=security)
+    assert realtime_system._receive_update_order_() is order and realtime_system._receive_update_position_() is position and realtime_system._receive_update_trade_() is trade
+    assert realtime_system._receive_update_account_() is account and realtime_system._receive_update_security_() is security
+    account.save.assert_not_called()
+    security.save.assert_not_called()
 
 def test_warmup_leaves_buffering_to_the_bar_receiver(realtime_system):
     realtime_system._db_ = None
@@ -191,62 +172,92 @@ def test_receive_update_exception_returns_reason(realtime_system):
     realtime_system._last_update_data_ = exception_codec.pack(78, "disconnect")
     assert realtime_system.receive_update_exception() == "disconnect"
 
-def test_receive_update_security_updates_and_returns_security(realtime_system):
-    security_codec = realtime_system._binary_security_
-    realtime_system._last_update_data_ = b'\x00' + security_codec.pack("EUR", "USD", 5, 0.00001, 0.0001, 100000.0, 1000.0, 10000000.0, 1000.0, 30.0, 1, -1.5, -1.2, 0, 3)
-    from Library.Universe.Contract import CommissionMode, SwapMode
-    from Library.Utility.Datetime import Weekday
-    from Library.Universe.Ticker import TickerAPI
+def _security_payload_(extra_day: int = 3, trading_mode: int = 0) -> bytes:
+    return b'\x00' + RealtimeAPI._binary_security_.pack(1, "EUR", "USD", "Euro vs US Dollar", 5, 0.00001, 0.0001, 100000, 1000.0, 10000000.0, 1000.0, 1, 30.0, 0, -1.5, -1.2, extra_day, trading_mode)
+
+def _stored_security_():
     from Library.Universe.Contract import ContractAPI
-    realtime_system._security_._ticker_ = TickerAPI(UID="EURUSD")
-    realtime_system._security_._contract_ = ContractAPI(UID=1)
+    from Library.Universe.Security import SecurityAPI
+    from Library.Universe.Ticker import ContractType
+    return SecurityAPI(Ticker="EURUSD", Provider="Spotware(cTrader)", Type=ContractType.Spot, Contract=ContractAPI(UID=1))
 
+def test_receive_update_security_updates_and_returns_security(realtime_system):
+    from Library.Universe.Contract import CommissionMode, SwapMode, TradingMode
+    from Library.Utility.Datetime import Weekday
+    realtime_system._security_ = _stored_security_()
+    realtime_system._last_update_data_ = _security_payload_()
     sec = realtime_system.receive_update_security()
-    assert sec is realtime_system._security_
-    assert sec.Ticker.BaseAsset == "EUR"
-    assert sec.Ticker.QuoteAsset == "USD"
-    assert sec.Contract.Digits == 5
-    assert sec.Contract.CommissionMode == CommissionMode.BaseAssetPerOneLot
-    assert sec.Contract.SwapExtraDay == Weekday.Wednesday
+    assert sec is realtime_system._security_ and sec.Symbol == 1
+    assert (sec.Ticker.BaseAsset, sec.Ticker.QuoteAsset, sec.Ticker.Description) == ("EUR", "USD", "Euro vs US Dollar")
+    assert (sec.Contract.Digits, sec.Contract.PointSize, sec.Contract.PipSize, sec.Contract.LotSize) == (5, 0.00001, 0.0001, 100000)
+    assert (sec.Contract.VolumeMin, sec.Contract.VolumeMax, sec.Contract.VolumeStep) == (1000.0, 10000000.0, 1000.0)
+    assert (sec.Contract.CommissionMode, sec.Contract.Commission) == (CommissionMode.BaseAssetPerOneLot, 30.0)
+    assert (sec.Contract.SwapMode, sec.Contract.SwapLong, sec.Contract.SwapShort, sec.Contract.SwapExtraDay) == (SwapMode.Pips, -1.5, -1.2, Weekday.Wednesday)
+    assert sec.Contract.TradingMode == TradingMode.Enabled and sec.Contract.UpdatedBy == "Connector"
 
-def test_exit_drains_buffers_before_closing_stack():
+def test_a_security_update_reads_ctraders_own_trading_modes_and_a_missing_triple_swap_day(realtime_system):
+    from Library.Universe.Contract import TradingMode
+    expected = {0: TradingMode.Enabled, 1: TradingMode.CloseOnlyMode, 2: TradingMode.DisabledWithPendingsExecution, 3: TradingMode.DisabledWithoutPendingsExecution}
+    for mode, trading in expected.items():
+        realtime_system._security_ = _stored_security_()
+        realtime_system._last_update_data_ = _security_payload_(extra_day=-1, trading_mode=mode)
+        contract = realtime_system.receive_update_security().Contract
+        assert contract.TradingMode == trading and contract.SwapExtraDay is None
+
+def test_a_security_without_stored_terms_takes_the_ones_the_connector_sends(realtime_system):
+    security = _stored_security_()
+    security._contract_ = None
+    realtime_system._security_ = security
+    realtime_system._last_update_data_ = _security_payload_()
+    contract = realtime_system.receive_update_security().Contract
+    assert contract is not None and contract.Digits == 5 and contract._owner_ is security
+
+def test_exit_closes_the_stack():
     system = _make_system_()
     calls = []
     system._connected_ = True
-    system._portfolio_._active_ = True
-    system._portfolio_.shutdown = lambda: calls.append("portfolio_shutdown")
     system._stack_ = MagicMock()
     system._stack_.__exit__ = MagicMock(side_effect=lambda *a, **k: calls.append("stack_exit"))
     system.__exit__(None, None, None)
-    assert calls.index("portfolio_shutdown") < calls.index("stack_exit")
+    assert calls == ["stack_exit"] and system._connected_ is False
 
 def test_a_wire_contract_is_recorded_with_its_own_provenance(tmp_path):
     from datetime import datetime
     from types import SimpleNamespace
     from Library.Universe.Contract import ContractAPI
+    from Library.Universe.Security import SecurityAPI
     from Library.Universe.Ticker import ContractType
     from Library.Utility.IO import read_yaml
     system = _make_system_(run=str(tmp_path))
-    stored = ContractAPI(Ticker="EURUSD", Provider="Spotware(cTrader)", Type=ContractType.Spot, SwapLong=-2.445, SwapShort=-0.105, UpdatedAt=datetime(2026, 9, 10, 18, 30), UpdatedBy="Autosave")
+    stored = SecurityAPI(Ticker="EURUSD", Provider="Spotware(cTrader)", Type=ContractType.Spot, Contract=ContractAPI(SwapLong=-2.445, SwapShort=-0.105, UpdatedAt=datetime(2026, 9, 10, 18, 30), UpdatedBy="Autosave")).Contract
     system._security_ = SimpleNamespace(Ticker=None, Contract=stored)
-    system._binary_security_ = SimpleNamespace(unpack=lambda data, offset: ("EUR", "USD", 5, 0.00001, 0.0001, 100000, 1000.0, 10000000.0, 1000.0, 45.0, 0, -9.0, -1.0, 0, 3))
+    system._binary_security_ = SimpleNamespace(unpack=lambda data, offset: (1, "EUR", "USD", "Euro vs US Dollar", 5, 0.00001, 0.0001, 100000, 1000.0, 10000000.0, 1000.0, 0, 45.0, 0, -9.0, -1.0, 3, 0))
     system._last_update_data_ = b""
     system.receive_update_security()
     written = read_yaml(tmp_path / "Input" / "Contract.yml", safe=False)
     assert (written["SwapLong"], written["SwapShort"], written["UpdatedBy"]) == (-9.0, -1.0, "Connector")
     assert written["UpdatedAt"] > datetime(2026, 9, 10, 18, 30)
 
-def test_a_wire_bar_carries_both_sides_of_each_extreme(realtime_system):
+def test_a_wire_bar_carries_both_sides_and_the_mid_of_each_extreme(realtime_system):
     import struct
     from Library.Protocol.Update import UpdateID
-    realtime_system.strategy = MagicMock()
-    realtime_system.strategy.Transform.Market = True
     realtime_system._security_ = None
     realtime_system._timeframe_ = None
-    ticks = [(1706745600000 + index, 1.1 + index / 1000, 1.0 + index / 1000, 1.0, 1.0, 1.0, 1.0, 1.0) for index in range(7)]
+    ticks = [(1706745600000 + index, 1.1 + index / 1000, 1.0 + index / 1000, 1.0, 1.0, 1.0, 1.0, 1.0) for index in range(9)]
     payload = struct.pack("<Bq", UpdateID.BarClosed.value, 1706745600000) + b"".join(realtime_system._binary_tick_.pack(*tick) for tick in ticks) + struct.pack("<d", 42.0)
-    assert len(payload) == realtime_system._bar_payload_
+    assert len(payload) == realtime_system._bar_payload_ == 593
     realtime_system._last_update_data_ = payload
     bar = realtime_system.receive_update_bar()
-    assert (bar.HighPoint.Ask.Price, bar.HighPoint.Bid.Price, bar.LowPoint.Ask.Price, bar.LowPoint.Bid.Price) == (1.102, 1.003, 1.104, 1.005)
-    assert bar.ClosePoint.AskTick is bar.ClosePoint.BidTick and bar.ClosePoint.Bid.Price == 1.006 and bar.Volume == 42.0
+    assert (bar.HighPoint.Ask.Price, bar.HighPoint.Bid.Price, bar.LowPoint.Ask.Price, bar.LowPoint.Bid.Price) == (ticks[2][1], ticks[3][2], ticks[5][1], ticks[6][2])
+    assert (bar.HighPoint.Mid.Price, bar.LowPoint.Mid.Price) == ((ticks[4][1] + ticks[4][2]) / 2, (ticks[7][1] + ticks[7][2]) / 2)
+    assert bar.ClosePoint.AskTick is bar.ClosePoint.BidTick is bar.ClosePoint.MidTick and bar.ClosePoint.Bid.Price == ticks[8][2] and bar.Volume == 42.0
+    assert bar.OpenPoint.MidTick is bar.OpenPoint.AskTick and bar.GapPoint.MidTick is bar.GapPoint.BidTick
+
+def test_the_market_prices_at_the_side_its_strategy_declares():
+    from Library.Market.Price import PriceMode
+    system = _make_system_()
+    system._assemble_()
+    assert system.market.ClosePoints.Price is system.market.ClosePoints.Bid
+    system._strategy_ = type("_Mid_", (_Stub_,), {"Pricing": PriceMode.Mid})
+    system._assemble_()
+    assert system.market.ClosePoints.Price is system.market.ClosePoints.Mid and system.market.Ticks.Price is system.market.Ticks.Mid

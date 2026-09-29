@@ -1,6 +1,11 @@
+import io
+import sys
+import json
+
 import pytest
 
 from Library.Utility.Command import CommandAPI
+from Library.Utility.Progress import Phase, ProgressAPI
 
 class _Probe_(CommandAPI):
 
@@ -38,3 +43,21 @@ def test_a_detail_skips_missing_values(capsys):
     assert capsys.readouterr().out.strip() == "Name: a"
     CommandAPI.detail(None)
     assert capsys.readouterr().out.strip() == "(not found)"
+def test_a_command_reports_running_then_terminating(monkeypatch):
+    stream = io.StringIO()
+    monkeypatch.setattr(sys, "__stdout__", stream)
+    assert _Probe_(None).main(["--value", "2"]) == 2
+    assert [json.loads(line[len(ProgressAPI.SENTINEL):])["phase"] for line in stream.getvalue().splitlines()] == [Phase.Running.name, Phase.Terminating.name]
+
+def test_a_refused_command_still_reports_terminating(monkeypatch, capsys):
+    stream = io.StringIO()
+    monkeypatch.setattr(sys, "__stdout__", stream)
+    assert _Probe_(LookupError("Missing")).main([]) == 1
+    assert stream.getvalue().splitlines()[-1].endswith('{"phase":"Terminating"}')
+
+def test_a_terminal_sees_no_phase_line(monkeypatch):
+    stream = io.StringIO()
+    monkeypatch.setattr(sys, "__stdout__", stream)
+    monkeypatch.setattr(ProgressAPI, "_attached_", staticmethod(lambda target: True))
+    ProgressAPI.phase(Phase.Running)
+    assert stream.getvalue() == ""

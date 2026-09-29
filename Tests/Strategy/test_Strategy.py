@@ -2,32 +2,36 @@ from Library.Utility.Parameter import Parameter
 from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Protocol.Update import AccountUpdateAPI, BarUpdateAPI, SecurityUpdateAPI, UpdateID
-from Library.Strategy.Rule.Download import DownloadStrategyAPI
 from Library.Strategy.Rule.NNFX import NNFXStrategyAPI
-from Library.Strategy.Strategy import StrategyAPI, StrategyType, Transform
+from Library.Strategy.Strategy import StrategyAPI, StrategyType
+
+class _Stub_(StrategyAPI):
+
+    def risk_management(self) -> None:
+        return None
+
+    def signal_management(self) -> None:
+        return None
 
 def test_strategy_type_enum():
-    assert StrategyType.Download.value == 1
-    assert StrategyType.NNFX.value == 2
-    assert StrategyType.DDPG.value == 3
-    assert StrategyType.Trend.value == 4
+    assert [(entry.name, entry.value) for entry in StrategyType] == [("NNFX", 2), ("DDPG", 3), ("Trend", 4), ("Test", 5)]
 
-def test_download_strategy_builds():
+def test_strategy_builds():
     p = Parameter({}, "test.yml")
-    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
+    strat = _Stub_(p, p, p, p, p, p, p)
     assert strat.risk_management() is None
     assert strat.signal_management() is None
     assert strat.strategy_management() is not None
 
-def test_download_strategy_machine_initial_state():
+def test_strategy_machine_initial_state():
     p = Parameter({}, "test.yml")
-    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
+    strat = _Stub_(p, p, p, p, p, p, p)
     eng = strat.strategy_management()
     assert eng.At.Name == "Initialization"
 
 def test_account_update_sets_portfolio_account():
     p = Parameter({}, "test.yml")
-    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
+    strat = _Stub_(p, p, p, p, p, p, p)
     eng = strat.strategy_management()
     account = AccountAPI(Balance=10000.0)
     portfolio = PortfolioAPI()
@@ -37,7 +41,7 @@ def test_account_update_sets_portfolio_account():
 
 def test_security_update_sets_portfolio_security_in_initialization():
     p = Parameter({}, "test.yml")
-    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
+    strat = _Stub_(p, p, p, p, p, p, p)
     eng = strat.strategy_management()
     portfolio = PortfolioAPI()
     update = SecurityUpdateAPI(Account=None, Security=None, Market=None, Technical=None, Fundamental=None, Sentimental=None, Portfolio=portfolio)
@@ -46,8 +50,7 @@ def test_security_update_sets_portfolio_security_in_initialization():
 
 def test_execution_transitions_initialization_to_execution():
     p = Parameter({}, "test.yml")
-    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
-    strat.Transform = Transform()
+    strat = _Stub_(p, p, p, p, p, p, p)
     eng = strat.strategy_management()
     portfolio = PortfolioAPI()
     from unittest.mock import MagicMock
@@ -62,7 +65,7 @@ def test_execution_transitions_initialization_to_execution():
 
 def test_shutdown_transitions_to_termination_from_initialization():
     p = Parameter({}, "test.yml")
-    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
+    strat = _Stub_(p, p, p, p, p, p, p)
     eng = strat.strategy_management()
     portfolio = PortfolioAPI()
     from Library.Protocol.Update import CompleteUpdateAPI
@@ -73,8 +76,7 @@ def test_shutdown_transitions_to_termination_from_initialization():
 
 def test_bar_closed_propagates_to_indicators_and_portfolio():
     p = Parameter({}, "test.yml")
-    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
-    strat.Transform = Transform()
+    strat = _Stub_(p, p, p, p, p, p, p)
     eng = strat.strategy_management()
     portfolio_mock = type("P", (), {"Account": None, "Security": None, "update_data": lambda self, x: None})()
     from unittest.mock import MagicMock
@@ -89,22 +91,14 @@ def test_bar_closed_propagates_to_indicators_and_portfolio():
     sentimental.update_data.assert_called_with(market)
     portfolio_mock.update_data.assert_called_with("bar_obj")
 
-def test_download_strategy_skips_indicators_and_portfolio():
-    p = Parameter({}, "test.yml")
-    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
-    eng = strat.strategy_management()
-    from unittest.mock import MagicMock
-    from Library.Protocol.Update import CompleteUpdateAPI
-    market, technical, fundamental, sentimental, portfolio = MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
-    eng.perform(UpdateID.Execution, CompleteUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio))
-    eng.perform(UpdateID.BarClosed, BarUpdateAPI(Account=None, Security=None, Market=market, Technical=technical, Fundamental=fundamental, Sentimental=sentimental, Portfolio=portfolio, Bar="bar_obj"))
-    technical.update_data.assert_not_called()
-    portfolio.update_data.assert_not_called()
-
-def test_strategy_subscription_defaults_and_download():
+def test_strategy_subscription_defaults():
     from Library.Protocol.Action import Stream
     assert StrategyAPI.Subscription == Stream.All
-    assert DownloadStrategyAPI.Subscription == Stream.BarClosed
+    assert _Stub_.Subscription == Stream.All
+
+def test_a_strategy_prices_its_market_at_the_bid_unless_it_declares_otherwise():
+    from Library.Market.Price import PriceMode
+    assert StrategyAPI.Pricing == _Stub_.Pricing == PriceMode.Bid and [mode.value for mode in PriceMode] == [0, 1, 2]
 
 def test_subscribe_action_serializes_actionid_and_bitmask():
     from Library.Protocol.Action import SubscribeActionAPI, ActionID, Stream
@@ -120,7 +114,7 @@ def test_opened_stop_order_propagates_to_portfolio():
     from unittest.mock import MagicMock
     from Library.Protocol.Update import OpenedBuyStopOrderUpdateAPI, CompleteUpdateAPI
     p = Parameter({}, "test.yml")
-    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
+    strat = _Stub_(p, p, p, p, p, p, p)
     eng = strat.strategy_management()
     portfolio = MagicMock()
     portfolio.update_data = MagicMock()
@@ -143,7 +137,7 @@ def test_filled_stop_order_transitions_order_to_position():
     from unittest.mock import MagicMock
     from Library.Protocol.Update import FilledBuyStopOrderUpdateAPI, CompleteUpdateAPI
     p = Parameter({}, "test.yml")
-    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
+    strat = _Stub_(p, p, p, p, p, p, p)
     eng = strat.strategy_management()
     portfolio = MagicMock()
     portfolio.update_data = MagicMock()
@@ -166,7 +160,7 @@ def test_expired_limit_order_removes_order():
     from unittest.mock import MagicMock
     from Library.Protocol.Update import ExpiredBuyLimitOrderUpdateAPI, CompleteUpdateAPI
     p = Parameter({}, "test.yml")
-    strat = DownloadStrategyAPI(p, p, p, p, p, p, p)
+    strat = _Stub_(p, p, p, p, p, p, p)
     eng = strat.strategy_management()
     portfolio = MagicMock()
     portfolio.update_data = MagicMock()

@@ -1,17 +1,19 @@
 import pytest
 from datetime import datetime, timezone
+
 import Library.Market
 import Library.Portfolio
-from ctrader_open_api.messages.OpenApiMessages_pb2 import (
-    ProtoOAGetAccountListByAccessTokenRes,
-    ProtoOATraderRes,
-    ProtoOAReconcileRes,
-    ProtoOAOrderListRes,
-    ProtoOAOrderDetailsRes,
+from Library.Spotware.Messages import (
+    ProtoOACashFlowHistoryListRes,
     ProtoOADealListRes,
+    ProtoOAGetAccountListByAccessTokenRes,
     ProtoOAGetPositionUnrealizedPnLRes,
-    ProtoOACashFlowHistoryListRes
+    ProtoOAOrderDetailsRes,
+    ProtoOAOrderListRes,
+    ProtoOAReconcileRes,
+    ProtoOATraderRes
 )
+
 def test_accounts_parses_response(spotware):
     res = ProtoOAGetAccountListByAccessTokenRes()
     res.accessToken = "tok"
@@ -406,3 +408,9 @@ def test_trades_stop_once_the_bound_passes_the_start(spotware):
     spotware._responses_.extend([_page_([1577836800000], True), _page_([1577836800000], True)])
     df = spotware.portfolio.trades(start=datetime(2020, 1, 1), stop=datetime(2020, 1, 3), rows=1)
     assert df["TradeID"].to_list() == [1577836800000] and len(spotware._sent_) == 2
+def test_trade_net_pnl_is_summed_in_money_units_before_it_is_decoded(spotware):
+    res = _page_([1577923201000], False)
+    res.deal[0].closePositionDetail.grossProfit, res.deal[0].closePositionDetail.commission = -2, -10
+    spotware._responses_.append(res)
+    df = spotware.portfolio.trades(start=datetime(2020, 1, 1), stop=datetime(2020, 1, 3))
+    assert df["NetPnL"][0] == -0.12 and -0.02 + -0.1 != -0.12

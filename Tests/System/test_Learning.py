@@ -1,4 +1,6 @@
 import pickle
+import pytest
+import torch
 
 from datetime import datetime
 from pathlib import Path
@@ -23,7 +25,8 @@ from Library.Strategy.Strategy import Threshold
 from Library.System.Learning import LearningAPI
 from Library.System.System import SystemAPI
 from Library.Universe.Contract import CommissionType, SpreadType, SwapType
-from Library.Utility.IO import mkdir, read_json, write_json
+from Library.Utility.IO import mkdir, read_json, read_yaml, write_json
+from Library.Utility.Path import traceback_root
 from Library.Utility.Typing import MISSING
 
 class _FakeAgent_:
@@ -79,7 +82,7 @@ class _Harness_(LearningAPI):
         agent = self._strategy_.Agent if self._strategy_.Agent is not None else _FakeAgent_()
         exposure = getattr(self, "_exposure_script_", None)
         longs, shorts = exposure.pop(0) if exposure and not training else (1000000.0, 1000000.0)
-        self.strategy = SimpleNamespace(_agent_=agent, save=lambda: _persist_(agent), load=agent.load, _observation_=SimpleNamespace(shape=lambda: 23), _sizing_mode_=SimpleNamespace(name="Percentage"), _risk_percentage_=1.0, _atr_scale_=1.5, DirectionalEntryThreshold=Threshold(-0.4, 0.4), DirectionalExitThreshold=Threshold(-0.1, 0.1), _long_bars_=longs, _short_bars_=shorts)
+        self.strategy = SimpleNamespace(_agent_=agent, save=lambda: _persist_(agent), load=agent.load, _observation_=SimpleNamespace(shape=lambda: 23), _sizing_mode_=SimpleNamespace(name="Percentage"), _risk_percentage_=1.0, _atr_scale_=1.5, _reward_=SimpleNamespace(_scale_=1000.0), DirectionalEntryThreshold=Threshold(-0.4, 0.4), DirectionalExitThreshold=Threshold(-0.1, 0.1), _long_bars_=longs, _short_bars_=shorts)
         self.portfolio = SimpleNamespace(Equity=10000.0, InitialBalance=10000.0, EquityCurve=CurveAPI())
         return self._script_.pop(0) if self._script_ else 0.0
 
@@ -227,7 +230,7 @@ def test_test_pass_loads_best_then_evaluates(tmp_path):
     assert _FakeAgent_.loads == 1
     assert harness._passes_[-1][2] is False
     manifest = read_json(tmp_path / "_FakeStrategy_ Manifest.json")
-    assert manifest["Results"][0]["Test"] == 0.10 and manifest["Best"] == 0.10
+    assert manifest["Results"][0]["Test"] == 0.10 and manifest["Best"] == 0.06 and manifest["Elected"] == 42
 
 def test_multi_seed_promotes_best(tmp_path):
     _reset_(tmp_path)
@@ -254,7 +257,7 @@ def test_manifest_records_configuration(tmp_path):
     assert manifest["TrainFrequency"] == 2 and manifest["GradientSteps"] == 3
     assert manifest["Validation"] == 0 and manifest["Testing"] == 0 and manifest["Seeds"] == 1
     assert manifest["Fitness"] == CALMARRATIOANN and manifest["Best"] == 0.05 and len(manifest["Results"]) == 1
-    assert manifest["RiskPercentage"] == 1.0 and manifest["ATRScale"] == 1.5
+    assert manifest["RiskPercentage"] == 1.0 and manifest["ATRScale"] == 1.5 and manifest["RewardScale"] == 1000.0
     assert manifest["DirectionalEntryThreshold"] == [-0.4, 0.4] and manifest["DirectionalExitThreshold"] == [-0.1, 0.1]
 
 def test_scratch_builds_fresh_agent_per_fold(tmp_path):
@@ -325,7 +328,8 @@ def _mirror_frame_():
         "ClosePoint.AskTick": ([1.2002, 1.3002], [1.2000, 1.3000], [6, 12]), "ClosePoint.BidTick": ([1.2002, 1.3002], [1.2000, 1.3000], [6, 12]),
     }
     columns = {f"{prefix}.{name}": values for prefix, (asks, bids, stamps) in ticks.items() for name, values in (("Ask", asks), ("Bid", bids), ("Timestamp", stamps))}
-    return pl.DataFrame({**columns, "ClosePoint.BidTick.AskBaseConversion": [1.0, 1.0]})
+    conversions = {f"{prefix}.{side}{kind}Conversion": [0.9, 0.8] for prefix in ticks for side in ("Ask", "Bid") for kind in ("Base", "Quote")}
+    return pl.DataFrame({**columns, **conversions})
 
 def test_mirror_frame_negates_returns_and_swaps_extremes():
     frame = _mirror_frame_()
@@ -339,12 +343,32 @@ def test_mirror_frame_negates_returns_and_swaps_extremes():
     assert abs(mirrored["LowPoint.AskTick.Ask"][0] - anchor / 1.3000) < 1e-12 and mirrored["LowPoint.AskTick.Timestamp"][0] == 3
     assert abs(mirrored["LowPoint.BidTick.Bid"][0] - anchor / 1.3004) < 1e-12 and mirrored["LowPoint.BidTick.Timestamp"][0] == 2
     assert (mirrored["HighPoint.BidTick.Bid"] > mirrored["LowPoint.BidTick.Bid"]).all()
-    assert mirrored["ClosePoint.BidTick.AskBaseConversion"][0] is None
+    assert mirrored["ClosePoint.BidTick.AskBaseConversion"][0] == 0.9 and mirrored["ClosePoint.BidTick.BidQuoteConversion"][1] == 0.8
     import math
     original_return = math.log(1.3000 / 1.2000)
     mirrored_return = math.log(mirrored["ClosePoint.BidTick.Bid"][1] / mirrored["ClosePoint.BidTick.Bid"][0])
     assert abs(mirrored_return + math.log(1.3002 / 1.2002)) < 1e-9
     assert mirrored_return < 0.0 < original_return
+
+def test_a_mirrored_tape_converts_through_its_own_mirrored_prices():
+    frame, anchor = _mirror_frame_(), 1.2 * 1.2
+    owned = LearningAPI._mirror_frame_(frame, anchor, quote=True)
+    assert owned["ClosePoint.BidTick.AskQuoteConversion"][0] == pytest.approx(1.0 / owned["ClosePoint.BidTick.Bid"][0], rel=1e-12)
+    assert owned["ClosePoint.BidTick.BidQuoteConversion"][0] == pytest.approx(1.0 / owned["ClosePoint.BidTick.Ask"][0], rel=1e-12)
+    assert owned["ClosePoint.BidTick.AskBaseConversion"][0] == 0.9
+    owned = LearningAPI._mirror_frame_(frame, anchor, base=True)
+    assert owned["HighPoint.BidTick.AskBaseConversion"][0] == owned["HighPoint.BidTick.Ask"][0] and owned["HighPoint.BidTick.BidBaseConversion"][0] == owned["HighPoint.BidTick.Bid"][0]
+    assert owned["HighPoint.BidTick.AskQuoteConversion"][0] == 0.9
+
+def test_mirror_frame_mirrors_each_mid_tick_with_its_point():
+    frame = _mirror_frame_()
+    mids = {"HighPoint.MidTick": (1.3003, 1.2999, 13), "LowPoint.MidTick": (1.0002, 0.9999, 14), "ClosePoint.MidTick": (1.2002, 1.2000, 6)}
+    frame = frame.with_columns([pl.lit(value).alias(f"{prefix}.{name}") for prefix, values in mids.items() for name, value in zip(("Ask", "Bid", "Timestamp"), values)])
+    anchor = 1.2 * 1.2
+    mirrored = LearningAPI._mirror_frame_(frame, anchor)
+    assert (mirrored["HighPoint.MidTick.Ask"][0], mirrored["HighPoint.MidTick.Bid"][0], mirrored["HighPoint.MidTick.Timestamp"][0]) == (anchor / 0.9999, anchor / 1.0002, 14)
+    assert (mirrored["LowPoint.MidTick.Ask"][0], mirrored["LowPoint.MidTick.Bid"][0], mirrored["LowPoint.MidTick.Timestamp"][0]) == (anchor / 1.2999, anchor / 1.3003, 13)
+    assert mirrored["ClosePoint.MidTick.Timestamp"][0] == mirrored["ClosePoint.BidTick.Timestamp"][0] and mirrored["ClosePoint.MidTick.Bid"][0] == mirrored["ClosePoint.BidTick.Bid"][0]
 
 def test_mirror_alternates_training_episodes_only(tmp_path):
     _reset_(tmp_path)
@@ -387,9 +411,87 @@ def test_parallel_payload_is_picklable(tmp_path):
     assert restored["provider"] == "Spotware(cTrader)" and restored["ticker"] == "EURUSD"
     assert restored["seed"] == 43 and restored["weights"].endswith("Seed 43")
     assert restored["rolling"] is True and restored["folds"] == folds and restored["test"] == test
-    assert restored["spread"][1] is None and restored["account"] == ("EUR", 10000.0, 100.0)
+    assert restored["spread"][1] is None and restored["account"] == ("EUR", 10000.0, 100.0, None)
     assert restored["shelf"] == [(7, "Tape", 3, (0, 1))]
     assert restored["history"][folds[0][0][0]][0]["Close"].to_list() == [1.1, 1.2] and restored["history"][folds[0][0][0]][1] == 2
+
+def test_a_worker_seed_selects_and_elects_as_the_run_asked(tmp_path, monkeypatch):
+    _reset_(tmp_path)
+    harness = _make_(episodes=1, training=12, validation=6, testing=0, seeds=2, workers=2, selection="Median", election="Mean")
+    payload = harness._payload_(43, tmp_path / "Seed 43", [], None, [], {})
+    assert payload["selection"] == "Median" and payload["election"] == "Mean"
+    captured = {}
+    def _capture_(self, **kwargs):
+        captured.update(kwargs)
+        raise RuntimeError("Captured")
+    monkeypatch.setattr(torch, "set_num_threads", lambda threads: None)
+    monkeypatch.setattr("Library.Logging.LoggingAPI", lambda *tags: SimpleNamespace(file=SimpleNamespace(set_level=lambda level: None)))
+    monkeypatch.setattr(LearningAPI, "_worker_", staticmethod(lambda payload, log: (None, None)))
+    monkeypatch.setattr(LearningAPI, "__init__", _capture_)
+    with pytest.raises(RuntimeError): LearningAPI._learn_seed_(payload)
+    assert captured["selection"] == "Median" and captured["election"] == "Mean"
+
+def test_a_serial_run_trains_on_the_threads_it_was_given(tmp_path, monkeypatch):
+    threads = []
+    monkeypatch.setattr(torch, "set_num_threads", threads.append)
+    _reset_(tmp_path)
+    harness = _make_(episodes=1, validation=0, testing=0, seeds=2, workers=1, threads=1)
+    harness._script_ = [0.01, 0.02]
+    harness.run()
+    assert threads == [1]
+    _reset_(tmp_path)
+    harness = _make_(episodes=1, validation=0, testing=0, seeds=1)
+    harness._script_ = [0.01]
+    harness.run()
+    assert threads == [1]
+
+def test_seeds_are_elected_on_validation_never_on_the_held_out_window(tmp_path):
+    _reset_(tmp_path)
+    harness = _make_(episodes=1, validation=0, testing=12, seed=42, seeds=2)
+    harness._script_ = [0.08, 0.01, 0.02, 0.50]
+    harness.run()
+    assert harness._promoted_ == tmp_path / "Seed 42"
+    manifest = read_json(tmp_path / "_FakeStrategy_ Manifest.json")
+    assert manifest["Best"] == 0.08 and manifest["Elected"] == 42
+    assert [result["Test"] for result in manifest["Results"]] == [0.01, 0.50]
+
+def test_a_run_keeps_every_seed_in_its_own_folder(tmp_path):
+    _reset_(tmp_path)
+    harness = _make_(episodes=1, validation=0, testing=0, seeds=1)
+    harness._run_ = tmp_path / "Run"
+    assert LearningAPI._weights_directory_(harness) == tmp_path / "Run" / SystemAPI.OUTPUT / "Weights"
+    assert (tmp_path / "Run" / SystemAPI.OUTPUT / "Weights").is_dir()
+    harness._weights_ = tmp_path / "Run" / SystemAPI.OUTPUT / "Weights"
+    mkdir(harness._weights_ / "Seed 42")
+    LearningAPI._export_weights_(harness)
+    assert (harness._weights_ / "Seed 42").is_dir() and not list(tmp_path.glob("_FakeStrategy_ *"))
+
+def test_a_walk_forward_run_writes_its_manifest(tmp_path):
+    _reset_(tmp_path)
+    harness = _make_(episodes=1, training=12, validation=6, testing=0, seeds=1)
+    harness._tracked_ = lambda: [(0, 10000.0)]
+    harness._script_ = [0.01, 0.02] * 8
+    harness.run()
+    manifest = read_json(tmp_path / "_FakeStrategy_ Manifest.json")
+    assert manifest is not None and "Stitched" not in manifest["Results"][0] and len(manifest["Results"][0]["Folds"]) > 1
+
+def test_a_three_to_one_rolling_split_validates_every_year_and_tests_the_last_from_midnight():
+    folds, test = SplitAPI.walk_forward_folds(datetime(2015, 1, 1), datetime(2026, 1, 1, 23, 59, 59, 999999), 36, 12, 12, True)
+    assert [validation[0].year for _, validation in folds] == list(range(2018, 2025))
+    assert all(train[0].year + 3 == train[1].year for train, _ in folds)
+    assert test == (datetime(2025, 1, 1), datetime(2026, 1, 1, 23, 59, 59, 999999))
+
+def test_the_ddpg_defaults_are_the_thesis_recipe():
+    golden = read_yaml(traceback_root() / "Tests" / "Golden" / "Consistency" / "DDPG" / "Parameters.yml")
+    for kind, rebalance in (("Learning", 0.0), ("Backtesting", 0.2)):
+        defaults = DDPGStrategyAPI.defaults(kind)
+        assert list(defaults["TechnicalManagement"].items()) == list(golden["TechnicalManagement"].items())
+        assert defaults["PortfolioManagement"]["PositionMode"] == ["Netting"] and defaults["SignalManagement"]["RebalanceThreshold"] == [rebalance]
+        assert defaults["SignalManagement"]["DecisionSchedule"] == ["D1"] and defaults["SignalManagement"]["AccountFeatures"] == [False]
+        for key in ("HiddenShape1", "HiddenShape2", "ActorRegularization", "BatchSize", "NormalizeWindow", "ObservationWindow"):
+            assert defaults["SignalManagement"][key] == golden["SignalManagement"][key], key
+    learning = DDPGStrategyAPI.defaults("Learning")["SignalManagement"]
+    assert learning["DiscountFactor"] == [0.9995] and learning["WarmupSteps"] == [3000] and learning["RewardScale"] == [1000.0] and learning["RewardClip"] == [1.0]
 
 def test_every_scope_a_seed_replays_has_its_history_published():
     folds = [((datetime(2023, 1, 1), datetime(2023, 5, 1)), (datetime(2023, 5, 1), datetime(2023, 7, 1))), ((datetime(2023, 3, 1), datetime(2023, 7, 1)), None)]

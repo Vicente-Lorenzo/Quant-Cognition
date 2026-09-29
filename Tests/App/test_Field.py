@@ -1,4 +1,5 @@
 from Library.App.V2.Component.Field import ControlType, FieldAPI
+from Library.App.V2.Component.Component import SelectAPI
 
 _SPEC_ = (
     FieldAPI(name="uid", label="UID", identity=True),
@@ -39,6 +40,14 @@ def test_index_maps_names_to_entries():
 def test_default_may_be_a_callable_resolved_against_the_page():
     entry = FieldAPI(name="owner", default=lambda page: page.owner)
     assert entry.initial(type("Page", (), {"owner": "me"})) == "me"
+
+def test_options_may_be_a_callable_resolved_against_the_page_and_the_row():
+    entry = FieldAPI(name="after", control="select", options=lambda page, row: [{"label": uid, "value": uid} for uid in page.uids if uid != (row or {}).get("UID")])
+    page = type("Page", (), {"uids": ["A", "B"]})
+    assert entry.dynamic and not _SPEC_[2].dynamic
+    assert entry.choose(page) == [{"label": "A", "value": "A"}, {"label": "B", "value": "B"}]
+    assert entry.choose(page, {"UID": "A"}) == [{"label": "B", "value": "B"}]
+    assert _SPEC_[2].choose(page) == _SPEC_[2].options
 
 def test_read_falls_back_to_the_default():
     assert _SPEC_[3].read({}) == 0
@@ -93,3 +102,9 @@ def test_parse_reads_a_command_back():
     spec = (FieldAPI(name="ticker"), FieldAPI(name="description"), FieldAPI(name="plot", control="switch"))
     command = FieldAPI.command(spec, ("EURUSD", "two words", True), "Backtesting")
     assert FieldAPI.parse(spec, command) == {"Ticker": "EURUSD", "Description": "two words", "Plot": "Yes"}
+def test_an_empty_valued_option_names_the_selects_placeholder():
+    none = [{"label": "(none)", "value": ""}, {"label": "Web", "value": "Web"}]
+    assert SelectAPI(options=none, value="").build()[0].placeholder == "(none)"
+    assert SelectAPI(options=none, value=None, placeholder="Predecessor").build()[0].placeholder == "Predecessor"
+    assert not hasattr(SelectAPI(options=[{"label": "Web", "value": "Web"}]).build()[0], "placeholder")
+    assert FieldAPI(name="after", control="select", default="", options=none).build(type("Page", (), {"F_AFTER": {"type": "select"}})())[0].placeholder == "(none)"

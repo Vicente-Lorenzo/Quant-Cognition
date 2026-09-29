@@ -25,9 +25,26 @@ def test_render_draws_edges_then_nodes():
 def test_render_labels_every_node():
     assert set(NetworkAPI.render(_NODES_, _EDGES_).data[1].text) == {"A", "B", "C"}
 
-def test_render_carries_the_uid_as_customdata():
+def test_render_carries_the_uid_and_an_empty_link_as_customdata():
     figure = NetworkAPI.render(_NODES_, _EDGES_)
-    assert list(figure.data[1].customdata) == list(figure.data[1].text)
+    assert [list(pair) for pair in figure.data[1].customdata] == [[uid, ""] for uid in figure.data[1].text]
+
+def test_render_draws_each_node_with_its_own_symbol_label_and_link():
+    nodes = [{"uid": "workflow:Up", "label": "Up", "symbol": "square", "link": "/scheduler/workflow/Up"}, {"uid": "A"}]
+    trace = NetworkAPI.render(nodes, [("workflow:Up", "A")]).data[1]
+    assert list(trace.marker.symbol) == ["square", "circle"]
+    assert list(trace.text) == ["Up", "A"]
+    assert [list(pair) for pair in trace.customdata] == [["workflow:Up", "/scheduler/workflow/Up"], ["A", ""]]
+
+def test_depth_counts_the_layers():
+    assert NetworkAPI.depth(_NODES_, _EDGES_) == 3
+    assert NetworkAPI.depth(_NODES_, []) == 1
+    assert NetworkAPI.depth([], []) == 0
+
+def test_a_horizontal_render_lays_each_layer_out_as_a_row():
+    trace = NetworkAPI.render([{"uid": "A"}, {"uid": "B"}, {"uid": "C"}], [("A", "C")], align="horizontal").data[1]
+    heights = dict(zip(trace.text, trace.y))
+    assert heights["A"] == heights["B"] != heights["C"]
 
 def test_render_skips_the_edge_trace_when_hit_testing():
     assert NetworkAPI.render(_NODES_, _EDGES_).data[0].hoverinfo == "skip"

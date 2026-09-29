@@ -223,3 +223,12 @@ def test_identifier_tracks_the_record(storage):
 def test_format_matches_the_file_sink(storage):
     line = storage._format_(VerboseLevel.Error, "2026-07-30 12:00:00.000", "EURUSD - ", "Engine - ", "message")
     assert line == "2026-07-30 12:00:00.000 - EURUSD - Error - Engine - message\n"
+
+def test_a_record_never_makes_the_caller_write_the_database(storage, monkeypatch):
+    record = _attach_(storage, interval=60.0)
+    storage.set_level(VerboseLevel.Debug)
+    flushed = []
+    monkeypatch.setattr(type(storage), "_flush_", lambda self: flushed.append(threading.current_thread()))
+    storage.write(VerboseLevel.Warning, "2026-01-01 00:00:00.000", "", "", "Warning Record")
+    storage.write(VerboseLevel.Info, "2026-01-01 00:00:01.000", "", "", "Info Record")
+    assert flushed == [] and record.saves == 0

@@ -1,7 +1,13 @@
 import math
+
+import pytest
+
 from Library.Universe.Contract import ContractAPI
 from Library.Portfolio.Account import AccountAPI
+from Library.Market.Price import PriceAPI
 from Library.Portfolio.Sizing import (
+    calculate_conversion_rate,
+    calculate_notional_volume,
     calculate_normalized_volume,
     calculate_fixed_amount_volume,
     calculate_fixed_fractional_volume,
@@ -54,3 +60,20 @@ def test_calculate_risk_parity_volume():
     # Risk budget = 100%. Allocated capital = 10000 * 100% * 0.2 = 2000.
     # Current price = 1.05. Volume = 2000 / 1.05 = 1904.7. Normalized = 1000.
     assert calculate_risk_parity_volume(0.2, 1.0, 100.0, account, contract, 1.05) == 1000.0
+
+def test_risk_is_measured_in_the_account_currency_through_the_quote_conversion():
+    contract = ContractAPI(PipSize=0.01, LotSize=100000.0, VolumeStep=1000.0, VolumeMin=1000.0, VolumeMax=10000000.0)
+    account = AccountAPI(Balance=10000.0)
+    volume = calculate_fixed_fractional_volume(1.0, 50.0, account, contract, 1.0 / 160.0)
+    assert volume == 32000.0 and volume * 50.0 * contract.PipSize / 160.0 == pytest.approx(100.0)
+
+def test_a_notional_is_sized_through_the_base_conversion():
+    contract = ContractAPI(LotSize=100000.0, VolumeStep=1000.0, VolumeMin=1000.0, VolumeMax=10000000.0)
+    assert calculate_notional_volume(100.0, AccountAPI(Balance=10000.0), contract, 0.92) == 10000.0
+    assert calculate_notional_volume(100.0, AccountAPI(Balance=10000.0), contract, 1.0) == 10000.0
+    assert calculate_notional_volume(50.0, AccountAPI(Balance=10000.0), contract, 1.1) == 4000.0
+
+def test_a_conversion_rate_must_be_known():
+    assert calculate_conversion_rate(PriceAPI(Price=0.9)) == 0.9 and calculate_conversion_rate(1.25) == 1.25
+    for unknown in (None, PriceAPI(Price=None), 0.0, float("nan")):
+        with pytest.raises(ValueError): calculate_conversion_rate(unknown)

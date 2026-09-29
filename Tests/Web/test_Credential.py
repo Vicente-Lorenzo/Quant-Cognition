@@ -132,3 +132,7 @@ def test_the_test_button_reports_both_outcomes(page, monkeypatch):
     monkeypatch.setattr(page._vault_, "test", refuse)
     assert page._test_(1, {"selected": ["x"]}) is dash.no_update
     assert notes == [("success", "Application authenticated"), ("error", "CH_CLIENT_AUTH_FAILURE · Wrong secret")]
+
+def test_every_empty_select_shows_its_label_instead_of_a_blank(page):
+    shown = {entry.name: entry.build(page)[0].placeholder for entry in page._FIELDS_ if entry.control.value == "select" and entry.initial(page) == ""}
+    assert shown == {"parent": "(none)", "view": "Owner", "edit": "Owner"}

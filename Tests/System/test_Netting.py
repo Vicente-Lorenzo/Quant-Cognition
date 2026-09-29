@@ -11,7 +11,7 @@ from Library.Protocol.Action import OpenBuyPositionActionAPI, OpenSellPositionAc
 from Library.System.Backtesting import BacktestingAPI
 from Library.Universe.Contract import CommissionMode, CommissionType, SpreadType, SwapType
 from Library.Utility.Datetime import Weekday
-from Library.Utility.Math import truncate
+from Library.Utility.Math import quantize
 
 ASK, BID = 1.10002, 1.10000
 TOLERANCE = 1e-9
@@ -26,6 +26,9 @@ class _Contract_:
     VolumeStep = 1000.0
     Commission = 45.0
     CommissionMode = CommissionMode.BaseAssetPerMillionVolume
+    MinCommission = 0.0
+    MinCommissionAsset = "USD"
+    ConversionFee = 0.0
     SwapLong = 0.0
     SwapShort = 0.0
     SwapMode = None
@@ -60,7 +63,7 @@ def _engine_(commission=(CommissionType.Points, 3.5)):
     engine._swap_type_, engine._swap_long_, engine._swap_short_ = SwapType.Points, 0.0, 0.0
     engine._account_asset_, engine._base_asset_, engine._quote_asset_ = "EUR", "EUR", "USD"
     engine._digits_ = 5
-    engine._positions_ = {}
+    engine._positions_, engine._lots_ = {}, {}
     engine._arm_version_ = 0
     engine._uid_queue_, engine._arg_queue_ = [], []
     engine._pids_, engine._tids_ = itertools.count(1), itertools.count(1)
@@ -128,16 +131,26 @@ def test_a_partial_close_preserves_the_average_entry():
     assert engine._net_position_().EntryPrice.Price == pytest.approx(average, abs=TOLERANCE)
     assert engine._net_position_().Volume == pytest.approx(5000.0, abs=TOLERANCE)
 
-def test_realized_pnl_on_a_reduce_uses_the_average_entry():
+def test_realized_pnl_on_a_reduce_takes_the_oldest_fills_first():
     engine = _engine_()
     _fill_(engine, Direction.Buy, 2000.0, ask=1.10000, bid=1.09998)
+    first = engine._net_position_().EntryTimestamp.DateTime
     _fill_(engine, Direction.Buy, 6000.0, ask=1.20000, bid=1.19998)
     average = engine._net_position_().EntryPrice.Price
     _fill_(engine, Direction.Sell, 3000.0, ask=1.30000, bid=1.29998)
     trade = _trades_(engine)[-1]
+    consumed = (2000.0 * 1.10000 + 1000.0 * 1.20000) / 3000.0
     quote = 1.0 / 1.30000
-    assert trade.GrossPnL.PnL == pytest.approx((1.29998 - average) * 3000.0 * quote, abs=1e-6)
-    assert trade.EntryPrice.Price == pytest.approx(average, abs=TOLERANCE)
+    assert trade.GrossPnL.PnL == pytest.approx((1.29998 - consumed) * 3000.0 * quote, abs=1e-6)
+    assert trade.EntryPrice.Price == pytest.approx(consumed, abs=TOLERANCE)
+    assert trade.EntryTimestamp.DateTime == first
+    assert engine._net_position_().EntryPrice.Price == pytest.approx(average, abs=TOLERANCE)
+
+def test_the_average_entry_is_exact_not_rounded():
+    engine = _engine_()
+    _fill_(engine, Direction.Sell, 10000.0, ask=1.13708, bid=1.13706)
+    _fill_(engine, Direction.Sell, 5000.0, ask=1.13709, bid=1.13707)
+    assert engine._net_position_().EntryPrice.Price == pytest.approx((10000.0 * 1.13706 + 5000.0 * 1.13707) / 15000.0, abs=1e-12)
 
 def test_commission_is_conserved_across_a_partial_close():
     engine = _engine_()
@@ -146,7 +159,7 @@ def test_commission_is_conserved_across_a_partial_close():
     _fill_(engine, Direction.Sell, 500.0)
     trade = _trades_(engine)[-1]
     retained = engine._net_position_().CommissionPnL.PnL
-    charged = truncate(engine._commission_(500.0, engine._mid_rate_(engine._tick_), *engine._conversions_(engine._tick_)))
+    charged = quantize(engine._commission_(500.0, engine._mid_rate_(engine._tick_), *engine._conversions_(engine._tick_)))
     assert retained + (trade.CommissionPnL.PnL - charged) == pytest.approx(opened, abs=1e-6)
 
 def test_commission_accrues_on_added_volume_only():

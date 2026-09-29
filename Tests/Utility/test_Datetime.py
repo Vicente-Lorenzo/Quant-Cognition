@@ -2,7 +2,7 @@ import pytest
 
 from datetime import date, datetime, timedelta, timezone
 
-from Library.Utility.Datetime import EPOCH, MICROSECOND, MILLISECOND, datetime_to_epoch, epoch_to_datetime, local_to_utc, parse_datetime, utc_to_local, zones
+from Library.Utility.Datetime import EPOCH, MICROSECOND, MILLISECOND, Weekday, datetime_to_epoch, epoch_to_datetime, local_to_utc, parse_datetime, utc_to_local, week_start, zones
 
 def test_parse_datetime_formats():
     assert parse_datetime("2023-01-01") == datetime(2023, 1, 1)
@@ -67,3 +67,14 @@ def test_utc_to_local_marks_the_second_pass_in_the_system_zone():
     assert utc_to_local(first) == utc_to_local(second)
     assert (utc_to_local(first).fold, utc_to_local(second).fold) == (0, 1)
     assert (local_to_utc(utc_to_local(first)), local_to_utc(utc_to_local(second))) == (first, second)
+
+@pytest.mark.parametrize("moment, monday", [
+    (datetime(2026, 9, 21), datetime(2026, 9, 21)),
+    (datetime(2026, 9, 21, 0, 0, 0, 1), datetime(2026, 9, 21)),
+    (datetime(2026, 9, 24, 13, 30), datetime(2026, 9, 21)),
+    (datetime(2026, 9, 27, 23, 59, 59), datetime(2026, 9, 21)),
+    (datetime(2026, 9, 28), datetime(2026, 9, 28)),
+    (datetime(2027, 1, 2, 12), datetime(2026, 12, 28))
+])
+def test_a_week_starts_on_monday(moment, monday):
+    assert week_start(moment) == monday and week_start(moment).weekday() == Weekday.Monday.value

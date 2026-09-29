@@ -1,5 +1,6 @@
 import sys
 import time
+import threading
 
 import psutil
 import pytest
@@ -9,6 +10,7 @@ from Library.Scheduler import WorkflowAPI, TaskAPI, DependencyAPI, CycleAPI, Run
 from Library.Scheduler.Main import SchedulerCommandAPI
 from Library.Database.Postgres.Postgres import PostgresDatabaseAPI
 from Library.Database.Query import QueryAPI
+from Library.Utility.Datetime import utc_now
 from Script.Setup.Auth import setup_auth
 from Script.Setup.Scheduler import setup_scheduler
 
@@ -210,3 +212,24 @@ def test_a_runner_that_fails_takes_its_child_with_it(manager, clean, tmp_path, m
     deadline = time.monotonic() + 10
     while psutil.pid_exists(child) and time.monotonic() < deadline: time.sleep(0.1)
     assert not psutil.pid_exists(child)
+def test_a_runner_whose_run_was_closed_elsewhere_stands_down(manager, clean, tmp_path):
+    script, marker = tmp_path / "sleeper.py", tmp_path / "pid.txt"
+    script.write_text("; ".join(["import os, time", f"open(r'{marker}', 'w').write(str(os.getpid()))", "time.sleep(120)"]))
+    created = task(manager, "t-stand-down", by=ADMIN, Path=str(script))
+    executor, finished = ExecutorAPI(database=DATABASE, heartbeat=0.3), []
+    runner = threading.Thread(target=lambda: finished.append(executor.run(created)), daemon=True)
+    runner.start()
+    deadline = time.monotonic() + 30
+    while not (marker.exists() and marker.read_text()) and time.monotonic() < deadline: time.sleep(0.1)
+    stopped = utc_now()
+    with PostgresDatabaseAPI(database=DATABASE) as db:
+        db.update(schema=RunAPI.Schema, table=RunAPI.Table, data={"Status": RunStatus.Failure.name, "StoppedAt": stopped}, condition='"TID" = :tid:', parameters={"tid": "t-stand-down"})
+    runner.join(timeout=30)
+    assert not runner.is_alive() and finished
+    child = int(marker.read_text())
+    deadline = time.monotonic() + 10
+    while psutil.pid_exists(child) and time.monotonic() < deadline: time.sleep(0.1)
+    assert not psutil.pid_exists(child)
+    with PostgresDatabaseAPI(database=DATABASE) as db:
+        row = db.first(schema=RunAPI.Schema, table=RunAPI.Table, condition='"TID" = :tid:', parameters={"tid": "t-stand-down"})
+    assert row["Status"] == RunStatus.Failure.name and row["StoppedAt"] == stopped and row["ExitCode"] is None

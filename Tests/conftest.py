@@ -1,4 +1,6 @@
 import pytest
+from datetime import datetime
+
 from Library.Database.Datapoint import DatapointAPI
 
 def override_databases(cls, db_name):
@@ -57,8 +59,8 @@ def universe(db):
     db.migrate(schema=UniverseAPI.Schema, table=CategoryAPI.Table, structure=CategoryAPI(db=None).Structure)
     db.migrate(schema=UniverseAPI.Schema, table=ProviderAPI.Table, structure=ProviderAPI(db=None).Structure)
     db.migrate(schema=UniverseAPI.Schema, table=TickerAPI.Table, structure=TickerAPI(db=None).Structure)
-    db.migrate(schema=UniverseAPI.Schema, table=ContractAPI.Table, structure=ContractAPI(db=None).Structure)
     db.migrate(schema=UniverseAPI.Schema, table=SecurityAPI.Table, structure=SecurityAPI(db=None).Structure)
+    db.migrate(schema=UniverseAPI.Schema, table=ContractAPI.Table, structure=ContractAPI(db=None).Structure)
     db.migrate(schema=UniverseAPI.Schema, table=TimeframeAPI.Table, structure=TimeframeAPI(db=None).Structure)
     cat = CategoryAPI(UID="Forex(Major)", Primary="Forex", Secondary="Major", Alternative="Currency", db=db)
     cat.save()
@@ -66,10 +68,11 @@ def universe(db):
     prov.save()
     ticker = TickerAPI(UID="EURUSD", Category="Forex(Major)", BaseAsset="EUR", BaseName="Euro", QuoteAsset="USD", QuoteName="US Dollar", Description="Euro vs US Dollar", db=db)
     ticker.save()
-    contract = ContractAPI(Ticker="EURUSD", Provider="Pepperstone(cTrader)", Type=ContractType.Spot, PipSize=0.0001, PointSize=0.00001, Digits=5, LotSize=100000, db=db)
-    contract.save()
-    sec = SecurityAPI(Ticker="EURUSD", Provider="Pepperstone(cTrader)", Contract=ContractType.Spot, Category="Forex(Major)", db=db)
+    sec = SecurityAPI(Ticker="EURUSD", Provider="Pepperstone(cTrader)", Type=ContractType.Spot, Symbol=1, Status="Enabled", Tracked=True, db=db)
     sec.save()
+    contract = ContractAPI(Security=sec.UID, Timestamp=datetime(2026, 1, 1), PipSize=0.0001, PointSize=0.00001, Digits=5, LotSize=100000, db=db)
+    contract.save()
+    sec.Contract = contract
     tf = TimeframeAPI(UID="M1", db=db)
     tf.save()
     return {"category": cat, "provider": prov, "ticker": ticker, "contract": contract, "security": sec, "timeframe": tf}

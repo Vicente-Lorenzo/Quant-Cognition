@@ -92,7 +92,7 @@ def test_statistics_default_to_the_recorded_window():
     portfolio._realize_(SimpleNamespace(IsLong=True, IsShort=False, NetPnL=SimpleNamespace(PnL=1000.0)))
     portfolio._record_equity_(portfolio.Equity)
     report = portfolio.calculate_statistics()
-    assert report.height == 90
+    assert report.height == 91
     assert abs(portfolio.AnnualizedReturn - 0.10) < 1e-12 and abs(portfolio.EquityCurve.AnnualizedReturn - 0.10) < 1e-12
 
 def test_trades_known_at_start_are_part_of_the_opening_balance_not_added_twice():

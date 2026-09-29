@@ -34,9 +34,10 @@ def test_a_run_records_its_contract_once_and_again_only_when_the_terms_change(tm
     from types import SimpleNamespace
     from Library.Logging import LoggingAPI
     from Library.Universe.Contract import ContractAPI
+    from Library.Universe.Security import SecurityAPI
     from Library.Universe.Ticker import ContractType
     from Library.Utility.IO import read_yaml
-    contract = ContractAPI(Ticker="EURUSD", Provider="Spotware(cTrader)", Type=ContractType.Spot, SwapLong=-2.445)
+    contract = SecurityAPI(Ticker="EURUSD", Provider="Spotware(cTrader)", Type=ContractType.Spot, Contract=ContractAPI(SwapLong=-2.445)).Contract
     system = SimpleNamespace(_security_=SimpleNamespace(Contract=contract), _run_=tmp_path, _contract_snapshot_=None, _log_=LoggingAPI(), INPUT=SystemAPI.INPUT, CONTRACT=SystemAPI.CONTRACT)
     path = tmp_path / SystemAPI.INPUT / SystemAPI.CONTRACT
     SystemAPI._record_contract_(system)

@@ -1,14 +1,14 @@
 import pytest
-from ctrader_open_api.messages.OpenApiCommonMessages_pb2 import ProtoMessage
 
 import Library.Market
 import Library.Portfolio
 from Library.Spotware import SpotwareAPI
+from Library.Spotware.Messages import ProtoMessage
 
 class FakeClient:
 
     def __init__(self):
-        self.isConnected = True
+        self.Connected = True
 
 class FakeSpotwareAPI(SpotwareAPI):
 

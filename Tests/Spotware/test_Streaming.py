@@ -1,19 +1,21 @@
 import threading
-from ctrader_open_api.messages.OpenApiModelMessages_pb2 import PROTO_OA_SPOT_EVENT
 from typing import Union
 import pytest
+
 import Library.Market
 import Library.Portfolio
-from ctrader_open_api.messages.OpenApiMessages_pb2 import (
-    ProtoOASpotEvent,
+from Library.Spotware.Messages import (
+    PROTO_OA_SPOT_EVENT,
     ProtoOADepthEvent,
-    ProtoOASubscribeSpotsRes,
-    ProtoOAUnsubscribeSpotsRes,
+    ProtoOASpotEvent,
     ProtoOASubscribeDepthQuotesRes,
-    ProtoOAUnsubscribeDepthQuotesRes,
     ProtoOASubscribeLiveTrendbarRes,
-    ProtoOAUnsubscribeLiveTrendbarRes
+    ProtoOASubscribeSpotsRes,
+    ProtoOAUnsubscribeDepthQuotesRes,
+    ProtoOAUnsubscribeLiveTrendbarRes,
+    ProtoOAUnsubscribeSpotsRes
 )
+
 def _spot_event(symbol_id: int, bid: Union[int, None] = None, ask: Union[int, None] = None, timestamp: Union[int, None] = None):
     ev = ProtoOASpotEvent()
     ev.ctidTraderAccountId = 123

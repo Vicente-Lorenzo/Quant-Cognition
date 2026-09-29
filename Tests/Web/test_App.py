@@ -5,12 +5,12 @@ from Library.Auth import RoleAPI
 from Library.Web.Core.Status import StatusAPI
 from Library.Web.Scheduler.Workflow import SchedulerWorkflowAPI
 
-_ACCESS_ = {"/trading": RoleAPI.Administrator, "/framework/database": RoleAPI.Moderator,
-            "/framework": RoleAPI.Viewer, "/framework/hierarchy": RoleAPI.Viewer,
-            "/framework/credential": RoleAPI.Viewer}
+_ACCESS_ = {"/trading": RoleAPI.Administrator,
+            "/framework": RoleAPI.Viewer, "/framework/hierarchy": RoleAPI.Viewer, "/framework/credential": RoleAPI.Viewer,
+            "/database": RoleAPI.Viewer, "/database/universe": RoleAPI.Viewer, "/database/market": RoleAPI.Viewer}
 
 def test_every_declared_page_is_registered(application):
-    assert len(application._pages_) == 26
+    assert len(application._pages_) == 29
 
 def test_endpoints_are_unique(application):
     assert len(set(application._pages_)) == len(application._pages_)
@@ -23,7 +23,7 @@ def test_every_detail_page_is_parametric(application):
         assert parent in application._parametrics_, f"{endpoint} has no parametric parent"
 
 def test_sections_carry_their_children(owned):
-    for anchor in ("/research", "/strategy", "/scheduler", "/framework"):
+    for anchor in ("/research", "/strategy", "/scheduler", "/framework", "/database"):
         children = [endpoint for endpoint in owned if endpoint.startswith(anchor + "/")]
         assert children, f"{anchor} has no child page"
 
@@ -37,19 +37,19 @@ def test_the_root_launchpad_carries_no_access_gate(owned):
     assert owned["/"].access is None
 
 def test_every_other_owned_page_is_editor(owned):
-    assert len(owned) == 24, f"the owned-page fixture found {len(owned)}"
+    assert len(owned) == 27, f"the owned-page fixture found {len(owned)}"
     for endpoint, page in owned.items():
         if endpoint == "/" or endpoint.rstrip("/") in _ACCESS_: continue
         assert page.access is RoleAPI.Editor, f"{endpoint} is {page.access}"
 
-def test_the_root_launchpad_is_a_four_by_two_matrix(application):
+def test_the_root_launchpad_is_a_three_by_three_matrix(application):
     root = application._pages_["/"]
     assert type(root).__name__ == "WebLaunchpadPageAPI"
-    assert root._matrix_() == {"gridTemplateColumns": "repeat(4, minmax(0, 1fr))",
-                              "gridTemplateRows": "repeat(2, minmax(0, 1fr))"}
+    assert root._matrix_() == {"gridTemplateColumns": "repeat(3, minmax(0, 1fr))",
+                              "gridTemplateRows": "repeat(3, minmax(0, 1fr))"}
 
 def test_section_launchpads_stay_automatic(application):
-    for endpoint in ("/research/", "/strategy/", "/scheduler/", "/framework/"):
+    for endpoint in ("/research/", "/strategy/", "/scheduler/", "/framework/", "/database/"):
         assert application._pages_[endpoint]._matrix_() == {}, f"{endpoint} pins its grid"
 
 def test_settings_offer_a_display_zone_that_defaults_to_the_browser(application):

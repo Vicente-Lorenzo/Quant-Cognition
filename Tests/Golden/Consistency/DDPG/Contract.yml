@@ -10,17 +10,23 @@ VolumeMax: 10000000.0
 VolumeStep: 1000.0
 CommissionMode: BaseAssetPerMillionVolume
 Commission: 45.0
+MinCommission: 0.0
+MinCommissionAsset: USD
+ConversionFee: 0.0
 SwapMode: Pips
 SwapLong: -2.445
 SwapShort: -0.105
 SwapPeriod: 24
+SwapTime: null
+SwapSkip: 0
 SwapExtraDay: Wednesday
-SwapSummerTime: 22
-SwapWinterTime: 21
+SwapWeekends: null
+TradingMode: null
 Variant: null
 Payoff: Trivial
 Strike: null
 Maturity: null
 Exercise: null
+Timestamp: 2026-09-10 18:30:36.628419
 UpdatedAt: 2026-09-10 18:30:36.628419
 UpdatedBy: Autosave
