@@ -9,6 +9,7 @@ from Library.Utility.Enumeration import EnumerationAPI
 from Library.Database.Dataclass import overridefield, coerce
 from Library.Database.Database import PrimaryKey, ForeignKey
 from Library.Universe.Category import CategoryAPI
+from Library.Utility.Datetime import utc_now
 from Library.Utility.Typing import MISSING
 from Library.Universe.Universe import UniverseAPI
 
@@ -25,7 +26,7 @@ class ContractType(EnumerationAPI):
 @dataclass
 class TickerAPI(UniverseAPI):
 
-    _FUTURES_PATTERNS_ = (re.compile(r"-F$"), re.compile(r"-[A-Z]{3}\d{2}$"), re.compile(r"[FGHJKMNQUVXZ]\d{1,2}$"), re.compile(r"\d!$"))
+    _FUTURES_PATTERNS_ = (re.compile(r"-F$"), re.compile(r"-[A-Z]{3}\d{2}$"), re.compile(r"(?:(?<=^[A-Z0-9])|(?<=^[A-Z0-9]{2})|(?<=^[A-Z0-9]{3}))[FGHJKMNQUVXZ]\d{1,2}$"), re.compile(r"\d!$"))
     _PREFIX_PATTERN_ = re.compile(r"^[^:]+:")
     _WHITESPACE_PATTERN_ = re.compile(r"\s+")
     _TRIM_PATTERN_ = re.compile(r"[#.+\-_]+$")
@@ -125,3 +126,10 @@ class TickerAPI(UniverseAPI):
     @property
     def Underscored(self) -> Union[str, None]:
         return f"{self.BaseAsset}_{self.QuoteAsset}" if self.BaseAsset and self.QuoteAsset else None
+
+    @classmethod
+    def categorize(cls, db: DatabaseAPI, tickers: list[str], category: str, by: str) -> int:
+        if not tickers: return 0
+        if db.first(schema=CategoryAPI.Schema, table=CategoryAPI.Table, condition='"UID" = :uid:', parameters={"uid": category}) is None: raise ValueError(f"Ticker Categorize: Failed · Unknown category {category}")
+        db.update(schema=cls.Schema, table=cls.Table, data={"Category": category, "UpdatedAt": utc_now(), "UpdatedBy": by}, condition='"UID" = ANY(:tickers:)', parameters={"tickers": list(tickers)})
+        return len(tickers)

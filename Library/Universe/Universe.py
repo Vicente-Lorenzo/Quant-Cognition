@@ -63,7 +63,7 @@ class UniverseAPI(DatapointAPI):
     @staticmethod
     def push_contracts(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Universe.Contract import ContractAPI
-        db.upsert(schema=ContractAPI.Schema, table=ContractAPI.Table, data=data, key=["Ticker", "Provider", "Type"])
+        db.upsert(schema=ContractAPI.Schema, table=ContractAPI.Table, data=data, key=["Security", "Timestamp"])
 
     @staticmethod
     def pull_securities(db: DatabaseAPI) -> pl.DataFrame:
@@ -73,4 +73,4 @@ class UniverseAPI(DatapointAPI):
     @staticmethod
     def push_securities(db: DatabaseAPI, data: Union[pl.DataFrame, list[dict], tuple, dict]) -> None:
         from Library.Universe.Security import SecurityAPI
-        db.upsert(schema=SecurityAPI.Schema, table=SecurityAPI.Table, data=data, key=["Ticker", "Provider", "Category", "Contract"])
+        db.upsert(schema=SecurityAPI.Schema, table=SecurityAPI.Table, data=data, key=["Provider", "Ticker", "Type"])
