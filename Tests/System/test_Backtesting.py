@@ -94,6 +94,11 @@ def test_commission_amount():
     engine = _engine_(commission=(CommissionType.Amount, 5.0))
     assert engine._commission_(10000.0, 1.1, 1.0, 1.0 / 1.1) == pytest.approx(-5.0)
 
+def test_commission_per_unit_is_charged_on_the_volume_in_the_account_currency():
+    engine = _engine_(commission=(CommissionType.Units, 0.000035))
+    assert engine._commission_(100000.0, 1.1, 1.0, 1.0 / 1.1) == pytest.approx(-3.5)
+    assert engine._commission_(250000.0, 150.0, 1.0, 1.0 / 150.0) == pytest.approx(-8.75)
+
 def test_commission_per_lot_is_the_same_amount_on_every_pair():
     engine = _engine_(commission=(CommissionType.Lots, 3.5))
     assert engine._commission_(100000.0, 1.1, 1.0, 1.0 / 1.1) == pytest.approx(-3.5)
