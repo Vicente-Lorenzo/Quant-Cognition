@@ -4,7 +4,6 @@ import os
 import contextlib
 
 from pathlib import Path
-from collections import deque
 from datetime import datetime, timedelta
 from typing import Union, TYPE_CHECKING
 
@@ -20,14 +19,13 @@ from Library.Market.Tick import TickAPI
 from Library.Portfolio.Account import AccountAPI, AccountType, MarginMode
 from Library.Portfolio.Order import OrderAPI, OrderType
 from Library.Portfolio.Position import PositionAPI, PositionType
-from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Trade import TradeAPI
 from Library.Protocol.Action import ActionAPI, ActionID, Stream, InitActionAPI, ExecutionActionAPI, SubscribeActionAPI, UnsubscribeActionAPI
 from Library.Protocol.Binary import BinaryAPI
 from Library.Protocol.Transport import TransportAPI, PeerExit
 from Library.Protocol.Update import UpdateID, CompleteUpdateAPI, InitUpdateAPI, BarUpdateAPI
 from Library.System.System import SystemAPI, SystemType
-from Library.Universe.Contract import CommissionMode, SwapMode
+from Library.Universe.Contract import ContractAPI, CommissionMode, SwapMode, TradingMode
 from Library.Universe.Security import SecurityAPI
 from Library.Utility.Datetime import timestamp_to_datetime, utc_now, Weekday
 from Library.Utility.Profiler import timer
@@ -45,13 +43,14 @@ class RealtimeAPI(SystemAPI):
     _DIRECTION_ = {0: Direction.Buy, 1: Direction.Sell}
     _ORDER_TYPE_ = {0: OrderType.Limit, 1: OrderType.Stop, 2: OrderType.StopLimit}
     _WEEKDAY_ = {0: Weekday.Sunday, 1: Weekday.Monday, 2: Weekday.Tuesday, 3: Weekday.Wednesday, 4: Weekday.Thursday, 5: Weekday.Friday, 6: Weekday.Saturday}
+    _TRADING_MODE_ = {0: TradingMode.Enabled, 1: TradingMode.CloseOnlyMode, 2: TradingMode.DisabledWithPendingsExecution, 3: TradingMode.DisabledWithoutPendingsExecution}
 
     _binary_init_ = BinaryAPI('i')
     _binary_denied_ = BinaryAPI('B', 's')
     _binary_exception_ = BinaryAPI('s')
 
     _binary_account_ = BinaryAPI('s', 's', 'B', 's', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'B')
-    _binary_security_ = BinaryAPI('s', 's', 'i', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'B', 'd', 'd', 'B', 'i')
+    _binary_security_ = BinaryAPI('q', 's', 's', 's', 'i', 'd', 'd', 'q', 'd', 'd', 'd', 'B', 'd', 'B', 'd', 'd', 'i', 'B')
 
     _binary_tick_ = BinaryAPI('q', 'd', 'd', 'd', 'd', 'd', 'd', 'd')
 
@@ -59,7 +58,7 @@ class RealtimeAPI(SystemAPI):
     _binary_position_ = BinaryAPI('i', 'B', 'B', 'q', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'D', 'D', 's')
     _binary_trade_ = BinaryAPI('i', 'i', 'B', 'B', 'q', 'q', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 's')
 
-    _bar_payload_ = 1 + 8 + 7 * _binary_tick_._size_ + 8
+    _bar_payload_ = 1 + 8 + 9 * _binary_tick_._size_ + 8
 
     def __init__(self,
                  system: SystemType,
@@ -68,9 +67,7 @@ class RealtimeAPI(SystemAPI):
                  timeframe: TimeframeAPI,
                  parameters: Parameter,
                  iid: str,
-                 database: Union[str, None],
-                 universe: tuple[int, float, int, int] = (0, 0.0, 0, 0),
-                 portfolio: tuple[int, float, int, int] = (0, 0.0, 0, 0),
+                 database: str = "Quant",
                  risk_free: float = 0.0,
                  benchmark: Union[str, list, None] = None,
                  report: bool = True,
@@ -78,20 +75,16 @@ class RealtimeAPI(SystemAPI):
                  plot: bool = False,
                  run: Union[str, Path, None] = None,
                  description: Union[str, None] = None) -> None:
-        if database is None:
-            universe = (0, 0.0, 0, 0)
-            portfolio = (0, 0.0, 0, 0)
-        super().__init__(strategy=strategy, security=security, timeframe=timeframe, parameters=parameters, universe=universe, portfolio=portfolio, risk_free=risk_free, benchmark=benchmark, report=report, export=export, plot=plot, run=run, description=description)
+        super().__init__(strategy=strategy, security=security, timeframe=timeframe, parameters=parameters, risk_free=risk_free, benchmark=benchmark, report=report, export=export, plot=plot, run=run, description=description)
 
         self._system_: SystemType = system
         self._iid_: str = iid
-        self._database_: Union[str, None] = database
+        self._database_: str = database
 
         self._db_: Union[DatabaseAPI, None] = None
         self._stack_: Union[contextlib.ExitStack, None] = None
         self._transport_: Union[TransportAPI, None] = None
         self._last_update_data_: bytes = b""
-        self._batch_queue_: deque = deque()
         self._exc_info_: tuple = (None, None, None)
 
         self._sync_buffer_: list[BarAPI] = []
@@ -115,13 +108,10 @@ class RealtimeAPI(SystemAPI):
             self._stack_.callback(lambda: self._transport_.close() if self._transport_ else None)
             self._log_.debug(lambda: f"Connect Operation: Bound Shared Memory (iid {self._iid_})")
             self._assemble_()
-            self._db_ = None if self._database_ is None else self._stack_.enter_context(PostgresDatabaseAPI(database=self._database_))
+            self._db_ = self._stack_.enter_context(PostgresDatabaseAPI(database=self._database_))
         except Exception:
             self._stack_.__exit__(None, None, None)
             raise
-        if self._portfolio_.Active:
-            self._session_ = SessionAPI(UID=self._iid_, Type=self._system_, Strategy=self._strategy_.__name__, Security=self._security_, StartTimestamp=utc_now(), db=self._db_)
-            self._session_.save()
         super()._connect_()
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
@@ -129,12 +119,6 @@ class RealtimeAPI(SystemAPI):
         return super().__exit__(exc_type, exc_value, exc_traceback)
 
     def _disconnect_(self) -> None:
-        if self._portfolio_.Active and self._session_ is not None:
-            self._session_.StopTimestamp = utc_now()
-            if not self._portfolio_.Empty: self._portfolio_.flush()
-            if self.account is not None and self.account.UID is not None:
-                self._session_.FinalAccount = self.account
-            self._session_.save()
         super()._disconnect_()
         if self._stack_: self._stack_.__exit__(*self._exc_info_)
         self._log_.debug(lambda: f"Disconnect Operation: Closed (iid {self._iid_})")
@@ -147,6 +131,9 @@ class RealtimeAPI(SystemAPI):
         self._log_.info(lambda: f"Phase Execution: {ticks_per_sec:.1f} Ticks/s · {bars_per_sec:.1f} Bars/s")
         self._log_.info(lambda: "Summary: " + " · ".join(f"{k} {v}" for k, v in m.items()))
 
+    def label(self) -> str:
+        return self._run_.name if self._run_ is not None else self._iid_
+
     def send_action(self, action: ActionAPI) -> None:
         self._transport_.send(action.serialize())
         self._metrics_["Actions"] += 1
@@ -155,16 +142,7 @@ class RealtimeAPI(SystemAPI):
         return self._transport_.receive()
 
     def receive_update_id(self) -> UpdateID:
-        while not self._batch_queue_:
-            data = self._receive_()
-            if data[0] != UpdateID.Batch.value:
-                self._last_update_data_ = data
-                return UpdateID(data[0])
-            offset = 1
-            while offset < len(data):
-                length = BinaryAPI.UINT16.unpack_from(data, offset)[0]; offset += 2
-                self._batch_queue_.append(data[offset:offset + length]); offset += length
-        self._last_update_data_ = self._batch_queue_.popleft()
+        self._last_update_data_ = self._receive_()
         return UpdateID(self._last_update_data_[0])
 
     def _receive_update_init_(self, offset: int = 1) -> InitUpdateAPI:
@@ -194,32 +172,36 @@ class RealtimeAPI(SystemAPI):
         )
 
     def receive_update_security(self, offset: int = 1) -> SecurityAPI:
-        (base_asset, quote_asset, digits, tick_size, pip_size, lot_size,
-         volume_min, volume_max, volume_step, commission, commission_type,
-         swap_long, swap_short, swap_calculation_type, swap_3_days_rollover
-        ) = self._binary_security_.unpack(self._last_update_data_, 1)
-        if self._security_:
-            if self._security_.Ticker:
-                self._security_.Ticker.BaseAsset = base_asset
-                self._security_.Ticker.QuoteAsset = quote_asset
-            if self._security_.Contract:
-                self._security_.Contract.Digits = digits
-                self._security_.Contract.PointSize = tick_size
-                self._security_.Contract.PipSize = pip_size
-                self._security_.Contract.LotSize = lot_size
-                self._security_.Contract.VolumeMin = volume_min
-                self._security_.Contract.VolumeMax = volume_max
-                self._security_.Contract.VolumeStep = volume_step
-                self._security_.Contract.Commission = commission
-                self._security_.Contract.CommissionMode = CommissionMode(commission_type)
-                self._security_.Contract.SwapLong = swap_long
-                self._security_.Contract.SwapShort = swap_short
-                self._security_.Contract.SwapMode = SwapMode(swap_calculation_type)
-                self._security_.Contract.SwapExtraDay = self._WEEKDAY_.get(swap_3_days_rollover, Weekday.Wednesday)
-                self._security_.Contract.UpdatedAt = utc_now()
-                self._security_.Contract.UpdatedBy = self._CONNECTOR_
+        (symbol, base_asset, quote_asset, description, digits, point_size, pip_size, lot_size, volume_min, volume_max, volume_step,
+         commission_mode, commission, swap_mode, swap_long, swap_short, swap_extra_day, trading_mode
+        ) = self._binary_security_.unpack(self._last_update_data_, offset)
+        security = self._security_
+        if security:
+            security.Symbol = symbol
+            if security.Ticker:
+                security.Ticker.BaseAsset = base_asset
+                security.Ticker.QuoteAsset = quote_asset
+                security.Ticker.Description = description
+            contract = security.Contract if security.Contract is not None else ContractAPI(Security=security.UID)
+            contract.Digits = digits
+            contract.PointSize = point_size
+            contract.PipSize = pip_size
+            contract.LotSize = lot_size
+            contract.VolumeMin = volume_min
+            contract.VolumeMax = volume_max
+            contract.VolumeStep = volume_step
+            contract.CommissionMode = CommissionMode(commission_mode)
+            contract.Commission = commission
+            contract.SwapMode = SwapMode(swap_mode)
+            contract.SwapLong = swap_long
+            contract.SwapShort = swap_short
+            contract.SwapExtraDay = self._WEEKDAY_.get(swap_extra_day)
+            contract.TradingMode = self._TRADING_MODE_[trading_mode]
+            contract.UpdatedAt = utc_now()
+            contract.UpdatedBy = self._CONNECTOR_
+            security.Contract = contract
             self._record_contract_()
-        return self._security_
+        return security
 
     def receive_update_order(self, offset: int = _bar_payload_) -> OrderAPI:
         uid, order_type_id, direction_id, volume, target_price, stop_loss, take_profit, expiration_ts, label = self._binary_order_.unpack(self._last_update_data_, offset)
@@ -229,7 +211,6 @@ class RealtimeAPI(SystemAPI):
         has_stop = order_type in (OrderType.Stop, OrderType.StopLimit)
         return OrderAPI(
             UID=uid,
-            Session=self._session_,
             Account=self.account,
             Security=self._security_,
             Direction=self._DIRECTION_[direction_id],
@@ -250,7 +231,6 @@ class RealtimeAPI(SystemAPI):
         pos_type = PositionType(pos_type_id)
         return PositionAPI(
             UID=uid,
-            Session=self._session_,
             Account=self.account,
             Security=self._security_,
             Type=pos_type,
@@ -284,7 +264,6 @@ class RealtimeAPI(SystemAPI):
         return TradeAPI(
             UID=uid,
             Position=position_id,
-            Session=self._session_,
             Account=self.account,
             Security=self._security_,
             Type=pos_type,
@@ -311,8 +290,6 @@ class RealtimeAPI(SystemAPI):
     def _deserialize_tick_(self, data: bytes, offset: int) -> TickAPI:
         ts, ask, bid, ask_base, bid_base, ask_quote, bid_quote, volume = self._binary_tick_.unpack(data, offset)
         timestamp = timestamp_to_datetime(ts, milliseconds=True)
-        if not self.strategy.Transform.Market:
-            return TickAPI._ingest_(self._security_, timestamp, ask, bid, ask_base, bid_base, ask_quote, bid_quote, volume)
         return TickAPI(
             Security=self._security_,
             Timestamp=timestamp,
@@ -334,21 +311,23 @@ class RealtimeAPI(SystemAPI):
         opn = self._deserialize_tick_(data, off); off += tick_size
         high_ask = self._deserialize_tick_(data, off); off += tick_size
         high_bid = self._deserialize_tick_(data, off); off += tick_size
+        high_mid = self._deserialize_tick_(data, off); off += tick_size
         low_ask = self._deserialize_tick_(data, off); off += tick_size
         low_bid = self._deserialize_tick_(data, off); off += tick_size
+        low_mid = self._deserialize_tick_(data, off); off += tick_size
         close = self._deserialize_tick_(data, off); off += tick_size
         volume = BinaryAPI.FLOAT64.unpack_from(data, off)[0]
-        self._metrics_["Ticks"] += 7
+        self._metrics_["Ticks"] += 9
         self._metrics_["Bars"] += 1
         return BarAPI(
             Security=self._security_,
             Timeframe=self._timeframe_,
             Timestamp=timestamp_to_datetime(bar_ts, milliseconds=True),
-            GapPoint=PointAPI(AskTick=gap, BidTick=gap),
-            OpenPoint=PointAPI(AskTick=opn, BidTick=opn),
-            HighPoint=PointAPI(AskTick=high_ask, BidTick=high_bid),
-            LowPoint=PointAPI(AskTick=low_ask, BidTick=low_bid),
-            ClosePoint=PointAPI(AskTick=close, BidTick=close),
+            GapPoint=PointAPI(AskTick=gap, MidTick=gap, BidTick=gap),
+            OpenPoint=PointAPI(AskTick=opn, MidTick=opn, BidTick=opn),
+            HighPoint=PointAPI(AskTick=high_ask, MidTick=high_mid, BidTick=high_bid),
+            LowPoint=PointAPI(AskTick=low_ask, MidTick=low_mid, BidTick=low_bid),
+            ClosePoint=PointAPI(AskTick=close, MidTick=close, BidTick=close),
             Volume=volume
         )
 
@@ -390,7 +369,7 @@ class RealtimeAPI(SystemAPI):
             self._log_.debug(lambda: f"Handshake Operation: Exchanged PIDs (peer {update.ProcessID} · self {os.getpid()})")
             subscribed = int(self.strategy.Subscription)
             unsubscribed = int(Stream.All) & ~subscribed
-            actions = [InitActionAPI(ProcessID=os.getpid())]
+            actions = [InitActionAPI(ProcessID=os.getpid(), Label=self.label())]
             if subscribed: actions.append(SubscribeActionAPI(Streams=subscribed))
             if unsubscribed: actions.append(UnsubscribeActionAPI(Streams=unsubscribed))
             return actions
@@ -432,13 +411,12 @@ class RealtimeAPI(SystemAPI):
         def update(update: BarUpdateAPI):
             if self._start_timestamp_ is None: self._start_timestamp_ = update.Bar.Timestamp.DateTime
             self._stop_timestamp_ = update.Bar.Timestamp.DateTime
-            if self.strategy.Transform.Market: update.Market.update_data(update.Bar)
+            update.Market.update_data(update.Bar)
 
         def report(update: CompleteUpdateAPI):
             self._transition_(self._execution_timer_, "Execution", self._finalization_timer_)
             self._log_.debug(lambda: f"Phase Execution: First Bar {self._start_timestamp_}")
             self._log_.debug(lambda: f"Phase Execution: Last Bar {self._stop_timestamp_}")
-            if self._portfolio_.Active and self.portfolio and self.portfolio.Security: self.portfolio.Security.save()
             account = self._initial_account_ if self._initial_account_ is not None else update.Portfolio.Account
             start = (self._start_timestamp_ if self._start_timestamp_ is not None else utc_now()).date()
             stop = (self._stop_timestamp_ if self._stop_timestamp_ is not None else utc_now()).date()

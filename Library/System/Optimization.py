@@ -147,8 +147,8 @@ class OptimizationAPI(BacktestingAPI):
     def _acquire_(self, start, stop, window: int) -> ProcessPoolExecutor:
         if self._pool_ is not None and self._pool_[2] == (start, stop) and self._pool_[3] >= window: return self._pool_[0]
         self._release_()
-        shared = self._publish_()
-        parcel = ParcelAPI(self._payload_(start, stop, self._histories_(shared, [start], window), self._bars_(shared, [(start, stop)])))
+        shared = self._shelve_()
+        parcel = ParcelAPI(self._payload_(start, stop, self._histories_(shared, [start], window), self._shared_bars_(shared, [(start, stop)])))
         try: pool = ProcessPoolExecutor(max_workers=self._workers_, initializer=OptimizationAPI._prepare_, initargs=(parcel.handle(),))
         except BaseException:
             parcel.close()

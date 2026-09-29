@@ -18,33 +18,14 @@ from Library.Utility import MISSING, Missing, Parameter, inspect_temporary, prof
 from Library.Utility.Datetime import utc_now
 from Library.Utility.IO import mkdir, read_yaml, write_text, write_yaml
 from Library.Utility.Command import CommandAPI
-from Library.Utility.Runtime import join_arguments
+from Library.Utility.Path import traceback_root
+from Library.Utility.Runtime import find_packages, find_revision, join_arguments
 
 class SystemCommandAPI(CommandAPI):
 
 
     def __init__(self) -> None:
         super().__init__(name="System", refusals=())
-
-    @staticmethod
-    def _settled_(given: tuple, automatic: tuple) -> tuple:
-        return tuple(fallback if isinstance(value, Missing) else value for value, fallback in zip(given, automatic))
-
-    @classmethod
-    def _universe_(cls, system: SystemType, batch: Union[int, Missing], interval: Union[float, Missing], workers: Union[int, Missing], maxsize: Union[int, Missing]) -> tuple[int, float, int, int]:
-        match system:
-            case SystemType.Live: automatic = 1, 0.0, 1, 64
-            case SystemType.Simulation: automatic = 1, 0.0, 8, 64
-            case _: automatic = 0, 0.0, 0, 0
-        return cls._settled_((batch, interval, workers, maxsize), automatic)
-
-    @classmethod
-    def _portfolio_(cls, system: SystemType, batch: Union[int, Missing], interval: Union[float, Missing], workers: Union[int, Missing], maxsize: Union[int, Missing]) -> tuple[int, float, int, int]:
-        match system:
-            case SystemType.Live: automatic = 100, 60.0, 1, 64
-            case SystemType.Simulation: automatic = 0, 0.0, 8, 64
-            case _: automatic = 0, 0.0, 0, 0
-        return cls._settled_((batch, interval, workers, maxsize), automatic)
 
     @classmethod
     def _system_(cls, args: Namespace, strategy: type[StrategyAPI], security: SecurityAPI, timeframe: TimeframeAPI, resolve) -> Union[SystemAPI, None]:
@@ -59,9 +40,6 @@ class SystemCommandAPI(CommandAPI):
                     timeframe=timeframe,
                     parameters=params,
                     iid=args.iid,
-                    database=args.database,
-                    universe=cls._universe_(system, args.universe_batch, args.universe_interval, args.universe_workers, args.universe_maxsize),
-                    portfolio=cls._portfolio_(system, args.portfolio_batch, args.portfolio_interval, args.portfolio_workers, args.portfolio_maxsize),
                     risk_free=args.risk_free,
                     benchmark=args.benchmark,
                     report=args.report,
@@ -80,7 +58,7 @@ class SystemCommandAPI(CommandAPI):
                     parameters=params,
                     start=args.start,
                     stop=args.stop,
-                    account=(args.account_asset, args.account_balance, args.account_leverage),
+                    account=(args.account_asset, args.account_balance, args.account_leverage, args.bridge),
                     spread=(SpreadType(args.spread_type), args.spread_value),
                     commission=(CommissionType(args.commission_type), args.commission_value),
                     swap=(SwapType(args.swap_type), args.swap_buy, args.swap_sell),
@@ -104,7 +82,7 @@ class SystemCommandAPI(CommandAPI):
                     space=space,
                     start=args.start,
                     stop=args.stop,
-                    account=(args.account_asset, args.account_balance, args.account_leverage),
+                    account=(args.account_asset, args.account_balance, args.account_leverage, args.bridge),
                     spread=(SpreadType(args.spread_type), args.spread_value),
                     commission=(CommissionType(args.commission_type), args.commission_value),
                     swap=(SwapType(args.swap_type), args.swap_buy, args.swap_sell),
@@ -136,7 +114,7 @@ class SystemCommandAPI(CommandAPI):
                     parameters=params,
                     start=args.start,
                     stop=args.stop,
-                    account=(args.account_asset, args.account_balance, args.account_leverage),
+                    account=(args.account_asset, args.account_balance, args.account_leverage, args.bridge),
                     spread=(SpreadType(args.spread_type), args.spread_value),
                     commission=(CommissionType(args.commission_type), args.commission_value),
                     swap=(SwapType(args.swap_type), args.swap_buy, args.swap_sell),
@@ -206,7 +184,9 @@ class SystemCommandAPI(CommandAPI):
                         "Command": join_arguments(sys.argv[1:]),
                         "Parameters": trails or None,
                         "Contract": contract if contract is not MISSING else None,
-                        "Scope": list(rungs) or None}
+                        "Scope": list(rungs) or None,
+                        "Revision": find_revision(traceback_root()) or None,
+                        "Packages": find_packages("torch", "numpy", "polars", "pandas")}
             write_text(folder / SystemAPI.MANIFEST, json.dumps({key: value for key, value in manifest.items() if value is not None}, indent=2), safe=False)
         except Exception as error:
             log.warning(lambda error=error: f"Snapshot Operation: Failed · {error}")
@@ -216,7 +196,7 @@ class SystemCommandAPI(CommandAPI):
         base_parser.add_argument("--console", type=str, default=VerboseLevel.Debug.name, choices=VerboseLevel.names())
         base_parser.add_argument("--file", type=str, default=VerboseLevel.Debug.name, choices=VerboseLevel.names())
         base_parser.add_argument("--storage", type=str, default=VerboseLevel.Warning.name, choices=VerboseLevel.names())
-        base_parser.add_argument("--strategy", type=str, default=StrategyType.Download.name, choices=StrategyType.names())
+        base_parser.add_argument("--strategy", type=str, default=StrategyType.Trend.name, choices=StrategyType.names())
         base_parser.add_argument("--provider", type=str, default="Spotware")
         base_parser.add_argument("--ticker", type=str, default="EURUSD")
         base_parser.add_argument("--timeframe", type=str, default="Daily")
@@ -242,17 +222,9 @@ class SystemCommandAPI(CommandAPI):
         account_parser.add_argument("--account-asset", type=str, default="EUR")
         account_parser.add_argument("--account-balance", type=float, default=10000.0)
         account_parser.add_argument("--account-leverage", type=float, default=30.0)
+        account_parser.add_argument("--bridge", type=str, default=MISSING)
         realtime_parser = ArgumentParser(add_help=False)
         realtime_parser.add_argument("--iid", type=str, default=None)
-        realtime_parser.add_argument("--database", type=str, default=None, choices=["Quant", "Tests"])
-        realtime_parser.add_argument("--universe-batch", type=int, default=MISSING)
-        realtime_parser.add_argument("--universe-interval", type=float, default=MISSING)
-        realtime_parser.add_argument("--universe-workers", type=int, default=MISSING)
-        realtime_parser.add_argument("--universe-maxsize", type=int, default=MISSING)
-        realtime_parser.add_argument("--portfolio-batch", type=int, default=MISSING)
-        realtime_parser.add_argument("--portfolio-interval", type=float, default=MISSING)
-        realtime_parser.add_argument("--portfolio-workers", type=int, default=MISSING)
-        realtime_parser.add_argument("--portfolio-maxsize", type=int, default=MISSING)
         fee_parser = ArgumentParser(add_help=False)
         fee_parser.add_argument("--spread-type", type=str, default=SpreadType.Auto.name, choices=SpreadType.names())
         fee_parser.add_argument("--spread-value", type=float, default=MISSING)
@@ -306,6 +278,11 @@ class SystemCommandAPI(CommandAPI):
         learning_parser.add_argument("--workers", type=int, default=1)
         learning_parser.add_argument("--threads", type=int, default=None)
 
+    @staticmethod
+    def _tracked_(security: SecurityAPI) -> SecurityAPI:
+        if not security.Tracked: raise ValueError(f"Security Lookup: Refused ({security.Provider.UID} {security.Ticker.UID}) · Not tracked · Track it on the Universe page so the Market service keeps its ticks")
+        return security
+
     def run(self, args: Namespace) -> int:
         ladder: LadderAPI = LadderAPI()
         log: LoggingAPI = LoggingAPI("Execution Management")
@@ -323,7 +300,7 @@ class SystemCommandAPI(CommandAPI):
         @log.guard
         def execute() -> None:
             with PostgresDatabaseAPI(database="Quant") as db:
-                security = SecurityAPI(Provider=args.provider, Ticker=args.ticker, db=db, autoload=True)
+                security = self._tracked_(SecurityAPI(Provider=args.provider, Ticker=args.ticker, db=db, autoload=True))
                 self._contract_(security, getattr(args, "contract", MISSING))
                 timeframe = TimeframeAPI(UID=TimeframeAPI.normalize(args.timeframe), db=db, autoload=True)
                 category = security.Category

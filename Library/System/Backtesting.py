@@ -32,11 +32,11 @@ from Library.Portfolio.Position import PositionAPI, PositionMode, PositionType
 from Library.Portfolio.Trade import TradeAPI
 from Library.Protocol.Action import ActionAPI, ActionID, OpenBuyPositionActionAPI, OpenSellPositionActionAPI
 from Library.Protocol.Update import UpdateID, BarUpdateAPI, CompleteUpdateAPI, InitUpdateAPI
-from Library.Universe.Contract import CommissionMode, CommissionType, SpreadType, SwapMode, SwapType
+from Library.Universe.Contract import CommissionMode, CommissionType, SpreadType, SwapType
 from Library.Universe.Security import SecurityAPI
 from Library.Universe.Timeframe import TimeframeAPI
-from Library.Utility.Datetime import Weekday, datetime_to_epoch, epoch_to_datetime, parse_datetime
-from Library.Utility.Math import EPSILON, equals, truncate
+from Library.Utility.Datetime import datetime_to_epoch, epoch_to_datetime, parse_datetime
+from Library.Utility.Math import EPSILON, equals, quantize
 from Library.Utility.Memory import memory_to_string
 from Library.Utility.Progress import ProgressAPI
 from Library.Utility.Profiler import Timer, timer
@@ -74,6 +74,7 @@ class BacktestingAPI(SystemAPI):
     _uid_queue_: deque
     _arg_queue_: deque
     _bar_: BarAPI
+    _walked_: BarAPI
     _tick_: TickAPI
 
     def __init__(self,
@@ -100,7 +101,7 @@ class BacktestingAPI(SystemAPI):
                  shelf: Union[dict, Missing] = MISSING,
                  history: Union[dict, Missing] = MISSING,
                  spans: Union[dict, Missing] = MISSING) -> None:
-        super().__init__(strategy=strategy, security=security, timeframe=timeframe, parameters=parameters, universe=(0, 0.0, 0, 0), portfolio=(0, 0.0, 0, 0), risk_free=risk_free, benchmark=benchmark, report=report, export=export, plot=plot, run=run, description=description)
+        super().__init__(strategy=strategy, security=security, timeframe=timeframe, parameters=parameters, risk_free=risk_free, benchmark=benchmark, report=report, export=export, plot=plot, run=run, description=description)
         self._injected_: Union[DatasetAPI, None] = dataset
         self._readers_: int = max(1, readers)
         self._shelf_: dict = shelf if shelf is not MISSING else {}
@@ -113,7 +114,8 @@ class BacktestingAPI(SystemAPI):
         self._start_: datetime = parse_datetime(start, end_of_day=False)
         self._stop_: datetime = parse_datetime(stop, end_of_day=True)
 
-        self._account_asset_, self._account_balance_, self._account_leverage_ = account
+        self._account_asset_, self._account_balance_, self._account_leverage_, *bridge = account
+        self._bridge_: Union[str, Missing] = bridge[0] if bridge and bridge[0] else MISSING
         self._spread_type_, spread_value, *spread_seed = spread
         self._commission_type_, commission_value = commission
         self._swap_type_, swap_long, swap_short = swap
@@ -140,6 +142,12 @@ class BacktestingAPI(SystemAPI):
         self._digits_: int = 5
 
         self._window_: int = 0
+        self._rolls_: tuple = (np.empty(0, dtype=np.int64), np.empty(0, dtype=np.int64))
+        self._roll_index_: int = 0
+        self._roll_rates_: np.ndarray = np.empty(0)
+        self._mark_: int = 0
+        self._segmented_: bool = False
+        self._walking_: bool = False
 
         self._pids_: count = count(start=-1, step=-1)
         self._tids_: count = count(start=-1, step=-1)
@@ -152,12 +160,12 @@ class BacktestingAPI(SystemAPI):
         self._preload_seconds_: float = 0.0
 
     def _connect_(self) -> None:
-        if self._spawns_(): self._publish_()
-        stack = contextlib.ExitStack()
-        stack.__enter__()
-        self._stack_ = stack
+        if self._spawns_(): self._shelve_()
+        if self._stack_ is None:
+            self._stack_ = contextlib.ExitStack()
+            self._stack_.__enter__()
+            self._db_ = self._stack_.enter_context(PostgresDatabaseAPI(database="Quant"))
         try:
-            self._db_ = stack.enter_context(PostgresDatabaseAPI(database="Quant"))
             self._assemble_()
             self._netting_ = self._position_mode_() == PositionMode.Netting
             self._contract_ = self._security_.Contract
@@ -168,6 +176,7 @@ class BacktestingAPI(SystemAPI):
             self._quote_asset_ = ticker.QuoteAsset if ticker else None
             self._needs_conversion_ = self._account_asset_ not in (self._base_asset_, self._quote_asset_)
             self._window_ = self._indicator_window_()
+            self._rolls_ = self._schedule_()
             if isinstance(self._resolution_arg_, TimeframeAPI): self._resolution_ = self._resolution_arg_
             else:
                 uid = self._resolution_arg_ if isinstance(self._resolution_arg_, str) and self._resolution_arg_ else "Auto"
@@ -178,24 +187,32 @@ class BacktestingAPI(SystemAPI):
             self.account = self._build_account_()
             self._preload_()
         except Exception:
-            stack.__exit__(None, None, None)
+            self._hangup_()
             raise
         self._advance_index_ = 0
         self._descended_, self._skipped_ = 0, 0
         self._positions_ = {}
+        self._lots_ = {}
+        self._pids_, self._tids_ = count(start=-1, step=-1), count(start=-1, step=-1)
         self._ask_above_ = None
         self._ask_below_ = None
         self._bid_above_ = None
         self._bid_below_ = None
         self._arm_version_ += 1
+        self._roll_index_, self._mark_, self._segmented_, self._walking_ = 0, 0, False, False
+        self._roll_rates_ = TapeAPI.rates(self._rolls_[0], self._dataset_.Conversions[1])[1] if self._dataset_.Conversions else np.ones(self._rolls_[0].size)
         self._uid_queue_ = deque()
         self._arg_queue_ = deque()
         self._feed_ = self._generate_()
         super()._connect_()
 
+    def _hangup_(self) -> None:
+        if self._stack_ is not None: self._stack_.__exit__(None, None, None)
+        self._stack_ = None
+
     def _disconnect_(self) -> None:
         super()._disconnect_()
-        if self._stack_: self._stack_.__exit__(None, None, None)
+        self._hangup_()
 
     def _build_account_(self) -> AccountAPI:
         return AccountAPI(
@@ -217,63 +234,37 @@ class BacktestingAPI(SystemAPI):
         )
 
     def _row_to_bar_(self, row: dict) -> BarAPI:
-        def tick(prefix: str) -> TickAPI:
-            return TickAPI(
-                Security=self._security_,
-                Timestamp=row.get(f"{prefix}.Timestamp"),
-                Ask=row.get(f"{prefix}.Ask"),
-                Bid=row.get(f"{prefix}.Bid"),
-                AskBaseConversion=row.get(f"{prefix}.AskBaseConversion"),
-                BidBaseConversion=row.get(f"{prefix}.BidBaseConversion"),
-                AskQuoteConversion=row.get(f"{prefix}.AskQuoteConversion"),
-                BidQuoteConversion=row.get(f"{prefix}.BidQuoteConversion"),
-                Volume=row.get(f"{prefix}.Volume")
-            )
-        def point(prefix: str) -> PointAPI:
-            bid = tick(f"{prefix}.BidTick")
-            return PointAPI(AskTick=bid if row[f"{prefix}.AskTick.Timestamp"] == row[f"{prefix}.BidTick.Timestamp"] else tick(f"{prefix}.AskTick"), BidTick=bid)
-        return BarAPI(
-            Security=self._security_,
-            Timeframe=self._timeframe_,
-            Timestamp=row.get("Timestamp"),
-            GapPoint=point("GapPoint"),
-            OpenPoint=point("OpenPoint"),
-            HighPoint=point("HighPoint"),
-            LowPoint=point("LowPoint"),
-            ClosePoint=point("ClosePoint"),
-            Volume=row.get("Volume")
-        )
-
-    def _pair_(self, db: PostgresDatabaseAPI, ticker: str) -> Union[int, None]:
-        condition, parameters = db.where(Provider=self._security_.Provider.UID, Ticker=ticker)
-        row = db.first(schema=SecurityAPI.Schema, table=SecurityAPI.Table, condition=condition, parameters=parameters)
-        return row[str(SecurityAPI.ID.UID)] if row else None
-
-    def _route_(self, db: PostgresDatabaseAPI, asset: str) -> Union[tuple[int, bool, str], None]:
-        account = self._account_asset_
-        if asset == account: return None
-        for ticker, inverse in ((f"{asset}{account}", False), (f"{account}{asset}", True)):
-            if ticker == self._security_.Ticker.UID: return self._security_.UID, inverse, ticker
-            security = self._pair_(db, ticker)
-            if security is not None: return security, inverse, ticker
-        raise ValueError(f"Conversion {asset} to {account}: Failed · Due to no direct pair ({asset}{account} or {account}{asset})")
+        return BarAPI.row(row, self._security_, self._timeframe_)
 
     def _source_(self, asset: str, tape: TapeAPI) -> Union[tuple[TapeAPI, bool], None]:
-        route = self._route_(self._db_, asset)
-        if route is None: return None
-        security, inverse, ticker = route
-        if security == self._security_.UID: return tape, inverse
-        source = TapeAPI.read(self._db_, security, epoch_to_datetime(int(tape.Stamps[0])) - timedelta(days=7), epoch_to_datetime(int(tape.Stamps[-1])), workers=self._readers_, shelf=self._shelf_.get(security, MISSING))
-        if not source.Stamps.size or source.Stamps[0] > tape.Stamps[0]: raise ValueError(f"Conversion {asset} to {self._account_asset_}: Failed · Due to no {ticker} quote before {epoch_to_datetime(int(tape.Stamps[0]))}")
-        return source, inverse
+        return TapeAPI.source(self._db_, self._security_, asset, self._account_asset_, tape, workers=self._readers_, shelf=self._shelf_, bridge=self._bridge_)
+
+    def _charges_base_(self) -> bool:
+        return self._commission_type_ == CommissionType.Accurate and self._contract_.CommissionMode in (CommissionMode.BaseAssetPerMillionVolume, CommissionMode.BaseAssetPerOneLot)
+
+    def _minimum_asset_(self, contract: Any) -> Union[str, None]:
+        if self._commission_type_ != CommissionType.Accurate or contract is None or not contract.MinCommission: return None
+        ticker = self._security_.Ticker
+        return None if contract.MinCommissionAsset in (self._account_asset_, ticker.BaseAsset, ticker.QuoteAsset) else contract.MinCommissionAsset
+
+    def _base_source_(self, tape: TapeAPI) -> Union[tuple[TapeAPI, bool], None]:
+        try: return self._source_(self._base_asset_, tape)
+        except ValueError:
+            if self._charges_base_(): raise
+            self._log_.debug(lambda: f"Conversion {self._base_asset_} to {self._account_asset_}: Unavailable · Notional sizing refused")
+            return TapeAPI.empty(tape.Security), False
 
     def _share_(self, start: datetime, stop: datetime) -> ShareAPI:
         first, last = TapeAPI.reach(start, stop, self._timeframe_)
+        ticker = self._security_.Ticker
         with PostgresDatabaseAPI(database="Quant") as db:
             securities = {self._security_.UID: first}
-            for asset in (self._security_.Ticker.BaseAsset, self._security_.Ticker.QuoteAsset):
-                route = self._route_(db, asset)
-                if route is not None and route[0] not in securities: securities[route[0]] = first - timedelta(days=7)
+            for asset in (ticker.BaseAsset, ticker.QuoteAsset, self._minimum_asset_(self._security_.Contract)):
+                if asset is None: continue
+                try: legs = TapeAPI.legs(db, self._security_, asset, self._account_asset_, self._bridge_)
+                except ValueError: continue
+                for leg in legs:
+                    if leg[0] not in securities: securities[leg[0]] = first - timedelta(days=7)
             share = ShareAPI([TapeAPI.read(db, security, begin, last, workers=self._readers_, shared=True) for security, begin in securities.items()])
         self._log_.debug(lambda: f"Shared Tapes: Published · {len(securities)} Tapes · {memory_to_string(share.size())}")
         return share
@@ -281,13 +272,13 @@ class BacktestingAPI(SystemAPI):
     def _spawns_(self) -> bool:
         return False
 
-    def _publish_(self) -> ShareAPI:
+    def _shelve_(self) -> ShareAPI:
         if self._shared_ is None:
             self._shared_ = self._share_(self._range_start_, self._range_stop_)
             self._shelf_ = {**self._shelf_, **self._shared_.tapes()}
         return self._shared_
 
-    def _bars_(self, share: ShareAPI, scopes: list) -> dict:
+    def _shared_bars_(self, share: ShareAPI, scopes: list) -> dict:
         shelf, spans = share.tapes().get(self._security_.UID, MISSING), {}
         with PostgresDatabaseAPI(database="Quant") as db:
             for start, stop in dict.fromkeys(scopes): spans[(start, stop)] = TapeAPI.span(db, self._security_.UID, self._timeframe_, start, stop, workers=self._readers_, shelf=shelf)[1]
@@ -318,19 +309,21 @@ class BacktestingAPI(SystemAPI):
 
     def _load_tape_(self) -> tuple:
         tape, bars = TapeAPI.span(self._db_, self._security_.UID, self._timeframe_, self._start_, self._stop_, workers=self._readers_, shelf=self._shelf_.get(self._security_.UID, MISSING), bars=self._spans_.get((self._start_, self._stop_), MISSING))
-        conversions = (self._source_(self._base_asset_, tape), self._source_(self._quote_asset_, tape)) if tape.Stamps.size else (None, None)
+        minimum = self._minimum_asset_(self._contract_)
+        conversions = (self._base_source_(tape), self._source_(self._quote_asset_, tape), self._source_(minimum, tape) if minimum else None) if tape.Stamps.size else (None, None, None)
         start = datetime_to_epoch(self._start_)
         early = tape.materialize(bars.filter(pl.col("Timestamp") < start), self._timeframe_)
         executed = bars.filter(pl.col("Timestamp") >= start)
-        rows = tape.materialize(executed, self._timeframe_, *conversions) if executed.height else None
+        rows = tape.materialize(executed, self._timeframe_, *conversions[:2]) if executed.height else None
         if executed.height < 2: return early, (None, None), rows, [], TapeAPI.empty(tape.Security), None, [None]
         window = tape.slice(int(executed["Open"][1]), int(executed["Close"][-1]))
         points = self._points_(window, window.bars(self._resolution_, workers=self._readers_)) if self._finer_() else None
         walked = [self._row_to_bar_(row) for row in rows.slice(1).to_dicts()]
         if self._walks_ticks_(): return early, conversions, rows, walked, window, points, [None]
         visited = executed.slice(1)
-        stamps = points.Stamps if points is not None else np.unique(tape.Stamps[np.concatenate((visited["Open"].to_numpy(), visited["HighAsk"].to_numpy(), visited["HighBid"].to_numpy(), visited["LowAsk"].to_numpy(), visited["LowBid"].to_numpy(), visited["Close"].to_numpy()))])
-        return early, (self._reduce_(conversions[0], stamps), self._reduce_(conversions[1], stamps)), rows, walked, TapeAPI.empty(tape.Security), points, [None]
+        stamps = points.Stamps if points is not None else tape.Stamps[np.concatenate((visited["Open"].to_numpy(), visited["HighAsk"].to_numpy(), visited["HighBid"].to_numpy(), visited["LowAsk"].to_numpy(), visited["LowBid"].to_numpy(), visited["Close"].to_numpy()))]
+        stamps = np.unique(np.concatenate((stamps, self._rolls_[0])))
+        return early, tuple(self._reduce_(source, stamps) for source in conversions), rows, walked, TapeAPI.empty(tape.Security), points, [None]
 
     def _load_warmup_(self, early: pl.DataFrame, rows: Union[pl.DataFrame, None], history: list) -> pl.DataFrame:
         count = max(self._window_ - early.height, 0)
@@ -343,7 +336,7 @@ class BacktestingAPI(SystemAPI):
         return warmup if rows is None else pl.concat([warmup, rows.head(1)], how="vertical_relaxed")
 
     def _scope_(self) -> tuple:
-        return self._security_.UID, self._start_, self._stop_, self._timeframe_.UID, self._resolution_.UID, self._account_asset_
+        return self._security_.UID, self._start_, self._stop_, self._timeframe_.UID, self._resolution_.UID, self._account_asset_, self._bridge_ or None
 
     def extract(self) -> DatasetAPI:
         return self._dataset_
@@ -424,7 +417,7 @@ class BacktestingAPI(SystemAPI):
         return SplitAPI.walk_forward_folds(self._range_start_, self._range_stop_, self._training_, self._validation_, self._testing_, self._rolling_, self._purge_, self._embargo_)
 
     def _replay_(self, start: datetime, stop: datetime) -> float:
-        self._disconnect_()
+        super()._disconnect_()
         self._start_, self._stop_ = start, stop
         with self.quieted():
             self._connect_()
@@ -440,7 +433,7 @@ class BacktestingAPI(SystemAPI):
             "parameters": parameters.data,
             "start": start,
             "stop": stop,
-            "account": (self._account_asset_, self._account_balance_, self._account_leverage_),
+            "account": (self._account_asset_, self._account_balance_, self._account_leverage_, self._bridge_ or None),
             "spread": (self._spread_type_, self._spread_value_),
             "commission": (self._commission_type_, self._commission_value_),
             "swap": (self._swap_type_, self._swap_long_, self._swap_short_),
@@ -477,13 +470,6 @@ class BacktestingAPI(SystemAPI):
     def _mid_rate_(tick: TickAPI) -> float:
         return (tick.Ask.Price + tick.Bid.Price) / 2.0
 
-    def _base_conversion_(self, rate: float) -> float:
-        return rate if self._account_asset_ == self._quote_asset_ else 1.0
-
-    def _quote_conversion_(self, rate: float) -> float:
-        if self._account_asset_ == self._base_asset_: return 1.0 / rate
-        return 1.0
-
     @staticmethod
     def _stored_(price: Union[PriceAPI, None]) -> Union[float, None]:
         return price.Price if price else None
@@ -512,9 +498,15 @@ class BacktestingAPI(SystemAPI):
     def _ask_bid_(self, tick: TickAPI) -> tuple[float, float]:
         return self._effective_ask_bid_(tick.Ask.Price, tick.Bid.Price)
 
-    def _commission_(self, volume: float, rate: float, base_conversion: Union[float, Missing] = MISSING, quote_conversion: Union[float, Missing] = MISSING) -> float:
-        base_conversion = base_conversion if base_conversion is not MISSING else self._base_conversion_(rate)
-        quote_conversion = quote_conversion if quote_conversion is not MISSING else self._quote_conversion_(rate)
+    def _minimum_(self, tick: TickAPI, base_conversion: float, quote_conversion: float) -> float:
+        amount, asset = self._contract_.MinCommission or 0.0, self._contract_.MinCommissionAsset
+        if not amount or self._commission_type_ != CommissionType.Accurate: return 0.0
+        if asset == self._account_asset_: return amount
+        if asset == self._quote_asset_: return amount * quote_conversion
+        if asset == self._base_asset_: return amount * base_conversion
+        return amount * float(TapeAPI.rates(np.array([datetime_to_epoch(tick.Timestamp.DateTime)], dtype=np.int64), self._dataset_.Conversions[2])[1][0])
+
+    def _commission_(self, volume: float, rate: float, base_conversion: float, quote_conversion: float, minimum: float = 0.0) -> float:
         match self._commission_type_:
             case CommissionType.Points:
                 return volume * (-(self._commission_value_ or 0.0) * self._contract_.PointSize) * quote_conversion
@@ -522,51 +514,60 @@ class BacktestingAPI(SystemAPI):
                 return -(self._commission_value_ or 0.0) / 100.0 * volume * rate * quote_conversion
             case CommissionType.Amount:
                 return -(self._commission_value_ or 0.0)
+            case CommissionType.Units:
+                return -(self._commission_value_ or 0.0) * volume
+            case CommissionType.Lots:
+                return -(self._commission_value_ or 0.0) * self._quantity_(volume)
             case CommissionType.Accurate:
                 commission = self._contract_.Commission or 0.0
                 match self._contract_.CommissionMode:
-                    case CommissionMode.BaseAssetPerMillionVolume:
-                        return volume * (-commission / 1_000_000) * base_conversion
-                    case CommissionMode.BaseAssetPerOneLot:
-                        return self._quantity_(volume) * -commission * base_conversion
-                    case CommissionMode.PercentageOfVolume:
-                        return -commission / 100.0 * volume * rate * quote_conversion
-                    case CommissionMode.QuoteAssetPerOneLot:
-                        return self._quantity_(volume) * -commission * quote_conversion
+                    case CommissionMode.BaseAssetPerMillionVolume: amount = volume * (-commission / 1_000_000) * base_conversion
+                    case CommissionMode.BaseAssetPerOneLot: amount = self._quantity_(volume) * -commission * base_conversion
+                    case CommissionMode.PercentageOfVolume: amount = -commission / 100.0 * volume * rate * quote_conversion
+                    case CommissionMode.QuoteAssetPerOneLot: amount = self._quantity_(volume) * -commission * quote_conversion
+                    case _: amount = 0.0
+                return min(amount, -minimum)
         return 0.0
 
-    def _overnights_(self, entry: datetime, exit: datetime) -> int:
-        overnights = 0
-        for rollover in TapeAPI.rollovers(entry, exit):
-            match rollover.weekday():
-                case day if day == self._contract_.SwapExtraDay.value: overnights += 3
-                case day if day in (Weekday.Saturday.value, Weekday.Sunday.value): overnights += 0
-                case _: overnights += 1
-        return overnights
+    def _fee_(self, volume: float, tick: TickAPI) -> float:
+        base_conversion, quote_conversion = self._conversions_(tick)
+        return quantize(self._commission_(volume, self._mid_rate_(tick), base_conversion, quote_conversion, self._minimum_(tick, base_conversion, quote_conversion)))
 
-    def _swap_(self, direction: Direction, volume: float, rate: float, entry: datetime, exit: datetime, quote_conversion: Union[float, Missing] = MISSING) -> float:
-        overnights = self._overnights_(entry, exit)
-        if not overnights: return 0.0
-        quote_conversion = quote_conversion if quote_conversion is not MISSING else self._quote_conversion_(rate)
-        long = direction == Direction.Buy
+    def _schedule_(self) -> tuple[np.ndarray, np.ndarray]:
+        rolls = self._contract_.rolls(self._start_, self._stop_) if self._contract_ is not None else []
+        return np.array([datetime_to_epoch(moment) for moment, _ in rolls], dtype=np.int64), np.array([days for _, days in rolls], dtype=np.int64)
+
+    def _swap_amount_(self, long: bool, volume: float, price: float, days: int, quote_conversion: float) -> float:
         match self._swap_type_:
-            case SwapType.Points:
-                points = (self._swap_long_ if long else self._swap_short_) or 0.0
-                return volume * points * self._contract_.PointSize * overnights * quote_conversion
-            case SwapType.Percentage:
-                percent = (self._swap_long_ if long else self._swap_short_) or 0.0
-                return volume * rate * (percent / 100.0) * (overnights / 365.0) * quote_conversion
-            case SwapType.Amount:
-                return (self._swap_long_ if long else self._swap_short_) or 0.0
-            case SwapType.Accurate:
-                match self._contract_.SwapMode:
-                    case SwapMode.Pips:
-                        pips = (self._contract_.SwapLong if long else self._contract_.SwapShort) or 0.0
-                        return volume * pips * self._contract_.PipSize * overnights * quote_conversion
-                    case SwapMode.Percentage:
-                        percent = (self._contract_.SwapLong if long else self._contract_.SwapShort) or 0.0
-                        return volume * rate * (percent / 100.0) * (overnights / 365.0) * quote_conversion
+            case SwapType.Points: return volume * ((self._swap_long_ if long else self._swap_short_) or 0.0) * self._contract_.PointSize * days * quote_conversion
+            case SwapType.Percentage: return volume * price * (((self._swap_long_ if long else self._swap_short_) or 0.0) / 100.0) * (days / 365.0) * quote_conversion
+            case SwapType.Amount: return ((self._swap_long_ if long else self._swap_short_) or 0.0) * days
+            case SwapType.Accurate: return self._contract_.swap(long, volume, price, days) * quote_conversion
         return 0.0
+
+    def _charge_(self) -> None:
+        moment, count, quote = int(self._rolls_[0][self._roll_index_]), int(self._rolls_[1][self._roll_index_]), float(self._roll_rates_[self._roll_index_])
+        self._roll_index_ += 1
+        if not self._positions_: return
+        price, skip, stamps = self._tick_.Bid.Price if self._tick_ is not None else 0.0, int(self._contract_.SwapSkip or 0), self._rolls_[0]
+        for position in self._positions_.values():
+            entry = datetime_to_epoch(position.EntryTimestamp.DateTime)
+            if entry < moment and self._roll_index_ - 1 - int(np.searchsorted(stamps, entry, side="right")) >= skip:
+                self.portfolio.charge(position, swap=quantize(self._swap_amount_(position.Direction == Direction.Buy, position.Volume, price, count, quote if quote == quote else 1.0)))
+
+    def _accrue_(self, stamp: int) -> None:
+        stamps = self._rolls_[0]
+        while self._roll_index_ < stamps.size and stamps[self._roll_index_] <= stamp: self._charge_()
+
+    def _roll_through_(self, bar: BarAPI, stamp: int) -> None:
+        stamps = self._rolls_[0]
+        while self._roll_index_ < stamps.size and stamps[self._roll_index_] <= stamp:
+            moment = int(stamps[self._roll_index_])
+            if self._positions_ and moment > self._mark_:
+                segment = self._segment_(bar, self._mark_, moment - 1)
+                if segment is not None: self.portfolio.update_data(segment)
+                self._mark_, self._segmented_ = moment, True
+            self._charge_()
 
     def _next_pid_(self) -> int:
         next(self._tids_)
@@ -578,10 +579,9 @@ class BacktestingAPI(SystemAPI):
     def _build_position_(self, direction: Direction, position_type: PositionType, volume: float, tick: TickAPI, sl_price: Union[float, None], tp_price: Union[float, None]) -> PositionAPI:
         ask, bid = self._ask_bid_(tick)
         entry_price = ask if direction == Direction.Buy else bid
-        rate = self._mid_rate_(tick)
-        base_conversion, quote_conversion = self._conversions_(tick)
+        quote_conversion = self._conversions_(tick)[1]
         gross = (bid - ask) * volume * quote_conversion
-        commission = truncate(self._commission_(volume, rate, base_conversion, quote_conversion))
+        commission = self._fee_(volume, tick)
         return PositionAPI(
             UID=self._next_pid_(),
             Account=self.account,
@@ -593,6 +593,7 @@ class BacktestingAPI(SystemAPI):
             Volume=volume,
             Quantity=self._quantity_(volume),
             GrossPnL=gross,
+            SpreadPnL=gross,
             CommissionPnL=commission,
             SwapPnL=0.0,
             NetPnL=gross + commission,
@@ -603,16 +604,34 @@ class BacktestingAPI(SystemAPI):
             Comment=position_type.name
         )
 
+    def _lots_of_(self, position: PositionAPI) -> list:
+        lots = self._lots_.get(position.UID)
+        if lots is None: lots = self._lots_[position.UID] = [[position.EntryTimestamp.DateTime, position.EntryPrice.Price, position.Volume, position.CommissionPnL.PnL if position.CommissionPnL else 0.0, position.SpreadPnL.PnL if position.SpreadPnL else 0.0]]
+        return lots
+
+    def _consume_(self, position: PositionAPI, volume: float) -> tuple[datetime, float, float, float]:
+        lots, left, portions, commission, spread = self._lots_of_(position), volume, [], 0.0, 0.0
+        while left > EPSILON and lots:
+            stamp, price, size, fee, paid = lots[0]
+            taken = min(size, left)
+            portions.append((stamp, price, taken))
+            share = quantize(fee * (taken / size)) if taken < size - EPSILON else fee
+            commission, spread, left = commission + share, spread + paid * (taken / size), left - taken
+            if taken < size - EPSILON: lots[0] = [stamp, price, size - taken, quantize(fee - share), paid * ((size - taken) / size)]
+            else: lots.pop(0)
+        entry = portions[0][1] if len(portions) == 1 else sum(price * taken for _, price, taken in portions) / sum(taken for _, _, taken in portions)
+        return portions[0][0], entry, commission, spread
+
     def _build_trade_(self, position: PositionAPI, volume: float, tick: TickAPI, exit_price: float) -> TradeAPI:
         direction = position.Direction
-        rate = self._mid_rate_(tick)
-        base_conversion, quote_conversion = self._conversions_(tick)
-        entry = position.EntryPrice.Price
+        quote_conversion = self._conversions_(tick)[1]
+        opened, entry, commission, spread = self._consume_(position, volume)
         delta = (exit_price - entry) if direction == Direction.Buy else (entry - exit_price)
         gross = delta * volume * quote_conversion
         ratio = volume / position.Volume if position.Volume else 1.0
-        commission = (position.CommissionPnL.PnL if position.CommissionPnL else 0.0) * ratio + truncate(self._commission_(volume, rate, base_conversion, quote_conversion))
-        swap = self._swap_(direction, volume, rate, position.EntryTimestamp.DateTime, tick.Timestamp.DateTime, quote_conversion)
+        conversion = self._contract_.ConversionFee if self._quote_asset_ != self._account_asset_ else None
+        commission = quantize(commission + self._fee_(volume, tick) - (conversion / 100.0 * max(gross, 0.0) if conversion else 0.0))
+        swap = (position.SwapPnL.PnL if position.SwapPnL else 0.0) * ratio
         return TradeAPI(
             UID=next(self._tids_),
             Position=position.UID,
@@ -620,13 +639,14 @@ class BacktestingAPI(SystemAPI):
             Security=self._security_,
             Type=position.Type,
             Direction=direction,
-            EntryTimestamp=position.EntryTimestamp.DateTime,
+            EntryTimestamp=opened,
             ExitTimestamp=tick.Timestamp.DateTime,
             EntryPrice=entry,
             ExitPrice=exit_price,
             Volume=volume,
             Quantity=self._quantity_(volume),
             GrossPnL=gross,
+            SpreadPnL=spread,
             CommissionPnL=commission,
             SwapPnL=swap,
             NetPnL=gross + commission + swap,
@@ -655,25 +675,28 @@ class BacktestingAPI(SystemAPI):
     def _emit_increase_(self, position: PositionAPI, direction: Direction, volume: float) -> None:
         ask, bid = self._ask_bid_(self._tick_)
         fill = ask if direction == Direction.Buy else bid
-        rate = self._mid_rate_(self._tick_)
-        base_conversion, quote_conversion = self._conversions_(self._tick_)
+        quote_conversion = self._conversions_(self._tick_)[1]
+        fee, paid = self._fee_(volume, self._tick_), (bid - ask) * volume * quote_conversion
+        self._lots_of_(position).append([self._tick_.Timestamp.DateTime, fill, volume, fee, paid])
         total = position.Volume + volume
-        position.EntryPrice.Price = self._round_((position.EntryPrice.Price * position.Volume + fill * volume) / total)
+        position.EntryPrice.Price = (position.EntryPrice.Price * position.Volume + fill * volume) / total
         position.Volume = total
         position.Quantity = self._quantity_(total)
-        previous = position.CommissionPnL.PnL if position.CommissionPnL else 0.0
-        position.CommissionPnL = previous + truncate(self._commission_(volume, rate, base_conversion, quote_conversion))
+        position.CommissionPnL = quantize((position.CommissionPnL.PnL if position.CommissionPnL else 0.0) + fee)
+        position.SpreadPnL = (position.SpreadPnL.PnL if position.SpreadPnL else 0.0) + paid
         self._arm_version_ += 1
         update_id = UpdateID.IncreasedBuyPositionVolume if direction == Direction.Buy else UpdateID.IncreasedSellPositionVolume
         self._enqueue_(update_id, self._bar_, position)
 
     def _emit_reduce_(self, position: PositionAPI, volume: float) -> None:
-        initial_commission = position.CommissionPnL.PnL if position.CommissionPnL else 0.0
         remaining = position.Volume - volume
         trade = self._build_trade_(position, volume, self._tick_, self._exit_price_(position, self._tick_))
+        lots = self._lots_of_(position)
         position.Volume = remaining
         position.Quantity = self._quantity_(remaining)
-        position.CommissionPnL = initial_commission * (remaining / (remaining + volume))
+        position.CommissionPnL = quantize(sum(lot[3] for lot in lots))
+        position.SpreadPnL = sum(lot[4] for lot in lots)
+        position.SwapPnL = (position.SwapPnL.PnL if position.SwapPnL else 0.0) * (remaining / (remaining + volume))
         self._arm_version_ += 1
         update_id = UpdateID.DecreasedBuyPositionVolume if position.Direction == Direction.Buy else UpdateID.DecreasedSellPositionVolume
         self._enqueue_(update_id, position, trade, self._bar_)
@@ -719,6 +742,7 @@ class BacktestingAPI(SystemAPI):
     def _emit_close_(self, position: PositionAPI, tick: TickAPI, update_id: UpdateID) -> None:
         trade = self._build_trade_(position, position.Volume, tick, self._exit_price_(position, tick))
         del self._positions_[position.UID]
+        self._lots_.pop(position.UID, None)
         self._arm_version_ += 1
         self._enqueue_(update_id, position, trade, self._bar_)
 
@@ -746,18 +770,19 @@ class BacktestingAPI(SystemAPI):
         match action.ActionID:
             case ActionID.Complete | ActionID.Init: pass
             case ActionID.Execution: self._enqueue_(UpdateID.Execution)
-            case ActionID.OpenBuyPosition: self._emit_open_(action, Direction.Buy)
-            case ActionID.OpenSellPosition: self._emit_open_(action, Direction.Sell)
+            case ActionID.OpenBuyPosition: self._touch_(); self._emit_open_(action, Direction.Buy)
+            case ActionID.OpenSellPosition: self._touch_(); self._emit_open_(action, Direction.Sell)
             case ActionID.CloseBuyPosition | ActionID.CloseSellPosition:
+                self._touch_()
                 position = self._positions_.get(action.PositionID)
                 if position is None: self._log_.error(lambda: "Action Close: Failed · Due to Position not found"); return
                 self._emit_close_(position, self._tick_, UpdateID.ClosedBuyPosition if action.ActionID == ActionID.CloseBuyPosition else UpdateID.ClosedSellPosition)
-            case ActionID.IncreaseBuyPositionVolume: self._emit_target_volume_(action, Direction.Buy, 1)
-            case ActionID.IncreaseSellPositionVolume: self._emit_target_volume_(action, Direction.Sell, 1)
-            case ActionID.DecreaseBuyPositionVolume: self._emit_target_volume_(action, Direction.Buy, -1)
-            case ActionID.DecreaseSellPositionVolume: self._emit_target_volume_(action, Direction.Sell, -1)
-            case ActionID.ModifyBuyPositionVolume: self._emit_target_volume_(action, Direction.Buy, 0)
-            case ActionID.ModifySellPositionVolume: self._emit_target_volume_(action, Direction.Sell, 0)
+            case ActionID.IncreaseBuyPositionVolume: self._touch_(); self._emit_target_volume_(action, Direction.Buy, 1)
+            case ActionID.IncreaseSellPositionVolume: self._touch_(); self._emit_target_volume_(action, Direction.Sell, 1)
+            case ActionID.DecreaseBuyPositionVolume: self._touch_(); self._emit_target_volume_(action, Direction.Buy, -1)
+            case ActionID.DecreaseSellPositionVolume: self._touch_(); self._emit_target_volume_(action, Direction.Sell, -1)
+            case ActionID.ModifyBuyPositionVolume: self._touch_(); self._emit_target_volume_(action, Direction.Buy, 0)
+            case ActionID.ModifySellPositionVolume: self._touch_(); self._emit_target_volume_(action, Direction.Sell, 0)
             case ActionID.ModifyBuyPositionStopLoss: self._emit_modify_(action.PositionID, str(PositionAPI.ID.StopLossPrice), action.StopLoss, UpdateID.ModifiedBuyPositionStopLoss, "Stop-Loss")
             case ActionID.ModifySellPositionStopLoss: self._emit_modify_(action.PositionID, str(PositionAPI.ID.StopLossPrice), action.StopLoss, UpdateID.ModifiedSellPositionStopLoss, "Stop-Loss")
             case ActionID.ModifyBuyPositionTakeProfit: self._emit_modify_(action.PositionID, str(PositionAPI.ID.TakeProfitPrice), action.TakeProfit, UpdateID.ModifiedBuyPositionTakeProfit, "Take-Profit")
@@ -804,8 +829,15 @@ class BacktestingAPI(SystemAPI):
         return epoch_to_datetime(timestamp) if isinstance(timestamp, int) else timestamp
 
     def _conversion_at_(self, timestamp: Union[int, datetime]) -> tuple:
-        stamps, (base, quote) = np.array([self._epoch_(timestamp)], dtype=np.int64), self._dataset_.Conversions
+        stamps, (base, quote) = np.array([self._epoch_(timestamp)], dtype=np.int64), self._dataset_.Conversions[:2]
         return tuple(None if math.isnan(rate[0]) else float(rate[0]) for rate in (*TapeAPI.rates(stamps, base), *TapeAPI.rates(stamps, quote)))
+
+    def _rates_(self, stamps: np.ndarray, asks: np.ndarray, bids: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        ones = np.ones(stamps.size)
+        if self._needs_conversion_: return (*TapeAPI.rates(stamps, self._dataset_.Conversions[0]), *TapeAPI.rates(stamps, self._dataset_.Conversions[1]))
+        if self._account_asset_ == self._quote_asset_: return asks, bids, ones, ones
+        if self._account_asset_ == self._base_asset_: return ones, ones, 1.0 / bids, 1.0 / asks
+        return ones, ones, ones, ones
 
     def _tick_conversions_(self, timestamp: Union[int, datetime], raw_ask: float, raw_bid: float) -> tuple:
         if self._needs_conversion_: return self._conversion_at_(timestamp)
@@ -817,13 +849,57 @@ class BacktestingAPI(SystemAPI):
         ask_base, bid_base, ask_quote, bid_quote = self._tick_conversions_(timestamp, raw_ask, raw_bid)
         return TickAPI(Security=self._security_, Timestamp=self._datetime_(timestamp), Ask=ask, Bid=bid, AskBaseConversion=ask_base, BidBaseConversion=bid_base, AskQuoteConversion=ask_quote, BidQuoteConversion=bid_quote, Volume=1.0)
 
+    def _span_(self, bar: BarAPI) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        if self._walks_ticks_() or self._finer_():
+            source = self._dataset_.Ticks if self._walks_ticks_() else self._dataset_.Points
+            start, stop = self._bounds_(source.Stamps, bar.OpenPoint.BidTick.Timestamp.DateTime, bar.ClosePoint.BidTick.Timestamp.DateTime)
+            return source.Stamps[start:stop], source.Asks[start:stop], source.Bids[start:stop]
+        ticks = self._intrabar_(bar)
+        return np.array([datetime_to_epoch(tick.Timestamp.DateTime) for tick in ticks], dtype=np.int64), np.array([tick.Ask.Price for tick in ticks]), np.array([tick.Bid.Price for tick in ticks])
+
+    def _segment_(self, bar: BarAPI, first: int, last: int) -> Union[BarAPI, None]:
+        stamps, asks, bids = self._span_(bar)
+        low, high = int(np.searchsorted(stamps, first, side="left")), int(np.searchsorted(stamps, last, side="right"))
+        if high <= low: return None
+        extremes = (bar.HighPoint.AskTick, bar.HighPoint.BidTick, bar.LowPoint.AskTick, bar.LowPoint.BidTick)
+        covered = all(first <= datetime_to_epoch(tick.Timestamp.DateTime) <= last for tick in extremes)
+        if self._positions_ and not covered:
+            longs, shorts = any(position.Direction == Direction.Buy for position in self._positions_.values()), any(position.Direction == Direction.Sell for position in self._positions_.values())
+            ask_high, ask_low = (low + int(np.argmax(asks[low:high])), low + int(np.argmin(asks[low:high]))) if shorts else (low, low)
+            bid_high, bid_low = (low + int(np.argmax(bids[low:high])), low + int(np.argmin(bids[low:high]))) if longs else (low, low)
+            points = (low, ask_high, bid_high, ask_low, bid_low, high - 1)
+        else: points = (low, low, low, low, low, high - 1)
+        index = np.unique(points)
+        rates = [[None if rate != rate else float(rate) for rate in column] for column in self._rates_(stamps[index], asks[index], bids[index])]
+        ticks = {int(at): TickAPI(Security=self._security_, Timestamp=epoch_to_datetime(int(stamps[at])), Ask=float(asks[at]), Bid=float(bids[at]), AskBaseConversion=rates[0][k], BidBaseConversion=rates[1][k], AskQuoteConversion=rates[2][k], BidQuoteConversion=rates[3][k], Volume=1.0) for k, at in enumerate(index)}
+        opened, high_ask, high_bid, low_ask, low_bid, closed = (ticks[point] for point in points)
+        if self._positions_ and covered: high_ask, high_bid, low_ask, low_bid = extremes
+        return BarAPI(Security=self._security_, Timeframe=self._timeframe_, Timestamp=bar.Timestamp.DateTime, GapPoint=bar.GapPoint, OpenPoint=PointAPI(AskTick=opened, MidTick=opened, BidTick=opened),
+                      HighPoint=PointAPI(AskTick=high_ask, BidTick=high_bid), LowPoint=PointAPI(AskTick=low_ask, BidTick=low_bid), ClosePoint=PointAPI(AskTick=closed, MidTick=closed, BidTick=closed), Volume=float(high - low))
+
+    def _cut_(self, stamp: int) -> None:
+        self._roll_through_(self._walked_, stamp)
+        if self._segmented_ and self._mark_ == stamp: return
+        segment = self._segment_(self._walked_, self._mark_, stamp)
+        if segment is not None:
+            self.portfolio.update_data(segment)
+            self._bar_ = segment
+        self._mark_, self._segmented_ = stamp, True
+
+    def _touch_(self) -> None:
+        stamp = datetime_to_epoch(self._tick_.Timestamp.DateTime)
+        if self._walking_: self._cut_(stamp)
+        else: self._accrue_(stamp)
+
     def _walk_(self, timestamp: Union[int, datetime], raw_ask: float, raw_bid: float) -> Iterator:
         ask, bid = self._effective_ask_bid_(raw_ask, raw_bid)
         spread = (raw_ask - raw_bid) if self._spread_type_ in (SpreadType.Accurate, SpreadType.Approximate) else self._spread_value_amount_(raw_ask, raw_bid)
+        stamp = self._epoch_(timestamp)
         for position in list(self._positions_.values()):
             if position.UID not in self._positions_: continue
             level, update_id = self._stop_level_(position, ask, bid)
             if level is not None:
+                self._cut_(stamp)
                 self._fill_stop_(position, timestamp, level, raw_ask, raw_bid, ask, bid, spread, update_id)
                 yield
         if self._ask_above_ is not None and ask >= self._ask_above_:
@@ -929,16 +1005,31 @@ class BacktestingAPI(SystemAPI):
         tracker = ProgressAPI(total, label=self._identity_(), unit="bars")
         for index, bar in enumerate(bars):
             tracker.advance()
+            close = datetime_to_epoch(bar.ClosePoint.BidTick.Timestamp.DateTime)
+            if not index: self._walked_, self._mark_ = bar, datetime_to_epoch(bar.OpenPoint.BidTick.Timestamp.DateTime)
+            self._roll_through_(bar, close)
+            if self._segmented_:
+                segment = self._segment_(bar, self._mark_, close) if self._positions_ else None
+                if segment is not None: self.portfolio.update_data(segment)
+                self._segmented_ = False
             self._bar_ = bar
             self._tick_ = bars[index + 1].OpenPoint.BidTick if index + 1 < total else bar.ClosePoint.BidTick
             self._enqueue_(UpdateID.BarClosed, bar)
             yield
             if index + 1 >= total: continue
             nbar = bars[index + 1]
-            self._bar_ = nbar
+            self._walked_ = nbar
+            self._mark_, self._walking_ = datetime_to_epoch(nbar.OpenPoint.BidTick.Timestamp.DateTime), True
             for timestamp, raw_ask, raw_bid in self._intrabar_source_(nbar):
                 for _ in self._walk_(timestamp, raw_ask, raw_bid): yield
+            self._walking_ = False
         tracker.close()
+
+    def _settle_(self) -> None:
+        self._accrue_(datetime_to_epoch(self._stop_))
+        if not self._positions_ or self._tick_ is None: return
+        for position in self._positions_.values(): self.portfolio.charge(position, commission=self._fee_(position.Volume, self._tick_))
+        self.portfolio.settle()
 
     def receive_update_id(self) -> UpdateID:
         if not self._uid_queue_:
@@ -994,7 +1085,7 @@ class BacktestingAPI(SystemAPI):
             self._transition_(self._initialization_timer_, "Initialization", self._execution_timer_)
 
         def advance(update: BarUpdateAPI):
-            if self.strategy.Transform.Market and self._dataset_.IndicatorResults is None:
+            if self._dataset_.IndicatorResults is None:
                 rows = self._dataset_.ExecutionRows
                 if rows is not None:
                     update.Market.update_data(rows.slice(self._advance_index_, 1))
@@ -1003,6 +1094,7 @@ class BacktestingAPI(SystemAPI):
                 self._advance_index_ += 1
 
         def report(update: CompleteUpdateAPI):
+            self._settle_()
             self._transition_(self._execution_timer_, "Execution", self._finalization_timer_)
             if self._auto_: self._log_.debug(lambda: f"Phase Resolution: Completed · Auto · {self._descended_} Descended · {self._skipped_} Skipped")
             self._report_(update.Portfolio, self.account, self._start_.date(), self._stop_.date())

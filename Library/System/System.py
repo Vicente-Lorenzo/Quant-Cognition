@@ -10,7 +10,6 @@ from typing import Sequence, Union, TYPE_CHECKING
 
 from Library.Statistic.Composition import backtest
 from Library.Statistic.Label import BENCHMARK_LABEL
-from Library.Database import BufferAPI
 from Library.Database.Dataframe import pl
 from Library.Indicator.Indicator import IndicatorAPI
 from Library.Logging import LoggingAPI, VerboseLevel
@@ -22,7 +21,6 @@ from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.Order import OrderAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.Position import PositionAPI, PositionStatus
-from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Statistic import aggregate_trades, generate_benchmark_report, generate_net_report, order_view, position_view, trade_view, deal_view
 from Library.Portfolio.Trade import TradeAPI
 from Library.Protocol.Action import ActionAPI, ActionID, CompleteActionAPI, ShutdownActionAPI
@@ -153,8 +151,6 @@ class SystemAPI(ServiceAPI, ABC):
                  security: SecurityAPI,
                  timeframe: TimeframeAPI,
                  parameters: Parameter,
-                 universe: tuple[int, float, int, int] = (0, 0.0, 0, 0),
-                 portfolio: tuple[int, float, int, int] = (0, 0.0, 0, 0),
                  risk_free: float = 0.0,
                  benchmark: Union[str, Sequence, None] = None,
                  report: bool = True,
@@ -191,21 +187,11 @@ class SystemAPI(ServiceAPI, ABC):
         self.statistics = None
         self.benchmarks = None
 
-        self._universe_: BufferAPI = BufferAPI(types=[SecurityAPI], batch=universe[0], interval=universe[1], workers=universe[2], maxsize=universe[3])
-        self._portfolio_: BufferAPI = BufferAPI(types=[AccountAPI, OrderAPI, PositionAPI, TradeAPI], batch=portfolio[0], interval=portfolio[1], workers=portfolio[2], maxsize=portfolio[3])
-
-        self._session_: Union[SessionAPI, None] = None
         self._initialization_timer_: Timer = Timer()
         self._execution_timer_: Timer = Timer()
         self._finalization_timer_: Timer = Timer()
 
         self._log_: LoggingAPI = LoggingAPI("System Management")
-
-    def _attach_session_(self, record) -> None:
-        if not self._portfolio_.Active or self._session_ is None: return
-        record.Session = self._session_
-        if not isinstance(record, AccountAPI):
-            record.Account = self.account
 
     def connected(self) -> bool:
         return self._connected_
@@ -215,7 +201,7 @@ class SystemAPI(ServiceAPI, ABC):
 
     def _assemble_(self) -> None:
         self.strategy = self._strategy_(money_management=self._parameters_.MoneyManagement, risk_management=self._parameters_.RiskManagement, signal_management=self._parameters_.SignalManagement, technical_management=self._parameters_.TechnicalManagement, fundamental_management=self._parameters_.FundamentalManagement, sentimental_management=self._parameters_.SentimentalManagement, portfolio_management=self._parameters_.PortfolioManagement)
-        self.market = MarketAPI()
+        self.market = MarketAPI(mode=self._strategy_.Pricing)
         self.indicator = IndicatorAPI(technical=self._parameters_.TechnicalManagement, fundamental=self._parameters_.FundamentalManagement, sentimental=self._parameters_.SentimentalManagement)
         self.portfolio = PortfolioAPI()
         self.portfolio.RiskFree = self._risk_free_
@@ -225,11 +211,9 @@ class SystemAPI(ServiceAPI, ABC):
             self.technical = self.indicator.Technical
             self.fundamental = self.indicator.Fundamental
             self.sentimental = self.indicator.Sentimental
-        if self._portfolio_.Active: self._portfolio_.start()
         self._connected_ = True
 
     def _disconnect_(self) -> None:
-        if self._portfolio_.Active: self._portfolio_.shutdown()
         self._connected_ = False
 
     def connect(self, **kwargs):
@@ -295,7 +279,7 @@ class SystemAPI(ServiceAPI, ABC):
 
     def _export_(self, tables: dict) -> None:
         try:
-            ident = getattr(self, "_iid_", None) or getattr(self._session_, "UID", None) or self.__class__.__name__
+            ident = getattr(self, "_iid_", None) or self.__class__.__name__
             destination = self._destination_(self._exporting_, self.Exports, "Export")
             if self._run_ is not None and self._exporting_ is True:
                 folder = destination
@@ -485,8 +469,14 @@ class SystemAPI(ServiceAPI, ABC):
             for name, frame in self._analysis_().items():
                 self._log_.info(lambda n=name, t=frame: f"Report {n}: {t}")
         if self._exporting_:
-            self._export_(tables)
+            self._export_({**tables, **self._series_(portfolio)})
         self._delivered_()
+
+    def _series_(self, portfolio: PortfolioAPI) -> dict:
+        series = {"Equity": pl.DataFrame(portfolio.EquityCurve.Track, schema={"Timestamp": pl.Datetime("us"), "Equity": pl.Float64}, orient="row")}
+        signals = getattr(self.strategy, "Signals", None)
+        if signals: series["Signals"] = pl.DataFrame(signals, schema={"Timestamp": pl.Datetime("us"), "Signal": pl.Float64, "Delta": pl.Float64, "Exposure": pl.Float64, "Order": pl.Float64}, orient="row")
+        return series
 
     def _identity_(self) -> str:
         ticker = self._ticker_(self._security_)
@@ -516,24 +506,14 @@ class SystemAPI(ServiceAPI, ABC):
         raise NotImplementedError
 
     def _receive_update_account_(self) -> AccountAPI:
-        account = self.receive_update_account()
-        self._attach_session_(account)
-        if self._portfolio_.Active and self._session_ is not None and self._session_.InitialAccount is None:
-            account.save()
-            self._session_.InitialAccount = account
-            self._session_.save()
-        else:
-            self._portfolio_.add(account)
-        return account
+        return self.receive_update_account()
 
     @abstractmethod
     def receive_update_security(self, offset: int = 1) -> SecurityAPI:
         raise NotImplementedError
 
     def _receive_update_security_(self) -> SecurityAPI:
-        security = self.receive_update_security()
-        if self._universe_.Active: security.save()
-        return security
+        return self.receive_update_security()
 
     @abstractmethod
     def receive_update_tick(self, offset: int = 1) -> TickAPI:
@@ -554,20 +534,14 @@ class SystemAPI(ServiceAPI, ABC):
         raise NotImplementedError
 
     def _receive_update_order_(self) -> OrderAPI:
-        order = self.receive_update_order()
-        self._attach_session_(order)
-        self._portfolio_.add(order)
-        return order
+        return self.receive_update_order()
 
     @abstractmethod
     def receive_update_position(self, offset: int = 1) -> PositionAPI:
         raise NotImplementedError
 
     def _receive_update_position_(self) -> PositionAPI:
-        position = self.receive_update_position()
-        self._attach_session_(position)
-        self._portfolio_.add(position)
-        return position
+        return self.receive_update_position()
 
     @abstractmethod
     def receive_update_trade(self, offset: int = 1) -> TradeAPI:
@@ -580,17 +554,10 @@ class SystemAPI(ServiceAPI, ABC):
     def _receive_update_position_trade_(self, status: PositionStatus) -> tuple[PositionAPI, TradeAPI]:
         pos, trade = self.receive_update_position_trade()
         pos.Status = status
-        self._attach_session_(pos)
-        self._attach_session_(trade)
-        self._portfolio_.add(pos)
-        self._portfolio_.add(trade)
         return pos, trade
 
     def _receive_update_trade_(self) -> TradeAPI:
-        trade = self.receive_update_trade()
-        self._attach_session_(trade)
-        self._portfolio_.add(trade)
-        return trade
+        return self.receive_update_trade()
 
     @abstractmethod
     def receive_update_denied(self, offset: int = 1) -> tuple[ActionID, str]:
@@ -607,8 +574,6 @@ class SystemAPI(ServiceAPI, ABC):
     def _process_updates_(self, engine: LifecycleAPI) -> list[ActionAPI]:
         actions: list[ActionAPI] = []
         while True:
-            if not self._universe_.Empty: self._universe_.flush()
-            if not self._portfolio_.Empty: self._portfolio_.flush()
             update_id = self.receive_update_id()
             match update_id:
                 case UpdateID.Init:
@@ -800,7 +765,7 @@ class SystemAPI(ServiceAPI, ABC):
 
     def deploy(self) -> None:
         if self.strategy is None: return
-        self.strategy.Recording = self._plotting_
+        self.strategy.Recording = self._plotting_ or self._exporting_
         self.strategy.Signals = []
         self.strategy._long_bars_ = 0
         self.strategy._short_bars_ = 0
@@ -813,8 +778,6 @@ class SystemAPI(ServiceAPI, ABC):
         while not engine.IsTerminated:
             actions = self._process_updates_(engine)
             self._process_actions_(actions, engine.IsTerminated)
-            if not self._universe_.Empty: self._universe_.flush()
-            if not self._portfolio_.Empty: self._portfolio_.flush()
 
     @abstractmethod
     def run(self) -> None:
