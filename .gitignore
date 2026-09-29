@@ -12,6 +12,8 @@
 
 *API/
 *Data/
+!Script/Data/
+!Tests/Script/Data/
 *LocalStorage/
 
 *.algo

@@ -2,7 +2,7 @@ import pytest
 from datetime import datetime, timedelta
 
 from Library.Database.Dataframe import pl
-from Library.Data.Market import MarketWorkerAPI
+from Script.Data.Market import MarketWorkerAPI
 from Library.Market.Download import DownloadAPI, DownloadStatus
 from Library.Market.Tape import TapeAPI
 from Library.Market.Tick import TickAPI
@@ -184,7 +184,7 @@ def test_a_day_written_after_its_successor_rewrites_the_successor_with_the_true_
     service = worker(security)
     assert service._day_(ClientAPI(FeedAPI(asks, bids)), db, following) is DownloadStatus.Complete
     assert TapeAPI.read(db, security, following, following + timedelta(days=1)).Stamps.size == 1
-    monkeypatch.setattr("Library.Data.Market.utc_now", lambda: DAY + timedelta(days=3, hours=1))
+    monkeypatch.setattr("Script.Data.Market.utc_now", lambda: DAY + timedelta(days=3, hours=1))
     assert service._backfill_(ClientAPI(FeedAPI(asks, bids)), db) == 0
     read = TapeAPI.read(db, security, following, following + timedelta(days=1))
     assert [(round(float(ask) * 100_000), round(float(bid) * 100_000)) for ask, bid in zip(read.Asks, read.Bids)] == [(110020, 110000), (110030, 110025)]

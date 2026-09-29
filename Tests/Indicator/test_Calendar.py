@@ -134,7 +134,7 @@ def test_a_week_awaiting_its_actuals_is_incomplete_until_they_arrive(calendar):
     assert CalendarAPI.incomplete(calendar, since, until) == set()
 
 def test_the_service_asks_for_missing_and_incomplete_weeks_but_never_the_current_one(calendar):
-    from Library.Data.Calendar import CalendarServiceAPI
+    from Script.Data.Calendar import CalendarServiceAPI
     service = CalendarServiceAPI(horizon=datetime(2031, 1, 6), database="Tests", vault="Tests")
     CalendarAPI.store(calendar, probe(""), "Tester")
     now = datetime(2031, 1, 22, 12)
@@ -153,7 +153,7 @@ def test_a_week_runs_monday_to_sunday_across_the_two_pages_it_spans(monkeypatch)
     assert requested == [datetime(2031, 1, 6), datetime(2031, 1, 12)]
 
 def test_a_sunday_evening_release_is_awaited_in_its_monday_week(calendar):
-    from Library.Data.Calendar import CalendarServiceAPI
+    from Script.Data.Calendar import CalendarServiceAPI
     service = CalendarServiceAPI(horizon=datetime(2031, 1, 6), database="Tests", vault="Tests")
     release = datetime(2031, 1, 12, 23, 50)
     CalendarAPI.store(calendar, probe("", int(release.replace(tzinfo=timezone.utc).timestamp())), "Tester")

@@ -3,7 +3,7 @@ import pytest
 from datetime import datetime, timedelta
 
 from Library.Database.Dataframe import np, pl
-from Library.Data.Portfolio import PortfolioWorkerAPI
+from Script.Data.Portfolio import PortfolioWorkerAPI
 from Library.Market.Download import DownloadAPI, DownloadStatus
 from Library.Market.Tape import TapeAPI
 from Library.Portfolio.Account import AccountAPI

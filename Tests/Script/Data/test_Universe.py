@@ -2,7 +2,7 @@ import pytest
 from datetime import datetime
 
 from Library.Database.Dataframe import pl
-from Library.Data.Universe import UniverseServiceAPI
+from Script.Data.Universe import UniverseServiceAPI
 from Library.Universe.Category import CategoryAPI
 from Library.Universe.Contract import ContractAPI
 from Library.Universe.Security import SecurityAPI
