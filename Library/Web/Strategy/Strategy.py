@@ -103,7 +103,7 @@ class StrategyBaseAPI(RefreshAPI, PageAPI):
                     FROM "Universe"."Security" s
                     JOIN "Universe"."Provider" p ON p."UID" = s."Provider"
                     JOIN "Universe"."Ticker" t ON t."UID" = s."Ticker"
-                    JOIN "Universe"."Category" c ON c."UID" = s."Category"
+                    JOIN "Universe"."Category" c ON c."UID" = t."Category"
                     ORDER BY 2, 4
                 ''')).fetchall(legacy=False).filter(pl.col("security").is_in(TapeAPI.securities(db)))
                 spans = db.executeone(QueryAPI('SELECT "UID" FROM "Universe"."Timeframe"')).fetchall()

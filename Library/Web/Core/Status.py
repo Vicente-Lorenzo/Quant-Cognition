@@ -6,10 +6,12 @@ from Library.Scheduler import RunStatus
 
 class StatusAPI:
 
-    _STATUS_COLOR_ = {RunStatus.Success.name: "#2f9e44", RunStatus.Failure.name: "#ef5350", RunStatus.Running.name: "#2962ff", RunStatus.Waiting.name: "#868993",
-                      RunStatus.Approving.name: "#ffb300", RunStatus.Reviewing.name: "#ff7043", RunStatus.Retrying.name: "#ab47bc"}
-    _LEGEND_ = [(RunStatus.Success.name, "success"), (RunStatus.Running.name, "running"), (RunStatus.Waiting.name, "waiting"), (RunStatus.Approving.name, "approving"),
-                (RunStatus.Reviewing.name, "reviewing"), (RunStatus.Retrying.name, "retrying"), (RunStatus.Failure.name, "failure"), ("No run", "none")]
+    _STATUS_COLOR_ = {RunStatus.Waiting.name: "#868993", RunStatus.Initializing.name: "#4fc3f7", RunStatus.Running.name: "#2962ff", RunStatus.Terminating.name: "#78909c",
+                      RunStatus.Approving.name: "#ffb300", RunStatus.Reviewing.name: "#ff7043", RunStatus.Retrying.name: "#ab47bc", RunStatus.Success.name: "#2f9e44",
+                      RunStatus.Failure.name: "#ef5350"}
+    _LEGEND_ = [(RunStatus.Waiting.name, "waiting"), (RunStatus.Initializing.name, "initializing"), (RunStatus.Running.name, "running"), (RunStatus.Terminating.name, "terminating"),
+                (RunStatus.Approving.name, "approving"), (RunStatus.Reviewing.name, "reviewing"), (RunStatus.Retrying.name, "retrying"), (RunStatus.Success.name, "success"),
+                (RunStatus.Failure.name, "failure"), ("No run", "none")]
 
     @classmethod
     def _key_(cls, status) -> str | None:

@@ -4,6 +4,6 @@
     var selected = state.rows || [];
     var status = function(row) { return String(row.Status || ""); };
     var gated = selected.some(function(row) { return /Approving|Reviewing/.test(status(row)); });
-    var live = selected.some(function(row) { return /Waiting|Running|Retrying/.test(status(row)); });
+    var live = selected.some(function(row) { return /Waiting|Initializing|Running|Terminating|Retrying/.test(status(row)); });
     return [!gated, !gated, !live];
 })

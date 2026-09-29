@@ -24,7 +24,7 @@ class SchedulerTaskAPI(SchedulerEntityAPI):
         FieldAPI(name="kind", control="select", group="kind", default=TaskAPI.Defaults["Kind"], options=FieldAPI.choices(Kind.names()), help="Execution style · Manual runs only on demand · Scheduled runs to completion when triggered · Service is kept always-on and respawned if it dies"),
         FieldAPI(name="path", required=True, placeholder="Script/Example.py", wrapper="scheduler-path-row", suffix=lambda page: page._browse_(), help="Artifact the runner executes · stored absolute unless Relative is on"),
         FieldAPI(name="schedule", label="Schedule (cron)", column="Schedule", placeholder="0 22 * * 1-5", wrapper="scheduler-cron-row", suffix=lambda page: [page._cron_(page.F_CRON)], help="Cron expression · inside a workflow it is the earliest-start gate within each cycle · standalone it triggers the task directly"),
-        FieldAPI(name="workflow", column="WID", control="select", default="", decode=lambda row: row.get("WID") or "", help="Optional membership · the task then runs inside the workflow cycles honoring its dependencies"),
+        FieldAPI(name="workflow", column="WID", control="select", default="", options=[{"label": "(none)", "value": ""}], decode=lambda row: row.get("WID") or "", help="Optional membership · the task then runs inside the workflow cycles honoring its dependencies"),
         FieldAPI(name="description", control="textarea", help="Free text shown on the task detail page"),
         FieldAPI(name="maxretry", label="Max Retry", column="MaxRetry", control="number", group="retry", default=TaskAPI.Defaults["MaxRetry"], minimum=0, step=1, help="Extra attempts after a crash · for a Service 0 means respawn forever while a positive value halts it after that many consecutive short-lived crashes"),
         FieldAPI(name="retrydelay", label="Retry Delay (s)", column="RetryDelay", control="number", group="retry", default=TaskAPI.Defaults["RetryDelay"], minimum=0, step=1, help="Seconds to wait before the next retry attempt or service respawn"),
@@ -91,7 +91,7 @@ class SchedulerTaskAPI(SchedulerEntityAPI):
         on_enter=InjectionType.Hidden,
     )
     def _options_(self):
-        return [{"label": "(none)", "value": ""}] + FieldAPI.choices([workflow["UID"] for workflow in self._manager_.workflows()])
+        return self._FIELD_["workflow"].options + FieldAPI.choices([workflow["UID"] for workflow in self._manager_.workflows()])
 
     @serverside_callback(
         Output(_FIELD_["path"].id, "value"),

@@ -6,6 +6,7 @@ from waitress import create_server
 from Library.Logging import LoggingAPI
 from Library.Logging.File import FileAPI
 from Library.Utility.Typing import MISSING
+from Library.Utility.Progress import Phase, ProgressAPI
 from Library.Utility.Runtime import open_browser
 from Library.Utility.Tray import TrayAPI as BaseTrayAPI
 from Library.Web.App import WebAppAPI
@@ -48,9 +49,11 @@ class TrayAPI(BaseTrayAPI):
         self._server_ = create_server(app.app.server, host=app._host_, port=app._port_, threads=8, ident=self._NAME_)
         self._thread_ = threading.Thread(target=self._server_.run, name="Server", daemon=True)
         self._thread_.start()
+        ProgressAPI.phase(Phase.Running)
         self._log_.info(lambda app=app: f"Server Launch: Running ({app._host_}:{app._port_}) · {'Debug' if self._debug_ else 'Production'} Mode")
 
     def _stop_(self) -> None:
+        ProgressAPI.phase(Phase.Terminating)
         try: self._server_.close()
         except Exception: pass
         self._log_.info(lambda: "Server Shutdown: Halted")

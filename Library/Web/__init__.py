@@ -5,9 +5,15 @@ from Library.Web.Core import (
 )
 from Library.Web.Trading import TradingPageAPI
 from Library.Web.Framework import (
-    DatabasePageAPI,
     HierarchyPageAPI,
     FrameworkPageAPI
+)
+from Library.Web.Database import (
+    DatabaseTableAPI,
+    MarketDatabasePageAPI,
+    PortfolioDatabasePageAPI,
+    UniverseDatabasePageAPI,
+    DatabasePageAPI
 )
 from Library.Web.Strategy import (
     StrategyBaseAPI,
@@ -57,9 +63,13 @@ __all__ = [
     "ArtifactAPI",
     "ManagedPageAPI",
     "TradingPageAPI",
-    "DatabasePageAPI",
     "HierarchyPageAPI",
     "FrameworkPageAPI",
+    "DatabaseTableAPI",
+    "MarketDatabasePageAPI",
+    "PortfolioDatabasePageAPI",
+    "UniverseDatabasePageAPI",
+    "DatabasePageAPI",
     "StrategyBaseAPI",
     "StrategyPageAPI",
     "StrategySystemPageAPI",

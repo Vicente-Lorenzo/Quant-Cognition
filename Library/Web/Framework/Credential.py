@@ -23,7 +23,7 @@ class CredentialPageAPI(TableAPI):
         FieldAPI(name="secret", control="textarea", help="What proves it · a password, token, client secret or private key · one value, or a JSON object for several · never shown here · on edit empty keeps it, a JSON object changes only the keys it names and a null removes one"),
         FieldAPI(name="fields", control="textarea", help="JSON object of accessory values that are not secret"),
         FieldAPI(name="expires", label="Expires At", placeholder="2026-12-31 00:00:00", help="When the secret stops working · empty means it never expires"),
-        FieldAPI(name="parent", control="select", default="", help="Optional · inherits the values of another credential, such as one application serving several accounts"),
+        FieldAPI(name="parent", control="select", default="", options=[{"label": "(none)", "value": ""}], help="Optional · inherits the values of another credential, such as one application serving several accounts"),
         FieldAPI(name="owner", default=lambda page: page._actor_(), help="Account that owns the credential and always keeps access · only the owner or an Administrator may hand it over"),
         FieldAPI(name="view", label="View Role", control="select", default="", options=_ROLES_, help="Lowest role that may see this row and use it · Owner keeps it to you"),
         FieldAPI(name="edit", label="Edit Role", control="select", default="", options=_ROLES_, help="Lowest role that may reveal, change and delete it · never below View"),
@@ -148,7 +148,7 @@ class CredentialPageAPI(TableAPI):
         on_enter=InjectionType.Hidden,
     )
     def _options_(self):
-        return [{"label": "(none)", "value": ""}] + [{"label": f"{row['Service']} · {row['Name']}", "value": row["UID"]} for row in self._vault_.credentials(by=self._actor_()) if not row.get("Parent")]
+        return self._FIELD_["parent"].options + [{"label": f"{row['Service']} · {row['Name']}", "value": row["UID"]} for row in self._vault_.credentials(by=self._actor_()) if not row.get("Parent")]
 
     _discard_, = modal_callbacks(MODAL_ID, closer=DISCARD_BTN)
 

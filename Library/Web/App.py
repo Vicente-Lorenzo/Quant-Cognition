@@ -12,9 +12,14 @@ from Library.Web.Launchpad import WebLaunchpadPageAPI
 from Library.Web.Trading import TradingPageAPI
 from Library.Web.Framework import (
     CredentialPageAPI,
-    DatabasePageAPI,
     HierarchyPageAPI,
     FrameworkPageAPI
+)
+from Library.Web.Database import (
+    DatabasePageAPI,
+    UniverseDatabasePageAPI,
+    MarketDatabasePageAPI,
+    PortfolioDatabasePageAPI
 )
 from Library.Web.Strategy import (
     StrategyPageAPI,
@@ -102,8 +107,11 @@ class WebAppAPI(AppAPI):
         self._page_(SchedulerRunDetailPageAPI(app=self), RoleAPI.Editor)
         self._page_(FrameworkPageAPI(app=self), RoleAPI.Viewer)
         self._page_(CredentialPageAPI(app=self), RoleAPI.Viewer)
-        self._page_(DatabasePageAPI(app=self), RoleAPI.Moderator)
         self._page_(HierarchyPageAPI(app=self), RoleAPI.Viewer)
+        self._page_(DatabasePageAPI(app=self), RoleAPI.Viewer)
+        self._page_(UniverseDatabasePageAPI(app=self), RoleAPI.Viewer)
+        self._page_(MarketDatabasePageAPI(app=self), RoleAPI.Viewer)
+        self._page_(PortfolioDatabasePageAPI(app=self), RoleAPI.Editor)
 
     def apps(self) -> list[LinkAPI]:
         return [

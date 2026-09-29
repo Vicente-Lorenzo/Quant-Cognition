@@ -21,13 +21,23 @@ class SchedulerWorkflowAPI(SchedulerEntityAPI):
         FieldAPI(name="kind", control="select", default="", options=[{"label": "(derive from Schedule)", "value": ""}] + FieldAPI.choices(Kind.names()), help="Lifecycle · Manual opens a cycle only on demand · Scheduled opens a cycle at each cron occurrence · Service keeps one resident always-on cycle and only accepts Service tasks · empty derives from Schedule"),
         FieldAPI(name="schedule", label="Schedule (cron)", column="Schedule", placeholder="0 22 * * 1-5", wrapper="scheduler-cron-row", suffix=lambda page: [page._cron_(page.F_CRON)], help="Cron that opens a new cycle at each occurrence · required for Scheduled and forbidden otherwise"),
         FieldAPI(name="zone", label="Time Zone", column="Zone", control="select", default="", options=[{"label": "(server zone)", "value": ""}] + FieldAPI.choices(zones()), help="Zone the cron is written in · follows that zone's daylight saving · member task schedules use it too · empty uses the server's zone"),
+        FieldAPI(name="after", control="select", default="", options=lambda page, row: page._upstreams_(row), help="Workflow this one starts after · while that workflow has an open cycle this one's cycles wait (Waiting) and its services do not start · empty starts on its own"),
         FieldAPI(name="description", control="textarea", help="Free text shown on the workflow detail page"),
         FieldAPI(name="waits", control="switch", default=WorkflowAPI.Defaults["Waits"], help="On: an overrunning cycle makes the next occurrence wait for it · Off: the next occurrence kills the open cycle and starts fresh"),
     )
     _FIELD_ = FieldAPI.index(_FIELDS_)
 
+    DAG_GRAPH_ID: ComponentID | dict = ComponentID()
+
     def _fetch_(self, uid):
         return self._manager_.workflow(uid)
+
+    def _upstreams_(self, row: dict = None) -> list:
+        own = (row or {}).get("UID")
+        return [{"label": "(none · starts on its own)", "value": ""}] + FieldAPI.choices([workflow["UID"] for workflow in self._manager_.workflows() if workflow["UID"] != own])
+
+    def _square_(self, uid: str, status, key: str = None) -> dict:
+        return {"uid": key or uid, "label": uid, "symbol": "square", "link": f"/scheduler/workflow/{uid}", "color": self._STATUS_COLOR_.get(status)}
 
     _new_, _edit_, _save_ = SchedulerEntityAPI.entity_callbacks(_FIELDS_)
 
@@ -40,9 +50,17 @@ class SchedulerWorkflowPageAPI(SchedulerWorkflowAPI, SchedulerEntityPageAPI, Tab
         super().ids()
         self._entity_ids_()
         self._field_ids_()
+        self.DAG_GRAPH_ID = self.register(type="graph", name="dag")
 
     def _columns_(self) -> list:
         return self._WORKFLOW_COLUMNS_
+
+    def _preface_(self) -> list:
+        return [html.Div(NetworkAPI(id=self.DAG_GRAPH_ID, figure=self._empty_figure_("Loading workflows"), anchor="/scheduler/workflow", style=self._layered_(1)).build(), className="scheduler-panel scheduler-overview")]
+
+    @staticmethod
+    def _layered_(depth: int) -> dict:
+        return {"height": f"{max(150, 70 + depth * 90)}px"}
 
     def _rows_(self) -> list:
         cycled = self._manager_.cycled()
@@ -50,14 +68,26 @@ class SchedulerWorkflowPageAPI(SchedulerWorkflowAPI, SchedulerEntityPageAPI, Tab
         return [self._workflow_row_(workflow, cycled.get(workflow.get("UID")), principal) for workflow in self._manager_.workflows()]
 
     def _fingerprint_(self):
-        return self._manager_.fingerprint("Scheduler", "Workflow")
+        return self._manager_.fingerprint("Scheduler", "Workflow", "Cycle")
 
     def _actions_(self) -> list:
         return self._lifecycle_buttons_()
 
+    @serverside_callback(
+        Output(SchedulerWorkflowAPI.DAG_GRAPH_ID, "figure"),
+        Output(SchedulerWorkflowAPI.DAG_GRAPH_ID, "style"),
+        Input(RefreshAPI.RELOAD_STORE_ID, "data"),
+    )
+    def _overview_(self, token):
+        if token is None: raise PreventUpdate
+        workflows, cycled = self._manager_.workflows(), self._manager_.cycled()
+        nodes = [self._square_(workflow["UID"], cycled.get(workflow["UID"])) for workflow in workflows]
+        edges = [(workflow["After"], workflow["UID"]) for workflow in workflows if workflow.get("After")]
+        graph = NetworkAPI.graph(nodes, edges) if nodes else None
+        return NetworkAPI.render(nodes, edges, placeholder="No workflows", graph=graph, align="horizontal"), self._layered_(NetworkAPI.depth(nodes, edges, graph=graph))
+
 class SchedulerWorkflowDetailPageAPI(SchedulerWorkflowAPI, SchedulerGridDetailAPI):
 
-    DAG_GRAPH_ID: ComponentID | dict = ComponentID()
     CYCLE_TABLE_ID: ComponentID | dict = ComponentID()
     CYCLE_CARRIER_ID: ComponentID | dict = ComponentID()
     LINK_PRED: ComponentID | dict = ComponentID()
@@ -96,6 +126,20 @@ class SchedulerWorkflowDetailPageAPI(SchedulerWorkflowAPI, SchedulerGridDetailAP
     def _open_task_button_(self) -> ButtonAPI:
         return ButtonAPI(id=self.SUB_OPEN_BTN, label=self._icon_("bi bi-box-arrow-up-right", "Open Task"), background="secondary", tooltip="Open the selected tasks · one opens here · several open in new tabs")
 
+    def _bridged_(self, nodes: list, edges: list, upstream: str | None, downstream: list, cycled: dict) -> tuple:
+        keys = [node["uid"] for node in nodes]
+        inner = [(predecessor, successor) for predecessor, successor in edges if predecessor in keys and successor in keys]
+        sources = [key for key in keys if key not in {successor for _, successor in inner}]
+        sinks = [key for key in keys if key not in {predecessor for predecessor, _ in inner}]
+        squares, links = [], []
+        if upstream:
+            squares.append(self._square_(upstream, cycled.get(upstream), key=f"workflow:{upstream}"))
+            links += [(f"workflow:{upstream}", source) for source in sources]
+        for uid in downstream:
+            squares.append(self._square_(uid, cycled.get(uid), key=f"workflow:{uid}"))
+            links += [(sink, f"workflow:{uid}") for sink in sinks]
+        return nodes + squares, edges + links
+
     def _pair_(self, predecessor, successor, target) -> str | None:
         uid = target[0] if target else None
         if uid is None: return None
@@ -124,8 +168,8 @@ class SchedulerWorkflowDetailPageAPI(SchedulerWorkflowAPI, SchedulerGridDetailAP
         Output(SchedulerBaseAPI.BREADCRUMB_ID, "children"),
         Output(SchedulerBaseAPI.TARGET_STORE_ID, "data"),
         Output(SchedulerBaseAPI.FIELDS_ID, "children"),
-        Output(DAG_GRAPH_ID, "figure"),
-        Output(DAG_GRAPH_ID, "style"),
+        Output(SchedulerWorkflowAPI.DAG_GRAPH_ID, "figure"),
+        Output(SchedulerWorkflowAPI.DAG_GRAPH_ID, "style"),
         Output(SchedulerGridDetailAPI.SUB_CARRIER_ID, "children"),
         Output(CYCLE_CARRIER_ID, "children"),
         Output(LINK_PRED, "options"),
@@ -144,6 +188,7 @@ class SchedulerWorkflowDetailPageAPI(SchedulerWorkflowAPI, SchedulerGridDetailAP
         edges = self._edges_(uid)
         members = self._sequenced_(self._manager_.tasks(workflow=uid), latest, edges)
         nodes = self._nodes_(members, latest)
+        if nodes: nodes, edges = self._bridged_(nodes, edges, workflow.get("After"), sorted(row["UID"] for row in self._manager_.workflows() if row.get("After") == uid), self._manager_.cycled())
         graph = NetworkAPI.graph(nodes, edges) if nodes else None
         cycles = [self._cycle_row_(cycle) for cycle in self._manager_.cycles(workflow=uid, limit=10)]
         pairs = self._pairs_(workflow, self._FIELDS_, [("Enabled", workflow.get("Enabled")), ("Tasks", len(members))])

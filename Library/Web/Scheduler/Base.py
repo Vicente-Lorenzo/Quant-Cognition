@@ -11,7 +11,7 @@ class SchedulerBaseAPI(ManagedPageAPI):
     BREADCRUMB_ID: ComponentID | dict = ComponentID()
     FIELDS_ID: ComponentID | dict = ComponentID()
 
-    _WORKFLOW_COLUMNS_ = ["Status", "UID", "Name", "Owner", "Run", "Edit", "Access", "Enabled", "Kind", "Waits", "Schedule", "Zone"]
+    _WORKFLOW_COLUMNS_ = ["Status", "UID", "Name", "Owner", "Run", "Edit", "Access", "Enabled", "Kind", "Waits", "Schedule", "Zone", "After"]
     _TASK_COLUMNS_ = ["Status", "UID", "Name", "Owner", "Run", "Edit", "Access", "Type", "Kind", "Enabled", "Waits", "Tolerates", "Schedule", "WID", "MaxRetry"]
     _MEMBER_COLUMNS_ = ["Status", "UID", "Name", "Type", "Kind", "Enabled"]
     _RUN_COLUMNS_ = ["Status", "UID", "CID", "TID", "Kind", "Retry", "StartedAt", "StoppedAt", "Duration", "ExitCode", "PID", "Auditor"]
@@ -92,7 +92,7 @@ class SchedulerBaseAPI(ManagedPageAPI):
     def _shown_(self, entry, row: dict):
         value = entry.read(row, self)
         if entry.control is not ControlType.Select: return value
-        return next((option["label"] for option in entry.options if option["value"] == value), value)
+        return next((option["label"] for option in entry.choose(self, row) if option["value"] == value), value)
 
     def _pairs_(self, row: dict, fields, extra: list = None) -> list:
         pairs = [(entry.label, self._shown_(entry, row)) for entry in fields if not entry.identity and entry.stored]

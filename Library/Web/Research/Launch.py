@@ -45,6 +45,7 @@ class LaunchFieldsAPI:
         FieldAPI(name="account_asset", label="Account Asset", group="account", default="EUR", help="Deposit currency of the simulated account"),
         FieldAPI(name="account_balance", label="Account Balance", control="number", group="account", default=10000.0, minimum=0, help="Opening balance of the simulated account"),
         FieldAPI(name="account_leverage", label="Account Leverage", control="number", group="account", default=30.0, minimum=1, help="Leverage the simulated account trades with"),
+        FieldAPI(name="bridge", group="account", help="Currency to convert through when no direct pair links an asset to the account · empty refuses such a run"),
         FieldAPI(name="spread_type", label="Spread Type", control="select", group="cost", default=SpreadType.Auto.name, options=_SPREAD_, help="How the spread is priced · Accurate derives it from the tick tape"),
         FieldAPI(name="spread_value", label="Spread Value", control="number", group="cost", help="Fixed spread in points when the type is not Accurate"),
         FieldAPI(name="commission_type", label="Commission Type", control="select", group="cost", default=CommissionType.Auto.name, options=_COMMISSION_, help="How commission is charged · Points matches an IC Markets raw account"),

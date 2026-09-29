@@ -64,7 +64,7 @@ class SchedulerEntityAPI(SegmentAPI, SchedulerBaseAPI):
         identity = next(entry for entry in fields if entry.identity)
         return [Output(SchedulerEntityAPI.MODAL_ID, "is_open"), Output(SchedulerEntityAPI.MODE_STORE_ID, "data"),
                 Output(SchedulerEntityAPI.MODAL_TITLE_ID, "children"), *[Output(entry.id, "value") for entry in fields],
-                Output(identity.id, "disabled")]
+                Output(identity.id, "disabled"), *[Output(entry.id, "options") for entry in fields if entry.dynamic]]
 
     @classmethod
     def _states_(cls, fields) -> list:
@@ -91,16 +91,16 @@ class SchedulerEntityAPI(SegmentAPI, SchedulerBaseAPI):
 
     def _blank_(self) -> tuple:
         return (True, {"mode": "create", "uid": None}, f"Insert {self._entity_.capitalize()}",
-                *[entry.initial(self) for entry in self._FIELDS_], False)
+                *[entry.initial(self) for entry in self._FIELDS_], False, *[entry.choose(self) for entry in self._FIELDS_ if entry.dynamic])
 
     def _prefill_(self, target) -> tuple:
         uid = target[0] if target and len(target) == 1 else None
         row = self._fetch_(uid) if uid else None
         if row is None:
             self.app.notify.warning(f"Select a single {self._entity_} to edit", header="Selection")
-            return (dash.no_update,) * (len(self._FIELDS_) + 4)
+            return (dash.no_update,) * (len(self._FIELDS_) + 4 + sum(entry.dynamic for entry in self._FIELDS_))
         return (True, {"mode": "update", "uid": row.get("UID")}, f"Edit {self._entity_.capitalize()}",
-                *[entry.read(row, self) for entry in self._FIELDS_], True)
+                *[entry.read(row, self) for entry in self._FIELDS_], True, *[entry.choose(self, row) for entry in self._FIELDS_ if entry.dynamic])
 
     def _submit_(self, mode, values) -> tuple:
         entity = self._entity_.capitalize()
