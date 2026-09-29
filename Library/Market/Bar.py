@@ -42,7 +42,7 @@ class BarAPI(DataclassAPI):
         self._timestamp_ = TimestampAPI.assign(None, timestamp)
 
     def _ticks_(self) -> list:
-        return [tick for point in (self.GapPoint, self.OpenPoint, self.HighPoint, self.LowPoint, self.ClosePoint) if point is not None for tick in (point.AskTick, point.BidTick, point.MidTick) if tick is not None]
+        return [tick for point in (self.GapPoint, self.OpenPoint, self.HighPoint, self.LowPoint, self.ClosePoint) if point is not None for tick in (point.AskTick, point.MidTick, point.BidTick) if tick is not None]
 
     @property
     @overridefield
@@ -85,9 +85,9 @@ class BarAPI(DataclassAPI):
             )
         def point(prefix: str) -> PointAPI:
             bid = tick(f"{prefix}.BidTick")
-            bid_stamp, ask_stamp, mid_stamp = row[f"{prefix}.BidTick.Timestamp"], row[f"{prefix}.AskTick.Timestamp"], row[f"{prefix}.MidTick.Timestamp"]
+            ask_stamp, mid_stamp, bid_stamp = row[f"{prefix}.AskTick.Timestamp"], row[f"{prefix}.MidTick.Timestamp"], row[f"{prefix}.BidTick.Timestamp"]
             ask = bid if ask_stamp == bid_stamp else tick(f"{prefix}.AskTick")
-            return PointAPI(AskTick=ask, BidTick=bid, MidTick=bid if mid_stamp == bid_stamp else ask if mid_stamp == ask_stamp else tick(f"{prefix}.MidTick"))
+            return PointAPI(AskTick=ask, MidTick=bid if mid_stamp == bid_stamp else ask if mid_stamp == ask_stamp else tick(f"{prefix}.MidTick"), BidTick=bid)
         return cls(
             Security=security,
             Timeframe=timeframe,

@@ -172,7 +172,7 @@ class TapeAPI:
 
     def _extremes_(self, pool: ThreadPoolExecutor, starts: np.ndarray) -> dict:
         count, size = starts.size, self.Stamps.size
-        columns = {name: np.empty(count, dtype=np.int64) for name in ("HighAsk", "HighBid", "HighMid", "LowAsk", "LowBid", "LowMid")}
+        columns = {name: np.empty(count, dtype=np.int64) for name in ("HighAsk", "HighMid", "HighBid", "LowAsk", "LowMid", "LowBid")}
         columns["Volume"] = np.empty(count)
         bounds = np.linspace(0, count, min(count, 64) + 1).astype(np.int64)
         def work(index: int) -> None:
@@ -183,7 +183,7 @@ class TapeAPI:
             lengths = np.diff(np.append(local, high - low))
             asks, bids = self.Asks[low:high], self.Bids[low:high]
             mids = asks + bids
-            for name, values, reduce in (("HighAsk", asks, np.maximum), ("HighBid", bids, np.maximum), ("HighMid", mids, np.maximum), ("LowAsk", asks, np.minimum), ("LowBid", bids, np.minimum), ("LowMid", mids, np.minimum)):
+            for name, values, reduce in (("HighAsk", asks, np.maximum), ("HighMid", mids, np.maximum), ("HighBid", bids, np.maximum), ("LowAsk", asks, np.minimum), ("LowMid", mids, np.minimum), ("LowBid", bids, np.minimum)):
                 columns[name][first:last] = self._first_(values, reduce, local, lengths) + low
             columns["Volume"][first:last] = np.add.reduceat(self.Volumes[low:high], local)
         list(pool.map(work, range(bounds.size - 1)))
@@ -375,7 +375,7 @@ class TapeAPI:
 
     def bars(self, timeframe: TimeframeAPI, zone: str = "America/New_York", roll: int = 17, workers: int = 32) -> pl.DataFrame:
         size = self.Stamps.size
-        if not size: return pl.DataFrame(schema={"Timestamp": pl.Int64, **{name: pl.Int64 for name in ("Gap", "Open", "HighAsk", "HighBid", "HighMid", "LowAsk", "LowBid", "LowMid", "Close")}, "Volume": pl.Float64})
+        if not size: return pl.DataFrame(schema={"Timestamp": pl.Int64, **{name: pl.Int64 for name in ("Gap", "Open", "HighAsk", "HighMid", "HighBid", "LowAsk", "LowMid", "LowBid", "Close")}, "Volume": pl.Float64})
         shift = (24 - roll) * 3_600_000
         with ThreadPoolExecutor(max_workers=workers) as pool:
             if timeframe.IsTick:
@@ -395,11 +395,11 @@ class TapeAPI:
             "Gap": np.maximum(starts - 1, 0),
             "Open": starts,
             "HighAsk": extremes["HighAsk"],
-            "HighBid": extremes["HighBid"],
             "HighMid": extremes["HighMid"],
+            "HighBid": extremes["HighBid"],
             "LowAsk": extremes["LowAsk"],
-            "LowBid": extremes["LowBid"],
             "LowMid": extremes["LowMid"],
+            "LowBid": extremes["LowBid"],
             "Close": np.append(starts[1:], size) - 1,
             "Volume": extremes["Volume"]
         })
@@ -436,8 +436,8 @@ class TapeAPI:
 
     def materialize(self, bars: pl.DataFrame, timeframe: TimeframeAPI, base: Union[tuple, None, Missing] = MISSING, quote: Union[tuple, None, Missing] = MISSING) -> pl.DataFrame:
         ticks, columns = {}, {}
-        for point, sources in (("GapPoint", ("Gap", "Gap", "Gap")), ("OpenPoint", ("Open", "Open", "Open")), ("HighPoint", ("HighAsk", "HighBid", "HighMid")), ("LowPoint", ("LowAsk", "LowBid", "LowMid")), ("ClosePoint", ("Close", "Close", "Close"))):
-            for side, source in zip(("AskTick", "BidTick", "MidTick"), sources):
+        for point, sources in (("GapPoint", ("Gap", "Gap", "Gap")), ("OpenPoint", ("Open", "Open", "Open")), ("HighPoint", ("HighAsk", "HighMid", "HighBid")), ("LowPoint", ("LowAsk", "LowMid", "LowBid")), ("ClosePoint", ("Close", "Close", "Close"))):
+            for side, source in zip(("AskTick", "MidTick", "BidTick"), sources):
                 if source not in ticks: ticks[source] = self._ticks_(bars[source].to_numpy(), base, quote)
                 columns.update((f"{point}.{side}.{name}", values) for name, values in ticks[source].items())
         columns["Volume"] = bars["Volume"]

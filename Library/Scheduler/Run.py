@@ -17,14 +17,14 @@ from Library.Database.Database import PrimaryKey, ForeignKey
 class RunStatus(EnumerationAPI):
 
     Waiting = 0
-    Running = 1
-    Approving = 2
-    Reviewing = 3
-    Retrying = 4
-    Success = 5
-    Failure = 6
-    Initializing = 7
-    Terminating = 8
+    Initializing = 1
+    Running = 2
+    Terminating = 3
+    Approving = 4
+    Reviewing = 5
+    Retrying = 6
+    Success = 7
+    Failure = 8
 
 class RetentionLevel(EnumerationAPI):
 

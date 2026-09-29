@@ -119,6 +119,12 @@ class TickAPI(DataclassAPI):
         return self._ask_.InvertedPrice if self._ask_ is not None else None
 
     @property
+    def Mid(self) -> Union[PriceAPI, None]:
+        if self._ask_ is None or self._bid_ is None or self._ask_.Price is None or self._bid_.Price is None: return None
+        contract = self._security_.Contract if self._security_ is not None else None
+        return PriceAPI(Price=(self._ask_.Price + self._bid_.Price) / 2, Reference=None, Contract=contract)
+
+    @property
     @overridefield
     def Bid(self) -> Union[PriceAPI, None]:
         return self._bid_
@@ -172,9 +178,3 @@ class TickAPI(DataclassAPI):
         if self._ask_ is None or self._bid_ is None or self._ask_.Price is None or self._bid_.Price is None: return None
         contract = self._security_.Contract if self._security_ is not None else None
         return PriceAPI(Price=self._ask_.Price - self._bid_.Price, Reference=self._ask_.Price, Contract=contract)
-
-    @property
-    def Mid(self) -> Union[PriceAPI, None]:
-        if self._ask_ is None or self._bid_ is None or self._ask_.Price is None or self._bid_.Price is None: return None
-        contract = self._security_.Contract if self._security_ is not None else None
-        return PriceAPI(Price=(self._ask_.Price + self._bid_.Price) / 2, Reference=None, Contract=contract)

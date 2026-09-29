@@ -24,17 +24,17 @@ class SeriesAPI:
         p = f"{prefix}." if prefix else ""
         if point:
             self.AskTick = SeriesAPI(f"{p}AskTick", True, self, mode)
-            self.BidTick = SeriesAPI(f"{p}BidTick", True, self, mode)
             self.MidTick = SeriesAPI(f"{p}MidTick", True, self, mode)
+            self.BidTick = SeriesAPI(f"{p}BidTick", True, self, mode)
             self.Ask = self.AskTick.Ask
-            self.Bid = self.BidTick.Bid
             self.Mid = self.MidTick.Mid
-            self._children_ = [self.AskTick, self.BidTick, self.MidTick]
+            self.Bid = self.BidTick.Bid
+            self._children_ = [self.AskTick, self.MidTick, self.BidTick]
             self._leaves_ = [self.Ask, self.Bid]
         elif multiple:
             self.Ask = SeriesAPI(f"{p}Ask", False, self, mode)
-            self.Bid = SeriesAPI(f"{p}Bid", False, self, mode)
             self.Mid = MidSeriesAPI(f"{p}Mid", self, mode)
+            self.Bid = SeriesAPI(f"{p}Bid", False, self, mode)
             self.AskBaseConversion = SeriesAPI(f"{p}AskBaseConversion", False, self, mode)
             self.BidBaseConversion = SeriesAPI(f"{p}BidBaseConversion", False, self, mode)
             self.AskQuoteConversion = SeriesAPI(f"{p}AskQuoteConversion", False, self, mode)
@@ -92,7 +92,7 @@ class SeriesAPI:
     def _item_(self, row: dict) -> Union[TickAPI, PointAPI]:
         if not self._point_: return self._tick_(row, self._prefix_)
         from Library.Market.Point import PointAPI
-        return PointAPI(AskTick=self._tick_(row, self.AskTick._prefix_), BidTick=self._tick_(row, self.BidTick._prefix_), MidTick=self._tick_(row, self.MidTick._prefix_))
+        return PointAPI(AskTick=self._tick_(row, self.AskTick._prefix_), MidTick=self._tick_(row, self.MidTick._prefix_), BidTick=self._tick_(row, self.BidTick._prefix_))
 
     def _each_(self, other: Union[SeriesAPI, float, int], method, shift: int, dataframe: bool) -> Union[list[bool], pl.DataFrame]:
         if not isinstance(other, SeriesAPI) or not other._multiple_: raise ValueError("Ambiguous comparison.")
