@@ -35,7 +35,9 @@ def main() -> int:
     parser.add_argument("--seeds", type=int, default=16)
     parser.add_argument("--workers", type=int, default=16)
     parser.add_argument("--floor", type=float, default=6.0)
-    parser.add_argument("--reserve", type=float, default=1.5)
+    parser.add_argument("--reserve", type=float, default=1.2)
+    parser.add_argument("--base", type=float, default=5.0)
+    parser.add_argument("--evaluators", type=int, default=6)
     args = parser.parse_args()
     log = LoggingAPI("Campaign")
     log.console.set_level(VerboseLevel.Info)
@@ -48,7 +50,7 @@ def main() -> int:
                 done = read_json(target / "Job.json") or {}
                 if done.get("Status") == "Completed": log.info(lambda target=target: f"Job Campaign: Skipped · Completed · {target.relative_to(root())}")
                 else: queue.append({"Pair": pair, "Arm": arm, "Seed": args.seed, "Seeds": args.seeds, "Workers": min(args.seeds, args.workers), "Folder": target})
-        running = []
+        running, waiting = [], False
         while queue or running:
             free = psutil.virtual_memory().available / GIGABYTE
             if free < args.floor and running:
@@ -66,8 +68,17 @@ def main() -> int:
                 status = "Completed" if job["Process"].returncode == 0 else "Failed"
                 _record_(job, status)
                 log.info(lambda job=job, status=status: f"Job Campaign: {status} · {job['Pair']} Arm {job['Arm']} · Seeds {job['Seed']}-{job['Seed'] + job['Seeds'] - 1} · {time.perf_counter() - job['Began']:.0f}s")
+                if status == "Completed" and not running:
+                    began = time.perf_counter()
+                    code = subprocess.run([sys.executable, "-m", "Script.Campaign.Evaluate", "--pairs", job["Pair"], "--processes", str(args.evaluators)], cwd=traceback_root(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **windowless()).returncode
+                    log.info(lambda job=job, code=code, began=began: f"Evaluation Campaign: {'Completed' if code == 0 else 'Failed'} · {job['Pair']} · {time.perf_counter() - began:.0f}s")
             used = sum(job["Workers"] for job in running)
-            if queue and used + queue[0]["Workers"] <= args.workers and free >= args.floor + 6.0 + queue[0]["Workers"] * args.reserve:
+            needed = args.floor + args.base + queue[0]["Workers"] * args.reserve if queue else 0.0
+            if queue and used + queue[0]["Workers"] <= args.workers and free < needed and not waiting:
+                waiting = True
+                log.warning(lambda free=free, needed=needed: f"Job Campaign: Waiting · Memory · {free:.1f} GB Free · {needed:.1f} GB Needed")
+            if queue and used + queue[0]["Workers"] <= args.workers and free >= needed:
+                waiting = False
                 job = _launch_(queue.pop(0))
                 running.append(job)
                 log.info(lambda job=job: f"Job Campaign: Started · {job['Pair']} Arm {job['Arm']} · Seeds {job['Seed']}-{job['Seed'] + job['Seeds'] - 1} · {job['Workers']} Workers")

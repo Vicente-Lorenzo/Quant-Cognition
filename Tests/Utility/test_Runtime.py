@@ -70,7 +70,7 @@ def test_release_accepts_no_job():
 
 def test_a_revision_names_the_commit_and_whether_tracked_files_changed(tmp_path):
     revision = find_revision(traceback_root())
-    assert len(revision["Commit"]) == 40 and isinstance(revision["Modified"], bool)
+    assert len(revision["Commit"]) == 40 and isinstance(revision["Modified"], list)
     assert find_revision(tmp_path) == {}
 
 def test_packages_are_named_with_their_versions():

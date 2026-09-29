@@ -162,9 +162,9 @@ def find_host() -> str:
 def find_revision(root: Union[str, Path]) -> dict:
     try:
         commit = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True, timeout=10, **windowless()).stdout.strip()
-        changes = subprocess.run(["git", "-C", str(root), "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, timeout=60, **windowless()).stdout.strip()
+        changes = subprocess.run(["git", "-C", str(root), "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, timeout=60, **windowless()).stdout
     except (OSError, subprocess.SubprocessError): return {}
-    return {"Commit": commit, "Modified": bool(changes)} if commit else {}
+    return {"Commit": commit, "Modified": sorted(line[3:].strip() for line in changes.splitlines() if line.strip())} if commit else {}
 
 def find_packages(*names: str) -> dict:
     import platform

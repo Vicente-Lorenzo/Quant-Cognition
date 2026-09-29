@@ -469,11 +469,14 @@ class SystemAPI(ServiceAPI, ABC):
             for name, frame in self._analysis_().items():
                 self._log_.info(lambda n=name, t=frame: f"Report {n}: {t}")
         if self._exporting_:
-            self._export_({**tables, **self._series_(portfolio)})
+            self._export_({**tables, **self._series_(portfolio, bars)})
         self._delivered_()
 
-    def _series_(self, portfolio: PortfolioAPI) -> dict:
+    def _series_(self, portfolio: PortfolioAPI, bars: list) -> dict:
         series = {"Equity": pl.DataFrame(portfolio.EquityCurve.Track, schema={"Timestamp": pl.Datetime("us"), "Equity": pl.Float64}, orient="row")}
+        if bars and series["Equity"].height:
+            prices = pl.DataFrame([row[:5] for row in bars], schema={"Timestamp": pl.Datetime("us"), "Open": pl.Float64, "High": pl.Float64, "Low": pl.Float64, "Close": pl.Float64}, orient="row")
+            series["Prices"] = prices.filter(pl.col("Timestamp") >= series["Equity"]["Timestamp"][0])
         signals = getattr(self.strategy, "Signals", None)
         if signals: series["Signals"] = pl.DataFrame(signals, schema={"Timestamp": pl.Datetime("us"), "Signal": pl.Float64, "Delta": pl.Float64, "Exposure": pl.Float64, "Order": pl.Float64}, orient="row")
         return series

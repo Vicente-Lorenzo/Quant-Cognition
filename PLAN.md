@@ -112,7 +112,7 @@ The final campaign, `Script/Campaign/` (`NAME` "DDPG 2026-09"). One model per ma
 | Account | USD for all seven, 10 000, 1 % risk, leverage 30, netting |
 | Recipe | the DDPG `Defaults` (`RULES.md`); 20 episodes a fold; mirror 0.50; gates activity 10 · balance 300 · ratio 0.30; fitness annualised Calmar; `--threads 1` |
 | Costs | real tick spread; commission 3.5 USD a lot a side (`Lots`); swap-free, with a swap sensitivity table |
-| Training costs | a canary A/B on GBPUSD and EURUSD, paired seeds: A trains on the spread with hysteresis 0 (the recipe), B on the full costs with hysteresis 0.20; the arm is chosen on validation |
+| Training costs | a canary A/B on GBPUSD and EURUSD, paired seeds 0-19: A trains on the spread with hysteresis 0 (the recipe), B on the full costs with hysteresis 0.20. Decided before any result (2026-09-29): per pair the arm with more seeds passing all five gates wins, ties to the higher median validation Calmar under the full costs; if the pairs disagree, more passes over both; if still tied, A |
 | Seed selection | the seven validation years only, under the full costs: gates (profitable, beats the pair, weaker side ≥ 10 % of active time, mean hold ≥ 24 bars, regime above its own null), then a money · safety · behaviour composite preferring low beta; 2025 is opened once per pair |
 | Reproducibility | the commit and packages in every `Run.json`; the nightly environment upgrade paused; one winning seed per pair retrained byte for byte at the end |
 | Hardware | one job at a time, about 20 workers (1.2 GB each plus 5 GB a run), a 6 GB free-memory floor |
