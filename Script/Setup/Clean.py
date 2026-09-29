@@ -10,7 +10,7 @@ from Library.Utility.Path import inspect_persistent
 from Library.Utility.IO import read_json, write_json
 from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Database import PostgresDatabaseAPI, QueryAPI
-from Library.Data.Universe import UniverseServiceAPI
+from Script.Data.Universe import UniverseServiceAPI
 from Library.Market.Download import DownloadAPI
 from Library.Market.Tape import TapeAPI
 from Library.Universe import CategoryAPI, ContractAPI, ProviderAPI, SecurityAPI, TickerAPI

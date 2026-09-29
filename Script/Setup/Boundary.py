@@ -12,8 +12,8 @@ from Library.Utility.IO import read_json, write_json
 from Library.Logging import LoggingAPI, VerboseLevel
 from Library.Database import PostgresDatabaseAPI
 from Library.Database.Query import QueryAPI
-from Library.Data.Market import MarketWorkerAPI
-from Library.Data.Universe import UniverseServiceAPI
+from Script.Data.Market import MarketWorkerAPI
+from Script.Data.Universe import UniverseServiceAPI
 from Library.Market.Download import DownloadAPI, DownloadStatus
 from Library.Market.Tape import TapeAPI
 from Library.Market.Tick import TickAPI
