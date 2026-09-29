@@ -121,7 +121,8 @@ class DatapointAPI(DataclassAPI):
         self._stamp_(by)
         natural_key = self.natural_keys()
         identity_cols = self.identity_keys()
-        data = {k: v for k, v in self.dict(include_fields=True, include_initvar_fields=False, include_properties=False, include_override_fields=True).items() if v is not None and v is not MISSING and k[0].isupper()}
+        columns = {str(name) for name in self.Structure}
+        data = {k: v for k, v in self.dict(include_fields=True, include_initvar_fields=False, include_properties=False, include_override_fields=True).items() if v is not None and v is not MISSING and k in columns}
         if natural_key and all(data.get(k) is not None for k in natural_key):
             insert_data = {k: v for k, v in data.items() if k not in identity_cols}
             result = self._db_.upsert(schema=self.Schema, table=self.Table, data=insert_data, key=natural_key, returning=identity_cols if identity_cols else None)

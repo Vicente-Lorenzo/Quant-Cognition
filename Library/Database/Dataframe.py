@@ -75,7 +75,7 @@ class DataframeAPI:
 
     def frame(self, data: Any, schema: Union[dict, Missing] = MISSING, legacy: Union[bool, Missing] = MISSING) -> Any:
         data = self.flatten(data)
-        df = pl.DataFrame(data=data, schema=None if schema is MISSING else schema, orient="row", strict=False)
+        df = pl.DataFrame(data=data, schema=None if schema is MISSING else schema, orient="row", strict=False, infer_schema_length=None)
         return df.to_pandas() if self.legacy(legacy) else df
 
     @staticmethod

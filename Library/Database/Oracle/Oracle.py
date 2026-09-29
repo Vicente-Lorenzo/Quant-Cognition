@@ -251,7 +251,7 @@ class OracleDatabaseAPI(DatabaseAPI):
                 "EXCEPTION WHEN NO_DATA_FOUND THEN generated := NULL; END; "
                 f"IF generated IS NOT NULL THEN EXECUTE IMMEDIATE {alter}BY DEFAULT AS IDENTITY)'; END IF; "
                 f"EXECUTE IMMEDIATE '{insert}'; "
-                f"IF generated IS NOT NULL THEN EXECUTE IMMEDIATE {alter}ALWAYS AS IDENTITY)'; END IF; END;")
+                f"IF generated IS NOT NULL THEN EXECUTE IMMEDIATE {alter}ALWAYS AS IDENTITY (START WITH LIMIT VALUE))'; END IF; END;")
 
     @staticmethod
     def _row_(name: str, datatype: str, is_pk: int, is_fk: int) -> str:

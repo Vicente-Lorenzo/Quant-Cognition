@@ -8,7 +8,6 @@ from Library.Database.Dataclass import overridefield, coerce
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.Position import PositionAPI, PositionType, PositionStatus
 from Library.Portfolio.Order import OrderAPI
-from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Account import AccountAPI
 from Library.Portfolio.PnL import PnLAPI
 from Library.Universe.Security import SecurityAPI
@@ -35,10 +34,9 @@ class TradeAPI(PositionAPI):
     def Structure(self) -> dict:
         cols = {
             self.ID.UID: PrimaryKey(pl.Int64),
-            self.ID.Session: ForeignKey(pl.String, reference=SessionAPI.reference()),
             self.ID.Account: ForeignKey(pl.Int64, reference=AccountAPI.reference()),
             self.ID.Order: ForeignKey(pl.Int64, reference=OrderAPI.reference()),
-            self.ID.Position: ForeignKey(pl.Int64, reference=PositionAPI.reference()),
+            self.ID.Position: pl.Int64(),
             self.ID.Security: ForeignKey(pl.Int64, reference=SecurityAPI.reference()),
             self.ID.Type: pl.String(),
             self.ID.Status: pl.String(),
@@ -60,6 +58,7 @@ class TradeAPI(PositionAPI):
             self.ID.ExitPrice: pl.Float64(),
             self.ID.ExitBalance: pl.Float64(),
             self.ID.GrossPnL: pl.Float64(),
+            self.ID.SpreadPnL: pl.Float64(),
             self.ID.CommissionPnL: pl.Float64(),
             self.ID.SwapPnL: pl.Float64(),
             self.ID.NetPnL: pl.Float64(),
@@ -76,7 +75,6 @@ class TradeAPI(PositionAPI):
                       autoload: bool,
                       autooverload: bool,
                       autosave: bool,
-                      session: Union[str, SessionAPI, None],
                       account: Union[int, AccountAPI, None],
                       order: Union[int, OrderAPI, None],
                       security: Union[int, SecurityAPI, None],
@@ -96,6 +94,7 @@ class TradeAPI(PositionAPI):
                       max_equity_runup_pnl: Union[float, PnLAPI, None],
                       exit_price: Union[float, PriceAPI, None],
                       gross_pnl: Union[float, PnLAPI, None],
+                      spread_pnl: Union[float, PnLAPI, None],
                       commission_pnl: Union[float, PnLAPI, None],
                       swap_pnl: Union[float, PnLAPI, None],
                       net_pnl: Union[float, PnLAPI, None],
@@ -113,7 +112,6 @@ class TradeAPI(PositionAPI):
                               autoload=autoload,
                               autooverload=autooverload,
                               autosave=autosave,
-                              session=session,
                               account=account,
                               order=order,
                               security=security,
@@ -133,6 +131,7 @@ class TradeAPI(PositionAPI):
                               max_equity_runup_pnl=max_equity_runup_pnl,
                               exit_price=exit_price,
                               gross_pnl=gross_pnl,
+                              spread_pnl=spread_pnl,
                               commission_pnl=commission_pnl,
                               swap_pnl=swap_pnl,
                               net_pnl=net_pnl)

@@ -1,8 +1,8 @@
 from typing import Union
 from datetime import datetime
-from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOATradeSide
 
 from Library.Database.Dataframe import pd, pl
+from Library.Spotware.Messages import ProtoOATradeSide
 from Library.Utility.Datetime import utc_now
 from Library.Utility.Service import ServiceAPI
 from Library.Utility.Typing import MISSING, Missing
@@ -55,7 +55,9 @@ class PortfolioAPI(ServiceAPI):
             "TakeProfitPrice": api._optional_(position, "takeProfit"),
             "SwapPnL": position.swap / money,
             "CommissionPnL": position.commission / money,
-            "UsedMargin": position.usedMargin / money
+            "UsedMargin": position.usedMargin / money,
+            "Label": trade.label,
+            "Comment": trade.comment
         }
 
     def _trade_(self, deal) -> dict:
@@ -73,8 +75,33 @@ class PortfolioAPI(ServiceAPI):
             "GrossPnL": gross,
             "CommissionPnL": commission,
             "SwapPnL": swap,
-            "NetPnL": gross + commission + swap,
+            "NetPnL": (close.grossProfit + close.commission + close.swap) / money,
             "ExitBalance": close.balance / money
+        }
+
+    def _deal_(self, deal) -> dict:
+        api, money = self._api_, self._api_._money_(deal)
+        closing = deal.HasField("closePositionDetail")
+        close = deal.closePositionDetail if closing else None
+        return {
+            "DealID": deal.dealId,
+            "OrderID": deal.orderId,
+            "PositionID": deal.positionId,
+            "Symbol": deal.symbolId,
+            "Direction": api._named_(deal, "tradeSide"),
+            "Volume": api._units_(deal.filledVolume),
+            "Status": api._named_(deal, "dealStatus"),
+            "ExecutionPrice": api._optional_(deal, "executionPrice"),
+            "ExecutionTimestamp": api._stamp_(deal.executionTimestamp),
+            "CreateTimestamp": api._stamp_(deal.createTimestamp),
+            "Commission": deal.commission / money,
+            "Closing": closing,
+            "EntryPrice": close.entryPrice if closing else None,
+            "ClosedVolume": api._units_(close.closedVolume) if closing and close.HasField("closedVolume") else None,
+            "GrossPnL": close.grossProfit / money if closing else None,
+            "SwapPnL": close.swap / money if closing else None,
+            "ClosingCommission": close.commission / money if closing else None,
+            "Balance": close.balance / money if closing else None
         }
 
     def _paged_(self, request: str, field: str, key: str, start: datetime, stop: Union[datetime, None], **fields) -> list:
@@ -115,6 +142,7 @@ class PortfolioAPI(ServiceAPI):
                 "BrokerName": api._optional_(trader, "brokerName"),
                 "DepositAssetID": trader.depositAssetId,
                 "TraderLogin": api._optional_(trader, "traderLogin"),
+                "Registration": api._stamp_(trader.registrationTimestamp) if trader.HasField("registrationTimestamp") else None,
                 "MoneyDigits": api._digits_(trader)
             }
             return api.frame([row], legacy=legacy)
@@ -195,6 +223,18 @@ class PortfolioAPI(ServiceAPI):
             return self._api_.frame([self._trade_(deal) for deal in deals if deal.HasField("closePositionDetail")], legacy=legacy)
         timer, result = super()._fetch_(callback=_fetch_)
         self._log_.info(lambda: f"Trades Operation: Fetched {len(result)} trades ({timer.result()})")
+        return result
+
+    def deals(self,
+              start: datetime,
+              stop: Union[datetime, None] = None,
+              rows: int = 1000,
+              legacy: Union[bool, Missing] = MISSING) -> Union[pd.DataFrame, pl.DataFrame]:
+        def _fetch_():
+            deals = self._paged_("ProtoOADealListReq", "deal", "dealId", start, stop, maxRows=int(rows))
+            return self._api_.frame(sorted((self._deal_(deal) for deal in deals), key=lambda row: (row["ExecutionTimestamp"] or row["CreateTimestamp"], row["DealID"])), legacy=legacy)
+        timer, result = super()._fetch_(callback=_fetch_)
+        self._log_.info(lambda: f"Deals Operation: Fetched {len(result)} deals ({timer.result()})")
         return result
 
     def pnl(self, legacy: Union[bool, Missing] = MISSING) -> Union[pd.DataFrame, pl.DataFrame]:

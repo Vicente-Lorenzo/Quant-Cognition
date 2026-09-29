@@ -71,8 +71,10 @@ class LadderAPI:
         return Parameter(sections, self.override(kind, *rungs)), trail
 
     def pin(self, strategy: type[StrategyAPI], kind: str, source: Union[str, Path], target: Union[str, Path]) -> tuple[Parameter, list]:
-        source, pinned = Path(source), read_yaml(Path(source), safe=False)
-        return Parameter(self.arrange(self.merge(strategy.defaults(kind), pinned), pinned), Path(target)), [self._ORIGIN_, str(source)]
+        source, pinned, defaults = Path(source), read_yaml(Path(source), safe=False) or {}, strategy.defaults(kind)
+        unknown = [str(section) for section in pinned if section not in defaults]
+        if unknown: raise ValueError(f"Parameters Pin: Failed · Unknown sections {' · '.join(unknown)} in {source.name} · A pinned file keeps its sections at the top level")
+        return Parameter(self.arrange(self.merge(defaults, pinned), pinned), Path(target)), [self._ORIGIN_, str(source)]
 
     def sources(self, strategy: type[StrategyAPI], kind: str, *rungs: str) -> dict:
         found = {}

@@ -1,11 +1,12 @@
+import time
+
 from typing import Union
 from datetime import datetime
 from collections.abc import Sequence
-from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOAExecutionEvent, ProtoOAOrderErrorEvent
-from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOAOrderType, ProtoOATimeInForce, ProtoOATradeSide
 
 from Library.Database.Dataframe import pd, pl
 from Library.Portfolio.Order import TimeInForce
+from Library.Spotware.Messages import ProtoOAExecutionEvent, ProtoOAOrderErrorEvent, ProtoOAOrderType, ProtoOATimeInForce, ProtoOATradeSide
 from Library.Utility.Service import ServiceAPI
 from Library.Utility.Typing import MISSING, Missing
 
@@ -15,6 +16,12 @@ class ExecutionAPI(ServiceAPI):
     def _is_seq_(value) -> bool:
         return isinstance(value, Sequence) and not isinstance(value, (str, bytes))
 
+    @staticmethod
+    def _keep_(fields: dict, current, *names: str) -> dict:
+        for name in names:
+            if name not in fields and current.HasField(name): fields[name] = getattr(current, name)
+        return fields
+
     @classmethod
     def _broadcast_(cls, **kwargs) -> list[dict]:
         lengths = {len(v) for v in kwargs.values() if cls._is_seq_(v)}
@@ -22,6 +29,13 @@ class ExecutionAPI(ServiceAPI):
         if len(lengths) > 1: raise ValueError(f"Batch Operation: Failed · Mismatched lengths {sorted(lengths)}")
         n = lengths.pop()
         return [{k: (v[i] if cls._is_seq_(v) else v) for k, v in kwargs.items()} for i in range(n)]
+
+    def _submit_(self, name: str, **fields):
+        for delay in (0.5, 1.0, 2.0, None):
+            payload = self._api_._request_(name, **fields)
+            if not isinstance(payload, ProtoOAOrderErrorEvent) or payload.errorCode != "CONCURRENT_MODIFICATION" or delay is None: return payload
+            self._log_.warning(lambda delay=delay: f"Request Operation: Deferred ({name}) · CONCURRENT_MODIFICATION · Retrying in {delay}s")
+            time.sleep(delay)
 
     def _execution_(self, payload) -> dict:
         row = {"ResponseType": type(payload).__name__ if payload is not None else "", "ExecutionType": None, "OrderID": None, "PositionID": None, "DealID": None, "ErrorCode": None, "Description": None}
@@ -36,8 +50,8 @@ class ExecutionAPI(ServiceAPI):
             row["ErrorCode"] = self._api_._optional_(payload, "errorCode")
         elif isinstance(payload, ProtoOAOrderErrorEvent):
             row["ErrorCode"] = payload.errorCode
-            row["OrderID"] = self._api_._optional_(payload, "orderId")
-            row["PositionID"] = self._api_._optional_(payload, "positionId")
+            row["OrderID"] = self._api_._optional_(payload, "orderId") or None
+            row["PositionID"] = self._api_._optional_(payload, "positionId") or None
             row["Description"] = self._api_._optional_(payload, "description")
         return row
 
@@ -81,7 +95,7 @@ class ExecutionAPI(ServiceAPI):
         if position_id is not None: fields["positionId"] = int(position_id)
         if trailing: fields["trailingStopLoss"] = True
         if guaranteed: fields["guaranteedStopLoss"] = True
-        return self._execution_(api._request_("ProtoOANewOrderReq", **fields))
+        return self._execution_(self._submit_("ProtoOANewOrderReq", **fields))
 
     def _modify_order_(self,
                        order: int,
@@ -105,7 +119,11 @@ class ExecutionAPI(ServiceAPI):
         if slippage_points is not None: fields["slippageInPoints"] = int(slippage_points)
         if trailing is not None: fields["trailingStopLoss"] = bool(trailing)
         if guaranteed is not None: fields["guaranteedStopLoss"] = bool(guaranteed)
-        return self._execution_(api._request_("ProtoOAAmendOrderReq", **fields))
+        current = api._request_("ProtoOAOrderDetailsReq", orderId=int(order)).order
+        self._keep_(fields, current, "limitPrice", "stopPrice", "slippageInPoints", "stopLoss", "takeProfit", "expirationTimestamp", "trailingStopLoss", "stopTriggerMethod")
+        if "stopLoss" not in fields: self._keep_(fields, current, "relativeStopLoss")
+        if "takeProfit" not in fields: self._keep_(fields, current, "relativeTakeProfit")
+        return self._execution_(self._submit_("ProtoOAAmendOrderReq", **fields))
 
     def _modify_position_(self,
                           position: int,
@@ -118,13 +136,15 @@ class ExecutionAPI(ServiceAPI):
         if take_profit is not None: fields["takeProfit"] = float(take_profit)
         if trailing is not None: fields["trailingStopLoss"] = bool(trailing)
         if guaranteed is not None: fields["guaranteedStopLoss"] = bool(guaranteed)
-        return self._execution_(self._api_._request_("ProtoOAAmendPositionSLTPReq", **fields))
+        current = next((item for item in self._api_._request_("ProtoOAReconcileReq").position if item.positionId == int(position)), None)
+        if current is not None: self._keep_(fields, current, "stopLoss", "takeProfit", "guaranteedStopLoss", "trailingStopLoss", "stopLossTriggerMethod")
+        return self._execution_(self._submit_("ProtoOAAmendPositionSLTPReq", **fields))
 
     def _close_order_(self, order: int) -> dict:
-        return self._execution_(self._api_._request_("ProtoOACancelOrderReq", orderId=int(order)))
+        return self._execution_(self._submit_("ProtoOACancelOrderReq", orderId=int(order)))
 
     def _close_position_(self, position: int, volume: float) -> dict:
-        return self._execution_(self._api_._request_("ProtoOAClosePositionReq", positionId=int(position), volume=self._api_._cents_(volume)))
+        return self._execution_(self._submit_("ProtoOAClosePositionReq", positionId=int(position), volume=self._api_._cents_(volume)))
 
     def _resolve_orders_(self, order: Union[int, Sequence[int], None]) -> list[int]:
         if order is None:
@@ -141,7 +161,9 @@ class ExecutionAPI(ServiceAPI):
         ids = [int(i) for i in position] if self._is_seq_(position) else [int(position)]
         if volume is None:
             positions = self._api_.portfolio.positions(legacy=False)
-            volumes = dict(zip(positions["PositionID"].to_list(), positions["Volume"].to_list()))
+            volumes = {} if positions.is_empty() else dict(zip(positions["PositionID"].to_list(), positions["Volume"].to_list()))
+            missing = [str(i) for i in ids if i not in volumes]
+            if missing: raise LookupError(f"Close Position Operation: Failed · Position {' · '.join(missing)} is not open")
             return [(i, volumes[i]) for i in ids]
         if not self._is_seq_(volume): return [(i, volume) for i in ids]
         if len(volume) != len(ids): raise ValueError(f"Batch Operation: Failed · Mismatched lengths position ({len(ids)}) volume ({len(volume)})")

@@ -147,7 +147,7 @@ class PostgresDatabaseAPI(DatabaseAPI):
             user=self._user_,
             password=self._password_,
             dbname=database,
-            options="-c TimeZone=UTC"
+            options="-c TimeZone=UTC -c plan_cache_mode=force_custom_plan"
         )
         connection.adapters.register_loader("timestamptz", TimestampLoader)
         connection.adapters.register_loader("timestamptz", TimestampBinaryLoader)
@@ -284,7 +284,13 @@ class PostgresDatabaseAPI(DatabaseAPI):
                 table: Union[str, None, Missing] = MISSING,
                 columns: str = "",
                 source: str = "") -> str:
-        return f"INSERT INTO {self._target_(schema, table)} ({columns}) OVERRIDING SYSTEM VALUE SELECT {columns} FROM {source}"
+        target = self._target_(schema, table)
+        restart = f"format('SELECT setval(pg_get_serial_sequence(%L, %L), COALESCE(MAX(%I), 0) + 1, false) FROM {target}', '{target}', generated, generated)"
+        return (f"DO $carry$ DECLARE generated text; BEGIN INSERT INTO {target} ({columns}) OVERRIDING SYSTEM VALUE SELECT {columns} FROM {source}; "
+                f"FOR generated IN SELECT attname FROM pg_attribute WHERE attrelid = to_regclass('{target}') AND attidentity <> '' AND NOT attisdropped LOOP EXECUTE {restart}; END LOOP; END $carry$")
+
+    def _lost_(self) -> bool:
+        return bool(self._connection_.closed)
 
     def _fingerprint_(self, *,
                       database: Union[str, Sequence, None, Missing] = MISSING,

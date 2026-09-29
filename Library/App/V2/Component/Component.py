@@ -209,6 +209,10 @@ class SelectAPI(ComponentAPI):
     placeholder: str = ComponentAPI.prop()
     disabled: bool = ComponentAPI.prop()
 
+    def __post_init__(self):
+        super().__post_init__()
+        if self.placeholder is MISSING or self.placeholder is None: self.placeholder = next((option["label"] for option in self.options or [] if isinstance(option, dict) and option.get("value") in ("", None)), MISSING)
+
 @dataclass(kw_only=True)
 class SwitchAPI(ComponentAPI):
 

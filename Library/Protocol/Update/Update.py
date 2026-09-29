@@ -102,8 +102,7 @@ class UpdateID(EnumerationAPI):
     Denied = 79
     Exception = 80
     Shutdown = 81
-    Batch = 82
-    Complete = 83
+    Complete = 82
 
 @dataclass(slots=True)
 class UpdateAPI(DataclassAPI):

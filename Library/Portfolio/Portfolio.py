@@ -51,7 +51,7 @@ class PortfolioAPI(DatapointAPI):
     _equity_peak_: Union[float, None] = field(default=None, init=False)
     _equity_trough_: Union[float, None] = field(default=None, init=False)
     _equity_stamp_: Union[datetime, None] = field(default=None, init=False)
-    _excursion_stamp_: Union[datetime, None] = field(default=None, init=False)
+    _through_: Union[datetime, None] = field(default=None, init=False)
     _equity_curve_: CurveAPI = field(default_factory=CurveAPI, init=False)
     _buy_equity_curve_: CurveAPI = field(default_factory=CurveAPI, init=False)
     _sell_equity_curve_: CurveAPI = field(default_factory=CurveAPI, init=False)
@@ -137,25 +137,48 @@ class PortfolioAPI(DatapointAPI):
         else: curve.observe(low, high, close)
 
     @staticmethod
-    def _conversion_(ask: Union[PriceAPI, None], bid: Union[PriceAPI, None]) -> float:
+    def _conversion_(ask: Union[PriceAPI, None], bid: Union[PriceAPI, None], fallback: float = 1.0) -> float:
         a = ask.Price if ask else None
         b = bid.Price if bid else None
         if b is not None: return b
-        return a if a is not None else 1.0
+        return a if a is not None else fallback
+
+    @classmethod
+    def _extreme_(cls, tick: Union[TickAPI, None], side: str, price: float, conversion: float) -> tuple[float, float]:
+        if tick is None: return price, conversion
+        return getattr(tick, side).Price, cls._conversion_(tick.AskQuoteConversion, tick.BidQuoteConversion, conversion)
+
+    def charge(self, position: PositionAPI, commission: float = 0.0, swap: float = 0.0) -> None:
+        if commission: position.CommissionPnL = (position.CommissionPnL.PnL if position.CommissionPnL else 0.0) + commission
+        if swap: position.SwapPnL = (position.SwapPnL.PnL if position.SwapPnL else 0.0) + swap
+        position.NetPnL = calculate_net_pnl(position.GrossPnL.PnL if position.GrossPnL else 0.0, position.CommissionPnL.PnL if position.CommissionPnL else 0.0, position.SwapPnL.PnL if position.SwapPnL else 0.0)
+
+    def settle(self) -> None:
+        equity = self.Equity
+        self._track_equity_(equity)
+        self._record_equity_(equity)
 
     def update_data(self, data: Union[TickAPI, BarAPI]) -> None:
         if isinstance(data, TickAPI):
-            bid, ask, timestamp = data.Bid.Price, data.Ask.Price, data.Timestamp.DateTime
+            close = timestamp = data.Timestamp.DateTime
+            if self._through_ is not None and close < self._through_: return
+            bid, ask = data.Bid.Price, data.Ask.Price
+            conversion = self._conversion_(data.AskQuoteConversion, data.BidQuoteConversion)
             high_bid = low_bid = bid
             high_ask = low_ask = ask
-            conversion = self._conversion_(data.AskQuoteConversion, data.BidQuoteConversion)
+            high_bid_rate = low_bid_rate = high_ask_rate = low_ask_rate = conversion
         else:
-            bid, ask, timestamp = data.ClosePoint.Bid.Price, data.ClosePoint.Ask.Price, data.Timestamp.DateTime
-            high_bid = data.HighPoint.Bid.Price if data.HighPoint and data.HighPoint.Bid else bid
-            low_bid = data.LowPoint.Bid.Price if data.LowPoint and data.LowPoint.Bid else bid
-            high_ask = data.HighPoint.Ask.Price if data.HighPoint and data.HighPoint.Ask else ask
-            low_ask = data.LowPoint.Ask.Price if data.LowPoint and data.LowPoint.Ask else ask
-            conversion = self._conversion_(data.ClosePoint.BidTick.AskQuoteConversion, data.ClosePoint.BidTick.BidQuoteConversion)
+            last = data.ClosePoint.BidTick
+            close, timestamp = last.Timestamp.DateTime, data.Timestamp.DateTime
+            if self._through_ is not None and close <= self._through_: return
+            bid, ask = data.ClosePoint.Bid.Price, data.ClosePoint.Ask.Price
+            conversion = self._conversion_(last.AskQuoteConversion, last.BidQuoteConversion)
+            high, low = data.HighPoint, data.LowPoint
+            high_bid, high_bid_rate = self._extreme_(high.BidTick if high else None, "Bid", bid, conversion)
+            low_bid, low_bid_rate = self._extreme_(low.BidTick if low else None, "Bid", bid, conversion)
+            high_ask, high_ask_rate = self._extreme_(high.AskTick if high else None, "Ask", ask, conversion)
+            low_ask, low_ask_rate = self._extreme_(low.AskTick if low else None, "Ask", ask, conversion)
+            self._through_ = close
         self._last_conversion_ = conversion
         high_pnl = low_pnl = 0.0
         longs = False
@@ -168,8 +191,8 @@ class PortfolioAPI(DatapointAPI):
             is_long, is_short = pos.IsLong, pos.IsShort
             gross, commission, swapped, opened, volume = pos.GrossPnL, pos.CommissionPnL, pos.SwapPnL, pos.EntryTimestamp, pos.Volume
             current_price = bid if is_long else ask
-            best_price = high_bid if is_long else low_ask
-            worst_price = low_bid if is_long else high_ask
+            best_price, best_rate = (high_bid, high_bid_rate) if is_long else (low_ask, low_ask_rate)
+            worst_price, worst_rate = (low_bid, low_bid_rate) if is_long else (high_ask, high_ask_rate)
             entry_price = entry.Price
             comm = commission.PnL if commission else 0.0
             swap = swapped.PnL if swapped else 0.0
@@ -181,8 +204,8 @@ class PortfolioAPI(DatapointAPI):
                 net.Duration = duration_sec if duration_sec > 0 else None
             if balance: net.Reference = balance
             ref_balance, duration = net.Reference, net.Duration
-            best_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(best_price, entry_price, is_long), volume, conversion), comm, swap)
-            worst_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(worst_price, entry_price, is_long), volume, conversion), comm, swap)
+            best_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(best_price, entry_price, is_long), volume, best_rate), comm, swap)
+            worst_pnl = calculate_net_pnl(calculate_gross_pnl(calculate_pnl_difference(worst_price, entry_price, is_long), volume, worst_rate), comm, swap)
             if is_long:
                 longs = True
                 high_pnl += best_pnl
@@ -228,8 +251,6 @@ class PortfolioAPI(DatapointAPI):
         self._equity_curve_.record(timestamp, equity)
         self._buy_equity_curve_.record(timestamp, buy_base + buy_pnl)
         self._sell_equity_curve_.record(timestamp, sell_base + sell_pnl)
-        if timestamp == self._excursion_stamp_: return
-        self._excursion_stamp_ = timestamp
         base = self._account_.Balance if (self._account_ and self._account_.Balance is not None) else 0.0
         bid_first = self._high_first_(data.HighPoint.BidTick if data.HighPoint else None, data.LowPoint.BidTick if data.LowPoint else None)
         ask_first = self._high_first_(data.HighPoint.AskTick if data.HighPoint else None, data.LowPoint.AskTick if data.LowPoint else None)
@@ -285,6 +306,15 @@ class PortfolioAPI(DatapointAPI):
         if dst.Label is None: dst.Label = src.Label
         if dst.Comment is None: dst.Comment = src.Comment
 
+    @staticmethod
+    def _freeze_(trade: TradeAPI) -> None:
+        for name in ("_max_equity_drawdown_price_", "_max_equity_runup_price_"):
+            price = getattr(trade, name)
+            if price is not None: setattr(trade, name, PriceAPI(Price=price.Price, Reference=price.Reference, Contract=price.Contract))
+        for name in ("_max_equity_drawdown_pnl_", "_max_equity_runup_pnl_"):
+            pnl = getattr(trade, name)
+            if pnl is not None: setattr(trade, name, PnLAPI(PnL=pnl.PnL, Reference=pnl.Reference, Duration=pnl.Duration))
+
     def _compute_target_pnl_(self, pos: PositionAPI, target_price: Union[float, None]) -> Union[float, None]:
         entry = pos.EntryPrice.Price if pos.EntryPrice else None
         if target_price is None or entry is None or pos.Volume is None: return None
@@ -331,6 +361,7 @@ class PortfolioAPI(DatapointAPI):
         if position_uid in self._positions_:
             old_pos = self._positions_[position_uid]
             self._inherit_position_state_(old_pos, trade)
+            self._freeze_(trade)
             if trade._position_ is None: trade._position_ = old_pos
             setattr(trade, 'EntryBalance', old_pos.EntryBalance)
             if trade.ExitPrice and trade.ExitPrice.Price is not None:
@@ -537,6 +568,12 @@ class PortfolioAPI(DatapointAPI):
     @property
     def AnnualizedLogPercentage(self) -> Union[float, None]:
         return calculate_log_percentage(self.AnnualizedLogReturn)
+
+    def position(self, uid: int) -> Union[PositionAPI, None]:
+        return self._positions_.get(uid)
+
+    def closed(self) -> list[TradeAPI]:
+        return list(self._trades_)
 
     @staticmethod
     def _frame_(items) -> pl.DataFrame:

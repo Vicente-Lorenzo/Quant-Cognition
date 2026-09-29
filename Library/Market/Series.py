@@ -25,13 +25,16 @@ class SeriesAPI:
         if point:
             self.AskTick = SeriesAPI(f"{p}AskTick", True, self, mode)
             self.BidTick = SeriesAPI(f"{p}BidTick", True, self, mode)
+            self.MidTick = SeriesAPI(f"{p}MidTick", True, self, mode)
             self.Ask = self.AskTick.Ask
             self.Bid = self.BidTick.Bid
-            self._children_ = [self.AskTick, self.BidTick]
+            self.Mid = self.MidTick.Mid
+            self._children_ = [self.AskTick, self.BidTick, self.MidTick]
             self._leaves_ = [self.Ask, self.Bid]
         elif multiple:
             self.Ask = SeriesAPI(f"{p}Ask", False, self, mode)
             self.Bid = SeriesAPI(f"{p}Bid", False, self, mode)
+            self.Mid = MidSeriesAPI(f"{p}Mid", self, mode)
             self.AskBaseConversion = SeriesAPI(f"{p}AskBaseConversion", False, self, mode)
             self.BidBaseConversion = SeriesAPI(f"{p}BidBaseConversion", False, self, mode)
             self.AskQuoteConversion = SeriesAPI(f"{p}AskQuoteConversion", False, self, mode)
@@ -46,7 +49,7 @@ class SeriesAPI:
     @property
     def Price(self) -> SeriesAPI:
         if not self._multiple_: return self
-        return self.Ask if self._mode_ == PriceMode.Ask else self.Bid
+        return self.Ask if self._mode_ == PriceMode.Ask else self.Mid if self._mode_ == PriceMode.Mid else self.Bid
 
     def init_data(self, data: pl.DataFrame) -> None:
         self._data_ = data
@@ -89,7 +92,7 @@ class SeriesAPI:
     def _item_(self, row: dict) -> Union[TickAPI, PointAPI]:
         if not self._point_: return self._tick_(row, self._prefix_)
         from Library.Market.Point import PointAPI
-        return PointAPI(AskTick=self._tick_(row, self.AskTick._prefix_), BidTick=self._tick_(row, self.BidTick._prefix_))
+        return PointAPI(AskTick=self._tick_(row, self.AskTick._prefix_), BidTick=self._tick_(row, self.BidTick._prefix_), MidTick=self._tick_(row, self.MidTick._prefix_))
 
     def _each_(self, other: Union[SeriesAPI, float, int], method, shift: int, dataframe: bool) -> Union[list[bool], pl.DataFrame]:
         if not isinstance(other, SeriesAPI) or not other._multiple_: raise ValueError("Ambiguous comparison.")
@@ -145,3 +148,18 @@ class SeriesAPI:
 
     def __repr__(self) -> str:
         return repr(self.dataframe())
+
+class MidSeriesAPI(SeriesAPI):
+
+    def __init__(self, prefix: str, parent: SeriesAPI, mode: PriceMode) -> None:
+        super().__init__(prefix, False, parent, mode)
+
+    def dataframe(self) -> pl.Series:
+        return ((self._parent_.Ask.dataframe() + self._parent_.Bid.dataframe()) / 2).alias(self._prefix_)
+
+    def last(self, shift: int = 0, dataframe: bool = False) -> Union[float, None]:
+        ask, bid = self._parent_.Ask.last(shift), self._parent_.Bid.last(shift)
+        return None if ask is None or bid is None else (ask + bid) / 2
+
+    def tail(self, n: int = MISSING, dataframe: bool = False) -> pl.Series:
+        return ((self._parent_.Ask.tail(n) + self._parent_.Bid.tail(n)) / 2).alias(self._prefix_)

@@ -4,18 +4,16 @@ import threading
 
 from functools import lru_cache
 from typing import Callable, Union
-from ctrader_open_api import Protobuf
 from typing_extensions import Self
 from twisted.internet import reactor
 from datetime import datetime, timezone
 from twisted.internet.threads import blockingCallFromThread
-from ctrader_open_api.messages.OpenApiCommonModelMessages_pb2 import ERROR_RES
-from ctrader_open_api.messages.OpenApiModelMessages_pb2 import PROTO_OA_ACCOUNT_DISCONNECT_EVENT, PROTO_OA_ACCOUNTS_TOKEN_INVALIDATED_EVENT, PROTO_OA_CLIENT_DISCONNECT_EVENT, PROTO_OA_ERROR_RES
 
-from Library.Database.Dataframe import DataframeAPI
+from Library.Database.Dataframe import DataframeAPI, pl
 from Library.Spotware.Client import ClientAPI
 from Library.Spotware.Execution import ExecutionAPI
 from Library.Spotware.Market import MarketAPI
+from Library.Spotware.Messages import ERROR_RES, PROTO_OA_ACCOUNT_DISCONNECT_EVENT, PROTO_OA_ACCOUNTS_TOKEN_INVALIDATED_EVENT, PROTO_OA_CLIENT_DISCONNECT_EVENT, PROTO_OA_ERROR_RES
 from Library.Spotware.Portfolio import PortfolioAPI
 from Library.Spotware.Streaming import StreamingAPI
 from Library.Spotware.Token import TokenAPI
@@ -25,6 +23,8 @@ from Library.Utility.Service import ServiceAPI
 from Library.Utility.Typing import MISSING, Missing, normalize
 
 class SpotwareAPI(ServiceAPI, DataframeAPI):
+
+    _STARTING_ = threading.Lock()
 
     def __init__(self, *,
                  client_id: str,
@@ -82,13 +82,19 @@ class SpotwareAPI(ServiceAPI, DataframeAPI):
             reached = api.portfolio.accounts()
         return f"Application authenticated · Token reaches {len(reached)} account(s)"
 
+    @classmethod
+    def _reactor_(cls) -> None:
+        with cls._STARTING_:
+            if reactor.running: return
+            started = threading.Event()
+            reactor.callWhenRunning(started.set)
+            threading.Thread(target=reactor.run, kwargs={"installSignalHandlers": False}, daemon=True).start()
+            started.wait(timeout=10)
+
     def _connect_(self, **kwargs) -> None:
-        if not reactor.running: threading.Thread(target=reactor.run, kwargs={"installSignalHandlers": False}, daemon=True).start()
+        self._reactor_()
         self._connected_event_, self._stopping_ = threading.Event(), False
-        self._connection_ = ClientAPI(self._host_, self._port_)
-        self._connection_.setConnectedCallback(self._on_connected_)
-        self._connection_.setDisconnectedCallback(self._on_disconnected_)
-        self._connection_.setMessageReceivedCallback(self._on_message_)
+        self._connection_ = ClientAPI(self._host_, self._port_, connected=self._on_connected_, disconnected=self._on_disconnected_, received=self._on_message_)
         blockingCallFromThread(reactor, self._connection_.startService)
         if not self._connected_event_.wait(timeout=self._timeout_):
             self._disconnect_()
@@ -147,7 +153,7 @@ class SpotwareAPI(ServiceAPI, DataframeAPI):
         if self._established_ and not self._stopping_: threading.Thread(target=self._restore_, kwargs={"generation": self._generation_}, daemon=True).start()
 
     def connected(self) -> bool:
-        return self._connection_ is not None and bool(getattr(self._connection_, "isConnected", False))
+        return self._connection_ is not None and bool(getattr(self._connection_, "Connected", False))
 
     def _on_disconnected_(self, client, reason) -> None:
         self._ready_.clear()
@@ -198,6 +204,10 @@ class SpotwareAPI(ServiceAPI, DataframeAPI):
         return relative / 100000
 
     @staticmethod
+    def _prices_(relative: pl.Expr) -> pl.Expr:
+        return (relative / 100000).round(5)
+
+    @staticmethod
     def _relative_(price: float) -> int:
         return round(price * 100000)
 
@@ -239,19 +249,23 @@ class SpotwareAPI(ServiceAPI, DataframeAPI):
         raise ValueError(f"{descriptor.name} {value}: Failed · Not a member")
 
     def _message_(self, name: str, **fields):
-        message = Protobuf.get(name, **fields)
+        message = ClientAPI.message(name, **fields)
         if self._account_id_ is not None and "ctidTraderAccountId" in message.DESCRIPTOR.fields_by_name: message.ctidTraderAccountId = self._account_id_
         return message
 
+    @staticmethod
+    def _transient_(code: str, description: str) -> bool:
+        return code == "BLOCKED_PAYLOAD_TYPE" or (code == "UNKNOWN_ERROR" and description == "Can't request tickdata")
+
     def _send_(self, request, timeout: Union[int, Missing] = MISSING):
         for delay in (1, 2, 4, 8, None):
-            response = blockingCallFromThread(reactor, self._connection_.send, request, responseTimeoutInSeconds=self._timeout_ if timeout is MISSING else timeout)
+            response = blockingCallFromThread(reactor, self._connection_.send, request, timeout=self._timeout_ if timeout is MISSING else timeout)
             if not hasattr(response, "payloadType"): return response
-            payload = Protobuf.extract(response)
+            payload = ClientAPI.payload(response)
             if response.payloadType not in (PROTO_OA_ERROR_RES, ERROR_RES): return payload
             description = getattr(payload, "description", "")
-            if payload.errorCode != "BLOCKED_PAYLOAD_TYPE" or delay is None: raise RuntimeError(f"{payload.errorCode} · {description}" if description else payload.errorCode)
-            self._log_.warning(lambda delay=delay: f"Request Operation: Throttled ({type(request).__name__}) · Retrying in {delay}s")
+            if not self._transient_(payload.errorCode, description) or delay is None: raise RuntimeError(f"{payload.errorCode} · {description}" if description else payload.errorCode)
+            self._log_.warning(lambda delay=delay, code=payload.errorCode: f"Request Operation: Throttled ({type(request).__name__}) · {code} · Retrying in {delay}s")
             time.sleep(delay)
 
     def _await_(self) -> None:
@@ -276,7 +290,7 @@ class SpotwareAPI(ServiceAPI, DataframeAPI):
         threading.Thread(target=self._restore_, kwargs={"renew": invalidated}, daemon=True).start()
 
     def _on_message_(self, client, message) -> None:
-        if getattr(message, "payloadType", None) in (PROTO_OA_CLIENT_DISCONNECT_EVENT, PROTO_OA_ACCOUNT_DISCONNECT_EVENT, PROTO_OA_ACCOUNTS_TOKEN_INVALIDATED_EVENT): self._react_(Protobuf.extract(message))
+        if getattr(message, "payloadType", None) in (PROTO_OA_CLIENT_DISCONNECT_EVENT, PROTO_OA_ACCOUNT_DISCONNECT_EVENT, PROTO_OA_ACCOUNTS_TOKEN_INVALIDATED_EVENT): self._react_(ClientAPI.payload(message))
         for callback in list(self._subscribers_):
             try: callback(message)
             except Exception as error: self._log_.exception(lambda error=error: f"Message Operation: Failed · {error}")
@@ -303,7 +317,7 @@ class SpotwareAPI(ServiceAPI, DataframeAPI):
             with lock:
                 if done.is_set(): return
                 try:
-                    for item in decode(Protobuf.extract(message)):
+                    for item in decode(ClientAPI.payload(message)):
                         callback(item)
                         count += 1
                         if limit is not MISSING and count >= limit:

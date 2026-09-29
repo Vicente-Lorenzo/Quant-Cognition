@@ -130,6 +130,21 @@ class ManagerAPI:
         if parsed is Kind.Scheduled and not schedule: raise ValueError("A Scheduled workflow requires a Schedule")
         if parsed is not Kind.Scheduled and schedule: raise ValueError(f"A {parsed.name} workflow cannot have a Schedule")
 
+    def _upstream_(self, uid: str, fields: dict, principal: Union[tuple, None]) -> None:
+        if "After" not in fields: return
+        fields["After"] = fields["After"] or None
+        after = fields["After"]
+        if after is None: return
+        if after == uid: raise ValueError(f"Workflow '{uid}' cannot run after itself")
+        row = self.workflow(after)
+        if row is None: raise ValueError(f"Unknown workflow '{after}'")
+        if principal is not None and self.access(row, principal) is AccessLevel.Denied: raise PermissionError(f"Workflow After: Failed · {principal[0] or 'Anonymous'} may not see {after}")
+        chain = {uid}
+        while row is not None:
+            if row["UID"] in chain: raise ValueError(f"Workflow '{after}' already runs after '{uid}' · a loop is refused")
+            chain.add(row["UID"])
+            row = self.workflow(row["After"]) if row.get("After") else None
+
     @staticmethod
     def _zoned_(zone: Union[str, None]) -> None:
         if zone and zone not in zones(): raise ValueError(f"Unknown time zone '{zone}'")
@@ -249,6 +264,7 @@ class ManagerAPI:
         if row is not None: self._permit_(WorkflowAPI, row, principal, edit=True, action="Create")
         self._owned_(WorkflowAPI, fields, row, principal)
         self._thresholds_(fields, row, principal)
+        self._upstream_(fields.get("UID"), fields, principal)
         workflow = WorkflowAPI(**fields)
         self._coherent_(workflow.Kind, workflow.Schedule)
         self._zoned_(workflow.Zone)
@@ -263,6 +279,7 @@ class ManagerAPI:
         self._permit_(WorkflowAPI, row, principal, edit=True, action="Update")
         self._owned_(WorkflowAPI, fields, row, principal)
         if "RunRole" in fields or "EditRole" in fields: self._thresholds_(fields, row, principal)
+        self._upstream_(uid, fields, principal)
         workflow = WorkflowAPI.parse(row, **fields)
         self._coherent_(workflow.Kind, workflow.Schedule)
         self._zoned_(workflow.Zone)
@@ -304,8 +321,11 @@ class ManagerAPI:
         members = self.tasks(workflow=uid, enabled=True)
         rows = {member["UID"]: member for member in members if Kind.parse(member["Kind"]) is Kind.Scheduled}
         with PostgresDatabaseAPI.attach(database=self._database_) as db:
-            edges = CoordinatorAPI.edges(db, uid)
-            cid = CycleAPI.start(db, uid, Kind.Manual.name, utc_now(), auditor or "Manager").UID
+            edges, held = CoordinatorAPI.edges(db, uid), CoordinatorAPI.held(db, row)
+            cid = CycleAPI.start(db, uid, Kind.Manual.name, utc_now(), auditor or "Manager", waiting=held is not None).UID
+        if held:
+            self._log_.info(lambda: f"Workflow Run: Waiting ({uid}) · After {held}")
+            return cid
         waits, tolerates = CoordinatorAPI.gates(rows)
         for tid in CoordinatorAPI.eligible(list(rows), edges, {}, waits=waits, tolerates=tolerates): self._spawn_(tid, cycle=cid, auditor=auditor)
         self._log_.info(lambda: f"Workflow Run: Dispatched ({uid}) · {cid}")

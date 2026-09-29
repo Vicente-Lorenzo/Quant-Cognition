@@ -156,6 +156,9 @@ class StorageAPI(LoggerAPI):
         try: self._persist_()
         finally: self._guard_.busy = False
 
+    def _pace_(self) -> None:
+        pass
+
     def _collect_(self) -> bool:
         collected = False
         while True:

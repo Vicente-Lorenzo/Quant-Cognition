@@ -24,6 +24,7 @@ class TableAPI(RefreshAPI, PageAPI):
     _EDITABLE_ = False
     _EXTENDABLE_ = True
     _NAVIGABLE_ = True
+    _FILL_ = True
 
     def ids(self) -> None:
         self.TABLE_ID = self.register(type="grid", name="grid")
@@ -75,6 +76,9 @@ class TableAPI(RefreshAPI, PageAPI):
         return None
 
     def _actions_(self) -> list:
+        return []
+
+    def _preface_(self) -> list:
         return []
 
     def _extras_(self) -> list:
@@ -129,10 +133,12 @@ class TableAPI(RefreshAPI, PageAPI):
             edition=self.EDIT_STORE_ID if self._EDITABLE_ else MISSING,
             workspace=self.endpoint,
             payload=self._workspace_(rows=[]),
-            stylename="lightweight-fill"
+            stylename="lightweight-fill" if self._FILL_ else MISSING,
+            height=MISSING if self._FILL_ else "60vh"
         )
         elements = [
             self.toolbar(buttons + self._actions_(), "table-toolbar"),
+            *self._preface_(),
             *grid.build(),
             *self._polling_(poll=not self._EDITABLE_),
         ]

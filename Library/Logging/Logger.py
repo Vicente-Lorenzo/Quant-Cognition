@@ -40,6 +40,7 @@ class LoggerAPI(ABC):
         self._enabled_: bool = True
         self._locked_: bool = False
         self._opened_: bool = False
+        self._flushed_: int = -1
         LoggerAPI.Registry.append(self)
         LoggerAPI.refresh()
 
@@ -88,6 +89,10 @@ class LoggerAPI(ABC):
 
     def _flush_(self) -> None:
         pass
+
+    def _pace_(self) -> None:
+        self._flushed_ = LoggerAPI.Second
+        self._flush_()
 
     def flush(self) -> None:
         """Pushes any buffered output to the destination, ignoring failures."""
@@ -221,5 +226,6 @@ class LoggerAPI(ABC):
                 if LoggerAPI.Terminated: return
                 self.open()
             self._write_(self._format_(level, moment, head, tail, message))
+            if self._flushed_ != LoggerAPI.Second or level._value_ <= VerboseLevel.Warning._value_: self._pace_()
         except Exception as error:
             self._fallback_(error)

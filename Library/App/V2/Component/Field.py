@@ -23,7 +23,7 @@ class FieldAPI:
     control: ControlType | str = ControlType.Text
     help: str = None
     placeholder: str = None
-    options: list = field(default_factory=list)
+    options: list | Callable = field(default_factory=list)
     default: Any = None
     minimum: int | float = None
     step: int | float = None
@@ -51,17 +51,24 @@ class FieldAPI:
     def switched(self) -> bool:
         return self.control is ControlType.Switch
 
+    @property
+    def dynamic(self) -> bool:
+        return self.control is ControlType.Select and callable(self.options)
+
     def bind(self, page) -> dict:
         return getattr(page, self.attribute)
 
     def initial(self, page):
         return self.default(page) if callable(self.default) else self.default
 
+    def choose(self, page, row: dict = None) -> list:
+        return self.options(page, row) if callable(self.options) else self.options
+
     def build(self, page, **over) -> list[Component]:
         identifier = self.bind(page)
         value = self.initial(page)
         if self.control is ControlType.Select:
-            return SelectAPI(id=identifier, options=self.options, value=value, **over).build()
+            return SelectAPI(id=identifier, options=self.choose(page), value=value, **over).build()
         if self.control is ControlType.Switch:
             return SwitchAPI(id=identifier, label=self.label, value=value, **over).build()
         if self.control is ControlType.Textarea:

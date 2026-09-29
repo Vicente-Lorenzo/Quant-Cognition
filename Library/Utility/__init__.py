@@ -1,5 +1,5 @@
 from Library.Utility.Memory import memory_to_string
-from Library.Utility.Math import equals, truncate, EPSILON
+from Library.Utility.Math import equals, truncate, quantize, EPSILON
 from Library.Utility.Datetime import (
     EPOCH,
     MILLISECOND,
@@ -165,7 +165,7 @@ __all__ = [
     "getvariable", "findvariable",
     "normalize", "cast", "contains", "format",
     "EPOCH", "MILLISECOND", "MICROSECOND", "STAMP", "datetime_to_string", "instant_to_string", "string_to_datetime", "datetime_to_timestamp", "datetime_to_epoch", "epoch_to_datetime", "timestamp_to_datetime", "datetime_to_iso", "iso_to_datetime", "parse_datetime", "seconds_to_string", "seconds_to_clock", "utc_now", "zones", "local_now", "local_to_utc", "utc_to_local",
-    "EPSILON", "equals", "truncate",
+    "EPSILON", "equals", "truncate", "quantize",
     "memory_to_string",
     "find_user", "is_windows", "is_linux", "is_mac", "is_local", "is_remote", "is_service",
     "find_ipython", "find_shell", "is_python", "is_ipython", "is_console", "is_terminal", "is_notebook", "find_notebook",

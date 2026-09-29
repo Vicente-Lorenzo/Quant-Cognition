@@ -5,7 +5,9 @@ from croniter import croniter
 from datetime import datetime, timedelta
 from typing import Union, TYPE_CHECKING
 
-from Library.Scheduler.Run import RunStatus
+from Library.Scheduler.Run import RunAPI, RunStatus
+from Library.Scheduler.Cycle import CycleAPI
+from Library.Scheduler.Workflow import WorkflowAPI
 from Library.Utility.Datetime import local_now
 from Library.Utility.Typing import MISSING, Missing
 from Library.Scheduler.Dependency import DependencyAPI
@@ -35,6 +37,15 @@ class CoordinatorAPI:
             if croniter(task, start - timedelta(seconds=1)).get_next(datetime) >= stop: return False
             start = stop
         return True
+
+    @staticmethod
+    def held(db: DatabaseAPI, workflow: dict) -> Union[str, None]:
+        upstream = workflow.get("After")
+        if not upstream: return None
+        row = db.first(schema=WorkflowAPI.Schema, table=WorkflowAPI.Table, condition='"UID" = :uid:', parameters={"uid": upstream})
+        if row is None or row["Enabled"] is False: return None
+        cycle = db.first(schema=CycleAPI.Schema, table=CycleAPI.Table, condition='"WID" = :wid:', order='"StartedAt" DESC NULLS LAST', parameters={"wid": upstream})
+        return upstream if cycle is not None and cycle["Status"] in RunAPI.Open else None
 
     @staticmethod
     def _clear_(status: Union[str, None], waits: bool, tolerates: bool) -> bool:

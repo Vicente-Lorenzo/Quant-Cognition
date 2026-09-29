@@ -82,6 +82,7 @@ Metrics = [
     EXPECTEDPIPS,
 
     GROSSPNLVALUE,
+    SPREADSPNLVALUE,
     COMMISSIONSPNLVALUE,
     SWAPSPNLVALUE,
     NETPNLVALUE,
@@ -162,6 +163,7 @@ PositionView = {
     str(PositionAPI.ID.MaxEquityRunupReturn): pl.Float64(),
     str(PositionAPI.ID.RiskAdjustedReturn): pl.Float64(),
     str(PositionAPI.ID.GrossPnL): pl.Float64(),
+    str(PositionAPI.ID.SpreadPnL): pl.Float64(),
     str(PositionAPI.ID.CommissionPnL): pl.Float64(),
     str(PositionAPI.ID.SwapPnL): pl.Float64(),
     str(PositionAPI.ID.NetPnL): pl.Float64()
@@ -187,6 +189,7 @@ TradeView = {
     str(TradeAPI.ID.MaxEquityRunupReturn): pl.Float64(),
     str(TradeAPI.ID.RiskAdjustedReturn): pl.Float64(),
     str(TradeAPI.ID.GrossPnL): pl.Float64(),
+    str(TradeAPI.ID.SpreadPnL): pl.Float64(),
     str(TradeAPI.ID.CommissionPnL): pl.Float64(),
     str(TradeAPI.ID.SwapPnL): pl.Float64(),
     str(TradeAPI.ID.NetPnL): pl.Float64()
@@ -212,6 +215,7 @@ DealView = {
     str(TradeAPI.ID.MaxEquityRunupReturn): pl.Float64(),
     str(TradeAPI.ID.RiskAdjustedReturn): pl.Float64(),
     str(TradeAPI.ID.GrossPnL): pl.Float64(),
+    str(TradeAPI.ID.SpreadPnL): pl.Float64(),
     str(TradeAPI.ID.CommissionPnL): pl.Float64(),
     str(TradeAPI.ID.SwapPnL): pl.Float64(),
     str(TradeAPI.ID.NetPnL): pl.Float64()
@@ -267,6 +271,7 @@ def aggregate_items(df: pl.DataFrame) -> pl.DataFrame:
         _weighted_(str(PositionAPI.ID.Points)),
         _weighted_(str(PositionAPI.ID.Pips)),
         _take_(str(PositionAPI.ID.GrossPnL), lambda x: x.sum()),
+        _take_(str(PositionAPI.ID.SpreadPnL), lambda x: x.sum()),
         _take_(str(PositionAPI.ID.CommissionPnL), lambda x: x.sum()),
         _take_(str(PositionAPI.ID.SwapPnL), lambda x: x.sum()),
         _take_(str(PositionAPI.ID.NetPnL), lambda x: x.sum()),
@@ -363,6 +368,7 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
     pips = str(PositionAPI.ID.Pips)
     net_pnl = str(PositionAPI.ID.NetPnL)
     gross_pnl_col = str(PositionAPI.ID.GrossPnL)
+    spread_pnl_col = str(PositionAPI.ID.SpreadPnL)
     commission_pnl_col = str(PositionAPI.ID.CommissionPnL)
     swap_pnl_col = str(PositionAPI.ID.SwapPnL)
 
@@ -390,6 +396,7 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
     loss_min_pips, loss_avg_pips, loss_max_pips = calculate_min_avg_max(loss_n, loss_df, pips)
 
     gross_pnl = calculate_sum(df, gross_pnl_col)
+    spread_pnl = calculate_sum(df, spread_pnl_col)
     comm_pnl = calculate_sum(df, commission_pnl_col)
     swap_pnl = calculate_sum(df, swap_pnl_col)
     win_pnl = calculate_sum(win_df, net_pnl)
@@ -478,6 +485,7 @@ def independent_metrics(initial_balance: float, start: date, stop: date, df: pl.
         EXPECTEDPIPS: exp_pips,
 
         GROSSPNLVALUE: gross_pnl,
+        SPREADSPNLVALUE: spread_pnl,
         COMMISSIONSPNLVALUE: comm_pnl,
         SWAPSPNLVALUE: swap_pnl,
         NETPNLVALUE: total_pnl,
@@ -562,7 +570,7 @@ def _safe_df_(df: pl.DataFrame) -> pl.DataFrame:
     float_cols = [
         str(PositionAPI.ID.UID), str(TradeAPI.ID.Position), str(PositionAPI.ID.EntryPrice), str(TradeAPI.ID.ExitPrice),
         str(PositionAPI.ID.Volume), str(PositionAPI.ID.Points), str(PositionAPI.ID.Pips),
-        str(PositionAPI.ID.GrossPnL), str(PositionAPI.ID.CommissionPnL), str(PositionAPI.ID.SwapPnL), str(PositionAPI.ID.NetPnL),
+        str(PositionAPI.ID.GrossPnL), str(PositionAPI.ID.SpreadPnL), str(PositionAPI.ID.CommissionPnL), str(PositionAPI.ID.SwapPnL), str(PositionAPI.ID.NetPnL),
         str(PositionAPI.ID.MaxEquityDrawdownPoints), str(PositionAPI.ID.MaxEquityDrawdownPips),
         str(PositionAPI.ID.MaxEquityRunupPoints), str(PositionAPI.ID.MaxEquityRunupPips),
         str(PositionAPI.ID.Return), str(PositionAPI.ID.LogReturn),

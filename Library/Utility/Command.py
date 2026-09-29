@@ -2,6 +2,7 @@ import sys
 from argparse import ArgumentParser, Namespace
 from typing import Union
 
+from Library.Utility.Progress import Phase, ProgressAPI
 from Library.Utility.Typing import MISSING, Missing
 
 class CommandAPI:
@@ -44,7 +45,10 @@ class CommandAPI:
         for stream in (sys.stdout, sys.stderr):
             if hasattr(stream, "reconfigure"): stream.reconfigure(encoding="utf-8", errors="replace")
         args = self.parse(argv)
+        ProgressAPI.phase(Phase.Running)
         try: return self.run(args) or 0
         except self._refusals_ as error:
             print(f"Rejected · {error}")
             return 1
+        finally:
+            ProgressAPI.phase(Phase.Terminating)

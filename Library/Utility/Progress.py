@@ -5,6 +5,13 @@ from typing import Union
 from typing_extensions import Self
 
 from Library.Utility.Datetime import seconds_to_clock
+from Library.Utility.Enumeration import EnumerationAPI
+
+class Phase(EnumerationAPI):
+
+    Initializing = 0
+    Running = 1
+    Terminating = 2
 
 class ProgressAPI:
 
@@ -42,6 +49,16 @@ class ProgressAPI:
     @classmethod
     def mute(cls, muted: bool = True) -> None:
         cls._MUTED_ = muted
+
+    @classmethod
+    def phase(cls, phase: Phase) -> None:
+        stream = sys.__stdout__
+        if stream is None or cls._attached_(stream): return
+        try:
+            stream.write(cls.SENTINEL + json.dumps({"phase": phase.name}, separators=(",", ":")) + "\n")
+            stream.flush()
+        except Exception:
+            pass
 
     @staticmethod
     def _attached_(stream) -> bool:

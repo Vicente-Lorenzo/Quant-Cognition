@@ -8,10 +8,11 @@ from Library.Market.Tick import TickAPI
 @dataclass
 class PointAPI(DataclassAPI):
 
-    _flatten_: ClassVar[tuple[str, ...]] = ("AskTick", "BidTick")
+    _flatten_: ClassVar[tuple[str, ...]] = ("AskTick", "BidTick", "MidTick")
 
     AskTick: Union[TickAPI, None] = None
     BidTick: Union[TickAPI, None] = None
+    MidTick: Union[TickAPI, None] = None
 
     @property
     def Ask(self) -> Union[PriceAPI, None]:
@@ -20,3 +21,7 @@ class PointAPI(DataclassAPI):
     @property
     def Bid(self) -> Union[PriceAPI, None]:
         return self.BidTick.Bid if self.BidTick is not None else None
+
+    @property
+    def Mid(self) -> Union[PriceAPI, None]:
+        return self.MidTick.Mid if self.MidTick is not None else None

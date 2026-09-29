@@ -9,9 +9,10 @@ from typing import ClassVar, TYPE_CHECKING
 
 from Library.Logging import LoggingAPI
 from Library.Database.Dataframe import pl
-from Library.Database.Database import PrimaryKey
+from Library.Database.Database import IdentityKey, PrimaryKey, ForeignKey
 from Library.Database.Datapoint import DatapointAPI
-from Library.Utility.Datetime import timestamp_to_datetime, utc_now
+from Library.Database.Query import QueryAPI
+from Library.Utility.Datetime import timestamp_to_datetime, utc_now, week_start
 
 if TYPE_CHECKING:
     from Library.Database.Database import DatabaseAPI
@@ -167,8 +168,47 @@ class CalendarAPI(DatapointAPI):
         return pl.DataFrame(rows, schema={str(name): kind.dtype if isinstance(kind, PrimaryKey) else kind for name, kind in cls().Structure.items() if name not in stamps})
 
     @classmethod
-    def _week_(cls, day: datetime) -> list:
-        return cls._rows_(cls._extract_(cls._request_(cls._url_(day))))
+    def _page_(cls, day: datetime) -> list:
+        page = cls._request_(cls._url_(day))
+        if "calendarComponentStates" not in page: raise ValueError(f"Calendar Fetch: Failed ({day:%Y-%m-%d}) · The page carries no calendar data · Blocked or changed")
+        return cls._rows_(cls._extract_(page))
+
+    @classmethod
+    def _within_(cls, rows: list, start: datetime, stop: datetime) -> list:
+        stamp = str(cls.ID.Timestamp)
+        return [row for row in rows if row[stamp] is None or start <= row[stamp] < stop]
+
+    @classmethod
+    def week(cls, day: datetime) -> list:
+        monday = week_start(day)
+        sunday = monday + timedelta(days=6)
+        return cls._within_(cls._page_(monday) + cls._page_(sunday), monday, sunday + timedelta(days=1))
+
+    @staticmethod
+    def _terms_() -> tuple:
+        return "Actual", "Forecast", "Previous", "Revision"
+
+    @classmethod
+    def store(cls, db: DatabaseAPI, rows: list, by: str) -> tuple[int, int]:
+        frame = cls._frame_(rows).filter(pl.col(str(cls.ID.UID)).is_not_null()).unique(subset=[str(cls.ID.UID)], keep="last")
+        if frame.is_empty(): return 0, 0
+        terms, now = cls._terms_(), utc_now()
+        stored = {row["UID"]: row for row in db.records(schema=cls.Schema, table=cls.Table, columns=["UID", *terms], condition='"UID" = ANY(:uids:)', parameters={"uids": frame["UID"].to_list()})}
+        changed = [row for row in frame.iter_rows(named=True) if row["UID"] not in stored or any(row[term] != stored[row["UID"]][term] for term in terms)]
+        cls.push(db, frame.with_columns(pl.lit(by).alias(str(cls.ID.UpdatedBy)), pl.lit(now).alias(str(cls.ID.UpdatedAt))))
+        if changed: db.upsert(schema=CalendarHistoryAPI.Schema, table=CalendarHistoryAPI.Table, data=[{"Calendar": row["UID"], "Timestamp": now, **{term: row[term] for term in terms}, "UpdatedAt": now, "UpdatedBy": by} for row in changed], key=["Calendar", "Timestamp"])
+        return frame.height, len(changed)
+
+    @classmethod
+    def weeks(cls, db: DatabaseAPI) -> set:
+        frame = db.executeone(QueryAPI(f"""SELECT DISTINCT DATE_TRUNC('week', "Timestamp") AS "Week" FROM "{cls.Schema}"."{cls.Table}" WHERE "Timestamp" IS NOT NULL""")).fetchall(legacy=False)
+        return set(frame["Week"].to_list()) if frame.height else set()
+
+    @classmethod
+    def incomplete(cls, db: DatabaseAPI, since: datetime, until: datetime) -> set:
+        frame = db.executeone(QueryAPI(f"""SELECT DISTINCT DATE_TRUNC('week', "Timestamp") AS "Week" FROM "{cls.Schema}"."{cls.Table}"
+            WHERE "Timestamp" BETWEEN :since: AND :until: AND "Actual" IS NULL AND "Forecast" IS NOT NULL"""), since=since, until=until).fetchall(legacy=False)
+        return set(frame["Week"].to_list()) if frame.height else set()
 
     @staticmethod
     def push(db: DatabaseAPI, data) -> None:
@@ -182,15 +222,40 @@ class CalendarAPI(DatapointAPI):
     def download(cls, db: DatabaseAPI, start: datetime, stop: datetime, by: str = "Calendar", delay: float = 3.0) -> int:
         log = LoggingAPI()
         cls(db=db, migrate=True, autoload=False)
-        total, week = 0, start - timedelta(days=start.weekday())
-        while week <= stop:
-            rows = cls._week_(week)
-            if rows:
-                frame = cls._frame_(rows).filter(pl.col(str(cls.ID.UID)).is_not_null()).unique(subset=[str(cls.ID.UID)], keep="last")
-                frame = frame.with_columns(pl.lit(by).alias(str(cls.ID.UpdatedBy)), pl.lit(utc_now()).alias(str(cls.ID.UpdatedAt)))
-                cls.push(db, frame)
-                total += frame.height
-            log.debug(lambda moment=week, count=len(rows): f"Fetch Operation: Retrieved {count} Events ({moment:%Y-%m-%d})")
-            week += timedelta(days=7)
-            if week <= stop: time.sleep(delay)
+        CalendarHistoryAPI(db=db, migrate=True, autoload=False)
+        first, last = week_start(start), week_start(stop) + timedelta(days=7)
+        total, monday = 0, first
+        while monday <= last:
+            rows = cls._within_(cls._page_(monday), first, last)
+            total += cls.store(db, rows, by)[0]
+            log.debug(lambda moment=monday, count=len(rows): f"Fetch Operation: Retrieved {count} Events ({moment:%Y-%m-%d})")
+            monday += timedelta(days=7)
+            if monday <= last: time.sleep(delay)
         return total
+
+@dataclass
+class CalendarHistoryAPI(DatapointAPI):
+
+    Schema: ClassVar[str] = CalendarAPI.Schema
+    Table: ClassVar[str] = "CalendarHistory"
+
+    UID: int | None = None
+    Calendar: int | None = None
+    Timestamp: datetime | None = None
+    Actual: str | None = None
+    Forecast: str | None = None
+    Previous: str | None = None
+    Revision: str | None = None
+
+    @property
+    def Structure(self) -> dict:
+        return {
+            self.ID.UID: IdentityKey(pl.Int64),
+            self.ID.Calendar: ForeignKey(pl.Int64, reference=CalendarAPI.reference("ON DELETE CASCADE"), primary=True),
+            self.ID.Timestamp: PrimaryKey(pl.Datetime),
+            self.ID.Actual: pl.String(),
+            self.ID.Forecast: pl.String(),
+            self.ID.Previous: pl.String(),
+            self.ID.Revision: pl.String(),
+            **super().Structure
+        }

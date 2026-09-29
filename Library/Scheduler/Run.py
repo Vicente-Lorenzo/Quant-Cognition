@@ -23,6 +23,8 @@ class RunStatus(EnumerationAPI):
     Retrying = 4
     Success = 5
     Failure = 6
+    Initializing = 7
+    Terminating = 8
 
 class RetentionLevel(EnumerationAPI):
 
@@ -48,10 +50,12 @@ class RunAPI(DatapointAPI):
     Table: ClassVar[str] = "Run"
     Enums: ClassVar[dict] = {"Status": RunStatus, "Retention": RetentionLevel}
 
-    Busy: ClassVar[tuple] = (RunStatus.Waiting.name, RunStatus.Running.name)
-    Live: ClassVar[tuple] = (RunStatus.Waiting.name, RunStatus.Running.name, RunStatus.Retrying.name)
-    Active: ClassVar[tuple] = (RunStatus.Waiting.name, RunStatus.Running.name, RunStatus.Approving.name, RunStatus.Reviewing.name, RunStatus.Retrying.name)
-    Open: ClassVar[tuple] = (RunStatus.Running.name, RunStatus.Approving.name, RunStatus.Reviewing.name)
+    Ended: ClassVar[tuple] = (RunStatus.Success.name, RunStatus.Failure.name)
+    Busy: ClassVar[tuple] = (RunStatus.Waiting.name, RunStatus.Initializing.name, RunStatus.Running.name, RunStatus.Terminating.name)
+    Live: ClassVar[tuple] = (*Busy, RunStatus.Retrying.name)
+    Active: ClassVar[tuple] = (*Busy, RunStatus.Approving.name, RunStatus.Reviewing.name, RunStatus.Retrying.name)
+    Open: ClassVar[tuple] = (*Busy, RunStatus.Approving.name, RunStatus.Reviewing.name)
+    Phases: ClassVar[tuple] = (RunStatus.Initializing.name, RunStatus.Running.name, RunStatus.Terminating.name)
 
     UID: Union[str, None] = None
     CID: Union[str, None] = None

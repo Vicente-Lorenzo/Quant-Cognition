@@ -35,8 +35,8 @@ class CycleAPI(DatapointAPI):
         }
 
     @classmethod
-    def start(cls, db: DatabaseAPI, wid: str, kind: str, started: datetime, by: str) -> Self:
+    def start(cls, db: DatabaseAPI, wid: str, kind: str, started: datetime, by: str, *, waiting: bool = False) -> Self:
         from Library.Scheduler.Run import RunStatus
-        cycle = cls(UID=uuid.uuid4().hex, WID=wid, Kind=kind, Status=RunStatus.Running.name, StartedAt=started, db=db)
+        cycle = cls(UID=uuid.uuid4().hex, WID=wid, Kind=kind, Status=(RunStatus.Waiting if waiting else RunStatus.Running).name, StartedAt=started, db=db)
         cycle.save(by=by)
         return cycle

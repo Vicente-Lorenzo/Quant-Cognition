@@ -474,8 +474,15 @@ class DatabaseAPI(ServiceAPI, DataframeAPI, ABC):
         return self._cursor_.rowcount if self._cursor_ is not None else 0
 
     def connected(self) -> bool:
-        """Checks if the database connection is active."""
-        return self._connection_ is not None and self._cursor_ is not None
+        """Checks if the database connection is active, dropping one the server has closed so the next connect opens a fresh one."""
+        if self._connection_ is None or self._cursor_ is None: return False
+        if (self._transaction_ is True and not self.autocommited()) or not self._lost_(): return True
+        self._log_.warning(lambda: "Connect Operation: Lost · The server closed the connection · Reconnecting")
+        self._connection_, self._cursor_ = None, None
+        return False
+
+    def _lost_(self) -> bool:
+        return False
 
     def disconnected(self) -> bool:
         """Checks if the database connection is closed."""

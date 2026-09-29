@@ -35,7 +35,7 @@ class SplitAPI:
         test = None
         inner_stop = stop
         if testing > 0:
-            test_start = max(start, stop - relativedelta(months=testing))
+            test_start = max(start, (stop - relativedelta(months=testing)).replace(hour=0, minute=0, second=0, microsecond=0))
             test = (test_start, stop)
             inner_stop = test_start
         folds = []

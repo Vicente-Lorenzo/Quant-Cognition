@@ -6,6 +6,7 @@ from Library.Database.Dataclass import DataclassAPI, overridefield, coerce
 from Library.Database.Datapoint import DatapointAPI
 from Library.Market.Timestamp import TimestampAPI
 from Library.Market.Point import PointAPI
+from Library.Market.Tick import TickAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Universe.Timeframe import TimeframeAPI
 from Library.Utility.Typing import MISSING
@@ -41,7 +42,7 @@ class BarAPI(DataclassAPI):
         self._timestamp_ = TimestampAPI.assign(None, timestamp)
 
     def _ticks_(self) -> list:
-        return [tick for point in (self.GapPoint, self.OpenPoint, self.HighPoint, self.LowPoint, self.ClosePoint) if point is not None for tick in (point.AskTick, point.BidTick) if tick is not None]
+        return [tick for point in (self.GapPoint, self.OpenPoint, self.HighPoint, self.LowPoint, self.ClosePoint) if point is not None for tick in (point.AskTick, point.BidTick, point.MidTick) if tick is not None]
 
     @property
     @overridefield
@@ -67,3 +68,34 @@ class BarAPI(DataclassAPI):
     @Timestamp.setter
     def Timestamp(self, val: Union[datetime, TimestampAPI, None]) -> None:
         self._timestamp_ = TimestampAPI.assign(self._timestamp_, val)
+
+    @classmethod
+    def row(cls, row: dict, security: Union[SecurityAPI, None], timeframe: Union[TimeframeAPI, None]) -> "BarAPI":
+        def tick(prefix: str) -> TickAPI:
+            return TickAPI(
+                Security=security,
+                Timestamp=row.get(f"{prefix}.Timestamp"),
+                Ask=row.get(f"{prefix}.Ask"),
+                Bid=row.get(f"{prefix}.Bid"),
+                AskBaseConversion=row.get(f"{prefix}.AskBaseConversion"),
+                BidBaseConversion=row.get(f"{prefix}.BidBaseConversion"),
+                AskQuoteConversion=row.get(f"{prefix}.AskQuoteConversion"),
+                BidQuoteConversion=row.get(f"{prefix}.BidQuoteConversion"),
+                Volume=row.get(f"{prefix}.Volume")
+            )
+        def point(prefix: str) -> PointAPI:
+            bid = tick(f"{prefix}.BidTick")
+            bid_stamp, ask_stamp, mid_stamp = row[f"{prefix}.BidTick.Timestamp"], row[f"{prefix}.AskTick.Timestamp"], row[f"{prefix}.MidTick.Timestamp"]
+            ask = bid if ask_stamp == bid_stamp else tick(f"{prefix}.AskTick")
+            return PointAPI(AskTick=ask, BidTick=bid, MidTick=bid if mid_stamp == bid_stamp else ask if mid_stamp == ask_stamp else tick(f"{prefix}.MidTick"))
+        return cls(
+            Security=security,
+            Timeframe=timeframe,
+            Timestamp=row.get("Timestamp"),
+            GapPoint=point("GapPoint"),
+            OpenPoint=point("OpenPoint"),
+            HighPoint=point("HighPoint"),
+            LowPoint=point("LowPoint"),
+            ClosePoint=point("ClosePoint"),
+            Volume=row.get("Volume")
+        )

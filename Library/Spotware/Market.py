@@ -1,11 +1,11 @@
 from typing import Union
 from datetime import datetime
 from itertools import accumulate
-from ctrader_open_api.messages.OpenApiModelMessages_pb2 import PROTO_OA_DEPTH_EVENT, ProtoOAQuoteType, ProtoOATrendbarPeriod
 
 from Library.Database.Dataframe import pd, pl
 from Library.Market.Bar import BarAPI
 from Library.Market.Tick import TickAPI
+from Library.Spotware.Messages import PROTO_OA_DEPTH_EVENT, ProtoOAQuoteType, ProtoOATrendbarPeriod
 from Library.Universe.Timeframe import TimeframeAPI
 from Library.Utility.Datetime import utc_now
 from Library.Utility.Service import ServiceAPI
@@ -57,11 +57,11 @@ class MarketAPI(ServiceAPI):
                 stamps.extend(accumulate(entry.timestamp for entry in response.tickData))
                 prices.extend(accumulate(entry.tick for entry in response.tickData))
                 if not response.hasMore: break
-                earliest = min(stamps[batch:]) - 1
+                earliest = min(stamps[batch:])
                 if earliest <= lower: break
-                upper = min(earliest, upper - 1)
+                upper = earliest
             frame = pl.DataFrame({stamp: stamps, column: prices}, schema={stamp: pl.Int64, column: pl.Int64})
-            frame = frame.select(pl.lit(sid, dtype=pl.Int64).alias("Symbol"), pl.from_epoch(pl.col(stamp), time_unit="ms"), self._api_._price_(pl.col(column))).sort(stamp)
+            frame = frame.select(pl.lit(sid, dtype=pl.Int64).alias("Symbol"), pl.from_epoch(pl.col(stamp), time_unit="ms"), self._api_._prices_(pl.col(column))).reverse().sort(stamp, maintain_order=True)
             return frame.to_pandas() if self._api_.legacy(legacy) else frame
         timer, result = super()._fetch_(callback=_fetch_)
         self._log_.info(lambda: f"Ticks Operation: Fetched {len(result)} ticks ({timer.result()})")

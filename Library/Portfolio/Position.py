@@ -11,7 +11,6 @@ from Library.Database.Dataclass import overridefield, coerce
 from Library.Utility.Enumeration import EnumerationAPI
 from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Portfolio.PnL import PnLAPI
-from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Account import AccountAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Market.Timestamp import TimestampAPI
@@ -43,7 +42,6 @@ class PositionAPI(DatapointAPI):
     Table: ClassVar[str] = "Position"
 
     UID: Union[int, None] = None
-    Session: InitVar[Union[str, SessionAPI, None]] = field(default=MISSING)
     Account: InitVar[Union[int, AccountAPI, None]] = field(default=MISSING)
     Order: InitVar[Union[int, OrderAPI, None]] = field(default=MISSING)
     Security: InitVar[Union[int, SecurityAPI, None]] = field(default=MISSING)
@@ -65,6 +63,7 @@ class PositionAPI(DatapointAPI):
     MaxEquityRunupPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
     ExitPrice: InitVar[Union[float, PriceAPI, None]] = field(default=MISSING)
     GrossPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
+    SpreadPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
     CommissionPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
     SwapPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
     NetPnL: InitVar[Union[float, PnLAPI, None]] = field(default=MISSING)
@@ -73,7 +72,6 @@ class PositionAPI(DatapointAPI):
     Label: Union[str, None] = None
     Comment: Union[str, None] = None
 
-    _session_: Union[SessionAPI, None] = field(default=None, init=False, repr=False)
     _account_: Union[AccountAPI, None] = field(default=None, init=False, repr=False)
     _order_: Union[OrderAPI, None] = field(default=None, init=False, repr=False)
     _security_: Union[SecurityAPI, None] = field(default=None, init=False, repr=False)
@@ -93,6 +91,7 @@ class PositionAPI(DatapointAPI):
     _max_equity_runup_pnl_: Union[PnLAPI, None] = field(default=None, init=False, repr=False)
     _exit_price_: Union[PriceAPI, None] = field(default=None, init=False, repr=False)
     _gross_pnl_: Union[PnLAPI, None] = field(default=None, init=False, repr=False)
+    _spread_pnl_: Union[PnLAPI, None] = field(default=None, init=False, repr=False)
     _commission_pnl_: Union[PnLAPI, None] = field(default=None, init=False, repr=False)
     _swap_pnl_: Union[PnLAPI, None] = field(default=None, init=False, repr=False)
     _net_pnl_: Union[PnLAPI, None] = field(default=None, init=False, repr=False)
@@ -102,7 +101,6 @@ class PositionAPI(DatapointAPI):
         from Library.Portfolio.Order import OrderAPI
         cols = {
             self.ID.UID: PrimaryKey(pl.Int64),
-            self.ID.Session: ForeignKey(pl.String, reference=SessionAPI.reference()),
             self.ID.Account: ForeignKey(pl.Int64, reference=AccountAPI.reference()),
             self.ID.Order: ForeignKey(pl.Int64, reference=OrderAPI.reference()),
             self.ID.Security: ForeignKey(pl.Int64, reference=SecurityAPI.reference()),
@@ -124,6 +122,7 @@ class PositionAPI(DatapointAPI):
             self.ID.MaxEquityRunupPnL: pl.Float64(),
             self.ID.ExitPrice: pl.Float64(),
             self.ID.GrossPnL: pl.Float64(),
+            self.ID.SpreadPnL: pl.Float64(),
             self.ID.CommissionPnL: pl.Float64(),
             self.ID.SwapPnL: pl.Float64(),
             self.ID.NetPnL: pl.Float64(),
@@ -141,7 +140,6 @@ class PositionAPI(DatapointAPI):
                       autoload: bool,
                       autooverload: bool,
                       autosave: bool,
-                      session: Union[str, SessionAPI, None],
                       account: Union[int, AccountAPI, None],
                       order: Union[int, OrderAPI, None],
                       security: Union[int, SecurityAPI, None],
@@ -161,11 +159,11 @@ class PositionAPI(DatapointAPI):
                       max_equity_runup_pnl: Union[float, PnLAPI, None],
                       exit_price: Union[float, PriceAPI, None],
                       gross_pnl: Union[float, PnLAPI, None],
+                      spread_pnl: Union[float, PnLAPI, None],
                       commission_pnl: Union[float, PnLAPI, None],
                       swap_pnl: Union[float, PnLAPI, None],
                       net_pnl: Union[float, PnLAPI, None]) -> None:
         from Library.Portfolio.Order import OrderAPI
-        session = coerce(session)
         account = coerce(account)
         order = coerce(order)
         security = coerce(security)
@@ -185,11 +183,11 @@ class PositionAPI(DatapointAPI):
         max_equity_runup_pnl = coerce(max_equity_runup_pnl)
         exit_price = coerce(exit_price)
         gross_pnl = coerce(gross_pnl)
+        spread_pnl = coerce(spread_pnl)
         commission_pnl = coerce(commission_pnl)
         swap_pnl = coerce(swap_pnl)
         net_pnl = coerce(net_pnl)
 
-        self._session_ = self._relate_(session, SessionAPI, db=db, autoload=True)
         self._account_ = self._relate_(account, AccountAPI, db=db, autoload=True)
         self._order_ = self._relate_(order, OrderAPI, db=db, autoload=True)
         self._security_ = self._relate_(security, SecurityAPI, db=db, autoload=True)
@@ -212,6 +210,7 @@ class PositionAPI(DatapointAPI):
         self._max_equity_runup_pnl_ = self._make_pnl_(max_equity_runup_pnl, reference=eb)
         self._exit_price_ = PriceAPI.make(exit_price, ep, contract)
         self._gross_pnl_ = self._make_pnl_(gross_pnl, reference=eb)
+        self._spread_pnl_ = self._make_pnl_(spread_pnl, reference=eb)
         self._commission_pnl_ = self._make_pnl_(commission_pnl, reference=eb)
         self._swap_pnl_ = self._make_pnl_(swap_pnl, reference=eb)
         self._net_pnl_ = self._make_pnl_(net_pnl, reference=eb)
@@ -224,14 +223,6 @@ class PositionAPI(DatapointAPI):
             self._status_ = PositionStatus.parse(row.get(self.ID.Status))
             self._direction_ = Direction.parse(row.get(self.ID.Direction))
         return row
-
-    @property
-    @overridefield
-    def Session(self) -> Union[SessionAPI, None]:
-        return self._session_
-    @Session.setter
-    def Session(self, val: Union[str, SessionAPI, None]) -> None:
-        if val is not None: self._session_ = self._relate_(val, SessionAPI, db=self._db_, autoload=True)
 
     @property
     @overridefield
@@ -312,7 +303,7 @@ class PositionAPI(DatapointAPI):
     @EntryBalance.setter
     def EntryBalance(self, val: Union[float, None]) -> None:
         self._entry_balance_ = val
-        for backing in (self._stop_loss_pnl_, self._take_profit_pnl_, self._max_equity_drawdown_pnl_, self._max_equity_runup_pnl_, self._gross_pnl_, self._commission_pnl_, self._swap_pnl_, self._net_pnl_):
+        for backing in (self._stop_loss_pnl_, self._take_profit_pnl_, self._max_equity_drawdown_pnl_, self._max_equity_runup_pnl_, self._gross_pnl_, self._spread_pnl_, self._commission_pnl_, self._swap_pnl_, self._net_pnl_):
             if backing: backing.Reference = val
 
     @property
@@ -404,6 +395,24 @@ class PositionAPI(DatapointAPI):
     @overridefield
     def GrossPips(self) -> Union[float, None]:
         return self._per_unit_(self.GrossPnL, "PipSize")
+
+    @property
+    @overridefield
+    def SpreadPnL(self) -> Union[PnLAPI, None]:
+        return self._spread_pnl_
+    @SpreadPnL.setter
+    def SpreadPnL(self, val: Union[float, PnLAPI, None]) -> None:
+        self._spread_pnl_ = self._assign_pnl_(self._spread_pnl_, val)
+
+    @property
+    @overridefield
+    def SpreadPoints(self) -> Union[float, None]:
+        return self._per_unit_(self.SpreadPnL, "PointSize")
+
+    @property
+    @overridefield
+    def SpreadPips(self) -> Union[float, None]:
+        return self._per_unit_(self.SpreadPnL, "PipSize")
 
     @property
     @overridefield

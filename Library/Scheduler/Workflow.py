@@ -32,6 +32,7 @@ class WorkflowAPI(DatapointAPI):
     Kind: Union[str, Kind, None] = None
     Schedule: Union[str, None] = None
     Zone: Union[str, None] = None
+    After: Union[str, None] = None
     Waits: Union[bool, None] = None
     Description: Union[str, None] = None
 
@@ -47,6 +48,7 @@ class WorkflowAPI(DatapointAPI):
             self.ID.Kind: pl.String(),
             self.ID.Schedule: pl.String(),
             self.ID.Zone: pl.String(),
+            self.ID.After: ForeignKey(pl.String, reference=WorkflowAPI.reference("ON DELETE SET NULL")),
             self.ID.Waits: pl.Boolean(),
             self.ID.Description: pl.String(),
             **super().Structure

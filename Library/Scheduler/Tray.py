@@ -1,6 +1,7 @@
 import sys
 import threading
 import subprocess
+from pathlib import Path
 
 from Library.Logging import LoggingAPI
 from Library.Logging.File import FileAPI
@@ -33,4 +34,14 @@ class TrayAPI(BaseTrayAPI):
         self._scheduler_.stop()
 
     def _relaunch_(self) -> None:
-        subprocess.Popen([sys.executable, str(traceback_root() / "Script" / "Scheduler.py")], cwd=str(traceback_root()), **windowless())
+        self.relaunch()
+
+    @staticmethod
+    def launcher() -> list:
+        interpreter = Path(sys.executable).resolve()
+        base = next((folder for folder in interpreter.parents if (folder / "condabin").is_dir()), interpreter.parent)
+        return [str(base / interpreter.name), str(traceback_root() / "Script" / "Scheduler.py")]
+
+    @classmethod
+    def relaunch(cls) -> None:
+        subprocess.Popen(cls.launcher(), cwd=str(traceback_root()), **windowless())

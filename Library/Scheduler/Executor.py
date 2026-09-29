@@ -172,14 +172,20 @@ class ExecutorAPI:
             run.save(by="Scheduler")
         run._db_ = None
 
-    def _beat_(self, run: RunAPI) -> None:
+    def _beat_(self, run: RunAPI) -> bool:
         run.Heartbeat = utc_now()
         try:
             with PostgresDatabaseAPI(database=self._database_) as db:
-                sql = f'UPDATE {db._target_(run.Schema, run.Table)} SET "Heartbeat" = :heartbeat:, "Progress" = :progress:, "Stage" = :stage:, "Remaining" = :remaining: WHERE "UID" = :uid:'
-                db.execute(QueryAPI(sql), [{"heartbeat": run.Heartbeat, "progress": run.Progress, "stage": run.Stage, "remaining": run.Remaining, "uid": run.UID}])
+                sql = f'UPDATE {db._target_(run.Schema, run.Table)} SET "Status" = :status:, "Heartbeat" = :heartbeat:, "Progress" = :progress:, "Stage" = :stage:, "Remaining" = :remaining: WHERE "UID" = :uid: AND "StoppedAt" IS NULL RETURNING "UID"'
+                return db.executeone(QueryAPI(sql), status=run.Status, heartbeat=run.Heartbeat, progress=run.Progress, stage=run.Stage, remaining=run.Remaining, uid=run.UID).fetchall(legacy=False).height > 0
         except Exception as error:
             self._log_.warning(lambda error=error: f"Run Heartbeat: Missed ({run.UID}) · {error}")
+            return True
+
+    @staticmethod
+    def _advance_(status: str, phase: Union[str, None]) -> str:
+        if status not in RunAPI.Phases or phase not in RunAPI.Phases or phase == RunStatus.Initializing.name: return status
+        return phase
 
     def _follow_(self, path: str, offset: int, run: RunAPI) -> int:
         try:
@@ -196,6 +202,9 @@ class ExecutorAPI:
                 marker = line.find(ProgressAPI.SENTINEL)
                 if marker < 0: continue
                 record = json.loads(line[marker + len(ProgressAPI.SENTINEL):])
+                if "phase" in record:
+                    run.Status = self._advance_(run.Status, record["phase"])
+                    continue
                 run.Progress, run.Stage, run.Remaining = record.get("fraction"), record.get("stage"), record.get("remaining")
             return offset + tail + 1
         except Exception:
@@ -209,14 +218,14 @@ class ExecutorAPI:
         run = RunAPI(UID=uuid.uuid4().hex, CID=cycle, TID=task.UID, Kind=kind, Status=RunStatus.Waiting.name, Retry=retry, Arguments=arguments, Auditor=auditor, Heartbeat=utc_now())
         self._persist_(run)
         started, clock = utc_now(), time.monotonic()
-        run.Status, run.StartedAt, run.Heartbeat = RunStatus.Running.name, started, started
+        run.Status, run.StartedAt, run.Heartbeat = RunStatus.Initializing.name, started, started
         self._persist_(run)
         self._log_.info(lambda: f"Run Launch: Started ({task.Name}) · {label} · {task.Path}")
         folder = self._tier_(False) / run.UID
         mkdir(folder, safe=False)
         log = str(folder / self.console())
         run.LID = self._open_log_(run, task, log)
-        peak, beat = 0, clock
+        peak, beat, stood = 0, clock, False
         with open(log, "wb") as sink:
             process = subprocess.Popen(self._command_(artifact, task.Path, self._scoped_(arguments, str(folder), task.Owner)), cwd=self._root_(), env=self._environment_(), stdout=sink, stderr=subprocess.STDOUT, **windowless())
             job = tether(process)
@@ -225,15 +234,19 @@ class ExecutorAPI:
                 try: monitor = psutil.Process(process.pid)
                 except psutil.Error: monitor = None
                 self._persist_(run)
-                cursor, pulse, seen = 0, clock, None
+                cursor, pulse, seen, phase = 0, clock, None, run.Status
                 while process.poll() is None:
                     if monitor is not None: peak = self._sample_(monitor, peak)
                     now = time.monotonic()
                     cursor = self._follow_(log, cursor, run)
                     moved = run.Progress != seen
-                    if now - beat >= self._heartbeat_ or (moved and now - pulse >= self._pulse_):
-                        self._beat_(run)
-                        beat, pulse, seen = now, now, run.Progress
+                    if now - beat >= self._heartbeat_ or run.Status != phase or (moved and now - pulse >= self._pulse_):
+                        if run.Status != phase: self._log_.info(lambda task=task, phase=phase, status=run.Status: f"Run Phase: [{phase}] → (Reported) → [{status}] ({task.Name})")
+                        if not self._beat_(run):
+                            self._log_.warning(lambda task=task: f"Run Heartbeat: Stood Down ({task.Name}) · Closed by the Scheduler")
+                            stood = True
+                            break
+                        beat, pulse, seen, phase = now, now, run.Progress, run.Status
                     time.sleep(self._poll_)
                 if monitor is not None: peak = self._sample_(monitor, peak)
             finally:
@@ -244,6 +257,7 @@ class ExecutorAPI:
         status = RunAPI.outcome(failure=exit_code != 0, approval=task.RequiresApproval, review=task.RequiresReview, retriable=retry < (task.MaxRetry or 0))
         run.Status, run.StoppedAt, run.Duration, run.Memory, run.ExitCode, run.Log = status, stopped, duration, peak, exit_code, log
         self._close_log_(run, log)
+        if stood: return run
         self._persist_(run)
         self._log_.info(lambda: f"Run Finish: {RunStatus.parse(run.Status).name} ({task.Name}) · {run.Duration:.2f}s · {memory_to_string(peak)} · Exit {exit_code}")
         return run

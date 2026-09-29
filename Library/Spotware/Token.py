@@ -3,7 +3,6 @@ import requests
 from typing import Union
 from urllib.parse import urlencode
 from datetime import datetime, timedelta
-from ctrader_open_api.endpoints import EndPoints
 
 from Library.Utility.Datetime import utc_now
 
@@ -16,7 +15,7 @@ class TokenAPI:
 
     @staticmethod
     def _get_(parameters: dict, timeout: float) -> Union[str, requests.Response]:
-        try: return requests.get(EndPoints.TOKEN_URI, params=parameters, timeout=timeout)
+        try: return requests.get("https://openapi.ctrader.com/apps/token", params=parameters, timeout=timeout)
         except requests.RequestException as error: return type(error).__name__
 
     @classmethod
@@ -33,7 +32,7 @@ class TokenAPI:
 
     @classmethod
     def consent(cls, client_id, redirect_uri: str, scope: str = "trading") -> str:
-        return f"{EndPoints.AUTH_URI}?{urlencode({'client_id': cls.plain(client_id), 'redirect_uri': redirect_uri, 'scope': scope})}"
+        return f"https://openapi.ctrader.com/apps/auth?{urlencode({'client_id': cls.plain(client_id), 'redirect_uri': redirect_uri, 'scope': scope})}"
 
     @classmethod
     def exchange(cls, code: str, *, client_id, client_secret, redirect_uri: str, timeout: float = 30.0) -> tuple[dict, datetime]:

@@ -1,5 +1,6 @@
 import time
 import subprocess
+import networkx as nx
 from datetime import datetime, timedelta
 from typing import Union
 
@@ -111,7 +112,7 @@ class SchedulerAPI:
 
     def _dedup_(self, db: PostgresDatabaseAPI, tid: str) -> bool:
         row = self._latest_(db, tid)
-        return row is not None and row["Status"] in RunAPI.Active
+        return row is not None and row["Status"] not in RunAPI.Ended
 
     def _is_latest_(self, db: PostgresDatabaseAPI, row: dict) -> bool:
         condition, parameters = db.where(TID=row["TID"], CID=row["CID"])
@@ -135,9 +136,9 @@ class SchedulerAPI:
         return sum(1 for tid in frame["TID"].to_list() if tid in scheduled)
 
     def _suspended_(self, now: datetime) -> bool:
-        if self._ticked_ is not None and (now - self._ticked_).total_seconds() > self._interval_ + self._lease_:
+        if self._ticked_ is not None and (now - self._ticked_).total_seconds() > 2 * self._interval_:
             self._grace_ = now + timedelta(seconds=self._lease_)
-            self._log_.warning(lambda gap=now - self._ticked_: f"Scheduler Resume: Reap Deferred · Suspended {gap.total_seconds():.0f}s · {self._lease_}s Grace")
+            self._log_.warning(lambda gap=now - self._ticked_: f"Scheduler Resume: Reap Deferred · Unobserved {gap.total_seconds():.0f}s · {self._lease_}s Grace")
         self._ticked_ = now
         return self._grace_ is not None and now < self._grace_
 
@@ -150,40 +151,58 @@ class SchedulerAPI:
             run.save(by="Reaper")
             self._log_.warning(lambda row=row, run=run: f"Run Reap: {RunStatus.parse(run.Status).name} ({row['UID']}) · Due to stale heartbeat")
 
-    def _paused_(self, db: PostgresDatabaseAPI, tasks: list[dict]) -> set:
-        governed = {task["UID"]: task["WID"] for task in tasks if task["WID"] is not None and Kind.parse(task["Kind"]) is Kind.Scheduled}
-        if not governed: return set()
-        frame = db.select(schema=RunAPI.Schema, table=RunAPI.Table, columns=["TID"], condition=f'"Status" IN ({self._members_(RunAPI.Live)})', legacy=False)
-        return {governed[tid] for tid in frame["TID"].to_list() if tid in governed}
-
     def _alive_(self, tid: str) -> bool:
         handle = self._services_.get(tid)
         return handle is not None and handle.poll() is None
 
+    def _useful_(self, db: PostgresDatabaseAPI, tid: str) -> bool:
+        if not self._alive_(tid): return False
+        row = self._latest_(db, tid)
+        return row is not None and row["Status"] == RunStatus.Running.name
+
     def _ready_(self, db: PostgresDatabaseAPI, task: dict, kinds: dict, edges: dict) -> bool:
-        if task["WID"] is None: return True
+        if task["WID"] is None or task.get("Waits") is False: return True
         if task["WID"] not in edges: edges[task["WID"]] = CoordinatorAPI.edges(db, task["WID"])
         for predecessor, successor in edges[task["WID"]]:
             if successor != task["UID"]: continue
             if kinds.get(predecessor) is Kind.Service:
-                if not self._alive_(predecessor): return False
+                if not self._useful_(db, predecessor): return False
             elif kinds.get(predecessor) is Kind.Scheduled:
                 row = self._latest_(db, predecessor)
-                if row is None or row["StartedAt"] is None or row["StartedAt"] < self._started_ or row["Status"] in RunAPI.Active: return False
+                if row is None or row["StartedAt"] is None or row["Status"] not in RunAPI.Ended: return False
+                if row["StartedAt"] < self._started_ and (row["CID"] is None or row["CID"] != (self._cycle_(db, task["WID"]) or {}).get("UID")): return False
         return True
 
-    def _service_(self, db: PostgresDatabaseAPI, tasks: list[dict], paused: set, now: datetime) -> None:
+    def _awaited_(self, db: PostgresDatabaseAPI, task: dict, kinds: dict, edges: dict) -> Union[str, None]:
+        if task["WID"] is None: return None
+        cycle = self._cycle_(db, task["WID"])
+        if cycle is None or cycle["Status"] not in RunAPI.Open: return None
+        if task["WID"] not in edges: edges[task["WID"]] = CoordinatorAPI.edges(db, task["WID"])
+        graph = CoordinatorAPI.graph([task["UID"]], edges[task["WID"]])
+        status = {run["TID"]: run["Status"] for run in sorted(self._cycle_runs_(db, cycle["UID"]), key=lambda run: (run["StartedAt"] or datetime.min, run["Retry"] or 0))}
+        for ancestor in sorted(nx.ancestors(graph, task["UID"])):
+            if kinds.get(ancestor) is Kind.Scheduled and (status.get(ancestor) is None or status[ancestor] in RunAPI.Live): return ancestor
+        return None
+
+    def _held_(self, db: PostgresDatabaseAPI, task: dict, workflows: dict) -> bool:
+        if task["WID"] is None: return False
+        if self._launch_ is not None and task["WID"] in self._launch_: return True
+        return task["WID"] in workflows and CoordinatorAPI.held(db, workflows[task["WID"]]) is not None
+
+    def _service_(self, db: PostgresDatabaseAPI, tasks: list[dict], now: datetime) -> None:
         kinds = {task["UID"]: Kind.parse(task["Kind"]) for task in tasks}
+        workflows = {row["UID"]: row for row in self._enabled_workflows_(db)}
         edges, clock = {}, time.monotonic()
         for task in tasks:
             uid = task["UID"]
             if kinds[uid] is not Kind.Service: continue
             running = self._alive_(uid)
-            if task["WID"] in paused:
+            awaited = self._awaited_(db, task, kinds, edges)
+            if awaited is not None:
                 if running:
                     terminate(self._services_[uid].pid)
                     self._suspend_(db, uid, now)
-                    self._log_.info(lambda task=task: f"Service Suspend: Stopped ({task['Name']}) · Maintenance")
+                    self._log_.info(lambda task=task, awaited=awaited: f"Service Suspend: Stopped ({task['Name']}) · Awaiting {awaited}")
                 self._services_.pop(uid, None)
                 continue
             if running: continue
@@ -198,7 +217,7 @@ class SchedulerAPI:
                     self._log_.error(lambda task=task, cap=cap: f"Service Halt: Stopped ({task['Name']}) · Crashed {cap + 1} Times")
                 continue
             if uid in self._spawns_ and clock - self._spawns_[uid] < (task["RetryDelay"] or 0): continue
-            if not self._ready_(db, task, kinds, edges): continue
+            if self._held_(db, task, workflows) or not self._ready_(db, task, kinds, edges): continue
             self._services_[uid] = self._spawn_(uid)
             self._spawns_[uid] = clock
             self._log_.info(lambda task=task: f"Service Supervise: Spawned ({task['Name']}) · {task['Path']}")
@@ -247,17 +266,24 @@ class SchedulerAPI:
         if row is None or row["Status"] not in RunAPI.Busy: return
         RunAPI.closed(row, now, Status=RunStatus.Success.name, db=db).save(by="Suspend")
 
+    def _gate_(self, db: PostgresDatabaseAPI, members: list[dict], status: dict) -> dict:
+        useful = {member["UID"]: RunStatus.Success.name for member in members if Kind.parse(member["Kind"]) is Kind.Service and self._useful_(db, member["UID"])}
+        return {**status, **useful}
+
     def _advance_(self, db: PostgresDatabaseAPI, workflow: dict, members: list[dict], edges: list, now: datetime, budget: int) -> int:
         launch = self._launch_ is not None and workflow["UID"] in self._launch_
         kind = Kind.parse(workflow["Kind"])
         if not isinstance(kind, Kind): kind = Kind.Scheduled if workflow["Schedule"] else Kind.Manual
         cycle = self._cycle_(db, workflow["UID"])
         opened = cycle is not None and cycle["Status"] in RunAPI.Open
+        held = CoordinatorAPI.held(db, workflow)
         if kind is Kind.Service:
             if launch: self._launch_.discard(workflow["UID"])
+            state = (RunStatus.Waiting if held else RunStatus.Running).name
             if not opened:
-                CycleAPI.start(db, workflow["UID"], Kind.Service.name, utc_now(), "Scheduler")
-                self._log_.info(lambda workflow=workflow: f"Cycle Open: Running ({workflow['Name']}) · Resident")
+                CycleAPI.start(db, workflow["UID"], Kind.Service.name, utc_now(), "Scheduler", waiting=held is not None)
+                self._log_.info(lambda workflow=workflow, state=state: f"Cycle Open: {state} ({workflow['Name']}) · Resident")
+            elif cycle["Status"] != state: self._record_(db, cycle, state, None, "Scheduler")
             return budget
         tids = [member["UID"] for member in members]
         rows = {member["UID"]: member for member in members if Kind.parse(member["Kind"]) is Kind.Scheduled}
@@ -273,12 +299,18 @@ class SchedulerAPI:
             self._reset_(db, cycle, now)
             opened = False
         if opened:
+            if launch: self._launch_.discard(workflow["UID"])
+            if cycle["Status"] == RunStatus.Waiting.name:
+                if held: return budget
+                self._record_(db, cycle, RunStatus.Running.name, None, "Scheduler")
+                cycle = {**cycle, "Status": RunStatus.Running.name}
+                self._log_.info(lambda workflow=workflow: f"Cycle Waiting: Released ({workflow['Name']}) · Upstream Finished")
             runs = sorted(self._cycle_runs_(db, cycle["UID"]), key=lambda run: (run["StartedAt"] or datetime.min, run["Retry"] or 0))
             status = {run["TID"]: run["Status"] for run in runs}
-            pending = any(state in RunAPI.Active for state in status.values())
+            pending = any(state not in RunAPI.Ended for state in status.values())
             manual = Kind.parse(cycle["Kind"]) is Kind.Manual
             timely = {uid: manual or self._timely_(row["Schedule"], cycle["StartedAt"], now, workflow.get("Zone")) for uid, row in rows.items()}
-            ready = [tid for tid in CoordinatorAPI.eligible(tids, edges, status, waits=waits, tolerates=tolerates) if tid in rows and timely[tid]]
+            ready = [tid for tid in CoordinatorAPI.eligible(tids, edges, self._gate_(db, members, status), waits=waits, tolerates=tolerates) if tid in rows and timely[tid]]
             waiting = any(status.get(uid) is None and not timely[uid] for uid in rows)
             dispatched = 0
             for tid in ready:
@@ -300,7 +332,10 @@ class SchedulerAPI:
             if launch: self._launch_.discard(workflow["UID"])
             start = self._previous_(workflow["Schedule"], now, workflow.get("Zone")) if workflow["Schedule"] and not launch else now
             if cycle is not None and cycle["StartedAt"] is not None and start <= cycle["StartedAt"]: start = now
-            fresh = CycleAPI.start(db, workflow["UID"], Kind.Scheduled.name, start, "Scheduler")
+            fresh = CycleAPI.start(db, workflow["UID"], Kind.Scheduled.name, start, "Scheduler", waiting=held is not None)
+            if held:
+                self._log_.info(lambda workflow=workflow, held=held: f"Cycle Open: Waiting ({workflow['Name']}) · After {held}")
+                return budget
             self._log_.info(lambda workflow=workflow: f"Cycle Open: Running ({workflow['Name']})")
             for tid in CoordinatorAPI.eligible(tids, edges, {}, waits=waits, tolerates=tolerates):
                 if tid not in rows: continue
@@ -311,6 +346,17 @@ class SchedulerAPI:
                 budget -= 1
                 self._log_.info(lambda workflow=workflow, tid=tid: f"Cycle Launch: Started ({workflow['Name']}) · {tid}")
         return budget
+
+    def _launchable_(self, db: PostgresDatabaseAPI, tasks: list[dict]) -> set:
+        upstream = {row["UID"]: row["After"] for row in self._enabled_workflows_(db)}
+        launch = {task["WID"] for task in tasks if task["WID"] is not None and Kind.parse(task["Kind"]) is Kind.Service}
+        frontier = list(launch)
+        while frontier:
+            after = upstream.get(frontier.pop())
+            if after in upstream and after not in launch:
+                launch.add(after)
+                frontier.append(after)
+        return launch
 
     def _workflows_(self, db: PostgresDatabaseAPI, tasks: list[dict], now: datetime, budget: int) -> int:
         for workflow in self._enabled_workflows_(db):
@@ -325,8 +371,8 @@ class SchedulerAPI:
         with PostgresDatabaseAPI(database=self._database_) as db:
             if not self._suspended_(now): self._reap_(db, now)
             tasks = self._tasks_(db)
-            if self._launch_ is None: self._launch_ = {task["WID"] for task in tasks if task["WID"] is not None and Kind.parse(task["Kind"]) is Kind.Service}
-            self._service_(db, tasks, self._paused_(db, tasks), now)
+            if self._launch_ is None: self._launch_ = self._launchable_(db, tasks)
+            self._service_(db, tasks, now)
             scheduled = {task["UID"] for task in tasks if Kind.parse(task["Kind"]) is Kind.Scheduled}
             budget = self._concurrency_ - self._busy_(db, scheduled)
             budget = self._retry_(db, now, budget)
@@ -344,9 +390,15 @@ class SchedulerAPI:
 
     def stop(self) -> None:
         self._running_ = False
-        for handle in list(self._services_.values()):
-            if handle is not None and handle.poll() is None: terminate(handle.pid)
+        stopped = [uid for uid, handle in self._services_.items() if handle is not None and handle.poll() is None]
+        for uid in stopped: terminate(self._services_[uid].pid)
         self._services_.clear()
+        if stopped:
+            try:
+                with PostgresDatabaseAPI(database=self._database_) as db:
+                    for uid in stopped: self._suspend_(db, uid, utc_now())
+            except Exception as error:
+                self._log_.warning(lambda error=error: f"Scheduler Stop: Suspend Failed · Due to {error}")
         if self._listener_ is not None:
             try: self._listener_.disconnect()
             except Exception: pass

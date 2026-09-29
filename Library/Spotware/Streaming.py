@@ -1,7 +1,7 @@
 from typing import Callable, Union
-from ctrader_open_api.messages.OpenApiModelMessages_pb2 import PROTO_OA_DEPTH_EVENT, PROTO_OA_SPOT_EVENT, ProtoOATrendbarPeriod
 
 from Library.Market.Tick import TickAPI
+from Library.Spotware.Messages import PROTO_OA_DEPTH_EVENT, PROTO_OA_SPOT_EVENT, ProtoOATrendbarPeriod
 from Library.Utility.Service import ServiceAPI
 from Library.Utility.Typing import MISSING, Missing
 

@@ -48,7 +48,7 @@ class ServiceAPI(ABC):
                 try: atexit.register(self._guard_)
                 except Exception: pass
             timer.stop()
-            self._log_.info(lambda: f"Connect Operation: Connected ({timer.result()})")
+            self._log_.debug(lambda: f"Connect Operation: Connected ({timer.result()})")
             return self
         except Exception as e:
             self._log_.failure(lambda e=e: f"Connect Operation: Failed · {e}")
@@ -79,7 +79,7 @@ class ServiceAPI(ABC):
                 try: atexit.unregister(self._guard_)
                 except Exception: pass
                 self._guard_ = None
-            self._log_.info(lambda: f"Disconnect Operation: Disconnected ({timer.result()})")
+            self._log_.debug(lambda: f"Disconnect Operation: Disconnected ({timer.result()})")
             return self
         except Exception as e:
             self._log_.failure(lambda e=e: f"Disconnect Operation: Failed · {e}")

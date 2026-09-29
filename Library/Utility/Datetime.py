@@ -144,3 +144,6 @@ def saturday_shift_datetime(shift: int, today: Union[datetime, None] = None) -> 
 
 def sunday_shift_datetime(shift: int, today: Union[datetime, None] = None) -> datetime:
     return weekday_shift_datetime(wd=Weekday.Sunday, shift=shift, today=today)
+
+def week_start(moment: datetime) -> datetime:
+    return monday_shift_datetime(0, moment).replace(hour=0, minute=0, second=0, microsecond=0)

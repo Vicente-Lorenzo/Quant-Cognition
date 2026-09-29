@@ -751,6 +751,7 @@
                 for (var entry = 0; entry < tabs.children.length; entry++) tabs.children[entry].classList.add("off");
                 tab.classList.remove("off");
                 draw(sheet);
+                requestAnimationFrame(fit);
             };
         });
         if (sheets.length < 2) tabs.style.display = "none";

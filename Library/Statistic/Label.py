@@ -65,6 +65,7 @@ EXPECTEDTRADE = "Expected Trade [Forward]"
 EXPECTEDPOINTS = "Expected Points [Forward]"
 EXPECTEDPIPS = "Expected Pips [Forward]"
 GROSSPNLVALUE = "Gross Profit/Loss"
+SPREADSPNLVALUE = "Spreads Profit/Loss"
 COMMISSIONSPNLVALUE = "Commissions Profit/Loss"
 SWAPSPNLVALUE = "Swaps Profit/Loss"
 NETPNLVALUE = "Net Profit/Loss"
@@ -190,6 +191,7 @@ __all__ = [
     "EXPECTEDPOINTS",
     "EXPECTEDPIPS",
     "GROSSPNLVALUE",
+    "SPREADSPNLVALUE",
     "COMMISSIONSPNLVALUE",
     "SWAPSPNLVALUE",
     "NETPNLVALUE",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Union
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
@@ -11,7 +12,7 @@ from Library.Database.Query import QueryAPI
 from Library.Market.Tick import TickAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Universe.Timeframe import TimeframeAPI
-from Library.Utility.Datetime import datetime_to_epoch, epoch_to_datetime, utc_to_local
+from Library.Utility.Datetime import datetime_to_epoch, epoch_to_datetime, utc_now
 from Library.Utility.Memory import BlockAPI
 from Library.Utility.Typing import MISSING, Missing
 
@@ -135,8 +136,10 @@ class TapeAPI:
     @classmethod
     def _previous_(cls, db: PostgresDatabaseAPI, security: int, low: int) -> Union[tuple, None]:
         floor, _ = cls._bounds_(security)
-        frame = db.executeone(QueryAPI(f'SELECT "Ask", "Bid" FROM {cls._table_()} WHERE "UID" < :low: AND "UID" >= :floor: ORDER BY "UID" DESC LIMIT 1'), low=low, floor=floor).fetchall(legacy=False)
-        return frame.row(0) if frame.height else None
+        for bottom in dict.fromkeys((max(floor, low - 3_600_000), floor)):
+            frame = db.executeone(QueryAPI(f'SELECT "Ask", "Bid" FROM {cls._table_()} WHERE "UID" < :low: AND "UID" >= :floor: ORDER BY "UID" DESC LIMIT 1'), low=low, floor=bottom).fetchall(legacy=False)
+            if frame.height: return frame.row(0)
+        return None
 
     def _decode_(self, part: tuple, offset: int, lead: Union[tuple, None]) -> None:
         rows, sizes = part
@@ -169,7 +172,7 @@ class TapeAPI:
 
     def _extremes_(self, pool: ThreadPoolExecutor, starts: np.ndarray) -> dict:
         count, size = starts.size, self.Stamps.size
-        columns = {name: np.empty(count, dtype=np.int64) for name in ("HighAsk", "HighBid", "LowAsk", "LowBid")}
+        columns = {name: np.empty(count, dtype=np.int64) for name in ("HighAsk", "HighBid", "HighMid", "LowAsk", "LowBid", "LowMid")}
         columns["Volume"] = np.empty(count)
         bounds = np.linspace(0, count, min(count, 64) + 1).astype(np.int64)
         def work(index: int) -> None:
@@ -178,27 +181,29 @@ class TapeAPI:
             low, high = int(starts[first]), int(starts[last]) if last < count else size
             local = starts[first:last] - low
             lengths = np.diff(np.append(local, high - low))
-            for name, values, reduce in (("HighAsk", self.Asks, np.maximum), ("HighBid", self.Bids, np.maximum), ("LowAsk", self.Asks, np.minimum), ("LowBid", self.Bids, np.minimum)):
-                columns[name][first:last] = self._first_(values[low:high], reduce, local, lengths) + low
+            asks, bids = self.Asks[low:high], self.Bids[low:high]
+            mids = asks + bids
+            for name, values, reduce in (("HighAsk", asks, np.maximum), ("HighBid", bids, np.maximum), ("HighMid", mids, np.maximum), ("LowAsk", asks, np.minimum), ("LowBid", bids, np.minimum), ("LowMid", mids, np.minimum)):
+                columns[name][first:last] = self._first_(values, reduce, local, lengths) + low
             columns["Volume"][first:last] = np.add.reduceat(self.Volumes[low:high], local)
         list(pool.map(work, range(bounds.size - 1)))
         return columns
 
-    def _ticks_(self, prefix: str, index: np.ndarray, base: Union[tuple, None, Missing], quote: Union[tuple, None, Missing]) -> dict:
+    def _ticks_(self, index: np.ndarray, base: Union[tuple, None, Missing], quote: Union[tuple, None, Missing]) -> dict:
         stamps = self.Stamps[index]
         columns = {
-            f"{prefix}.UID": (self.Security << TickAPI.bits()) | stamps,
-            f"{prefix}.Volume": self.Volumes[index],
-            f"{prefix}.Security": np.full(index.size, self.Security, dtype=np.int64),
-            f"{prefix}.Timestamp": self._moments_(stamps),
-            f"{prefix}.Ask": self.Asks[index],
-            f"{prefix}.Bid": self.Bids[index]
+            "UID": (self.Security << TickAPI.bits()) | stamps,
+            "Volume": self.Volumes[index],
+            "Security": np.full(index.size, self.Security, dtype=np.int64),
+            "Timestamp": self._moments_(stamps),
+            "Ask": self.Asks[index],
+            "Bid": self.Bids[index]
         }
         for side, source in (("Base", base), ("Quote", quote)):
             if source is MISSING:
-                columns[f"{prefix}.Ask{side}Conversion"] = columns[f"{prefix}.Bid{side}Conversion"] = pl.repeat(None, index.size, dtype=pl.Float64, eager=True)
+                columns[f"Ask{side}Conversion"] = columns[f"Bid{side}Conversion"] = pl.repeat(None, index.size, dtype=pl.Float64, eager=True)
             else:
-                columns[f"{prefix}.Ask{side}Conversion"], columns[f"{prefix}.Bid{side}Conversion"] = self.rates(stamps, source)
+                columns[f"Ask{side}Conversion"], columns[f"Bid{side}Conversion"] = self.rates(stamps, source)
         return columns
 
     @classmethod
@@ -217,6 +222,99 @@ class TapeAPI:
         if not compressed.height or not compressed.item():
             db.executeone(QueryAPI(f'''ALTER TABLE {table} SET (timescaledb.compress, timescaledb.compress_segmentby = '"Security"', timescaledb.compress_orderby = '"UID"')'''))
         db.executeone(QueryAPI(f'ALTER TABLE {table} ALTER COLUMN "UID" SET STATISTICS 1000, ALTER COLUMN "Security" SET STATISTICS 1000'))
+
+    @staticmethod
+    def merge(asks: pl.DataFrame, bids: pl.DataFrame, carry: Union[tuple, None] = None) -> pl.DataFrame:
+        stamp = str(TickAPI.ID.Timestamp)
+        def side(frame: pl.DataFrame, column: str, other: str) -> pl.DataFrame:
+            return frame.select(pl.col(stamp).dt.epoch("ms").alias("Stamp"), (pl.col(column) * 100_000).round().cast(pl.Int64).alias(column), pl.lit(None, dtype=pl.Int64).alias(other)).select("Stamp", "Ask", "Bid")
+        merged = pl.concat([side(asks, "Ask", "Bid"), side(bids, "Bid", "Ask")]).sort("Stamp", maintain_order=True)
+        merged = merged.group_by("Stamp", maintain_order=True).agg(pl.col("Ask").drop_nulls().last(), pl.col("Bid").drop_nulls().last())
+        merged = merged.with_columns(pl.col("Ask").forward_fill(), pl.col("Bid").forward_fill())
+        if carry is not None: merged = merged.with_columns(pl.col("Ask").fill_null(int(carry[0])), pl.col("Bid").fill_null(int(carry[1])))
+        return merged.drop_nulls()
+
+    @classmethod
+    def previous(cls, db: PostgresDatabaseAPI, security: int, moment: datetime) -> Union[tuple, None]:
+        return cls._previous_(db, security, TickAPI.encode(security, moment))
+
+    @classmethod
+    def _rows_(cls, security: int, frame: pl.DataFrame, by: str) -> pl.DataFrame:
+        return frame.select((pl.col("Stamp") + (security << TickAPI.bits())).alias("UID"), pl.lit(security, dtype=pl.Int32).alias("Security"), "Ask", "Bid",
+                            pl.lit(f"{utc_now():%Y-%m-%d %H:%M:%S.%f}+00:00").alias("UpdatedAt"), pl.lit(by).alias("UpdatedBy"))
+
+    @staticmethod
+    def _covering_(db: PostgresDatabaseAPI, low: int, high: int) -> list[str]:
+        frame = db.executeone(QueryAPI("""SELECT QUOTE_IDENT(chunk_schema) || '.' || QUOTE_IDENT(chunk_name) AS "Chunk" FROM timescaledb_information.chunks WHERE hypertable_schema = 'Market' AND hypertable_name = 'Tick'
+            AND range_start_integer <= :high: AND range_end_integer > :low:"""), low=low, high=high).fetchall(legacy=False)
+        return frame["Chunk"].to_list() if frame.height else []
+
+    @classmethod
+    def write(cls, db: PostgresDatabaseAPI, security: int, frame: pl.DataFrame, start: datetime, stop: datetime, by: str) -> int:
+        low, high = datetime_to_epoch(start), datetime_to_epoch(stop)
+        frame = frame.filter((pl.col("Stamp") >= low) & (pl.col("Stamp") < high))
+        first, last = TickAPI.encode(security, start), TickAPI.encode(security, stop) - 1
+        db.executeone(QueryAPI("BEGIN"))
+        try:
+            for chunk in cls._covering_(db, first, last): db.executeone(QueryAPI(f'DELETE FROM {chunk} WHERE "UID" BETWEEN :low: AND :high:'), low=first, high=last)
+            if not frame.is_empty(): db.copy(schema="Market", table="Tick", data=cls._rows_(security, frame, by))
+            db.executeone(QueryAPI("COMMIT"))
+        except BaseException:
+            with suppress(Exception): db.executeone(QueryAPI("ROLLBACK"))
+            raise
+        return frame.height
+
+    @classmethod
+    def extend(cls, db: PostgresDatabaseAPI, security: int, frame: pl.DataFrame, start: datetime, by: str) -> int:
+        frame = frame.filter(pl.col("Stamp") >= datetime_to_epoch(start))
+        if not frame.is_empty(): db.upsert(schema="Market", table="Tick", data=cls._rows_(security, frame, by), key=["UID"])
+        return frame.height
+
+    @classmethod
+    def compress(cls, db: PostgresDatabaseAPI, security: int, before: datetime) -> int:
+        low, high = TickAPI.encode(security, datetime(1970, 1, 1)), TickAPI.encode(security, before)
+        chunks = db.executeone(QueryAPI("""SELECT QUOTE_IDENT(chunk_schema) || '.' || QUOTE_IDENT(chunk_name) AS "Chunk" FROM timescaledb_information.chunks WHERE hypertable_schema = 'Market' AND hypertable_name = 'Tick'
+            AND NOT is_compressed AND range_start_integer >= :low: AND range_end_integer <= :high: ORDER BY range_start_integer"""), low=low, high=high).fetchall(legacy=False)
+        for chunk in chunks["Chunk"].to_list() if chunks.height else []: db.executeone(QueryAPI(f"SELECT compress_chunk('{chunk}', if_not_compressed => TRUE)"))
+        return chunks.height
+
+    @staticmethod
+    def route(db: PostgresDatabaseAPI, security: SecurityAPI, asset: str, account: str) -> Union[tuple[int, bool, str], None]:
+        if asset == account: return None
+        for ticker, inverse in ((f"{asset}{account}", False), (f"{account}{asset}", True)):
+            if ticker == security.Ticker.UID: return security.UID, inverse, ticker
+            condition, parameters = db.where(Provider=security.Provider.UID, Ticker=ticker)
+            row = db.first(schema=SecurityAPI.Schema, table=SecurityAPI.Table, condition=condition, parameters=parameters)
+            if row is not None: return row[str(SecurityAPI.ID.UID)], inverse, ticker
+        raise ValueError(f"Conversion {asset} to {account}: Failed · Due to no direct pair ({asset}{account} or {account}{asset})")
+
+    @classmethod
+    def compose(cls, first: tuple[TapeAPI, bool], second: tuple[TapeAPI, bool]) -> TapeAPI:
+        stamps = np.union1d(first[0].Stamps, second[0].Stamps)
+        (first_asks, first_bids), (second_asks, second_bids) = cls.rates(stamps, first), cls.rates(stamps, second)
+        known = ~(np.isnan(first_asks) | np.isnan(second_asks))
+        return TapeAPI(Security=0, Stamps=stamps[known], Asks=(first_asks * second_asks)[known], Bids=(first_bids * second_bids)[known], Volumes=np.zeros(int(known.sum())))
+
+    @classmethod
+    def legs(cls, db: PostgresDatabaseAPI, security: SecurityAPI, asset: str, account: str, bridge: Union[str, Missing] = MISSING) -> list[tuple[int, bool, str]]:
+        try: route = cls.route(db, security, asset, account)
+        except ValueError:
+            if not bridge or bridge in (asset, account): raise
+            return [leg for pair in ((asset, bridge), (bridge, account)) for leg in cls.legs(db, security, *pair)]
+        return [] if route is None else [route]
+
+    @classmethod
+    def source(cls, db: PostgresDatabaseAPI, security: SecurityAPI, asset: str, account: str, tape: TapeAPI, workers: int = 32, shelf: Union[dict, Missing] = MISSING, bridge: Union[str, Missing] = MISSING) -> Union[tuple[TapeAPI, bool], None]:
+        try: route = cls.route(db, security, asset, account)
+        except ValueError:
+            if not bridge or bridge in (asset, account): raise
+            return cls.compose(cls.source(db, security, asset, bridge, tape, workers, shelf), cls.source(db, security, bridge, account, tape, workers, shelf)), False
+        if route is None: return None
+        uid, inverse, ticker = route
+        if uid == security.UID: return tape, inverse
+        source = cls.read(db, uid, epoch_to_datetime(int(tape.Stamps[0])) - timedelta(days=7), epoch_to_datetime(int(tape.Stamps[-1])), workers=workers, shelf=(shelf or {}).get(uid, MISSING))
+        if not source.Stamps.size or source.Stamps[0] > tape.Stamps[0]: raise ValueError(f"Conversion {asset} to {account}: Failed · Due to no {ticker} quote before {epoch_to_datetime(int(tape.Stamps[0]))}")
+        return source, inverse
 
     @staticmethod
     def securities(db: PostgresDatabaseAPI) -> list[int]:
@@ -275,20 +373,9 @@ class TapeAPI:
         asks, bids = np.where(found, tape.Asks[index], np.nan), np.where(found, tape.Bids[index], np.nan)
         return (1.0 / bids, 1.0 / asks) if inverse else (asks, bids)
 
-    @staticmethod
-    def rollovers(start: datetime, stop: datetime, zone: str = "America/New_York", roll: int = 17) -> list[datetime]:
-        opened, closed = utc_to_local(start, zone), utc_to_local(stop, zone)
-        moment = opened.replace(hour=roll, minute=0, second=0, microsecond=0, fold=0)
-        if moment <= opened: moment += timedelta(days=1)
-        rolls = []
-        while moment < closed:
-            rolls.append(moment)
-            moment += timedelta(days=1)
-        return rolls
-
     def bars(self, timeframe: TimeframeAPI, zone: str = "America/New_York", roll: int = 17, workers: int = 32) -> pl.DataFrame:
         size = self.Stamps.size
-        if not size: return pl.DataFrame(schema={"Timestamp": pl.Int64, **{name: pl.Int64 for name in ("Gap", "Open", "HighAsk", "HighBid", "LowAsk", "LowBid", "Close")}, "Volume": pl.Float64})
+        if not size: return pl.DataFrame(schema={"Timestamp": pl.Int64, **{name: pl.Int64 for name in ("Gap", "Open", "HighAsk", "HighBid", "HighMid", "LowAsk", "LowBid", "LowMid", "Close")}, "Volume": pl.Float64})
         shift = (24 - roll) * 3_600_000
         with ThreadPoolExecutor(max_workers=workers) as pool:
             if timeframe.IsTick:
@@ -309,8 +396,10 @@ class TapeAPI:
             "Open": starts,
             "HighAsk": extremes["HighAsk"],
             "HighBid": extremes["HighBid"],
+            "HighMid": extremes["HighMid"],
             "LowAsk": extremes["LowAsk"],
             "LowBid": extremes["LowBid"],
+            "LowMid": extremes["LowMid"],
             "Close": np.append(starts[1:], size) - 1,
             "Volume": extremes["Volume"]
         })
@@ -346,10 +435,11 @@ class TapeAPI:
             reach *= 2
 
     def materialize(self, bars: pl.DataFrame, timeframe: TimeframeAPI, base: Union[tuple, None, Missing] = MISSING, quote: Union[tuple, None, Missing] = MISSING) -> pl.DataFrame:
-        columns = {}
-        for point, ask, bid in (("GapPoint", "Gap", "Gap"), ("OpenPoint", "Open", "Open"), ("HighPoint", "HighAsk", "HighBid"), ("LowPoint", "LowAsk", "LowBid"), ("ClosePoint", "Close", "Close")):
-            columns.update(self._ticks_(f"{point}.AskTick", bars[ask].to_numpy(), base, quote))
-            columns.update(self._ticks_(f"{point}.BidTick", bars[bid].to_numpy(), base, quote))
+        ticks, columns = {}, {}
+        for point, sources in (("GapPoint", ("Gap", "Gap", "Gap")), ("OpenPoint", ("Open", "Open", "Open")), ("HighPoint", ("HighAsk", "HighBid", "HighMid")), ("LowPoint", ("LowAsk", "LowBid", "LowMid")), ("ClosePoint", ("Close", "Close", "Close"))):
+            for side, source in zip(("AskTick", "BidTick", "MidTick"), sources):
+                if source not in ticks: ticks[source] = self._ticks_(bars[source].to_numpy(), base, quote)
+                columns.update((f"{point}.{side}.{name}", values) for name, values in ticks[source].items())
         columns["Volume"] = bars["Volume"]
         columns["Security"] = np.full(bars.height, self.Security, dtype=np.int64)
         columns["Timeframe"] = pl.repeat(timeframe.UID, bars.height, dtype=pl.String, eager=True)

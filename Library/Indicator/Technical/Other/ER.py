@@ -1,6 +1,6 @@
 from typing import Union
 
-from Library.Database.Dataframe import pl
+from Library.Database.Dataframe import np, pl
 from Library.Indicator.Technical.Technical import NeutralSignalAPI, TechnicalAPI, TechnicalType
 
 class EfficiencyRatioAPI(NeutralSignalAPI):
@@ -9,10 +9,10 @@ class EfficiencyRatioAPI(NeutralSignalAPI):
     Parameters = (TechnicalAPI.PERIOD.revised(default=24), TechnicalAPI.MODE)
 
     def _ratio_(self, data: Union[pl.Series, pl.DataFrame]) -> Union[float, None]:
-        window = data.tail(self.Window + 1)
-        if len(window) < self.Window + 1: return None
+        window = data.tail(self.Window + 1).to_numpy()
+        if window.size < self.Window + 1: return None
         direction = abs(float(window[-1]) - float(window[0]))
-        volatility = float(window.diff().abs().sum())
+        volatility = float(np.add.accumulate(np.abs(np.diff(window)))[-1])
         return direction / volatility if volatility > 0.0 else 0.0
 
     def batch(self, data: Union[pl.Series, pl.DataFrame]) -> pl.DataFrame:

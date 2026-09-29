@@ -120,6 +120,7 @@ class SchedulerCommandAPI(CommandAPI):
         create.add_argument("--schedule", default=None)
         create.add_argument("--kind", default=None, choices=Kind.names())
         create.add_argument("--zone", default=None)
+        create.add_argument("--after", default=None)
         create.add_argument("--description", default=None)
         create.add_argument("--disabled", action="store_true")
         create.add_argument("--no-waits", action="store_true")
@@ -131,6 +132,7 @@ class SchedulerCommandAPI(CommandAPI):
         update.add_argument("--description", default=SUPPRESS)
         update.add_argument("--schedule", default=SUPPRESS)
         update.add_argument("--zone", default=SUPPRESS)
+        update.add_argument("--after", default=SUPPRESS)
         for action in ("delete", "show", "enable", "disable", "run"):
             workflow.add_parser(action).add_argument("--uid", required=True)
         workflow.add_parser("list").add_argument("--enabled", action="store_true")

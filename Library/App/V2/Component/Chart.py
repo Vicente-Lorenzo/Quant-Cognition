@@ -69,6 +69,12 @@ class NetworkAPI(PlotlyAPI):
         return graph
 
     @classmethod
+    def depth(cls, nodes: list, edges: list, graph=MISSING) -> int:
+        if graph is MISSING: graph = cls.graph(nodes, edges) if nodes else None
+        if graph is None: return 1 if nodes else 0
+        return 1 + max((graph.nodes[node]["layer"] for node in graph.nodes()), default=0)
+
+    @classmethod
     def span(cls, nodes: list, edges: list, graph=MISSING) -> int:
         if graph is MISSING: graph = cls.graph(nodes, edges) if nodes else None
         if graph is None: return len(nodes)
@@ -83,14 +89,28 @@ class NetworkAPI(PlotlyAPI):
         if graph is None: return [node["uid"] for node in nodes]
         return sorted(graph.nodes(), key=lambda node: (graph.nodes[node]["layer"], node))
 
+    @staticmethod
+    def stacked(graph) -> dict:
+        import networkx as nx
+        position, offset = {}, 0
+        for members in sorted(nx.weakly_connected_components(graph), key=lambda members: (-len(members), min(members))):
+            layers = {}
+            for node in sorted(members, key=lambda node: graph.nodes[node]["layer"]): layers.setdefault(graph.nodes[node]["layer"], []).append(node)
+            width = max(len(row) for row in layers.values())
+            for layer in sorted(layers):
+                row = sorted(layers[layer], key=lambda node: (sum(position[parent][0] for parent in graph.predecessors(node)) / max(1, graph.in_degree(node)), node))
+                for index, node in enumerate(row): position[node] = (offset + (width - len(row)) / 2 + index, float(layer))
+            offset += width
+        return position
+
     @classmethod
-    def render(cls, nodes: list, edges: list, tint: str = "#868993", fallback: str = "#565a66", placeholder: str = "No nodes", graph=MISSING):
+    def render(cls, nodes: list, edges: list, tint: str = "#868993", fallback: str = "#565a66", placeholder: str = "No nodes", graph=MISSING, align: str = "vertical"):
         import networkx as nx
         import plotly.graph_objects as go
         if not nodes: return cls.blank(placeholder, tint)
         if graph is MISSING: graph = cls.graph(nodes, edges)
         if graph is None: return cls.blank("Dependency cycle detected", tint)
-        position = nx.multipartite_layout(graph, subset_key="layer")
+        position = cls.stacked(graph) if align == "horizontal" else nx.multipartite_layout(graph, subset_key="layer")
         ordered = list(graph.nodes())
         catalog = {node["uid"]: node for node in nodes}
         horizontal, vertical, arrows = [], [], []
@@ -106,10 +126,10 @@ class NetworkAPI(PlotlyAPI):
         figure = go.Figure()
         figure.add_trace(go.Scatter(x=horizontal, y=vertical, mode="lines", hoverinfo="skip", line={"color": tint, "width": 2.4, "shape": "spline"}))
         figure.add_trace(go.Scatter(x=[position[node][0] for node in ordered], y=[position[node][1] for node in ordered],
-                                    mode="markers+text", customdata=ordered, hoverinfo="none",
+                                    mode="markers+text", customdata=[[node, catalog[node].get("link") or ""] for node in ordered], hoverinfo="none",
                                     marker={"size": 26, "color": [catalog[node].get("color") or fallback for node in ordered],
-                                            "line": {"width": 0}, "symbol": "circle", "opacity": 1},
-                                    text=ordered, textposition="bottom center",
+                                            "line": {"width": 0}, "symbol": [catalog[node].get("symbol") or "circle" for node in ordered], "opacity": 1},
+                                    text=[catalog[node].get("label") or node for node in ordered], textposition="middle right" if align == "horizontal" else "bottom center",
                                     textfont={"color": tint, "size": 11.5, "family": "inherit"}))
         figure.update_layout(annotations=arrows)
         return cls.layout(figure, tint, reversed=True)

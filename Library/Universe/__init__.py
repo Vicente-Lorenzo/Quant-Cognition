@@ -2,7 +2,6 @@ from Library.Universe.Universe import UniverseAPI
 from Library.Universe.Category import CategoryAPI
 from Library.Universe.Provider import (
     ProviderAPI,
-    Provider,
     Platform
 )
 from Library.Universe.Ticker import (
@@ -17,17 +16,20 @@ from Library.Universe.Contract import (
     CommissionMode,
     SwapType,
     SwapMode,
+    TradingMode,
     VariantType,
     ExerciseType,
     PayoffType
 )
-from Library.Universe.Security import SecurityAPI
+from Library.Universe.Security import (
+    SecurityAPI,
+    SecurityStatus
+)
 
 __all__ = [
     "UniverseAPI",
     "CategoryAPI",
     "ProviderAPI",
-    "Provider",
     "Platform",
     "TickerAPI",
     "ContractType",
@@ -38,8 +40,10 @@ __all__ = [
     "CommissionMode",
     "SwapType",
     "SwapMode",
+    "TradingMode",
     "VariantType",
     "ExerciseType",
     "PayoffType",
+    "SecurityStatus",
     "SecurityAPI"
 ]

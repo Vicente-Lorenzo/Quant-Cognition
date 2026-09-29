@@ -12,11 +12,13 @@
         plot._dag = {uid: null, stamp: 0};
         plot.on("plotly_click", function (event) {
             var point = (event.points || [])[0];
-            var name = point ? (point.customdata || point.text) : null;
+            var data = point ? point.customdata : null;
+            var name = Array.isArray(data) ? data[0] : (data || (point ? point.text : null));
+            var link = Array.isArray(data) && data[1] ? String(data[1]) : null;
             var uid = name ? String(name) : null;
             if (!uid) return;
             var now = performance.now();
-            if (plot._dag.uid === uid && now - plot._dag.stamp < DELAY) return open(host, uid);
+            if (plot._dag.uid === uid && now - plot._dag.stamp < DELAY) return link ? window.location.assign(link) : open(host, uid);
             plot._dag = {uid: uid, stamp: now};
         });
     };

@@ -104,11 +104,12 @@ class ShutdownActionAPI(_EmptyActionAPI_):
 class InitActionAPI(ActionAPI):
 
     ActionID: ClassVar[ActionID] = ActionID.Init
-    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i')
+    _binary_: ClassVar[BinaryAPI] = BinaryAPI('B', 'i', 's')
     ProcessID: int
+    Label: str
 
     def serialize(self) -> bytes:
-        return self._binary_.pack(self.ActionID.value, self.ProcessID)
+        return self._binary_.pack(self.ActionID.value, self.ProcessID, self.Label)
 
 @dataclass(slots=True)
 class ExecutionActionAPI(_EmptyActionAPI_):

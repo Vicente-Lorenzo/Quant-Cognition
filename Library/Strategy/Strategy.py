@@ -6,6 +6,7 @@ from typing import Any, ClassVar, NamedTuple, Union, TYPE_CHECKING
 
 from Library.Engine import MachineAPI
 from Library.Logging import LoggingAPI
+from Library.Market.Price import PriceMode
 from Library.Protocol.Action import Stream, OpenBuyPositionActionAPI, OpenSellPositionActionAPI
 from Library.Protocol.Update import (
     UpdateID,
@@ -42,16 +43,10 @@ if TYPE_CHECKING:
 
 class StrategyType(EnumerationAPI):
 
-    Download = 1
     NNFX = 2
     DDPG = 3
     Trend = 4
-
-class Transform(NamedTuple):
-
-    Market: bool = True
-    Indicators: bool = True
-    Portfolio: bool = True
+    Test = 5
 
 class Threshold(NamedTuple):
 
@@ -60,8 +55,8 @@ class Threshold(NamedTuple):
 
 class StrategyAPI(ABC):
 
-    Transform = Transform()
     Subscription = Stream.All
+    Pricing = PriceMode.Bid
     Recording: bool = False
     Defaults: ClassVar[dict] = {}
 
@@ -194,7 +189,6 @@ class StrategyAPI(ABC):
         raise NotImplementedError
 
     def strategy_management(self) -> Union[MachineAPI, None]:
-        transform = self.Transform
         strategy_engine = MachineAPI(Name="Strategy Management", Events=len(UpdateID))
 
         initialization = strategy_engine.state(name="Initialization")
@@ -208,18 +202,15 @@ class StrategyAPI(ABC):
             update.Portfolio.Security = update.Security
 
         def init_indicators(update: CompleteUpdateAPI):
-            if transform.Indicators:
-                update.Technical.init_data(update.Market)
-                update.Fundamental.init_data(update.Market)
-                update.Sentimental.init_data(update.Market)
+            update.Technical.init_data(update.Market)
+            update.Fundamental.init_data(update.Market)
+            update.Sentimental.init_data(update.Market)
 
         def update_bar(update: BarUpdateAPI):
-            if transform.Indicators:
-                update.Technical.update_data(update.Market)
-                update.Fundamental.update_data(update.Market)
-                update.Sentimental.update_data(update.Market)
-            if transform.Portfolio:
-                update.Portfolio.update_data(update.Bar)
+            update.Technical.update_data(update.Market)
+            update.Fundamental.update_data(update.Market)
+            update.Sentimental.update_data(update.Market)
+            update.Portfolio.update_data(update.Bar)
 
         def update_target(update: TickUpdateAPI):
             update.Portfolio.update_data(update.Tick)

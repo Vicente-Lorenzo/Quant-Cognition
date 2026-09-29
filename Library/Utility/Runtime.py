@@ -159,6 +159,22 @@ def find_host() -> str:
     try: return socket.gethostname() or "Unknown"
     except OSError: return "Unknown"
 
+def find_revision(root: Union[str, Path]) -> dict:
+    try:
+        commit = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True, timeout=10, **windowless()).stdout.strip()
+        changes = subprocess.run(["git", "-C", str(root), "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, timeout=60, **windowless()).stdout.strip()
+    except (OSError, subprocess.SubprocessError): return {}
+    return {"Commit": commit, "Modified": bool(changes)} if commit else {}
+
+def find_packages(*names: str) -> dict:
+    import platform
+    from importlib.metadata import PackageNotFoundError, version
+    found = {"Python": platform.python_version()}
+    for name in names:
+        try: found[name] = version(name)
+        except PackageNotFoundError: found[name] = None
+    return found
+
 def split_arguments(arguments: Union[str, None]) -> list[str]:
     tokens = _ARGUMENT_.findall(arguments) if arguments else []
     if any(token[0] in "\"'" and (len(token) == 1 or token[-1] != token[0]) for token in tokens): raise ValueError("No closing quotation")

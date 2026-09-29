@@ -9,7 +9,6 @@ from Library.Portfolio.Portfolio import PortfolioAPI
 from Library.Database.Dataclass import overridefield, coerce
 from Library.Utility.Enumeration import EnumerationAPI
 from Library.Portfolio.Position import PositionAPI
-from Library.Portfolio.Session import SessionAPI
 from Library.Portfolio.Account import AccountAPI
 from Library.Universe.Security import SecurityAPI
 from Library.Universe.Contract import ContractAPI
@@ -47,7 +46,6 @@ class OrderAPI(DatapointAPI):
     Table: ClassVar[str] = "Order"
 
     UID: Union[int, None] = None
-    Session: InitVar[Union[str, SessionAPI, None]] = field(default=MISSING)
     Account: InitVar[Union[int, AccountAPI, None]] = field(default=MISSING)
     Position: InitVar[Union[int, PositionAPI, None]] = field(default=MISSING)
     Security: InitVar[Union[int, SecurityAPI, None]] = field(default=MISSING)
@@ -70,7 +68,7 @@ class OrderAPI(DatapointAPI):
     ClientOrderID: Union[str, None] = None
     IsStopOut: Union[bool, None] = None
     TrailingStopLoss: Union[bool, None] = None
-    StopTriggerMethod: Union[int, None] = None
+    StopTriggerMethod: Union[str, None] = None
     EntryTimestamp: InitVar[Union[datetime, TimestampAPI, None]] = field(default=MISSING)
     ExpirationTimestamp: InitVar[Union[datetime, TimestampAPI, None]] = field(default=MISSING)
     LastUpdateTimestamp: InitVar[Union[datetime, TimestampAPI, None]] = field(default=MISSING)
@@ -78,7 +76,6 @@ class OrderAPI(DatapointAPI):
     Label: Union[str, None] = None
     Comment: Union[str, None] = None
 
-    _session_: Union[SessionAPI, None] = field(default=None, init=False, repr=False)
     _account_: Union[AccountAPI, None] = field(default=None, init=False, repr=False)
     _position_: Union[PositionAPI, None] = field(default=None, init=False, repr=False)
     _security_: Union[SecurityAPI, None] = field(default=None, init=False, repr=False)
@@ -101,7 +98,6 @@ class OrderAPI(DatapointAPI):
     def Structure(self) -> dict:
         return {
             self.ID.UID: PrimaryKey(pl.Int64),
-            self.ID.Session: ForeignKey(pl.String, reference=SessionAPI.reference()),
             self.ID.Account: ForeignKey(pl.Int64, reference=AccountAPI.reference()),
             self.ID.Position: pl.Int64(),
             self.ID.Security: ForeignKey(pl.Int64, reference=SecurityAPI.reference()),
@@ -124,7 +120,7 @@ class OrderAPI(DatapointAPI):
             self.ID.BaseSlippagePrice: pl.Float64(),
             self.ID.SlippageInPoints: pl.Int32(),
             self.ID.TrailingStopLoss: pl.Boolean(),
-            self.ID.StopTriggerMethod: pl.Int32(),
+            self.ID.StopTriggerMethod: pl.String(),
             self.ID.ClosingOrder: pl.Boolean(),
             self.ID.IsStopOut: pl.Boolean(),
             self.ID.ClientOrderID: pl.String(),
@@ -139,7 +135,6 @@ class OrderAPI(DatapointAPI):
                       autoload: bool,
                       autooverload: bool,
                       autosave: bool,
-                      session: Union[str, SessionAPI, None],
                       account: Union[int, AccountAPI, None],
                       position: Union[int, PositionAPI, None],
                       security: Union[int, SecurityAPI, None],
@@ -157,7 +152,6 @@ class OrderAPI(DatapointAPI):
                       expiration_timestamp: Union[datetime, TimestampAPI, None],
                       last_update_timestamp: Union[datetime, TimestampAPI, None],
                       contract: Union[ContractAPI, None]) -> None:
-        session = coerce(session)
         account = coerce(account)
         position = coerce(position)
         security = coerce(security)
@@ -176,7 +170,6 @@ class OrderAPI(DatapointAPI):
         last_update_timestamp = coerce(last_update_timestamp)
         contract = coerce(contract)
 
-        self._session_ = self._relate_(session, SessionAPI, db=db, autoload=True)
         self._account_ = self._relate_(account, AccountAPI, db=db, autoload=True)
         self._position_ = self._relate_(position, PositionAPI, db=db, migrate=migrate, autoload=False, autooverload=False)
         self._security_ = self._relate_(security, SecurityAPI, db=db, migrate=migrate, autoload=autoload, autooverload=autooverload)
@@ -205,14 +198,6 @@ class OrderAPI(DatapointAPI):
             self._order_status_ = OrderStatus.parse(row.get(self.ID.OrderStatus))
             self._time_in_force_ = TimeInForce.parse(row.get(self.ID.TimeInForce))
         return row
-
-    @property
-    @overridefield
-    def Session(self) -> Union[SessionAPI, None]:
-        return self._session_
-    @Session.setter
-    def Session(self, val: Union[str, SessionAPI, None]) -> None:
-        if val is not None: self._session_ = self._relate_(val, SessionAPI, db=self._db_, autoload=True)
 
     @property
     @overridefield

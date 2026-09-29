@@ -2,17 +2,16 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import ClassVar, Any, Union, TYPE_CHECKING
+from typing import ClassVar, Any, Callable, Union, TYPE_CHECKING
 
 from Library.Database.Dataframe import np
 from Library.Engine import MachineAPI
 from Library.Indicator.Indicator import IndicatorAPI
 from Library.Indicator.Technical.Technical import TechnicalType
 from Library.Portfolio import PositionType
-from Library.Portfolio.Sizing import SizingMode, calculate_fixed_fractional_volume, calculate_normalized_volume
+from Library.Portfolio.Sizing import calculate_conversion_rate, calculate_fixed_fractional_volume, calculate_normalized_volume
 from Library.Protocol.Action import Stream, OpenBuyPositionActionAPI, OpenSellPositionActionAPI
 from Library.Protocol.Update import UpdateID, BarUpdateAPI
-from Library.Strategy.Model.Action import ActionAPI
 from Library.Strategy.Model.Normalizer import NormalizerAPI
 from Library.Strategy.Model.Observation import ObservationAPI
 from Library.Strategy.Model.Reward import RewardAPI, RewardType
@@ -83,7 +82,8 @@ class DDPGObservationAPI(ObservationAPI):
                       initial capital; EquityDrawdown (bounded [-1, 0], bypass) and
                       EquityRunup.
       Position (5)  — open-trade state, scale-free. Signed exposure (volume divided by
-                      the exposure-reference MaxVolume, bounded [-1, 1], bypass);
+                      the order sizer's reference volume, the risk-sized volume a full
+                      action trades, bounded [-1, 1], bypass);
                       unrealized return, max drawdown and max runup as fractions of the
                       entry balance; duration as ln(1 + bars held).
       Market (6)    — bar geometry and microstructure, Bid series. Gap/High/Low/Close as
@@ -104,9 +104,9 @@ class DDPGObservationAPI(ObservationAPI):
     _ATR_ = "ATR"
     _EFFICIENCY_ = "ER"
 
-    def __init__(self, action: ActionAPI, momentum_features: tuple, overlap_features: tuple, normalize_window: int, window: int, account: bool = True) -> None:
+    def __init__(self, reference: Callable[[BarUpdateAPI], float], momentum_features: tuple, overlap_features: tuple, normalize_window: int, window: int, account: bool = True) -> None:
         super().__init__(normalizer=DDPGNormalizationAPI(normalize_window), window=window)
-        self._action_ = action
+        self._reference_ = reference
         self._account_state_ = account
         self._momentum_features_ = tuple(momentum_features)
         self._overlap_features_ = tuple(overlap_features)
@@ -169,7 +169,7 @@ class DDPGObservationAPI(ObservationAPI):
         else:
             self._position_bars_ += 1
         signed = position.Direction.value * position.Volume
-        maximum = self._action_.maximum_volume(update)
+        maximum = self._reference_(update)
         entry = position.EntryBalance or 0.0
         net = position.NetPnL.PnL if position.NetPnL and position.NetPnL.PnL is not None else 0.0
         drawdown = position.MaxEquityDrawdownPnL.PnL if position.MaxEquityDrawdownPnL and position.MaxEquityDrawdownPnL.PnL is not None else 0.0
@@ -250,38 +250,49 @@ class DDPGStrategyAPI(StrategyAPI):
                 'ATRScale': [1.5],
                 'RiskPercentage': [1.0],
             },
-            'PortfolioManagement': None,
+            'PortfolioManagement': {
+                'PositionMode': ['Netting'],
+            },
             'RiskManagement': None,
             'SentimentalManagement': None,
             'SignalManagement': {
                 'ActorLearningRate': [0.0001],
-                'ActorRegularization': [0.01],
+                'ActorRegularization': [0.001],
                 'BatchSize': [64],
                 'CriticLearningRate': [0.001],
                 'DirectionalEntryThreshold': None,
                 'DirectionalExitThreshold': None,
-                'DiscountFactor': [0.99],
+                'DiscountFactor': [0.9995],
                 'GradientClip': [1.0],
-                'HiddenShape1': [400],
-                'HiddenShape2': [300],
+                'HiddenShape1': [64],
+                'HiddenShape2': [32],
                 'MemorySize': [1000000],
                 'NormalizeWindow': [200],
                 'ObservationWindow': [1],
                 'SoftUpdate': [0.001],
                 'VolumeEntryThreshold': None,
                 'VolumeExitThreshold': None,
+                'DecisionSchedule': ['D1'],
+                'AccountFeatures': [False],
+                'RebalanceThreshold': [0.2],
             },
             'TechnicalManagement': {
                 'ATR': ['ATR', 14],
-                'ER': ['ER', 21],
-                'MAFast': ['SMA', 5],
-                'MAMedium': ['SMA', 21],
-                'MASlow': ['SMA', 63],
-                'MOMFast': ['ROC', 5],
-                'MOMMedium': ['ROC', 21],
-                'MOMSlow': ['ROC', 63],
+                'ER': ['ER', 120],
+                'MAFast': ['SMA', 24],
+                'MAMedium': ['SMA', 120],
+                'MASlow': ['SMA', 480],
+                'MOMFast': ['ROC', 24],
+                'MOMMedium': ['ROC', 120],
+                'MOMSlow': ['ROC', 480],
                 'RVFast': ['RV', 16],
-                'RVSlow': ['RV', 63],
+                'RVSlow': ['RV', 480],
+                'MOMRegime': ['ROC', 1440],
+                'MOMEpoch': ['ROC', 2880],
+                'MARegime': ['SMA', 1440],
+                'MAEpoch': ['SMA', 2880],
+                'MACycle': ['SMA', 4320],
+                'MAEra': ['SMA', 5040],
             },
         },
         "Learning": {
@@ -290,43 +301,57 @@ class DDPGStrategyAPI(StrategyAPI):
                 'ATRScale': [1.5],
                 'RiskPercentage': [1.0],
             },
-            'PortfolioManagement': None,
+            'PortfolioManagement': {
+                'PositionMode': ['Netting'],
+            },
             'RiskManagement': None,
             'SentimentalManagement': None,
             'SignalManagement': {
                 'ActorLearningRate': [0.0001],
-                'ActorRegularization': [0.01],
+                'ActorRegularization': [0.001],
                 'BatchSize': [64],
                 'CriticLearningRate': [0.001],
                 'DirectionalEntryThreshold': None,
                 'DirectionalExitThreshold': None,
-                'DiscountFactor': [0.99],
+                'DiscountFactor': [0.9995],
                 'GradientClip': [1.0],
-                'HiddenShape1': [400],
-                'HiddenShape2': [300],
+                'HiddenShape1': [64],
+                'HiddenShape2': [32],
                 'MemorySize': [1000000],
                 'NormalizeWindow': [200],
                 'ObservationWindow': [1],
                 'SoftUpdate': [0.001],
                 'VolumeEntryThreshold': None,
                 'VolumeExitThreshold': None,
+                'DecisionSchedule': ['D1'],
+                'AccountFeatures': [False],
+                'RebalanceThreshold': [0.0],
+                'WarmupSteps': [3000],
+                'RewardScale': [1000.0],
+                'RewardClip': [1.0],
             },
             'TechnicalManagement': {
                 'ATR': ['ATR', 14],
-                'ER': ['ER', 21],
-                'MAFast': ['SMA', 5],
-                'MAMedium': ['SMA', 21],
-                'MASlow': ['SMA', 63],
-                'MOMFast': ['ROC', 5],
-                'MOMMedium': ['ROC', 21],
-                'MOMSlow': ['ROC', 63],
+                'ER': ['ER', 120],
+                'MAFast': ['SMA', 24],
+                'MAMedium': ['SMA', 120],
+                'MASlow': ['SMA', 480],
+                'MOMFast': ['ROC', 24],
+                'MOMMedium': ['ROC', 120],
+                'MOMSlow': ['ROC', 480],
                 'RVFast': ['RV', 16],
-                'RVSlow': ['RV', 63],
+                'RVSlow': ['RV', 480],
+                'MOMRegime': ['ROC', 1440],
+                'MOMEpoch': ['ROC', 2880],
+                'MARegime': ['SMA', 1440],
+                'MAEpoch': ['SMA', 2880],
+                'MACycle': ['SMA', 4320],
+                'MAEra': ['SMA', 5040],
             },
         },
     }
 
-    Subscription = Stream.All & ~Stream.Tick
+    Subscription = Stream.BarClosed | Stream.Position | Stream.Trade
 
     Agent: Union[AgentAPI, None] = None
     Weights: Union[Path, None] = None
@@ -342,7 +367,6 @@ class DDPGStrategyAPI(StrategyAPI):
     LAYOUT: str = "Observation.json"
 
     _ACTION_SHAPE_: int = 1
-    _EXPOSURE_REFERENCE_: float = 100.0
     _DEFAULT_WEIGHTS_: Path = inspect_persistent("Models")
 
     def __init__(self,
@@ -367,8 +391,7 @@ class DDPGStrategyAPI(StrategyAPI):
         self._rebalance_threshold_ = float(self.SignalManagement.first("RebalanceThreshold", 0.0))
         self._account_features_enabled_ = bool(self.SignalManagement.first("AccountFeatures", True))
         momentum, overlap = self._observation_features_()
-        self._action_ = ActionAPI(mode=SizingMode.Balance, maximum=float(self.SignalManagement.first("ExposureReference", self._EXPOSURE_REFERENCE_)), deadzone=0.0)
-        self._observation_ = DDPGObservationAPI(action=self._action_, momentum_features=momentum, overlap_features=overlap, normalize_window=self.SignalManagement.NormalizeWindow[0], window=self.SignalManagement.ObservationWindow[0], account=self._account_features_enabled_)
+        self._observation_ = DDPGObservationAPI(reference=self._reference_volume_, momentum_features=momentum, overlap_features=overlap, normalize_window=self.SignalManagement.NormalizeWindow[0], window=self.SignalManagement.ObservationWindow[0], account=self._account_features_enabled_)
         self._reward_ = RewardAPI(kind=self.Reward, scale=float(self.SignalManagement.first("RewardScale", self.RewardScale)), clip=float(self.SignalManagement.first("RewardClip", self.RewardClip)))
         self._agent_: AgentAPI = self.Agent if self.Agent is not None else self._create_agent_((self._observation_.shape(),), self._ACTION_SHAPE_)
         if self.Agent is None and not self.Training and (self.Weights is not None or self._configured_weights_ is not None):
@@ -442,7 +465,7 @@ class DDPGStrategyAPI(StrategyAPI):
         atr = update.Technical.ATR.Result.last()
         contract = update.Portfolio.Security.Contract
         if not atr or atr <= 0.0 or not contract or not contract.PipSize: return 0.0
-        return calculate_fixed_fractional_volume(self._risk_percentage_, self._atr_scale_ * atr / contract.PipSize, update.Portfolio.Account, contract)
+        return calculate_fixed_fractional_volume(self._risk_percentage_, self._atr_scale_ * atr / contract.PipSize, update.Portfolio.Account, contract, calculate_conversion_rate(update.Bar.ClosePoint.BidTick.BidQuoteConversion))
 
     def _target_(self, update: BarUpdateAPI, action: float) -> Union[float, None]:
         if self._neutral_(action, self.DirectionalEntryThreshold): return None

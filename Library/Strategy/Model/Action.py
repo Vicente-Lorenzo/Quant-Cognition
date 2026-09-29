@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from Library.Portfolio.Sizing import SizingMode, calculate_normalized_volume
+from Library.Portfolio.Sizing import SizingMode, calculate_conversion_rate, calculate_normalized_volume, calculate_notional_volume
 
 if TYPE_CHECKING:
     from Library.Protocol.Update import BarUpdateAPI
@@ -16,8 +16,8 @@ class ActionAPI:
       - Deadzone: |a| < deadzone -> 0 (flat) to suppress churn from tiny actions.
       - MaxVolume from the sizing config (scale-free, configurable):
           Volume   -> maximum is a raw volume cap (units).
-          Balance  -> maximum is a percent of account balance, converted to a notional
-                      and divided by price to obtain a volume.
+          Balance  -> maximum is a percent of account balance, a notional in the account
+                      currency, divided by the base-to-account rate to obtain a volume.
       - target = floor-normalize(|a| * MaxVolume) to the contract volume step, clamped
         to [VolumeMin, VolumeMax]; below VolumeMin -> 0 (flat). The sign of the target
         follows the sign of a. The Risk sizing mode is stop-based money management and
@@ -35,10 +35,7 @@ class ActionAPI:
     def maximum_volume(self, update: BarUpdateAPI) -> float:
         contract = update.Portfolio.Security.Contract
         if self._mode_ == SizingMode.Balance:
-            balance = update.Portfolio.Account.Balance if update.Portfolio.Account else 0.0
-            price = update.Bar.ClosePoint.Bid.Price
-            if not balance or not price: return 0.0
-            return calculate_normalized_volume(balance * (self._maximum_ / 100.0) / price, contract)
+            return calculate_notional_volume(self._maximum_, update.Portfolio.Account, contract, calculate_conversion_rate(update.Bar.ClosePoint.BidTick.BidBaseConversion))
         return calculate_normalized_volume(self._maximum_, contract)
 
     def target(self, action: float, update: BarUpdateAPI) -> float:
