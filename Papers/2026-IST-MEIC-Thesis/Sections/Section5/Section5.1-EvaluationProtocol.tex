@@ -2,10 +2,10 @@
 \section{Evaluation Protocol}
 \label{Section:EvaluationProtocol}
 
-The account, the cost model and the execution engine are described in \Cref{Section:TradingFramework} and are not repeated here. Three things are specific to the evaluation.
+The account, the cost model and the execution engine are described in \Cref{Section:TradingFramework} and are not repeated here. Three points are specific to the evaluation.
 
-The window runs from 1 January 2015 to 1 January 2026, eleven years. It starts a year after the data begins so that the slowest indicator in the observation, a moving average over five thousand hourly bars, is fully warmed before the first decision.
+The evaluation window runs from 1 January 2015 to 1 January 2026, which is eleven years. It starts one year after the data begins. This way the slowest indicator in the observation, a moving average over five thousand hourly bars, is fully warmed up before the first decision.
 
-Every result is measured from five different starting balances, of $9\,900$, $10\,000$, $10\,050$, $10\,100$ and $10\,200$ euros. A trading strategy that depends on its entry point is not a strategy, and small changes to the opening balance shift the rounding of every position size and therefore the whole sequence of trades. Reporting one balance would hide that sensitivity, so the tables give the mean across the five and the spread around it.
+Every result is measured from five different starting balances: $9\,900$, $10\,000$, $10\,050$, $10\,100$ and $10\,200$ euros. A strategy whose result depends on its starting point is not a real strategy. Small changes to the opening balance change the rounding of every position size, and so they change the whole sequence of trades. Reporting one balance would hide this sensitivity. The tables therefore give the mean across the five balances and the dispersion around it.
 
-Position size is a per-pair parameter, chosen by the sweep described in \Cref{Section:ExperimentalProcedure} rather than fixed in advance. Five pairs use the reference risk of \Cref{Equation:PositionSizing}, NZD/USD uses one and a half times it, and USD/JPY uses a smaller fraction of it. Position size scales the size of every trade but does not change the policy that chooses them, so the ratios, the alpha and beta decomposition and the correlation structure are all unaffected by it.
+Position size is a parameter set for each pair separately. It was chosen by the sweep described in \Cref{Section:ExperimentalProcedure} and was not fixed in advance. Five pairs use the reference risk of \Cref{Equation:PositionSizing}. NZD/USD uses one and a half times that risk, and USD/JPY uses a smaller fraction of it. Position size scales every trade, but it does not change the policy that chooses the trades. The ratios, the alpha and beta decomposition and the correlation structure are therefore not affected by it.

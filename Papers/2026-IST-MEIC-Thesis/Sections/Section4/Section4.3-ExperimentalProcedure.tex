@@ -2,11 +2,11 @@
 \section{Experimental Procedure: Training, Selection and Deployment}
 \label{Section:ExperimentalProcedure}
 
-An agent design does not by itself produce a result. Training is stochastic, so the same configuration run twice gives two different policies, and a procedure is needed that says which of them is reported and on what grounds. This subsection describes that procedure, the criteria applied at each stage, and the two deployment decisions that sit between the learned policy and the orders actually sent.
+An agent design does not produce a result on its own. Training is stochastic, so the same configuration run twice gives two different policies. A procedure is needed to decide which of them is reported, and why. This section describes that procedure, the criteria used at each stage, and the two deployment decisions that sit between the learned policy and the orders actually sent.
 
 \subsection{Training Procedure: Seeds, Episodes and Data Splits}
 
-The eleven-year window is divided once into three consecutive periods. Writing the window as $[T_0, T_3)$ with $T_0$ the first of January 2015 and $T_3$ the first of January 2026:
+The eleven-year window is split once into three consecutive periods. The window is written as $[T_0, T_3)$, where $T_0$ is the first of January 2015 and $T_3$ is the first of January 2026:
 
 \begin{equation}
 \underbrace{[T_0, T_1)}_{\text{training, 9 years}} \quad
@@ -15,14 +15,14 @@ The eleven-year window is divided once into three consecutive periods. Writing t
 \label{Equation:Split}
 \end{equation}
 
-Weights are updated on the training period only. The validation period decides which state of the network is kept. The testing period is visited once, after every other decision has been taken. Within that split, a single training run proceeds as follows. A seed fixes the network initialisation, the exploration noise stream and the order in which the replay buffer is sampled, and so determines the entire run. The agent then performs $30$ episodes, an episode being one pass over the training period. Weights are not reset between episodes: the run is a single trajectory of $30$ passes, and the network at the start of episode $n+1$ is the network at the end of episode $n$. After each episode the agent is evaluated once over the validation period with learning disabled, and that evaluation is reduced to a single number by the Calmar ratio, its annualised return divided by its maximum drawdown. Writing $f_n$ for that value and $g_n$ for an eligibility test defined below, the state retained after episode $n$ is
+Weights are updated on the training period only. The validation period decides which state of the network is kept. The testing period is used once, after every other decision has been made. Within this split, a single training run works as follows. A seed fixes the network initialisation, the stream of exploration noise and the order in which the replay buffer is sampled, so it determines the whole run. The agent then runs $30$ episodes. An episode is one pass over the training period. Weights are not reset between episodes. The run is a single sequence of $30$ passes, and the network at the start of episode $n+1$ is the network at the end of episode $n$. After each episode the agent is evaluated once over the validation period, with learning turned off. This evaluation is reduced to a single number, the Calmar ratio, which is the annualised return divided by the maximum drawdown. Let $f_n$ be this value and let $g_n$ be an eligibility test defined below. The state kept after episode $n$ is
 
 \begin{equation}
 \theta^{\star} \leftarrow \theta_n \quad \text{if} \quad (g_n \wedge \neg g^{\star}) \;\vee\; \left(g_n = g^{\star} \wedge f_n > f^{\star}\right)
 \label{Equation:KeepBest}
 \end{equation}
 
-which keeps an eligible episode over an ineligible one regardless of score, and otherwise keeps the higher score within the same eligibility class. The saved state is a copy: the run continues training from $\theta_n$, not from $\theta^{\star}$, so a later episode is never restarted from an earlier checkpoint. The eligibility test $g_n$ rejects policies that are degenerate rather than merely poor. An episode qualifies only if it opened at least ten positions, spent at least three hundred bars on each side of the market, and held its weaker side for at least $30\%$ of the time it held its stronger one. A policy that never trades, or that is long for the entire period, can produce a respectable Calmar ratio on a trending window while having learned nothing about when to hold a position, and the test removes it from consideration before the score is compared. Between $128$ and $256$ seeds were run for each currency pair, differing in nothing but the seed. \Cref{Figure:TrainingPipeline} shows how the three stages fit together.
+which prefers an eligible episode to an ineligible one, whatever the scores. Otherwise it keeps the higher score within the same eligibility class. The saved state is a copy. The run continues training from $\theta_n$, not from $\theta^{\star}$, so a later episode never restarts from an earlier checkpoint. The eligibility test $g_n$ rejects policies that are degenerate. It does not reject a policy only because it performs poorly. An episode passes only if it opened at least ten positions, spent at least three hundred bars on each side of the market, and held its weaker side for at least $30\%$ of the time it held its stronger one. A policy that never trades, or that is long for the whole period, can reach a good Calmar ratio on a trending window without having learned anything about when to hold a position. The test removes such a policy before the scores are compared. Between $128$ and $256$ seeds were run for each currency pair, and the runs differed only in the seed. \Cref{Figure:TrainingPipeline} shows how the three stages fit together.
 
 \begin{figure}[htb!]
 \centering
@@ -55,26 +55,26 @@ which keeps an eligible episode over an ineligible one regardless of score, and 
 \draw[flow] (sweep) -- (score);
 \draw[flow] (score.south) to[out=270, in=0] (champion.east);
 \end{tikzpicture}
-\caption{The three stages of the procedure. The Calmar ratio chooses among episodes within one seed; the composite score of \Cref{Section:ExperimentalProcedure} chooses among seeds.}
+\caption{The three stages of the procedure. The Calmar ratio chooses among the episodes of one seed. The composite score of \Cref{Section:ExperimentalProcedure} chooses among seeds.}
 \label{Figure:TrainingPipeline}
 \end{figure}
 
-One property of this arrangement must be stated explicitly, because it limits what the results in \Cref{Chapter:ExperimentalResults} can claim. The split of \Cref{Equation:Split} governs the training of an individual seed. The choice of which seed to publish, described next, is made on performance measured over the whole eleven-year window, and the performance figures reported in this work are measured over that same window. The testing period is therefore held out from the training of each candidate and from the choice among its episodes, but not from the choice among candidates, and the headline returns are not out-of-sample estimates. This is the weakest point in the method and it is not disguised anywhere in what follows.
+One property of this setup must be stated clearly, because it limits what the results in \Cref{Chapter:ExperimentalResults} can claim. The split of \Cref{Equation:Split} applies to the training of a single seed. The choice of which seed to publish, described next, is based on performance over the whole eleven-year window. The performance figures reported in this work are measured over that same window. The testing period is therefore held out from the training of each candidate and from the choice among its episodes. It is not held out from the choice among candidates, so the headline returns are not out-of-sample estimates. This is the weakest point of the method, and it is not hidden anywhere in the rest of this thesis.
 
 \subsection{Model Selection: Gates and Composite Ranking}
 
-Once the seeds for a pair have been trained, each is evaluated over the full window under the cost model of \Cref{Tables:CostModel}, and one is chosen. The choice is made in two steps, rejection followed by ranking, because the two questions are different: whether a policy is admissible at all, and which of the admissible ones is best.
+Once the seeds for a pair have been trained, each one is evaluated over the full window with the cost model of \Cref{Tables:CostModel}, and one is chosen. The choice is made in two steps, first rejection and then ranking, because they answer two different questions. The first question is whether a policy is admissible at all. The second is which of the admissible policies is best.
 
-Four gates reject a candidate outright. Its return must be positive. Its weaker direction must account for at least $10\%$ of its exposure, which removes policies that are long or short throughout. Its mean holding period must be at least twenty-four bars, which removes policies whose signal is noise. And its regime score, the fraction of market movement during which it was positioned correctly, must exceed the score its own policy achieves when its position sequence is rotated in time. That last gate deserves a note, because a fixed threshold was tried first and does not work. A rotated policy holds the same positions for the same durations but at the wrong moments, so its score measures what that policy's autocorrelation and holding structure would earn by luck alone. Measured across the seven pairs those nulls range from $48$ to $70$, so a fixed bar of, say, $55$ would be below chance on one pair and needlessly severe on another. The null is therefore computed per model rather than assumed.
+Four gates reject a candidate directly. First, its return must be positive. Second, its weaker direction must make up at least $10\%$ of its exposure. This removes policies that are long or short the whole time. Third, its mean holding period must be at least twenty-four bars. This removes policies whose signal is noise. Fourth, its regime score must be higher than the score of the same policy with its position sequence rotated in time. The regime score is the fraction of market movement during which the policy held the correct position. The last gate needs some explanation, because a fixed threshold was tried first and does not work. A rotated policy holds the same positions for the same durations, but at the wrong moments. Its score therefore measures what the policy's autocorrelation and holding pattern would earn by luck alone. Across the seven pairs these null scores range from $48$ to $70$. A fixed threshold of, for example, $55$ would be below chance on one pair and too strict on another. The null score is therefore computed for each model and not assumed.
 
-Candidates surviving the gates are ranked by a composite of percentile ranks within their own pool. For a metric $m$ and a pool of $K$ candidates, the rank of candidate $i$ is
+Candidates that pass the gates are ranked by a composite of percentile ranks within their own pool. For a metric $m$ and a pool of $K$ candidates, the rank of candidate $i$ is
 
 \begin{equation}
 R_m(i) = 100 \cdot \frac{\left|\left\{ j : v_m(j) < v_m(i) \right\}\right|}{K - 1}
 \label{Equation:PercentileRank}
 \end{equation}
 
-where $v_m$ is negated for metrics that are better when smaller, such as drawdown. The metrics are divided into three groups, listed in \Cref{Tables:Composite}, and the score is the unweighted mean of the three group means:
+where $v_m$ is negated for metrics that are better when smaller, such as drawdown. The metrics are split into three groups, listed in \Cref{Tables:Composite}. The score is the unweighted mean of the three group means:
 
 \begin{equation}
 S(i) = \frac{1}{3} \sum_{G \in \{\text{money}, \text{safety}, \text{behaviour}\}} \frac{1}{|G|} \sum_{m \in G} R_m(i)
@@ -83,48 +83,48 @@ S(i) = \frac{1}{3} \sum_{G \in \{\text{money}, \text{safety}, \text{behaviour}\}
 
 \input{Tables/Composite}
 
-Two design decisions are embedded in \Cref{Equation:Composite}. Ranks are relative to the pool rather than absolute, so no threshold can exclude a candidate that is simply better than everything around it. And the three groups carry equal weight, so a policy cannot win on return alone: money, safety and behaviour each contribute a third, and a candidate with the highest return in its pool but no two-sidedness and no regime edge scores poorly on two groups out of three. Each surviving candidate is also evaluated at several position sizes, from the reference risk of \Cref{Equation:PositionSizing} up to three times it. Scaling the risk fraction does not change the learned policy, only the size of the positions it takes, and the level chosen for each pair is reported with the results.
+Two design decisions are built into \Cref{Equation:Composite}. First, ranks are relative to the pool and not absolute. No threshold can therefore exclude a candidate that is simply better than all the others in its pool. Second, the three groups have equal weight, so a policy cannot win on return alone. Money, safety and behaviour each count for a third. A candidate with the highest return in its pool, but with no two-sidedness and no regime edge over its rotation null, scores poorly on two groups out of three. Each candidate that passes the gates is also evaluated at several position sizes, from the reference risk of \Cref{Equation:PositionSizing} up to three times that risk. Scaling the risk fraction changes only the size of the positions the policy takes. It does not change the learned policy. The level chosen for each pair is reported with the results.
 
-\subsection{Deployment: Decision Cadence and Rebalance Threshold}
+\subsection{Deployment: Decision Frequency and Rebalance Threshold}
 
-Two decisions separate the learned policy from the orders that are actually sent, and between them they account for more of the delivered performance than any hyperparameter.
+Two decisions sit between the learned policy and the orders that are actually sent. Together they explain more of the delivered performance than any hyperparameter.
 
-The first is the decision cadence. The agent observes every hourly bar, but it is permitted to act only once per calendar day. A key is formed from the timestamp of each bar and a new action is committed only when that key changes:
+The first is the decision frequency, which is how often the agent may act. The agent observes every hourly bar, but it may act only once per calendar day. A key is built from the timestamp of each bar, and a new action is taken only when that key changes:
 
 \begin{equation}
 \kappa(t) = (\text{year}(t), \text{month}(t), \text{day}(t))
 \label{Equation:DecisionKey}
 \end{equation}
 
-The key is built from the calendar rather than from a count of bars, which makes it robust to the gaps and short sessions described in \Cref{Section:TradingFramework}: a week containing a holiday still produces one decision per trading day rather than drifting out of alignment. The second is a rebalance threshold. A continuous action changes slightly at every decision, and acting on every such change would send a stream of tiny orders each paying the spread and a commission. An order is therefore sent only when the change in the target position is large enough to be worth its cost:
+The key is built from the calendar and not from a count of bars. This means that the gaps and short sessions described in \Cref{Section:TradingFramework} do not affect it. A week with a holiday still produces one decision per trading day, and the decisions stay aligned with the trading days. The second decision is a rebalance threshold. A continuous action changes slightly at every decision. Acting on every such change would send a stream of tiny orders, and each of them would pay the spread and a commission. An order is therefore sent only when the change in the target position is large enough to be worth its cost:
 
 \begin{equation}
 \left| V_{target} - V_{current} \right| \;\geq\; \max\!\left(V_{min},\; \eta \left| V_{ref} \right|\right), \qquad \eta = 0.20
 \label{Equation:Hysteresis}
 \end{equation}
 
-where $V_{min}$ is the broker's minimum volume. The threshold is a fraction of the reference volume rather than of the position currently held, so it does not vanish as a position is reduced. \Cref{Tables:Deployment} isolates the contribution of each decision, measured on one model with nothing retrained. The comparison is between four configurations of the same weights, so the differences are attributable to the deployment layer alone.
+where $V_{min}$ is the broker's minimum volume. The threshold is a fraction of the reference volume, not of the position currently held, so it does not shrink to zero as a position is reduced. \Cref{Tables:Deployment} isolates the effect of each decision, measured on one model with nothing retrained. The comparison is between four configurations of the same weights, so the differences are attributable to the deployment layer alone.
 
 \input{Tables/Deployment}
 
-Two things follow from that table. Moving from hourly to daily decisions is worth some eighty percentage points, turning a losing configuration into a profitable one, because an hourly cadence acts on noise the eleven-year horizon of the discount factor was never meant to capture. And the rebalance threshold recovers roughly twelve percentage points under realistic costs while reducing drawdown rather than increasing it, which is unusual: commission alone costs over twenty percentage points without the filter and about six with it. A continuous action space is what makes the strategy expressive, and this filter is what makes it affordable.
+Two things follow from that table. First, moving from hourly to daily decisions adds about eighty percentage points and turns a losing configuration into a profitable one. The reason is that hourly decisions act on noise that the eleven-year horizon of the discount factor was never meant to capture. Second, the rebalance threshold recovers about twelve percentage points under realistic costs, and at the same time it reduces drawdown instead of increasing it. This is unusual. Commission alone costs over twenty percentage points without the filter and about six with it. The continuous action space makes the strategy expressive, and this filter keeps its trading costs low enough.
 
 \subsection{Worked Example: One Position From Decision to Settlement}
 
-The preceding subsections define each component separately. This one follows a single position through all of them, using a trade taken by the delivered EUR/USD model, so that the arithmetic can be checked rather than assumed.
+The earlier parts of this chapter define each component separately. This section follows one position through all of them, using a trade taken by the delivered EUR/USD model. This allows the arithmetic to be checked instead of taken on trust.
 
-At 02:00 on 30 January 2019 the daily decision key of \Cref{Equation:DecisionKey} changed, and the agent was consulted for the first time that day. It received the 38-value observation of \Cref{Section:AgentDesign}, built from the bar that had just closed, and returned a positive action. The reference volume of \Cref{Equation:PositionSizing} at that moment, risking $1\%$ of the balance over a stop of $1.5$ average true ranges, gave a target of $12{,}000$ units of the base currency once the action had scaled it and the result was rounded to the broker's volume step. The change from the position then held exceeded the threshold of \Cref{Equation:Hysteresis}, so an order was sent. The tick recorded at that instant quoted $1.14392$ ask against $1.14387$ bid, a spread of five points. The buy was filled at the ask. Twenty-four hours later the key changed again, the agent's action reversed the sign, and the position was closed at the bid then quoted, $1.14931$. The profit follows from those two prices and the volume, and is expressed in the account currency at the conversion rate recorded on the closing tick:
+At 02:00 on 30 January 2019 the daily decision key of \Cref{Equation:DecisionKey} changed, and the agent was asked for an action for the first time that day. It received the 38-value observation of \Cref{Section:AgentDesign}, built from the bar that had just closed, and it returned a positive action. At that moment the reference volume of \Cref{Equation:PositionSizing} risked $1\%$ of the balance over a stop of $1.5$ average true ranges. The action scaled this volume, and the result was rounded to the broker's volume step. This gave a target of $12{,}000$ units of the base currency. The change from the position held at that time was larger than the threshold of \Cref{Equation:Hysteresis}, so an order was sent. The tick recorded at that instant quoted $1.14392$ ask and $1.14387$ bid, a spread of five points. The buy was filled at the ask. Twenty-four hours later the key changed again, and the agent's action changed sign. The position was closed at the bid quoted at that time, $1.14931$. The profit follows from those two prices and the volume. It is expressed in the account currency at the conversion rate recorded on the closing tick:
 
 \begin{equation}
 12{,}000 \times \left(1.14931 - 1.14392\right) = 64.68 \text{ USD} \;\;\longrightarrow\;\; 56.27 \text{ EUR}
 \label{Equation:WorkedGross}
 \end{equation}
 
-The spread is already inside that figure. It was paid at entry by filling at the ask rather than the mid, and again at exit by filling at the bid, which is what makes the round trip cross it exactly once. The commission is charged separately at both ends:
+The spread is already included in that figure. It was paid at entry, by filling at the ask and not at the mid, and again at exit, by filling at the bid. This is why the round trip crosses the spread exactly once. The commission is charged separately at both ends:
 
 \begin{equation}
 2 \times 3.5 \times 10^{-5} \times 12{,}000 = 0.84 \text{ USD} \;\;\longrightarrow\;\; 0.72 \text{ EUR}
 \label{Equation:WorkedCommission}
 \end{equation}
 
-The swap is zero, the position having been held overnight on a swap-free account. The position therefore settled at $56.27 - 0.72 = 55.55$ EUR, which is the figure recorded in the exported trade record. One trade says little. Across all $1{,}777$ trades the delivered EUR/USD model took over the eleven years, the same accounting gives a gross profit of $8{,}733.62$ EUR, a commission charge of $1{,}669.50$ EUR and a swap charge of exactly zero, for a net of $7{,}064.12$ EUR. Commission alone consumed $19.1\%$ of the gross profit, and that is before the spread, which is not separable from the gross figure because it is embedded in every fill. A result reported without these charges would be describing a different strategy.
+The position was held overnight, but the swap is zero because the account is swap-free. The position therefore settled at $56.27 - 0.72 = 55.55$ EUR, which is the figure in the exported trade record. One trade says little on its own. The delivered EUR/USD model took $1{,}777$ trades over the eleven years. Across all of them, the same accounting gives a gross profit of $8{,}733.62$ EUR, a commission charge of $1{,}669.50$ EUR and a swap charge of exactly zero, for a net of $7{,}064.12$ EUR. Commission alone took $19.1\%$ of the gross profit. This figure does not include the spread, which cannot be separated from the gross figure because it is part of every fill. A result reported without these charges would describe a different strategy.

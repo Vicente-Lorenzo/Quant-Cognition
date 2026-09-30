@@ -2,9 +2,9 @@
 \fancychapter{Implementation}
 \label{Chapter:Implementation}
 
-\Cref{Chapter:RelatedWork} set out what the reviewed literature leaves open. This section describes what was built in response: the environment the agent trades in, the agent itself, and the procedure by which it was trained and a single model chosen for each currency pair.
+\Cref{Chapter:RelatedWork} showed what the reviewed literature leaves open. This chapter describes what was built to address it. It covers the environment the agent trades in, the agent itself, and the procedure used to train the agent and to choose one model for each currency pair.
 
-The order is deliberate. An agent cannot be described apart from the environment that supplies its observations and charges it for its actions, and no number produced by it means anything unless that environment is faithful. The framework therefore comes first, the agent second, and the experimental procedure third.
+The sections follow this order on purpose. The agent cannot be described without its environment, because the environment gives the agent its observations and charges it for its actions. No number the agent produces means anything unless that environment is accurate. So the framework comes first, then the agent, and then the experimental procedure.
 
 \input{Sections/Section4/Section4.1-TradingFramework}
 
@@ -12,6 +12,6 @@ The order is deliberate. An agent cannot be described apart from the environment
 
 \input{Sections/Section4/Section4.3-ExperimentalProcedure}
 
-Everything described here was fixed before any result was seen: one architecture, one observation, one reward, one selection rule, applied unchanged to seven instruments. That constraint is what makes the outcomes comparable across pairs.
+Everything described here was fixed before any result was seen. There is one architecture, one observation, one reward and one selection rule, and they were applied unchanged to seven instruments. This is what makes the results comparable across pairs.
 
-It also makes them falsifiable. A design tuned until it works on a single instrument can always be made to work on that instrument, and nothing in its results distinguishes a strategy from a description of that instrument's history. Applying the same design to seven leaves it nowhere to hide, and the results in \Cref{Chapter:ExperimentalResults} include a pair on which it does not work.
+It also makes the results falsifiable, because they can show the design to be wrong. A design that is tuned on one instrument until it works can always be made to work on that instrument. Its results then cannot tell a real strategy apart from a description of that instrument's past prices. When the same design is applied to seven instruments, a failure on any of them shows in the results. The results in \Cref{Chapter:ExperimentalResults} include a pair on which the design does not work.

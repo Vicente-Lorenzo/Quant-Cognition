@@ -2,9 +2,9 @@
 \fancychapter{Introduction}
 \label{Chapter:Introduction}
 
-The foreign exchange market is the largest financial market in the world, with an average turnover of 9.6 trillion US dollars per day in April 2025 \cite{bis_otc_2025}, and it trades continuously from Sunday evening to Friday evening. This makes it a good target for automated trading. A program can act at any hour, the major currency pairs absorb retail order sizes without moving the price, and the price history is available down to individual quotes. The signal, however, is weak. Returns are close to unpredictable over short horizons \cite{fama_efficient_1970}, and the cost of trading is high enough that many strategies which look profitable in a simplified test lose money once those costs are charged.
+The foreign exchange market is the largest financial market in the world. In April 2025, its average turnover was 9.6 trillion US dollars per day \cite{bis_otc_2025}. It trades continuously from Sunday evening to Friday evening. This makes it a good target for automated trading. A program can trade at any hour. The major currency pairs absorb retail order sizes without moving the price. The price history is also available down to single quotes. However, there is little useful signal in the prices. Over short horizons, returns are close to unpredictable \cite{fama_efficient_1970}. The cost of trading is also high. Many strategies that look profitable in a simplified test lose money once these costs are charged.
 
-This work applies Deep Reinforcement Learning (DRL) to that problem. One Deep Deterministic Policy Gradient (DDPG) \cite{lillicrap_continuous_2015} agent is trained for each of the seven major currency pairs and evaluated over eleven years of tick data, charging the spread quoted at the time of the trade and the commission of a retail account.
+This work applies Deep Reinforcement Learning (DRL) to this problem. One Deep Deterministic Policy Gradient (DDPG) \cite{lillicrap_continuous_2015} agent is trained for each of the seven major currency pairs. Each agent is evaluated over eleven years of tick data. The evaluation charges the spread quoted at the time of the trade and the commission of a retail account.
 
 \input{Sections/Section1/Section1.1-Motivation}
 
@@ -16,4 +16,4 @@ This work applies Deep Reinforcement Learning (DRL) to that problem. One Deep De
 
 \input{Sections/Section1/Section1.5-Structure}
 
-This work draws on two fields that developed apart from each other. Trading supplies the market, the instruments, the costs and the way performance is measured. Reinforcement learning supplies the learning algorithm and the way the problem is posed. Both are needed before the system itself can be described, and they are covered next.
+This work uses two fields that developed separately. Trading gives the market, the instruments, the costs and the way performance is measured. Reinforcement learning gives the learning algorithm and the way the problem is set up. Both are needed before the system itself can be described. They are covered in the next chapter.

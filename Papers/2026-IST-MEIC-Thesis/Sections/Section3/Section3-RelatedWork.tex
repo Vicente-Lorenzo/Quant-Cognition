@@ -2,9 +2,9 @@
 \fancychapter{Related Work}
 \label{Chapter:RelatedWork}
 
-This section reviews the published work on deep reinforcement learning applied to financial trading. The review was carried out in two stages. Surveys were read first, to establish which problems the field treats as open and which papers are worth reading in full. Individual articles were then read and their design decisions recorded in a common format, so that studies using different markets and different algorithms could be compared on the same terms.
+This chapter reviews the published work on deep reinforcement learning for financial trading. The review had two stages. First, surveys were read to find which problems the field still sees as open and which papers are worth reading in full. Then single articles were read, and their design choices were recorded in one common format. This way, studies that use different markets and different algorithms could be compared on the same points.
 
-Eighteen articles were examined in that way. Their basic features are collected in \Cref{Tables:BasicRelatedWork} and the design decisions inside each agent in \Cref{Tables:AdvancedRelatedWork}, and the discussion below refers to both throughout.
+Eighteen articles were read in this way. \Cref{Tables:BasicRelatedWork} lists their basic features, and \Cref{Tables:AdvancedRelatedWork} lists the design choices inside each agent. The text below refers to both tables.
 
 \input{Sections/Section3/Section3.1-SurveyResearch}
 
@@ -12,6 +12,6 @@ Eighteen articles were examined in that way. Their basic features are collected 
 
 \input{Sections/Section3/Section3.3-ResearchGap}
 
-The studies reviewed here answer the question of whether a deep reinforcement learning agent can learn a profitable trading policy. They say much less about the conditions under which that answer holds, because the environment each agent was trained in is usually described in a sentence or two and is rarely reproducible from the description given.
+The studies reviewed here answer the question of whether a deep reinforcement learning agent can learn a profitable trading policy. They say much less about the conditions in which that answer holds. Each study usually describes the environment its agent was trained in with a sentence or two, and that description is rarely enough to build the environment again.
 
-That environment is the part this work had to build before the question could be asked. An agent trained against a simplified market learns to exploit the simplification, so the worth of any result depends on how the environment charges for trading, advances time and fills orders. \Cref{Chapter:Implementation} describes that environment and the agent that runs inside it.
+This work had to build that environment before it could ask the question. An agent trained on a simplified market learns to exploit the simplification. So the value of any result depends on how the environment charges for trading, moves time forward and fills orders. \Cref{Chapter:Implementation} describes that environment and the agent that runs in it.

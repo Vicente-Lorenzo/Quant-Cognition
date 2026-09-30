@@ -2,9 +2,9 @@
 \fancychapter{Experimental Results}
 \label{Chapter:ExperimentalResults}
 
-This section reports what the design of \Cref{Chapter:Implementation} produced. Seven agents were trained, one per major currency pair, and each was evaluated over eleven years under the cost model of \Cref{Tables:CostModel}. Every figure below traces to a stored run that can be reopened, and the analysis was recomputed from those runs rather than copied from the training logs.
+This chapter reports the results of the design of \Cref{Chapter:Implementation}. Seven agents were trained, one for each major currency pair. Each agent was evaluated over eleven years under the cost model of \Cref{Tables:CostModel}. Every figure below comes from a stored run that can be opened again. The analysis was computed again from those runs. It was not copied from the training logs.
 
-The order of the section is deliberate. Returns come first, then the checks that decide whether those returns mean anything, then the year that was held back, and finally the result of running the seven together.
+The order of this chapter was chosen on purpose. The returns come first. Then come the checks that decide whether those returns mean anything, then the year that was held back, and last the result of running the seven agents together.
 
 \input{Sections/Section5/Section5.1-EvaluationProtocol}
 
@@ -26,6 +26,6 @@ The order of the section is deliberate. Returns come first, then the checks that
 
 \input{Sections/Section5/Section5.10-Portfolio}
 
-Two results carry the most weight. Six of the seven agents produced positive alpha against their own market, and three of those did it with a market sensitivity close to zero, which is what separates a strategy from leveraged exposure. And the seven combined behave better than any of them alone, because they are close to uncorrelated.
+Two results matter most. First, six of the seven agents produced positive alpha against their own market. Three of those did so with a market sensitivity close to zero, and this is what separates a trading strategy from leveraged market exposure. Second, the seven agents combined behave better than any of them alone, because their returns are close to uncorrelated.
 
-Against that, the held-out year is negative and the selection is uncorrected. \Cref{Chapter:Conclusion} sets out what those two facts allow the work to claim and what they do not.
+On the other hand, the held-out year is negative, and the selection is not corrected for multiple testing. \Cref{Chapter:Conclusion} sets out what these two facts allow this work to claim and what they do not.

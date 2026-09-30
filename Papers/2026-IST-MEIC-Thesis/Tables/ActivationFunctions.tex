@@ -12,11 +12,11 @@ Linear & \( a(x) = x \) & Suitable for regression tasks. \\
 \addlinespace
 Sigmoid & \( \sigma(x) = \frac{1}{1 + e^{-x}} \) & Maps inputs to (0, 1), for binary classification. \\
 \addlinespace
-Hyperbolic Tangent & \( \tanh(x) = \frac{e^{x} - e^{-x}}{e^{x} + e^{-x}} \) & Maps inputs to (-1, 1), offering richer gradients than sigmoid. \\
+Hyperbolic Tangent & \( \tanh(x) = \frac{e^{x} - e^{-x}}{e^{x} + e^{-x}} \) & Maps inputs to (-1, 1), with stronger gradients than sigmoid. \\
 \addlinespace
-ReLU & \( \text{ReLU}(x) = \max(0, x) \) & Encourages sparse activation, helps with gradient flow. \\
+ReLU & \( \text{ReLU}(x) = \max(0, x) \) & Leads to sparse activation, helps gradient flow. \\
 \addlinespace
-Softmax & \( \text{Softmax}(z)_i = \frac{e^{z_i}}{\sum_{k=1}^K e^{z_k}} \) & Turns logits into probabilities, for multi-class classification. \\
+Softmax & \( \text{Softmax}(z)_i = \frac{e^{z_i}}{\sum_{k=1}^K e^{z_k}} \) & Turns raw scores (logits) into probabilities, for multi-class classification. \\
 \bottomrule
 \end{tabularx}
 \end{table}

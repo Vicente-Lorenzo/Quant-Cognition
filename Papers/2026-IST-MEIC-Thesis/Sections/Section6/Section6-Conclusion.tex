@@ -2,9 +2,9 @@
 \fancychapter{Conclusion}
 \label{Chapter:Conclusion}
 
-This work set out to determine whether a single deep reinforcement learning design, trained separately for each instrument and otherwise unchanged, produces a profitable and risk-controlled policy on all seven major currency pairs when the evaluation charges what a real account charges.
+The aim of this work was to find out whether one deep reinforcement learning design gives a profitable policy with controlled risk on all seven major currency pairs. The design was trained separately for each instrument and was otherwise not changed. The evaluation charged the same costs that a real account charges.
 
-The answer is a qualified yes, and the qualification is as much a part of the result as the answer.
+The answer is yes, but with conditions. These conditions are as much a part of the result as the answer itself.
 
 \input{Sections/Section6/Section6.1-Summary}
 
@@ -12,4 +12,4 @@ The answer is a qualified yes, and the qualification is as much a part of the re
 
 \input{Sections/Section6/Section6.3-FutureWork}
 
-Deep reinforcement learning applied to currency trading is neither the solved problem that some reported returns suggest nor the dead end that its out-of-sample record would imply. What this work shows is that the difficulty is not mainly in the learning algorithm. It is in the environment the agent is trained against, the costs it is charged, and above all in the discipline of deciding which of many trained models deserves to be believed. Six of seven agents produced returns that survive a decomposition into policy and market exposure; in every one of the seven the candidate that looked best on return did not.
+Some reported returns suggest that deep reinforcement learning for currency trading is a solved problem. Its out-of-sample record suggests that it leads nowhere. Neither view is correct. This work shows that the main difficulty is not in the learning algorithm. It is in the environment the agent is trained in and in the costs it is charged. Most of all, it is in a careful and strict way of deciding which of many trained models to trust. Six of the seven agents produced returns that still hold after a decomposition into policy and market exposure. For all seven pairs, the candidate that looked best on return did not pass this test.

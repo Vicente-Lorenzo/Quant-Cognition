@@ -2,12 +2,12 @@
 \section{A Negative Result: USD/JPY}
 \label{Section:NegativeResult}
 
-USD/JPY did not work, and the reason is understood.
+USD/JPY did not work, and the reason is known.
 
-The numbers say the model is the market. Its correlation with the pair's yearly move is $+0.946$ and its beta is $+1.012$, so it carries the pair almost exactly one for one. Its alpha is $-1.07\%$ per year. It returns $+15.7\%$ over the eleven years against roughly $+25\%$ for simply buying and holding the pair, so it underperforms the benchmark that costs nothing to run. The model is long at every point in the window.
+The numbers show that the model behaves like the market. Its correlation with the pair's yearly move is $+0.946$ and its beta is $+1.012$, so its exposure to the pair is almost exactly one for one. Its alpha is $-1.07\%$ per year. It returns $+15.7\%$ over the eleven years, against roughly $+25\%$ for simply buying and holding the pair. It therefore underperforms a benchmark that costs nothing to run. The model is long at every point in the window.
 
-The mechanism is in the data. USD/JPY rose from roughly $120$ to $150$ over the period, with the move concentrated and largely one-directional. On such a series, holding a long position is close to optimal, and any deviation from it is punished. The reward signal therefore offers no gradient towards modulating exposure, and the agent settles on the simplest policy that captures the trend. The other six majors mean-revert enough over the same period that two-sided behaviour is rewarded, and their agents learned it.
+The cause is in the data. USD/JPY rose from roughly $120$ to $150$ over the period, and the move was concentrated and mostly in one direction. On such a series, holding a long position is close to optimal, and any change from it is punished. The reward signal therefore gives no gradient towards changing the exposure, and the agent settles on the simplest policy that follows the trend. Over the same period the other six majors mean-revert often enough that trading both sides is rewarded, and their agents learned to do it.
 
-This was tested rather than assumed. Across seven configurations and $448$ seeds, every run converged to an all-in directional policy. Raising the augmentation that presents the agent with mirrored price series, which was intended to remove exactly this bias, made the resulting policies more binary rather than less.
+This was not assumed. It was tested. Across seven configurations and $448$ seeds, every run converged to a directional policy at full size. One augmentation shows the agent mirrored price series, and it was meant to remove exactly this bias. Raising it made the resulting policies more binary, not less.
 
-The result is reported because it is informative. It marks the boundary of the method: this design learns to time exposure in markets that turn, and on a market that does not turn it reduces to holding the trend and pays costs for the privilege. A reader deciding whether to apply the approach elsewhere needs that boundary more than they need a seventh success.
+The result is reported because it is informative. It shows the limit of the method. This design learns to time its exposure in markets that turn. On a market that does not turn, it ends up just holding the trend, and it pays trading costs to do so. A reader who is deciding whether to use the approach elsewhere needs to know this limit more than they need a seventh success.
