@@ -1,0 +1,17 @@
+% !TEX root = ../../Main.tex
+\fancychapter{Background}
+\label{Chapter:Background}
+
+This section covers the material needed to follow the rest of the document. It starts with financial markets, and with the Forex market in particular, including how trading works there and what it costs. It then covers neural networks and reinforcement learning, the two machine learning fields this work draws on, and ends with Deep Reinforcement Learning, where the two meet, and with the algorithm used here.
+
+\input{Sections/Section2/Section2.1-FinancialMarketsAndTrading}
+
+\input{Sections/Section2/Section2.2-NeuralNetworks}
+
+\input{Sections/Section2/Section2.3-ReinforcementLearning}
+
+\input{Sections/Section2/Section2.4-DeepReinforcementLearning}
+
+The four topics covered here are the parts this work combines: a market to trade in, networks to approximate the functions involved, a reinforcement learning formulation of the decision problem, and an algorithm that solves it for continuous actions. Combining them is not new, and a considerable body of published work has already attempted it.
+
+Those studies differ in how they define the state, the action and the reward, and in whether the agent is charged for trading at all. Those choices decide whether a reported result would hold on a live account, which makes them the right basis for comparing the literature and for placing this work within it.

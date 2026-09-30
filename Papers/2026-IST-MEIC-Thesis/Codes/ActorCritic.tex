@@ -1,0 +1,18 @@
+% !TEX root = ../Main.tex
+\begin{algorithm}[htb!]
+\DontPrintSemicolon
+\KwRequire{$\pi(a \mid s; \theta)$: a differentiable policy, $Q(s, a; w)$: a differentiable $Q$-function, $N$: number of iterations and learning rates $\beta^\theta > 0$ and $\beta^w > 0$}
+Initialise policy parameter $\theta^{(0)}$ and $Q$-function parameter $w^{(0)}$\;
+Initialise state $s$\;
+\For{$n = 0, 1, \ldots, N - 1$}{
+    Sample $a \sim \pi(\cdot \mid s; \theta^{(n)})$\;
+    Take action $a$, observe state $s'$ and reward $r$\;
+    Sample $a' \sim \pi(\cdot \mid s'; \theta^{(n)})$\;
+    Compute the TD error: $\delta \gets r + \gamma Q(s', a'; w^{(n)}) - Q(s, a; w^{(n)})$\;
+    Update $w$: $w^{(n+1)} \gets w^{(n)} + \beta^w \delta \nabla_w Q(s, a; w^{(n)})$\;
+    Update $\theta$: $\theta^{(n+1)} \gets \theta^{(n)} + \beta^\theta \delta \nabla_\theta \ln \pi(a \mid s; \theta^{(n)})$\;
+    $s \gets s'$\;
+}
+\caption{Actor-Critic \cite{sutton_reinforcement_2018}.}
+\label{Codes:ActorCritic}
+\end{algorithm}

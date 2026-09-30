@@ -1,0 +1,216 @@
+% #############################################################################
+% Preamble of the dissertation
+% Styling follows the IST Thesis-MSc template (Version 4, August 2022, by
+% Prof. Rui Santos Cruz); only the packages this document uses are loaded.
+% !TEX root = ./Main.tex
+% #############################################################################
+%
+% -----------------------------------------------------------------------------
+% Encoding and language
+% -----------------------------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[main=english,portuguese]{babel}
+\usepackage{iflang}
+%
+% -----------------------------------------------------------------------------
+% Mathematics and figures
+% -----------------------------------------------------------------------------
+\usepackage{mathtools, amssymb}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows, positioning}
+%
+% -----------------------------------------------------------------------------
+% Tables
+% -----------------------------------------------------------------------------
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{makecell}
+\usepackage{rotating}
+%
+% -----------------------------------------------------------------------------
+% Captions
+% -----------------------------------------------------------------------------
+\usepackage[format=hang,labelfont=bf,font=small]{caption}
+\captionsetup[table]{skip=10pt}
+%
+% -----------------------------------------------------------------------------
+% Algorithms
+% -----------------------------------------------------------------------------
+\usepackage[ruled,vlined,algochapter,norelsize,\languagename]{algorithm2e}
+\SetKwInput{KwRequire}{Require}
+%
+% -----------------------------------------------------------------------------
+% Emphasis as underline, as in the IST template (restored to italics for the
+% bibliography in Main.tex)
+% -----------------------------------------------------------------------------
+\usepackage[ULforem,normalbf]{ulem}
+%
+% -----------------------------------------------------------------------------
+% Colours used by the chapter heads and the hyperlinks
+% -----------------------------------------------------------------------------
+\usepackage{xcolor}
+\definecolor{darkgray}{rgb}{0.4, 0.4, 0.4}
+\definecolor{chaptergrey}{rgb}{0.6,0.6,0.6}
+%
+% -----------------------------------------------------------------------------
+% Line spacing
+% -----------------------------------------------------------------------------
+\usepackage{setspace}
+%
+% -----------------------------------------------------------------------------
+% Citations, acronyms, hyperlinks and cross-references
+% -----------------------------------------------------------------------------
+\usepackage{cite}
+\usepackage[nohyperlinks]{acronym}
+\usepackage{hyperref}
+\hypersetup{ colorlinks=true,
+             citecolor=cyan,
+             linkcolor=darkgray,
+             urlcolor=teal,
+             breaklinks=true,
+             bookmarksnumbered=true,
+             bookmarksopen=true,
+}
+\usepackage{url}
+\usepackage[\IfLanguageName{english}{english}{brazilian}]{cleveref}
+%
+% -----------------------------------------------------------------------------
+% Lists
+% -----------------------------------------------------------------------------
+\usepackage[shortlabels]{enumitem}
+\setlist[description]{leftmargin=\parindent,labelindent=\parindent,itemsep=1pt,parsep=0pt,topsep=0pt}
+%
+% -----------------------------------------------------------------------------
+% Glossary, sorted by LaTeX itself so no external indexing tool is needed
+% -----------------------------------------------------------------------------
+\usepackage[nopostdot,nonumberlist]{glossaries}
+\makeatletter
+\newglossarystyle{mystyle}{%
+  \setglossarystyle{altlist}%
+  \renewenvironment{theglossary}{%
+  \begin{description}[style=standard,labelindent=0pt,itemsep=5pt]%
+  }%
+  {\end{description}}
+  \renewcommand*{\glossentry}[2]{%
+    \item[\glsentryitem{##1}%
+      \glstarget{##1}{\glossentryname{##1}}]%
+      \mbox{}\par\nobreak\@afterheading
+      \glossentrydesc{##1}\glspostdescription%
+  }%
+  \renewcommand{\glsgroupskip}{}%
+}
+\makeatother
+\setglossarystyle{mystyle}
+\makenoidxglossaries
+\input{Sections/Section0/Section0-Glossary}
+%
+% #############################################################################
+% GLOBAL FORMATTING OF THE THESIS DOCUMENT (IST template, unchanged)
+% #############################################################################
+\usepackage{./Cover}
+%
+% Paragraph counter in alphanumeric mode, as the IST guide requires
+\renewcommand{\theparagraph}{\Alph{paragraph}~--}
+\hoffset 0in
+\voffset 0in
+\oddsidemargin 0 cm
+\evensidemargin 0 cm
+\marginparsep 0in
+\topmargin -0.25cm
+\textwidth 16 cm
+\textheight 22.4 cm
+\makeatletter
+\def\@afterindentfalse{\let\if@afterindent\iffalse}
+\makeatother
+%
+% -----------------------------------------------------------------------------
+% Headers and footers
+% -----------------------------------------------------------------------------
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\renewcommand{\chaptermark}[1]{\markboth{\thechapter.\ #1}{}}
+\renewcommand{\sectionmark}[1]{\markright{\thesection\ #1}}
+\fancyhf{}
+\fancyfoot[C]{\bfseries\thepage}
+\renewcommand{\headrulewidth}{0.0pt}
+\renewcommand{\footrulewidth}{0.0pt}
+\addtolength{\headheight}{2pt}
+\fancypagestyle{plain}{%
+   \renewcommand{\headrulewidth}{0pt}
+   \renewcommand{\footrulewidth}{0pt}
+}
+\fancypagestyle{blank}{%
+   \renewcommand{\headrulewidth}{0pt}
+   \renewcommand{\footrulewidth}{0pt}
+}
+\fancypagestyle{abstract}{%
+   \renewcommand{\headrulewidth}{0pt}
+   \renewcommand{\footrulewidth}{0.0pt}
+}
+\fancypagestyle{document}{%
+	\renewcommand{\headrulewidth}{0.5pt}
+	\renewcommand{\footrulewidth}{0.5pt}
+	\addtolength{\headheight}{2pt}
+}
+\setcounter{secnumdepth} {5}
+\setcounter{tocdepth} {5}
+\renewcommand{\thesubsubsection}{\thesubsection.\Alph{subsubsection}}
+%
+% -----------------------------------------------------------------------------
+% Chapter heads with a mini table of contents (\fancychapter)
+% -----------------------------------------------------------------------------
+\usepackage{minitoc}
+\setcounter{minitocdepth}{1}
+\setlength{\mtcindent}{24pt}
+\renewcommand{\mtcfont}{\small\rm}
+\renewcommand{\mtcSfont}{\small\bf}
+\renewcommand*{\kernafterminitoc}{\kern0.\baselineskip\kern0.ex}
+\mtcselectlanguage{\languagename}
+\makeatletter
+\def\boxedverbatim{%
+  \def\verbatim@processline{%
+    {\setbox0=\hbox{\the\verbatim@line}%
+    \hsize=\wd0 \the\verbatim@line\par}}%
+  \@minipagetrue%
+  \@tempswatrue%
+  \setbox0=\vbox\bgroup\vspace*{0.2cm}\footnotesize\verbatim
+}
+\def\endboxedverbatim{%
+  \endverbatim
+  \unskip\setbox0=\lastbox%
+  \hspace*{0.2cm}
+  \vspace*{-0.2cm}
+  \egroup
+  \fbox{\box0}%
+}
+\makeatother
+\newcommand*{\chapnumfont}{%
+  \usefont{T1}{pbk}{b}{n}
+  \fontsize{130}{100}
+  \selectfont
+  \color{chaptergrey}
+}
+\makeatletter
+\def\@makechapterhead#1{%
+  \vspace*{50\p@}%
+  {\parindent \z@ \raggedright \normalfont
+    {\chapnumfont\ifnum \c@secnumdepth >\m@ne
+        \raggedleft\bfseries \thechapter
+        \par\nobreak
+        \vskip 20\p@
+    \fi}
+    \interlinepenalty\@M
+    {\raggedleft\Huge \bfseries #1\par\nobreak}
+    \vskip 40\p@
+  }}
+\makeatother
+\newcommand{\fancychapter}[1]{\chapter{#1}\minitoc\bigskip}
+%
+% -----------------------------------------------------------------------------
+% Official name of the degree (automatic for MEIC, depends on the language)
+% -----------------------------------------------------------------------------
+\IfLanguageName{english}
+		{\degree{Computer Science and Engineering}}
+		{\degree{Engenharia Informática e de Computadores}}

@@ -1,0 +1,10 @@
+% !TEX root = ../../Main.tex
+\section{Problem Statement}
+
+Most published work on deep reinforcement learning for trading uses equity markets, daily bars, and a single instrument over a few years \cite{hambly_recent_2023, fischer_reinforcement_2018, alameer_reinforcement_2022}. The work that does use currencies normally relies on a discrete action space \cite{carapuco_reinforcement_2018, huang_financial_2018, rundo_deep_2019}. Trading costs are reported inconsistently: some studies charge both explicit and implicit costs, while others state returns with the spread fixed or omitted \cite{pricope_deep_2021}. Two questions are left open. The first is whether one design works across several instruments instead of being fitted to one. The second is whether the reported performance survives realistic costs.
+
+This work addresses both. The problem is to determine whether a single deep reinforcement learning design, trained separately for each instrument and otherwise unchanged, produces a profitable and risk-controlled policy on all seven major currency pairs, when the evaluation runs on tick data and charges the spread quoted at the time of the trade together with the commission of a swap-free raw-spread retail account.
+
+Running one design across seven instruments also guards against a particular failure. A model that is adjusted until it performs on a single pair may be describing the history of that pair rather than a strategy, and nothing in its results will say which of the two it is \cite{bailey_pseudo-mathematics_2014}. Applying the same design unchanged to every major pair makes the difference visible, because a result that depends on the instrument will not hold across all of them.
+
+Answering that question needs more than a learning algorithm. It needs an execution environment close enough to a real broker that the answer means something, and no such environment was available off the shelf. Building one took a substantial part of the effort behind this work, and its design is described in \Cref{Chapter:Implementation}.

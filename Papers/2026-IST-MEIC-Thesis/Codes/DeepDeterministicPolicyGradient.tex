@@ -1,0 +1,26 @@
+% !TEX root = ../Main.tex
+\begin{algorithm}[htb!]
+\DontPrintSemicolon
+\KwRequire{an actor $\mu(s | \theta^{\mu})$, a critic $Q(s, a | \theta^{Q})$, a discount factor $\gamma$, a soft update rate $\tau \ll 1$ and a minibatch size $N$}
+Randomly initialise the critic parameters $\theta^{Q}$ and the actor parameters $\theta^{\mu}$\;
+Initialise the target parameters $\theta^{Q'} \leftarrow \theta^{Q}$ and $\theta^{\mu'} \leftarrow \theta^{\mu}$, and the replay buffer $\mathcal{B}$\;
+\For{episode $= 1, M$}{
+    Initialise a random process $\mathcal{N}$ for action exploration\;
+    Receive the initial observation state $s_1$\;
+    \For{$t = 1, T$}{
+        Select the action $a_t = \mu(s_t | \theta^{\mu}) + \mathcal{N}_t$ from the current policy and the exploration noise\;
+        Execute the action $a_t$ and observe the reward $r_t$ and the new state $s_{t+1}$\;
+        Store the transition $(s_t, a_t, r_t, s_{t+1})$ in $\mathcal{B}$\;
+        Sample a random minibatch of $N$ transitions $(s_i, a_i, r_i, s_{i+1})$ from $\mathcal{B}$\;
+        Set $y_i = r_i + \gamma Q'(s_{i+1}, \mu'(s_{i+1} | \theta^{\mu'}) | \theta^{Q'})$\;
+        Update the critic by minimising the loss: $L = \frac{1}{N}\sum_i (y_i - Q(s_i, a_i | \theta^{Q}))^2$\;
+        Update the actor policy using the sampled policy gradient:\;
+        $\nabla_{\theta^{\mu}} J \approx \frac{1}{N}\sum_i \nabla_a Q(s, a | \theta^{Q})|_{s = s_i, a = \mu(s_i)} \nabla_{\theta^{\mu}} \mu(s | \theta^{\mu})|_{s_i}$\;
+        Update the target networks:\;
+        $\theta^{Q'} \leftarrow \tau \theta^{Q} + (1 - \tau) \theta^{Q'}$\;
+        $\theta^{\mu'} \leftarrow \tau \theta^{\mu} + (1 - \tau) \theta^{\mu'}$\;
+    }
+}
+\caption{Deep Deterministic Policy Gradient \cite{lillicrap_continuous_2015}.}
+\label{Codes:DeepDeterministicPolicyGradient}
+\end{algorithm}

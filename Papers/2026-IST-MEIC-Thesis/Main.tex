@@ -1,0 +1,129 @@
+% #############################################################################
+% Main document of the dissertation
+% Structure follows the IST Thesis-MSc template (Version 4, August 2022, by
+% Prof. Rui Santos Cruz)
+% !TEX root = ./Main.tex
+% #############################################################################
+\documentclass[defaultstyle,10pt,Helvetica,twoside,openright]{Thesis}
+\input{Preamble}
+% #############################################################################
+\begin{document}
+%
+% -----------------------------------------------------------------------------
+% Cover and declaration
+\pdfbookmark[0]{Titlepage}{Title}
+\input{Sections/Section0/Section0-Cover}
+\maketitle
+\thispagestyle{empty}
+\cleardoublepage
+%
+% -----------------------------------------------------------------------------
+% Front matter in roman numbering
+\setcounter{page}{1} \pagenumbering{roman}
+\baselineskip 18pt
+%
+% -----------------------------------------------------------------------------
+% Acknowledgements
+\pdfbookmark[0]{Acknowledgments}{acknowledgments}
+\begin{acknowledgments}
+	\input{Sections/Section0/Section0-Acknowledgements}
+\end{acknowledgments}
+%
+% -----------------------------------------------------------------------------
+% Abstract and keywords
+\begin{abstract}
+	\input{Sections/Section0/Section0-Abstract}
+\end{abstract}
+\begin{keywords}
+	\input{Sections/Section0/Section0-Keywords}
+\end{keywords}
+\clearpage
+\thispagestyle{empty}
+\cleardoublepage
+%
+% -----------------------------------------------------------------------------
+% Resumo and palavras-chave
+\begin{resumo}
+	\input{Sections/Section0/Section0-Resumo}
+\end{resumo}
+\begin{palavraschave}
+	\input{Sections/Section0/Section0-PalavrasChave}
+\end{palavraschave}
+\clearpage
+\thispagestyle{empty}
+\cleardoublepage
+%
+% -----------------------------------------------------------------------------
+% Mini tables of contents of each chapter
+\dominitoc
+\dominilof
+\dominilot
+%
+% -----------------------------------------------------------------------------
+% Contents, figures, tables and algorithms
+\renewcommand{\baselinestretch}{1}
+\pdfbookmark[0]{Contents}{toc}
+\tableofcontents
+\cleardoublepage
+\renewcommand{\baselinestretch}{1.5}
+\pdfbookmark[1]{List of Figures}{lof}
+\listoffigures
+\begingroup
+\pdfbookmark[1]{List of Tables}{lot}
+\listoftables
+\pdfbookmark[1]{List of Algorithms}{loa}
+\listofalgorithms
+\endgroup
+%
+% -----------------------------------------------------------------------------
+% Acronyms
+\pdfbookmark[1]{Acronyms}{loac}
+\chapter*{\tlangAcronyms}
+\input{Sections/Section0/Section0-Acronyms}
+\clearpage
+%
+% -----------------------------------------------------------------------------
+% Glossary
+\pdfbookmark[1]{Glossary}{glo}
+\printnoidxglossary[]
+\cleardoublepage
+%
+% -----------------------------------------------------------------------------
+% Document matter in arabic numbering
+\setcounter{page}{1} \pagenumbering{arabic}
+\baselineskip 18pt
+%
+\acresetall
+\input{Sections/Section1/Section1-Introduction}
+\cleardoublepage
+%
+\input{Sections/Section2/Section2-Background}
+\cleardoublepage
+%
+\input{Sections/Section3/Section3-RelatedWork}
+\cleardoublepage
+%
+\input{Sections/Section4/Section4-Implementation}
+%
+\input{Sections/Section5/Section5-ExperimentalResults}
+\cleardoublepage
+%
+\input{Sections/Section6/Section6-Conclusion}
+%
+% -----------------------------------------------------------------------------
+% Bibliography
+\addcontentsline{toc}{chapter}{Bibliography}
+\bibliographystyle{IEEEtran}
+\normalem
+\bibliography{./Bibliography}
+\ULforem
+%
+% -----------------------------------------------------------------------------
+% Appendices
+\appendix
+\input{Sections/SectionA/SectionA-TechnicalIndicators}
+\cleardoublepage
+%
+\input{Sections/SectionB/SectionB-ReviewedArticles}
+% -----------------------------------------------------------------------------
+\end{document}

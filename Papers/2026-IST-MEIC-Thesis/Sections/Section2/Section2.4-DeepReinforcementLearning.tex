@@ -1,0 +1,49 @@
+% !TEX root = ../../Main.tex
+\section{Deep Reinforcement Learning}
+\label{Section:DeepReinforcementLearning}
+
+Deep Reinforcement Learning (DRL) combines the decision making of reinforcement learning with the function approximation of neural networks. The value functions and policies of \Cref{Section:ReinforcementLearning} are defined over states, and in a tabular setting each state is stored separately. That is not possible when the state is a vector of continuous market variables, because the number of distinct states is unbounded. Replacing the table with a neural network removes that limit and allows the agent to generalise from states it has seen to states it has not.
+
+\subsection{Fundamentals and History}
+
+DRL emerged once it became clear that neural networks could act as the function approximators reinforcement learning needed in order to handle high-dimensional input. The result that established the field was the Deep Q-Network, which learned to play a range of Atari 2600 games directly from raw pixels and reached human-level scores on many of them \cite{mnih_playing_2013, mnih_human-level_2015}. It showed that a single architecture could learn control policies from unprocessed, high-dimensional input, without features designed for each individual task. That result is what prompted interest in applying the same methods to financial markets, where the input is also high-dimensional and the mapping from observation to decision is also unknown. The difference is that an Atari game is stationary and fully observable, while a market is neither, and this is the reason results transfer far less directly than the analogy suggests.
+
+\subsection{Deep Value-Based RL Algorithms: Deep Q-Networks}
+
+Deep value-based methods use a neural network to approximate the Q-function, which allows them to operate over state spaces too large to enumerate. Neural Fitted Q Iteration was an early technique of this kind, fitting a network to the Q-values of a stored set of transitions and refitting it as more transitions were collected \cite{riedmiller_neural_2005}. The approach became established with the Deep Q-Network (DQN) algorithm \cite{mnih_human-level_2015}, which added two mechanisms that made training stable enough to be practical. The first is a separate target network, a delayed copy of the value network used to compute the learning targets, which prevents the target from moving at the same rate as the estimate. The second is experience replay, a buffer of past transitions from which mini-batches are drawn at random, which breaks the temporal correlation between consecutive samples. Both mechanisms reappear in the algorithm used in this work.
+
+Following DQN, the Double Deep Q-Network (DDQN) addressed the tendency of DQN to overestimate action values \cite{van_hasselt_deep_2016}. It does so by separating action selection from action evaluation, using the online network to choose the action and the target network to score it. Deep value-based methods are not used in this work, because selecting an action by comparing the values of all available actions requires the action set to be discrete.
+
+\subsection{Deep Policy-Based RL Algorithms: Deep Policy Gradients}
+
+Deep policy-based algorithms optimise the policy directly instead of deriving it from action values, which is what allows them to operate on continuous actions. In trading this matters because a position has a size as well as a direction, and a method restricted to a discrete action set has to decide that size outside the learned policy. The Deep Deterministic Policy Gradient (DDPG) algorithm is a model-free, off-policy, actor-critic method for continuous action spaces \cite{lillicrap_continuous_2015}. It maintains four networks: an actor \( \mu(s | \theta^{\mu}) \) that maps a state to a single action, a critic \( Q(s, a | \theta^{Q}) \) that estimates the value of a state-action pair, and delayed copies of both, the target actor \( \mu' \) and the target critic \( Q' \). Transitions are stored in a replay buffer and mini-batches of \( N \) transitions are sampled from it at random. The critic is trained the same way as in DQN, by minimising the squared error between its estimate and a target built from the observed reward and the value of the next state \cite{lillicrap_continuous_2015}:
+
+\begin{equation}
+y_i = r_i + \gamma \, Q'\!\left(s_{i+1}, \mu'(s_{i+1} | \theta^{\mu'}) \,\middle|\, \theta^{Q'}\right)
+\label{Equation:DDPGTarget}
+\end{equation}
+
+\begin{equation}
+L = \frac{1}{N} \sum_{i} \left( y_i - Q(s_i, a_i | \theta^{Q}) \right)^2
+\label{Equation:DDPGCriticLoss}
+\end{equation}
+
+The actor is updated by the deterministic policy gradient, which follows the direction in which the critic's estimated value increases. Because the action is continuous, the gradient of the value with respect to the action is defined, and the chain rule carries it back to the actor's parameters \cite{lillicrap_continuous_2015}:
+
+\begin{equation}
+\nabla_{\theta^{\mu}} J \approx \frac{1}{N} \sum_{i} \nabla_{a} Q(s, a | \theta^{Q}) \big|_{s = s_i,\, a = \mu(s_i)} \; \nabla_{\theta^{\mu}} \mu(s | \theta^{\mu}) \big|_{s_i}
+\label{Equation:DeterministicPolicyGradient}
+\end{equation}
+
+The target networks are not copied outright. They are moved a small fraction \( \tau \ll 1 \) towards the trained networks after every update, which keeps the learning targets almost stationary at the cost of slowing how fast they track improvements \cite{lillicrap_continuous_2015}:
+
+\begin{equation}
+\theta' \leftarrow \tau \theta + (1 - \tau) \theta'
+\label{Equation:SoftUpdate}
+\end{equation}
+
+Since the policy is deterministic, it produces no exploration of its own, and the problem raised in \Cref{Section:ReinforcementLearning} returns here. DDPG solves it by adding a noise process \( \mathcal{N} \) to the action during training, so that the action actually executed is \( \mu(s | \theta^{\mu}) + \mathcal{N} \). The original work uses an Ornstein-Uhlenbeck process, which produces noise correlated in time rather than independent at each step, on the grounds that a physical system with momentum explores better under a disturbance that persists for a while than under one that changes sign at every step \cite{lillicrap_continuous_2015}. \Cref{Codes:DeepDeterministicPolicyGradient} sets out the complete procedure.
+
+\input{Codes/DeepDeterministicPolicyGradient}
+
+DDPG is powerful but not dependable. It carries no convergence guarantee outside restrictive conditions, and it is known to be sensitive to its hyperparameters and to the random seed, so two runs of the same configuration can end at different policies. A market makes this worse, since it is non-stationary and only partially observable, and the guarantees that apply to finite Markov Decision Processes do not hold. These are properties of the method rather than obstacles to be removed, and \Cref{Chapter:ExperimentalResults} treats them as such by reporting how results vary rather than reporting a single run.

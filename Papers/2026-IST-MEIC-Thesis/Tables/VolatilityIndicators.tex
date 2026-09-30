@@ -1,0 +1,32 @@
+% !TEX root = ../Main.tex
+\begin{table}[htb!]
+\centering
+\footnotesize
+\caption{Summary of frequently used Volatility Technical Indicators \cite{jansen_machine_2020}.}
+\label{Tables:VolatilityIndicators}
+\begin{tabularx}{\textwidth}{@{}lXl@{}}
+\toprule
+\textbf{Indicator Name} & \textbf{Formula} & \textbf{Range} \\
+\midrule
+Standard Deviation & $\text{SD}(N)_t = \sqrt{\frac{1}{N-1} \sum_{i=1}^{N} (\text{Price}_i - \overline{\text{Price}})^2}$ & - \\
+\addlinespace
+Realised Volatility & $\text{RV}(N)_t = \sqrt{\sigma^2_t}$, where $\sigma^2_t = \alpha \times r_t^2 + (1 - \alpha) \times \sigma^2_{t-1}$, $r_t = \ln\left(\frac{\text{Price}_t}{\text{Price}_{t-1}}\right)$ and $\alpha = \frac{1}{N}$ & - \\
+\addlinespace
+Bollinger Bands & $\text{Upper BB}(N, k)_t = \text{SMA}(N)_t + k \times \text{SD}(N)_t$ & - \\
+\addlinespace
+& $\text{Lower BB}(N, k)_t = \text{SMA}(N)_t - k \times \text{SD}(N)_t$ & \\
+\addlinespace
+& where typically $ k = 2 $& \\
+\addlinespace
+Average True Range & $\text{ATR}(N)_t = \frac{(N - 1) \times \text{ATR}(N)_{t-1} + \text{TRANGE}_t}{N}$ & - \\
+\addlinespace
+& $\text{TRANGE}_t = \max(\text{High}_t - \text{Low}_t, |\text{High}_t - \text{Close}_{t-1}|, |\text{Low}_t - \text{Close}_{t-1}|)$ & \\
+\addlinespace
+Normalised Average True Range & $\text{NATR}(N)_t = \frac{\text{ATR}(N)_t}{\text{Close}_t} \times 100$ & - \\
+\addlinespace
+Chaikin Volatility Index & $\text{CVI}(N)_t = \frac{\text{EMA}_{HL}(N)_t - \text{EMA}_{HL}(N)_{t-N}}{\text{EMA}_{HL}(N)_{t-N}} \times 100$ & - \\
+\addlinespace
+& $\text{EMA}_{HL}(N)_t = \text{EMA}(N)$ applied to $(\text{High}_t - \text{Low}_t)$ & \\
+\bottomrule
+\end{tabularx}
+\end{table}

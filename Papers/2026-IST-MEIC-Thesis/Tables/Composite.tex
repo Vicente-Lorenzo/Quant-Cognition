@@ -1,0 +1,18 @@
+% !TEX root = ../Main.tex
+\begin{table}[htb!]
+\centering
+\footnotesize
+\caption{Components of the composite selection score of \Cref{Equation:Composite}. The three groups carry equal weight, so return contributes one ninth of the total rather than dominating it. The ratios are those defined in \Cref{Section:PerformanceMeasurement}.}
+\label{Tables:Composite}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+\textbf{Group} & \textbf{Metrics, each entering as a percentile rank within the candidate pool} \\
+\midrule
+Money & Annualised return, Calmar ratio, Sterling ratio \\
+\addlinespace
+Safety & Sharpe ratio, Sortino ratio, inverse maximum drawdown, inverse downside volatility \\
+\addlinespace
+Behaviour & Two-sidedness (the weaker exposure side as a fraction of half), regime edge over the model's own rotation null, mean holding period, longest holding period \\
+\bottomrule
+\end{tabularx}
+\end{table}

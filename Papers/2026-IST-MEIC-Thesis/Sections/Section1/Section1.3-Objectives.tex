@@ -1,0 +1,14 @@
+% !TEX root = ../../Main.tex
+\section{Objectives}
+
+The work was organised around five objectives.
+
+\begin{itemize}
+\item Build a trading framework that can backtest a strategy on tick data with broker-accurate costs and run the same strategy inside cTrader, both in its backtesting tab and on a live account, so that the tested system and the deployed system are the same code.
+\item Implement DDPG within that framework, with an observation built from price history and technical indicators, and with a continuous action read as a signed position size.
+\item Train and evaluate one agent per currency pair across the seven major pairs, over the same period and under the same cost model, so that any difference between pairs reflects the instrument rather than the setup.
+\item Determine whether the resulting performance comes from the policy or from exposure to the underlying currency movement.
+\item Combine the seven agents into a single equal-weight portfolio and measure what it does, since a trader would run them together rather than one at a time, and the behaviour of the combination is not implied by the seven results taken separately.
+\end{itemize}
+
+The first objective supports the other three. A result produced by a simplified simulator cannot be trusted or deployed, so the framework was built first and the learning experiments were run on top of it.
